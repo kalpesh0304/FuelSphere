@@ -48,6 +48,6 @@
     "node": ">=20"
   },
   "sapux": [
-    "app/fuelsphere"
+    "app/airports"
   ]
 }
