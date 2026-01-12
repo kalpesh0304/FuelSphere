@@ -1,4 +1,42 @@
 {
+  "[development]": {
+    "auth": {
+      "kind": "mocked",
+      "users": {
+        "alice": {
+          "roles": ["FullAdmin"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
+        },
+        "kalpesh": {
+          "roles": ["FullAdmin"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
+        },
+        "planner": {
+          "roles": ["FuelPlanner"]
+        },
+        "ops": {
+          "roles": ["OperationsManager", "StationCoordinator"],
+          "attributes": {
+            "station": ["MNL", "CEB"],
+            "region": ["APAC"]
+          }
+        },
+        "finance": {
+          "roles": ["FinanceManager", "FinanceController"]
+        },
+        "analyst": {
+          "roles": ["Analyst"]
+        },
+        "*": true
+      }
+    }
+  },
   "build": {
     "target": ".",
     "tasks": [
