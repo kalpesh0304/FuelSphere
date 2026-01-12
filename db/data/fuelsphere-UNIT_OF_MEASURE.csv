@@ -1,0 +1,6 @@
+uom_code,uom_name,uom_category,conversion_to_kg,is_active
+KG,Kilogram,MASS,1.000000,true
+LTR,Liter,VOLUME,0.800000,true
+GAL,US Gallon,VOLUME,3.028329,true
+USG,US Gallon (Aviation),VOLUME,3.028329,true
+MT,Metric Ton,MASS,1000.000000,true

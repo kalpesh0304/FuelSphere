@@ -1,0 +1,6 @@
+manufacture_code,manufacture_name,is_active
+AB,Airbus,true
+BO,Boeing,true
+EM,Embraer,true
+AT,ATR,true
+BB,Bombardier,true
