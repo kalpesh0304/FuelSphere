@@ -8,8 +8,8 @@
 using { fuelsphere as db } from '../db/schema';
 
 @path: '/api/master-data'
-@requires: 'authenticated-user'  // Any logged-in user can access (role checks in production via XSUAA)
-service MasterDataService @(restrict: [{ grant: '*', to: 'authenticated-user' }]) {
+// @requires: 'authenticated-user' - disabled for local dev, enable for production
+service MasterDataService {
 
     // ========================================================================
     // REFERENCE DATA (S/4HANA Synchronized) - Read-only for most users
