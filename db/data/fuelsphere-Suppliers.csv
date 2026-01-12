@@ -1,0 +1,5 @@
+ID;code;name;country_code;contactEmail;contactPhone;isActive
+55555555-5555-5555-5555-555555555555;SHELL;Shell Aviation;NL;aviation@shell.com;+31-70-377-9111;true
+66666666-6666-6666-6666-666666666666;BP;BP Aviation;GB;aviation@bp.com;+44-20-7496-4000;true
+77777777-7777-7777-7777-777777777777;TOTAL;TotalEnergies Aviation;FR;aviation@totalenergies.com;+33-1-47-44-45-46;true
+88888888-8888-8888-8888-888888888888;NESTE;Neste Aviation;FI;aviation@neste.com;+358-10-458-11;true

@@ -1,0 +1,7 @@
+ID;iataCode;icaoCode;name;city;country_code;latitude;longitude;timezone
+aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa;JFK;KJFK;John F. Kennedy International Airport;New York;US;40.639751;-73.778925;America/New_York
+bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb;LAX;KLAX;Los Angeles International Airport;Los Angeles;US;33.942536;-118.408075;America/Los_Angeles
+cccccccc-cccc-cccc-cccc-cccccccccccc;LHR;EGLL;London Heathrow Airport;London;GB;51.470022;-0.454296;Europe/London
+dddddddd-dddd-dddd-dddd-dddddddddddd;FRA;EDDF;Frankfurt Airport;Frankfurt;DE;50.033333;8.570556;Europe/Berlin
+eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee;SIN;WSSS;Singapore Changi Airport;Singapore;SG;1.350189;103.994433;Asia/Singapore
+ffffffff-ffff-ffff-ffff-ffffffffffff;DXB;OMDB;Dubai International Airport;Dubai;AE;25.252778;55.364444;Asia/Dubai

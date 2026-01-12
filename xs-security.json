@@ -1,0 +1,99 @@
+{
+  "xsappname": "fuelsphere",
+  "tenant-mode": "dedicated",
+  "description": "FuelSphere - Airline Fuel Lifecycle Management Solution",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.admin",
+      "description": "Administrator - Full access to all functions"
+    },
+    {
+      "name": "$XSAPPNAME.operations_manager",
+      "description": "Operations Manager - Manage fuel orders and operations"
+    },
+    {
+      "name": "$XSAPPNAME.operations_staff",
+      "description": "Operations Staff - Execute fueling operations"
+    },
+    {
+      "name": "$XSAPPNAME.analyst",
+      "description": "Analyst - View analytics and reports"
+    },
+    {
+      "name": "$XSAPPNAME.viewer",
+      "description": "Viewer - Read-only access"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "airport",
+      "description": "Airport codes the user has access to",
+      "valueType": "string"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "Administrator",
+      "description": "Full system administrator",
+      "scope-references": [
+        "$XSAPPNAME.admin",
+        "$XSAPPNAME.operations_manager",
+        "$XSAPPNAME.operations_staff",
+        "$XSAPPNAME.analyst",
+        "$XSAPPNAME.viewer"
+      ]
+    },
+    {
+      "name": "OperationsManager",
+      "description": "Manages fuel operations and orders",
+      "scope-references": [
+        "$XSAPPNAME.operations_manager",
+        "$XSAPPNAME.operations_staff",
+        "$XSAPPNAME.analyst",
+        "$XSAPPNAME.viewer"
+      ],
+      "attribute-references": [
+        "airport"
+      ]
+    },
+    {
+      "name": "OperationsStaff",
+      "description": "Executes daily fueling operations",
+      "scope-references": [
+        "$XSAPPNAME.operations_staff",
+        "$XSAPPNAME.viewer"
+      ],
+      "attribute-references": [
+        "airport"
+      ]
+    },
+    {
+      "name": "Analyst",
+      "description": "Views analytics and generates reports",
+      "scope-references": [
+        "$XSAPPNAME.analyst",
+        "$XSAPPNAME.viewer"
+      ],
+      "attribute-references": [
+        "airport"
+      ]
+    },
+    {
+      "name": "Viewer",
+      "description": "Read-only access to operational data",
+      "scope-references": [
+        "$XSAPPNAME.viewer"
+      ],
+      "attribute-references": [
+        "airport"
+      ]
+    }
+  ],
+  "oauth2-configuration": {
+    "token-validity": 43200,
+    "redirect-uris": [
+      "https://*.cfapps.*.hana.ondemand.com/**",
+      "https://*.hana.ondemand.com/**"
+    ]
+  }
+}

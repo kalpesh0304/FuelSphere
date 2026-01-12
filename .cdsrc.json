@@ -1,0 +1,45 @@
+{
+  "build": {
+    "target": ".",
+    "tasks": [
+      {
+        "for": "hana",
+        "src": "db",
+        "options": {
+          "model": ["db", "srv", "app"]
+        }
+      },
+      {
+        "for": "node-cf",
+        "src": "srv",
+        "options": {
+          "model": ["db", "srv", "app"]
+        }
+      }
+    ]
+  },
+  "requires": {
+    "db": {
+      "kind": "sql"
+    },
+    "[production]": {
+      "db": {
+        "kind": "hana"
+      },
+      "auth": {
+        "kind": "xsuaa"
+      }
+    }
+  },
+  "odata": {
+    "version": "v4"
+  },
+  "log": {
+    "levels": {
+      "cds": "info"
+    }
+  },
+  "features": {
+    "odata_new_parser": true
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "_version": "1.59.0",
+  "sap.app": {
+    "id": "com.fuelsphere.operations",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": {
+      "version": "1.0.0"
+    },
+    "dataSources": {
+      "operationsService": {
+        "uri": "/operations/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0",
+          "localUri": "localService/metadata.xml"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "fuelsphere-display": {
+          "semanticObject": "FuelSphere",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "sap-icon://fuel"
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "flexEnabled": true,
+    "dependencies": {
+      "minUI5Version": "1.120.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.fe.templates": {}
+      }
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "com.fuelsphere.operations.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "operationsService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "FuelOrdersList",
+          "target": "FuelOrdersList"
+        },
+        {
+          "pattern": "FuelOrders({key}):?query:",
+          "name": "FuelOrdersObjectPage",
+          "target": "FuelOrdersObjectPage"
+        },
+        {
+          "pattern": "FlightFuelRequirements:?query:",
+          "name": "FlightRequirementsList",
+          "target": "FlightRequirementsList"
+        },
+        {
+          "pattern": "FlightFuelRequirements({key}):?query:",
+          "name": "FlightRequirementsObjectPage",
+          "target": "FlightRequirementsObjectPage"
+        },
+        {
+          "pattern": "FuelingOperations:?query:",
+          "name": "FuelingOperationsList",
+          "target": "FuelingOperationsList"
+        },
+        {
+          "pattern": "FuelingOperations({key}):?query:",
+          "name": "FuelingOperationsObjectPage",
+          "target": "FuelingOperationsObjectPage"
+        }
+      ],
+      "targets": {
+        "FuelOrdersList": {
+          "type": "Component",
+          "id": "FuelOrdersList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FuelOrders",
+              "variantManagement": "Page",
+              "navigation": {
+                "FuelOrders": {
+                  "detail": {
+                    "route": "FuelOrdersObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "selectionMode": "Multi"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "FuelOrdersObjectPage": {
+          "type": "Component",
+          "id": "FuelOrdersObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/FuelOrders",
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "FlightRequirementsList": {
+          "type": "Component",
+          "id": "FlightRequirementsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FlightFuelRequirements",
+              "variantManagement": "Page"
+            }
+          }
+        },
+        "FlightRequirementsObjectPage": {
+          "type": "Component",
+          "id": "FlightRequirementsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/FlightFuelRequirements"
+            }
+          }
+        },
+        "FuelingOperationsList": {
+          "type": "Component",
+          "id": "FuelingOperationsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FuelingOperations",
+              "variantManagement": "Page"
+            }
+          }
+        },
+        "FuelingOperationsObjectPage": {
+          "type": "Component",
+          "id": "FuelingOperationsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/FuelingOperations"
+            }
+          }
+        }
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    }
+  },
+  "sap.fiori": {
+    "registrationIds": [],
+    "archeType": "transactional"
+  }
+}
