@@ -1,69 +1,121 @@
+/**
+ * FuelSphere - Administration Service
+ *
+ * Manages configuration entities (DD-001, DD-002):
+ * - Persona configuration
+ * - Tile assignments
+ * - Approval limits
+ * - Audit log access
+ *
+ * Restricted to FullAdmin role
+ */
+
 using { fuelsphere as db } from '../db/schema';
 
-/**
- * Administrative Service for Master Data Management
- * Restricted to administrators and data stewards
- */
-@path: '/admin'
-@requires: 'admin'
+@path: '/api/admin'
+@requires: 'FullAdmin'
 service AdminService {
 
-    // Fuel Type Management
-    entity FuelTypes as projection on db.FuelTypes;
+    // ========================================================================
+    // PERSONA CONFIGURATION (DD-001)
+    // ========================================================================
 
-    // Airport Management
-    entity Airports as projection on db.Airports {
+    /**
+     * CONFIG_PERSONAS - Seed data for personas
+     * Delivered as recommended, customizable by admin
+     */
+    entity Personas as projection on db.CONFIG_PERSONAS;
+
+    /**
+     * CONFIG_TILES - Application tile definitions
+     * Seed data for Fiori Launchpad tiles
+     */
+    entity Tiles as projection on db.CONFIG_TILES;
+
+    /**
+     * CONFIG_PERSONA_TILES - Persona-Tile mapping
+     * Customizable by customer administrators
+     */
+    entity PersonaTiles as projection on db.CONFIG_PERSONA_TILES {
         *,
-        storageFacilities : redirected to StorageFacilities
+        persona : redirected to Personas,
+        tile    : redirected to Tiles
     };
 
-    // Storage Facility Management
-    entity StorageFacilities as projection on db.StorageFacilities {
+    /**
+     * CONFIG_USER_PERSONAS - User-Persona assignments
+     * Managed by customer administrators
+     */
+    entity UserPersonas as projection on db.CONFIG_USER_PERSONAS {
         *,
-        airport : redirected to Airports,
-        fuelType : redirected to FuelTypes
+        persona : redirected to Personas
     };
 
-    // Supplier Management
-    entity Suppliers as projection on db.Suppliers {
+    // ========================================================================
+    // APPROVAL LIMITS CONFIGURATION (DD-002)
+    // ========================================================================
+
+    /**
+     * CONFIG_APPROVAL_LIMITS - Approval threshold configuration
+     * Setup data, configurable at deployment
+     */
+    entity ApprovalLimits as projection on db.CONFIG_APPROVAL_LIMITS {
         *,
-        contracts : redirected to SupplierContracts
+        persona : redirected to Personas
     };
 
-    // Contract Management
-    entity SupplierContracts as projection on db.SupplierContracts {
-        *,
-        supplier : redirected to Suppliers,
-        fuelType : redirected to FuelTypes
-    };
+    // ========================================================================
+    // AUDIT LOG
+    // ========================================================================
 
-    // Aircraft Management
-    entity Aircraft as projection on db.Aircraft {
-        *,
-        fuelType : redirected to FuelTypes
-    };
-
-    // Audit Log (read-only)
+    /**
+     * AUDIT_LOG - System audit trail
+     * Read-only access for compliance review
+     */
     @readonly
-    entity AuditLog as projection on db.AuditLog;
+    entity AuditLog as projection on db.AUDIT_LOG;
 
-    // Actions for bulk operations
-    action importAirports(data: array of AirportData) returns array of String;
-    action importSuppliers(data: array of SupplierData) returns array of String;
-    action deactivateExpiredContracts() returns Integer;
+    // ========================================================================
+    // ADMINISTRATIVE ACTIONS
+    // ========================================================================
 
-    type AirportData {
-        iataCode    : String(3);
-        icaoCode    : String(4);
-        name        : String(200);
-        city        : String(100);
-        country     : String(3);
-    }
+    /**
+     * Initialize seed data for personas and tiles
+     */
+    action initializeSeedData() returns InitResult;
 
-    type SupplierData {
-        code        : String(20);
-        name        : String(200);
-        country     : String(3);
-        contactEmail : String(255);
+    /**
+     * Assign persona to user
+     */
+    action assignPersonaToUser(
+        userId    : String,
+        personaId : String,
+        station   : String,
+        region    : String
+    ) returns Boolean;
+
+    /**
+     * Set approval limit for persona
+     */
+    action setApprovalLimit(
+        personaId : String,
+        limitType : String,
+        limitValue: Decimal
+    ) returns Boolean;
+
+    /**
+     * Export audit log for compliance
+     */
+    action exportAuditLog(
+        fromDate  : DateTime,
+        toDate    : DateTime,
+        entityName: String
+    ) returns String; // Returns download URL
+
+    type InitResult {
+        personasCreated : Integer;
+        tilesCreated    : Integer;
+        mappingsCreated : Integer;
+        limitsCreated   : Integer;
     }
 }

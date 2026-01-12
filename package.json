@@ -7,9 +7,11 @@
   "private": true,
   "dependencies": {
     "@sap/cds": "^8",
+    "@cap-js/hana": "^1",
     "express": "^4",
     "@sap/xsenv": "^5",
     "@sap/xssec": "^4",
+    "passport": "^0.7",
     "@sap/audit-logging": "^6"
   },
   "devDependencies": {
