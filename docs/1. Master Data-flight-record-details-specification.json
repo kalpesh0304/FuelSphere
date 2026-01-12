@@ -1,0 +1,214 @@
+{
+  "metadata": {
+    "screenId": "FLIGHT_RECORD_DETAILS_001",
+    "screenName": "Flight Record Details",
+    "module": "Master Data",
+    "sapFioriFloorplan": "Object Page",
+    "userPersonas": [
+      "Master Data Manager"
+    ],
+    "authorizedRoles": [
+      "Data Manager"
+    ],
+    "responsiveBreakpoints": [
+      "Desktop (1920px)",
+      "Tablet (768px)",
+      "Mobile (375px)"
+    ],
+    "layoutType": "Object Page - Display",
+    "implementationStatus": "Implemented"
+  },
+  "layoutStructure": {
+    "gridSystem": "8px base grid (--spacing-xs through --spacing-xxl)",
+    "containerMaxWidth": "1600px",
+    "pageLayoutType": "Object Page with Sections",
+    "sections": [
+      {
+        "sectionId": "header",
+        "sectionName": "Object Page Header",
+        "position": "Top",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-m)"
+      },
+      {
+        "sectionId": "anchor-nav",
+        "sectionName": "Anchor Navigation",
+        "position": "Below Header",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-s)"
+      },
+      {
+        "sectionId": "content",
+        "sectionName": "Tabbed Content Sections",
+        "position": "Main",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-l)"
+      }
+    ]
+  },
+  "componentInventory": [
+    {
+      "componentId": "object-page-header",
+      "componentType": "Object Page Header",
+      "sapUI5Equivalent": "sap.uxap.ObjectPageHeader",
+      "properties": {
+        "showTitleSelector": false,
+        "showMarkers": true,
+        "backgroundColor": "var(--card)"
+      },
+      "dimensions": {
+        "width": "100%",
+        "height": "Auto",
+        "minHeight": "200px"
+      }
+    },
+    {
+      "componentId": "anchor-navigation",
+      "componentType": "Anchor Navigation",
+      "sapUI5Equivalent": "sap.uxap.AnchorBar",
+      "properties": {
+        "showPopover": true,
+        "sticky": true,
+        "backgroundColor": "var(--card)"
+      },
+      "dimensions": {
+        "width": "100%",
+        "height": "44px"
+      }
+    }
+  ],
+  "dataModel": {
+    "entityName": "GenericEntity",
+    "description": "Primary entity for Flight Record Details",
+    "fields": [
+      {
+        "fieldName": "genericEntityId",
+        "dataType": "UUID",
+        "description": "Unique GenericEntity identifier",
+        "key": true,
+        "required": true
+      },
+      {
+        "fieldName": "createdDate",
+        "dataType": "DateTime",
+        "description": "Creation timestamp",
+        "required": true
+      },
+      {
+        "fieldName": "createdBy",
+        "dataType": "String",
+        "description": "User who created the record",
+        "maxLength": 100,
+        "required": true
+      },
+      {
+        "fieldName": "lastModifiedDate",
+        "dataType": "DateTime",
+        "description": "Last modification timestamp",
+        "required": false
+      },
+      {
+        "fieldName": "status",
+        "dataType": "String",
+        "description": "Record status",
+        "enumValues": [
+          "Draft",
+          "Active",
+          "Completed",
+          "Cancelled"
+        ],
+        "required": true
+      }
+    ],
+    "associations": [
+      {
+        "associationName": "toUserCreated",
+        "targetEntity": "User",
+        "cardinality": "N:1",
+        "foreignKey": "createdBy"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "save",
+      "actionType": "Save",
+      "trigger": "onClick",
+      "element": "Save Button",
+      "behavior": "Save changes to backend"
+    },
+    {
+      "actionId": "cancel",
+      "actionType": "Navigation",
+      "trigger": "onClick",
+      "element": "Cancel Button",
+      "behavior": "Discard changes and return"
+    },
+    {
+      "actionId": "edit",
+      "actionType": "State Change",
+      "trigger": "onClick",
+      "element": "Edit Button",
+      "behavior": "Enter edit mode"
+    }
+  ],
+  "visualSpecifications": {
+    "colors": {
+      "primaryBlue": "#0070F2 (var(--primary-blue))",
+      "secondaryBlue": "#5CAAFF (var(--secondary-blue))",
+      "infoBlue": "#0064D9 (var(--info-blue))",
+      "successGreen": "#30914C (var(--success-green))",
+      "warningAmber": "#E76500 (var(--warning-amber))",
+      "errorRed": "#D32F2F (var(--error-red))",
+      "background": "#F5F6F7 (var(--background))",
+      "card": "#FFFFFF (var(--card))",
+      "border": "#D9D9D9 (var(--border))",
+      "textPrimary": "#32363A (var(--text-primary))",
+      "textSecondary": "#6C6C6C (var(--text-secondary))",
+      "muted": "#F2F2F2 (var(--muted))"
+    },
+    "typography": {
+      "fontFamily": "'72', Arial, sans-serif",
+      "h1": "var(--text-h1) - 32px, font-weight: var(--font-weight-bold)",
+      "h2": "var(--text-h2) - 24px, font-weight: var(--font-weight-bold)",
+      "h3": "var(--text-h3) - 20px, font-weight: var(--font-weight-bold)",
+      "base": "var(--text-base) - 14px, font-weight: var(--font-weight-normal)",
+      "sm": "var(--text-sm) - 12px, font-weight: var(--font-weight-normal)",
+      "xs": "var(--text-xs) - 11px, font-weight: var(--font-weight-normal)"
+    },
+    "spacing": {
+      "xs": "4px (var(--spacing-xs))",
+      "s": "8px (var(--spacing-s))",
+      "m": "16px (var(--spacing-m))",
+      "l": "24px (var(--spacing-l))",
+      "xl": "32px (var(--spacing-xl))",
+      "xxl": "48px (var(--spacing-xxl))"
+    },
+    "borderRadius": {
+      "card": "8px (var(--radius-card))",
+      "button": "4px (var(--radius-button))"
+    },
+    "elevation": {
+      "sm": "0 1px 3px rgba(0,0,0,0.12) (var(--elevation-sm))",
+      "md": "0 2px 8px rgba(0,0,0,0.15) (var(--elevation-md))",
+      "lg": "0 4px 16px rgba(0,0,0,0.2) (var(--elevation-lg))"
+    },
+    "statusColors": {
+      "statusDraft": "#6C6C6C (var(--text-secondary))",
+      "statusSubmitted": "#0064D9 (var(--info-blue))",
+      "statusApproved": "#30914C (var(--success-green))",
+      "statusInProgress": "#E76500 (var(--warning-amber))",
+      "statusDelivered": "#30914C (var(--success-green))",
+      "statusCancelled": "#D32F2F (var(--error-red))",
+      "statusCompleted": "#30914C (var(--success-green))",
+      "statusPending": "#E76500 (var(--warning-amber))",
+      "statusRejected": "#D32F2F (var(--error-red))"
+    },
+    "icons": {
+      "search": "lucide-react Search",
+      "filter": "lucide-react Filter",
+      "settings": "lucide-react Settings",
+      "refresh": "lucide-react RefreshCw"
+    }
+  }
+}
