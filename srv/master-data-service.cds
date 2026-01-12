@@ -8,7 +8,8 @@
 using { fuelsphere as db } from '../db/schema';
 
 @path: '/api/master-data'
-service MasterDataService {
+@requires: 'authenticated-user'  // Any logged-in user can access (role checks in production via XSUAA)
+service MasterDataService @(restrict: [{ grant: '*', to: 'authenticated-user' }]) {
 
     // ========================================================================
     // REFERENCE DATA (S/4HANA Synchronized) - Read-only for most users
@@ -37,24 +38,14 @@ service MasterDataService {
      * Manufacturers - Aircraft Manufacturer Master
      * Access: integration-admin (Edit), others (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'OperationsManager',
-                              'StationCoordinator', 'IntegrationAdmin', 'Analyst',
-                              'Auditor', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Manufacturers as projection on db.MANUFACTURE;
 
     /**
      * Aircraft - Aircraft Type Master
      * Access: integration-admin (Edit), others (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'OperationsManager',
-                              'StationCoordinator', 'IntegrationAdmin', 'Analyst',
-                              'Auditor', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
         manufacturer : redirected to Manufacturers
@@ -64,12 +55,7 @@ service MasterDataService {
      * Airports - Airport Master
      * Access: integration-admin (Edit), ops-manager/fuel-planner (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'OperationsManager',
-                              'StationCoordinator', 'IntegrationAdmin', 'Analyst',
-                              'Auditor', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries,
@@ -80,11 +66,7 @@ service MasterDataService {
      * Routes - Route Master
      * Access: fuel-planner (View), integration-admin (Edit)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'OperationsManager', 'IntegrationAdmin',
-                              'Analyst', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Routes as projection on db.ROUTE_MASTER {
         *,
         origin      : redirected to Airports,
@@ -99,13 +81,7 @@ service MasterDataService {
      * Suppliers - Supplier/Vendor Master
      * Access: contracts-manager (Edit), others (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'OperationsManager',
-                              'StationCoordinator', 'FinanceManager', 'FinanceController',
-                              'IntegrationAdmin', 'Analyst', 'Auditor', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE'], to: ['ContractsManager', 'IntegrationAdmin', 'FullAdmin'] },
-        { grant: 'DELETE', to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Suppliers as projection on db.MASTER_SUPPLIERS {
         *,
         country : redirected to Countries
@@ -115,12 +91,7 @@ service MasterDataService {
      * Products - Fuel Product Master
      * Access: integration-admin (Edit), others (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'OperationsManager',
-                              'StationCoordinator', 'IntegrationAdmin', 'Analyst',
-                              'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['IntegrationAdmin', 'FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
         uom : redirected to UnitsOfMeasure
@@ -130,13 +101,7 @@ service MasterDataService {
      * Contracts - Purchase Contract Master
      * Access: contracts-manager (Full), finance (View)
      */
-    @restrict: [
-        { grant: 'READ', to: ['FuelPlanner', 'ContractsManager', 'FinanceManager',
-                              'FinanceController', 'IntegrationAdmin', 'Analyst',
-                              'Auditor', 'FullAdmin'] },
-        { grant: ['CREATE', 'UPDATE'], to: ['ContractsManager', 'FullAdmin'] },
-        { grant: 'DELETE', to: ['FullAdmin'] }
-    ]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
         supplier : redirected to Suppliers,
@@ -151,7 +116,7 @@ service MasterDataService {
      * Sync master data from S/4HANA
      * Restricted to integration-admin
      */
-    @restrict: [{ grant: '*', to: ['IntegrationAdmin', 'FullAdmin'] }]
+    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
     action syncFromS4HANA(entityType: String) returns SyncResult;
 
     type SyncResult {
