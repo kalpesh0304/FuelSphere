@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuelSphere - Master Data Launchpad</title>
+
+    <script>
+        window["sap-ushell-config"] = {
+            defaultRenderer: "fiori2",
+            applications: {
+                "Airport-display": {
+                    title: "Airports",
+                    description: "Manage Airport Master Data",
+                    icon: "sap-icon://flight",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/",
+                    navigationMode: "embedded"
+                },
+                "Aircraft-display": {
+                    title: "Aircraft",
+                    description: "Manage Aircraft Master Data",
+                    icon: "sap-icon://flight",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Aircraft",
+                    navigationMode: "embedded"
+                },
+                "Route-display": {
+                    title: "Routes",
+                    description: "Manage Route Master Data",
+                    icon: "sap-icon://map-2",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Routes",
+                    navigationMode: "embedded"
+                },
+                "Supplier-display": {
+                    title: "Suppliers",
+                    description: "Manage Supplier Master Data",
+                    icon: "sap-icon://supplier",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Suppliers",
+                    navigationMode: "embedded"
+                },
+                "Contract-display": {
+                    title: "Contracts",
+                    description: "Manage Contract Master Data",
+                    icon: "sap-icon://document",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Contracts",
+                    navigationMode: "embedded"
+                },
+                "Product-display": {
+                    title: "Products",
+                    description: "Manage Product Master Data",
+                    icon: "sap-icon://product",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Products",
+                    navigationMode: "embedded"
+                },
+                "Countries-display": {
+                    title: "Countries",
+                    description: "View Country Reference Data",
+                    icon: "sap-icon://world",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Countries",
+                    navigationMode: "embedded"
+                },
+                "Currencies-display": {
+                    title: "Currencies",
+                    description: "View Currency Reference Data",
+                    icon: "sap-icon://money-bills",
+                    additionalInformation: "SAPUI5.Component=com.fuelsphere.masterdata",
+                    applicationType: "URL",
+                    url: "../index.html#/Currencies",
+                    navigationMode: "embedded"
+                }
+            }
+        };
+    </script>
+
+    <script
+        id="sap-ui-bootstrap"
+        src="https://ui5.sap.com/resources/sap-ui-core.js"
+        data-sap-ui-theme="sap_horizon"
+        data-sap-ui-compatVersion="edge"
+        data-sap-ui-async="true"
+        data-sap-ui-frameOptions="allow">
+    </script>
+
+    <script>
+        sap.ui.require([
+            "sap/ushell/Container"
+        ], function(Container) {
+            Container.createRenderer("fiori2").then(function(renderer) {
+                renderer.placeAt("content");
+            });
+        });
+    </script>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body class="sapUiBody" id="content">
+</body>
+</html>
