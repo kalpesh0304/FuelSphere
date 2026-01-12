@@ -1,0 +1,58 @@
+{
+  "_version": "1.59.0",
+  "sap.app": {
+    "id": "airports",
+    "type": "application",
+    "title": "Airports",
+    "description": "Manage Airport Master Data",
+    "dataSources": {
+      "mainService": {
+        "uri": "/api/master-data/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.120.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": { "synchronizationMode": "None", "operationMode": "Server", "autoExpandSelect": true, "earlyRequests": true }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "AirportsList", "target": "AirportsList" },
+        { "pattern": "Airports({key}):?query:", "name": "AirportsDetail", "target": "AirportsDetail" }
+      ],
+      "targets": {
+        "AirportsList": {
+          "type": "Component",
+          "id": "AirportsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Airports",
+              "variantManagement": "Page",
+              "navigation": { "Airports": { "detail": { "route": "AirportsDetail" } } },
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "AirportsDetail": {
+          "type": "Component",
+          "id": "AirportsDetail",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": { "contextPath": "/Airports" }
+          }
+        }
+      }
+    }
+  }
+}
