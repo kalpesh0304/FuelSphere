@@ -1,7 +1,7 @@
 {
   "[development]": {
     "auth": {
-      "kind": "mocked",
+      "kind": "dummy",
       "users": {
         "alice": {
           "roles": ["FullAdmin"],
