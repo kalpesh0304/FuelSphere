@@ -90,12 +90,12 @@ modules:
   # ==================== UI BUILD ====================
   - name: fuelsphere-ui
     type: html5
-    path: app/fuelsphere
+    path: app/airports
     build-parameters:
       build-result: dist
       builder: custom
       commands:
-        - npm ci
+        - npm install
         - npm run build
       supported-platforms: []
 
