@@ -3,6 +3,16 @@ using MasterDataService as service from './master-data-service';
 // =============================================================================
 // AIRPORTS - List Report + Object Page
 // =============================================================================
+
+// Enable CRUD operations for Airports
+annotate service.Airports with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Airports with @(
     UI: {
         HeaderInfo: {
