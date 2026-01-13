@@ -22,9 +22,11 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch",
+    "dev": "npm rebuild 2>/dev/null; cds watch --port 4004",
     "test": "cds bind --exec jest --silent",
     "build": "cds build --production",
-    "deploy": "cds deploy"
+    "deploy": "cds deploy",
+    "postinstall": "npm rebuild 2>/dev/null || true"
   },
   "cds": {
     "requires": {

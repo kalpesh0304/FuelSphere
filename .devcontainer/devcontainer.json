@@ -1,0 +1,30 @@
+{
+  "name": "FuelSphere Development",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "postCreateCommand": "npm install && npm rebuild",
+  "postStartCommand": "nvm use 20 2>/dev/null || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "sapse.vscode-cds",
+        "sapse.sap-ux-fiori-tools-extension-pack",
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "forwardPorts": [4004],
+  "portsAttributes": {
+    "4004": {
+      "label": "CAP Server",
+      "onAutoForward": "notify"
+    }
+  }
+}
