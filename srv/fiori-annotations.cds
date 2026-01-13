@@ -63,6 +63,16 @@ annotate service.Airports with @(
 // =============================================================================
 // AIRCRAFT
 // =============================================================================
+
+// Enable CRUD operations for Aircraft
+annotate service.Aircraft with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Aircraft with @(
     UI: {
         HeaderInfo: {
@@ -89,6 +99,16 @@ annotate service.Aircraft with @(
 // =============================================================================
 // ROUTES
 // =============================================================================
+
+// Enable CRUD operations for Routes
+annotate service.Routes with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Routes with @(
     UI: {
         HeaderInfo: {
@@ -115,6 +135,16 @@ annotate service.Routes with @(
 // =============================================================================
 // SUPPLIERS
 // =============================================================================
+
+// Enable CRUD operations for Suppliers
+annotate service.Suppliers with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Suppliers with @(
     UI: {
         HeaderInfo: {
@@ -142,6 +172,16 @@ annotate service.Suppliers with @(
 // =============================================================================
 // PRODUCTS
 // =============================================================================
+
+// Enable CRUD operations for Products
+annotate service.Products with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Products with @(
     UI: {
         HeaderInfo: {
@@ -168,6 +208,16 @@ annotate service.Products with @(
 // =============================================================================
 // CONTRACTS
 // =============================================================================
+
+// Enable CRUD operations for Contracts
+annotate service.Contracts with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
 annotate service.Contracts with @(
     UI: {
         HeaderInfo: {
@@ -194,7 +244,41 @@ annotate service.Contracts with @(
 );
 
 // =============================================================================
-// REFERENCE DATA
+// MANUFACTURERS
+// =============================================================================
+
+// Enable CRUD operations for Manufacturers
+annotate service.Manufacturers with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
+annotate service.Manufacturers with @(
+    UI: {
+        HeaderInfo: {
+            TypeName: 'Manufacturer',
+            TypeNamePlural: 'Manufacturers',
+            Title: { Value: manufacturer_name },
+            Description: { Value: manufacturer_code }
+        },
+        SelectionFields: [
+            manufacturer_code,
+            is_active
+        ],
+        LineItem: [
+            { Value: manufacturer_code, Label: 'Manufacturer Code' },
+            { Value: manufacturer_name, Label: 'Manufacturer Name' },
+            { Value: country_of_origin, Label: 'Country of Origin' },
+            { Value: is_active, Label: 'Active' }
+        ]
+    }
+);
+
+// =============================================================================
+// REFERENCE DATA (Read-Only - S/4HANA Synchronized)
 // =============================================================================
 annotate service.Countries with @(
     UI: {
