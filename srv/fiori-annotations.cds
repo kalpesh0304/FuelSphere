@@ -15,6 +15,9 @@ annotate service.Airports with @(
 
 annotate service.Airports with @(
     UI: {
+        CreateHidden: false,
+        UpdateHidden: false,
+        DeleteHidden: false,
         HeaderInfo: {
             TypeName: 'Airport',
             TypeNamePlural: 'Airports',
