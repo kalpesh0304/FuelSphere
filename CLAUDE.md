@@ -4,66 +4,67 @@ This file contains project-specific patterns, conventions, and skills for Claude
 
 ## Project Overview
 
-- **Name**: FuelSphere - Airline Fuel Lifecycle Management Solution
-- **Tech Stack**: SAP CAP (Node.js), SAP HANA, Fiori Elements, OData V4
+- **Name**: FuelSphere - Airline Fuel Lifecycle Management Solution (CAPM Backend)
+- **Tech Stack**: SAP CAP (Node.js), SAP HANA, OData V4
 - **Target Platform**: SAP BTP (Business Technology Platform)
+- **Architecture**: CAPM Backend Only (UI in separate FuelSphere-UI project)
 
-## Project Structure
+## Project Architecture
+
+FuelSphere follows a decoupled architecture with separate repositories:
+
+```
+FuelSphere/           # CAPM Backend (this project)
+├── db/               # Data model definitions
+├── srv/              # OData services & authorization
+├── mta.yaml          # Backend deployment descriptor
+└── xs-security.json  # XSUAA security config
+
+FuelSphere-UI/        # Fiori UI Applications (separate project)
+├── apps/             # Individual UI5 apps
+│   └── airports/     # Airports Master Data app
+├── router/           # App Router
+└── mta.yaml          # UI deployment descriptor
+```
+
+## Project Structure (Backend)
 
 ```
 FuelSphere/
 ├── db/
-│   ├── schema.cds          # Data model definitions
-│   └── data/               # CSV mock data files
+│   ├── schema.cds              # Data model definitions
+│   └── data/                   # CSV mock data files
 ├── srv/
-│   ├── master-data-service.cds    # Service definitions
-│   ├── fiori-annotations.cds      # UI annotations
-│   └── *.js                       # Service handlers
-├── app/
-│   ├── airports/           # Fiori Elements app
-│   │   ├── webapp/
-│   │   │   ├── manifest.json
-│   │   │   └── Component.js
-│   │   ├── ui5.yaml
-│   │   └── package.json
-│   └── router/             # App Router for BTP
-├── mta.yaml                # BTP deployment descriptor
-├── xs-security.json        # XSUAA security config
-├── .cdsrc.json            # CDS configuration
+│   ├── master-data-service.cds # Master Data service definitions
+│   ├── authorization.cds       # RBAC authorization annotations
+│   ├── fiori-annotations.cds   # UI annotations (for Fiori preview)
+│   └── admin-service.cds       # Admin service definitions
+├── docs/
+│   └── original/               # Design specifications
+│       ├── FS-FND-001_*.docx   # Solution Architecture
+│       ├── FS-FND-002_*.docx   # Data Model ERD
+│       ├── FS-FND-003_*.docx   # Security Specification
+│       ├── FS-FND-003-A_xs-security.json
+│       ├── FS-FND-003-B_authorization.cds
+│       └── FS-FND-004_*.docx   # UI/UX Standards
+├── mta.yaml                    # BTP deployment descriptor
+├── xs-security.json            # XSUAA security config
+├── .cdsrc.json                 # CDS configuration
 └── package.json
 ```
 
-## Key Patterns
+## Service Definitions
 
-### 1. CDS Entity Definition (db/schema.cds)
-
-```cds
-namespace fuelsphere;
-using { cuid, managed } from '@sap/cds/common';
-
-entity MASTER_AIRPORTS : cuid, managed {
-    iata_code     : String(3) @mandatory;
-    icao_code     : String(4);
-    airport_name  : String(100) @mandatory;
-    city          : String(50);
-    country_code  : String(2);
-    timezone      : String(50);
-    is_active     : Boolean default true;
-}
-```
-
-### 2. Service Definition (srv/*.cds)
+### Master Data Service
 
 ```cds
 using { fuelsphere as db } from '../db/schema';
 
-@path: '/api/master-data'
+@path: '/odata/v4/master'
 service MasterDataService {
-    // Read-only entity (S/4HANA synced)
     @readonly
     entity Countries as projection on db.T005_COUNTRY;
 
-    // Editable entity
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries
@@ -71,89 +72,57 @@ service MasterDataService {
 }
 ```
 
-### 3. Fiori Annotations (srv/fiori-annotations.cds)
+### Service Paths (Architecture Spec FS-FND-001)
 
-```cds
-using MasterDataService as service from './master-data-service';
+| Service | Path | Purpose |
+|---------|------|---------|
+| MasterDataService | `/odata/v4/master` | Master data CRUD |
+| PlanningService | `/odata/v4/planning` | Forecasting, budgets |
+| OrderService | `/odata/v4/orders` | Fuel order management |
+| DeliveryService | `/odata/v4/delivery` | ePOD, fuel tickets |
+| InvoiceService | `/odata/v4/invoice` | Invoice verification |
+| BurnService | `/odata/v4/burn` | Fuel burn, ROB tracking |
+| FinanceService | `/odata/v4/finance` | Financial postings |
+| IntegrationService | `/odata/v4/integration` | Monitoring, health |
+| AdminService | `/odata/v4/admin` | Administration |
 
-// Enable CRUD operations
-annotate service.Airports with @(
-    Capabilities: {
-        InsertRestrictions: { Insertable: true },
-        UpdateRestrictions: { Updatable: true },
-        DeleteRestrictions: { Deletable: true }
-    }
-);
+## Authorization (FS-FND-003)
 
-// UI Annotations
-annotate service.Airports with @(
-    UI: {
-        CreateHidden: false,
-        UpdateHidden: false,
-        DeleteHidden: false,
-        HeaderInfo: {
-            TypeName: 'Airport',
-            TypeNamePlural: 'Airports',
-            Title: { Value: airport_name },
-            Description: { Value: iata_code }
-        },
-        SelectionFields: [ iata_code, country_code, is_active ],
-        LineItem: [
-            { Value: iata_code, Label: 'IATA Code' },
-            { Value: airport_name, Label: 'Airport Name' },
-            { Value: is_active, Label: 'Active' }
-        ],
-        Facets: [{
-            $Type: 'UI.ReferenceFacet',
-            Label: 'General Information',
-            Target: '@UI.FieldGroup#General'
-        }],
-        FieldGroup#General: {
-            Data: [
-                { Value: iata_code },
-                { Value: airport_name }
-            ]
-        }
-    }
-);
-```
+### Scopes (xs-security.json)
 
-### 4. Fiori Elements App (app/*/webapp/manifest.json)
+| Scope | Description |
+|-------|-------------|
+| MasterDataRead | Read master data entities |
+| MasterDataWrite | Create/update master data |
+| MasterDataAdmin | Full admin including delete |
+| FuelOrderCreate | Create fuel orders |
+| FuelOrderApprove | Approve fuel orders |
+| ePODCapture | Capture ePOD |
+| ePODApprove | Approve ePOD |
+| InvoiceVerify | Verify invoices |
+| InvoiceApprove | Approve invoices |
+| FinancePost | Post to S/4HANA |
+| BurnDataView | View fuel burn data |
+| BurnDataEdit | Edit fuel burn |
+| ContractManage | Manage contracts |
+| PlanningAccess | Planning access |
+| ReportView | View reports |
+| IntegrationMonitor | Monitor integration |
+| AdminAccess | Full admin access |
 
-```json
-{
-  "sap.app": {
-    "id": "airports",
-    "type": "application",
-    "dataSources": {
-      "mainService": {
-        "uri": "/api/master-data/",
-        "type": "OData",
-        "settings": { "odataVersion": "4.0" }
-      }
-    }
-  },
-  "sap.ui5": {
-    "models": {
-      "": { "dataSource": "mainService" }
-    },
-    "routing": {
-      "routes": [
-        { "pattern": ":?query:", "name": "List", "target": "List" }
-      ],
-      "targets": {
-        "List": {
-          "type": "Component",
-          "name": "sap.fe.templates.ListReport",
-          "options": {
-            "settings": { "contextPath": "/Airports" }
-          }
-        }
-      }
-    }
-  }
-}
-```
+### Role Templates
+
+| Role | Description |
+|------|-------------|
+| MasterDataManager | Maintains master data |
+| FuelPlanner | Demand forecasting, planning |
+| StationCoordinator | Fuel orders, ePOD capture |
+| ProcurementSpecialist | Contracts, CPE |
+| FinanceController | Invoice verification |
+| OperationsManager | Burn monitoring, approvals |
+| IntegrationAdministrator | API monitoring |
+| SystemAdministrator | Full system admin |
+| Viewer | Read-only access |
 
 ## Commands
 
@@ -166,7 +135,7 @@ cds watch --port 4004
 # With auto-rebuild for Node version issues
 npm rebuild && cds watch --port 4004
 
-# Fiori Preview URL
+# Fiori Preview URL (built-in)
 http://localhost:4004/$fiori-preview/MasterDataService/Airports
 ```
 
@@ -197,17 +166,17 @@ git push -u origin claude/setup-btp-project-J1Bhp
 
 | Entity | Service Path | CRUD | Notes |
 |--------|-------------|------|-------|
-| Airports | /api/master-data/Airports | Yes | FuelSphere native |
-| Aircraft | /api/master-data/Aircraft | Yes | FuelSphere native |
-| Routes | /api/master-data/Routes | Yes | FuelSphere native |
-| Suppliers | /api/master-data/Suppliers | Yes | Bidirectional S/4 |
-| Products | /api/master-data/Products | Yes | Bidirectional S/4 |
-| Contracts | /api/master-data/Contracts | Yes | Bidirectional S/4 |
-| Manufacturers | /api/master-data/Manufacturers | Yes | FuelSphere native |
-| Countries | /api/master-data/Countries | No | Read-only, S/4HANA |
-| Currencies | /api/master-data/Currencies | No | Read-only, S/4HANA |
-| Plants | /api/master-data/Plants | No | Read-only, S/4HANA |
-| UnitsOfMeasure | /api/master-data/UnitsOfMeasure | No | Read-only, S/4HANA |
+| Airports | /odata/v4/master/Airports | Yes | FuelSphere native |
+| Aircraft | /odata/v4/master/Aircraft | Yes | FuelSphere native |
+| Routes | /odata/v4/master/Routes | Yes | FuelSphere native |
+| Suppliers | /odata/v4/master/Suppliers | Yes | Bidirectional S/4 |
+| Products | /odata/v4/master/Products | Yes | Bidirectional S/4 |
+| Contracts | /odata/v4/master/Contracts | Yes | Bidirectional S/4 |
+| Manufacturers | /odata/v4/master/Manufacturers | Yes | FuelSphere native |
+| Countries | /odata/v4/master/Countries | No | Read-only, S/4HANA |
+| Currencies | /odata/v4/master/Currencies | No | Read-only, S/4HANA |
+| Plants | /odata/v4/master/Plants | No | Read-only, S/4HANA |
+| UnitsOfMeasure | /odata/v4/master/UnitsOfMeasure | No | Read-only, S/4HANA |
 
 ## Authentication
 
@@ -219,7 +188,8 @@ git push -u origin claude/setup-btp-project-J1Bhp
     "auth": {
       "kind": "dummy",
       "users": {
-        "alice": { "roles": ["FullAdmin"] },
+        "alice": { "roles": ["MasterDataRead", "MasterDataWrite"] },
+        "admin": { "roles": ["AdminAccess", "MasterDataAdmin"] },
         "*": true
       }
     }
@@ -229,9 +199,55 @@ git push -u origin claude/setup-btp-project-J1Bhp
 
 ### Production (xs-security.json)
 
-- 11 Role Templates: FuelPlanner, ContractsManager, FinanceManager, etc.
-- 11 Role Collections: FuelSphere_FuelPlanner, FuelSphere_FullAdmin, etc.
-- XSUAA scopes for fine-grained authorization
+- 17 Scopes for fine-grained authorization
+- 9 Role Templates: MasterDataManager, FuelPlanner, etc.
+- 9 Role Collections: FuelSphere_MasterDataManager, etc.
+- Attribute-based access: CompanyCode, Plant, CostCenter
+
+## S/4HANA Integration
+
+### Destinations
+
+| Name | Authentication | Purpose |
+|------|---------------|---------|
+| S4HC_TECHNICAL | OAuth2ClientCredentials | Batch/scheduled jobs |
+| S4HC_USER | OAuth2SAMLBearerAssertion | User context APIs |
+
+### Communication Scenarios (S/4HANA Cloud)
+
+| Scenario | Description |
+|----------|-------------|
+| SAP_COM_0008 | Business Partner Integration |
+| SAP_COM_0009 | Product Master Integration |
+| SAP_COM_0028 | Journal Entry Integration |
+| SAP_COM_0053 | Purchase Contract Integration |
+| SAP_COM_0164 | Purchase Order Integration |
+| SAP_COM_0367 | Goods Receipt Integration |
+
+## Testing URLs
+
+```
+# Service index
+http://localhost:4004
+
+# OData metadata
+http://localhost:4004/odata/v4/master/$metadata
+
+# Entity data
+http://localhost:4004/odata/v4/master/Airports
+
+# Fiori preview
+http://localhost:4004/$fiori-preview/MasterDataService/Airports
+```
+
+## BTP Services Required
+
+| Service | Plan | Purpose |
+|---------|------|---------|
+| SAP HANA Cloud | hdi-shared | Database |
+| XSUAA | application | Authentication |
+| Destination | lite | S/4HANA connectivity |
+| App Logging | lite | Logs |
 
 ## Common Issues & Solutions
 
@@ -257,50 +273,12 @@ npm rebuild
 3. Clear browser cache
 4. Restart server: `pkill -f "cds watch" && cds watch`
 
-### CRUD Buttons Not Showing
-
-Ensure annotations include:
-```cds
-@(Capabilities: {
-    InsertRestrictions: { Insertable: true },
-    UpdateRestrictions: { Updatable: true },
-    DeleteRestrictions: { Deletable: true }
-})
-@(UI: {
-    CreateHidden: false,
-    UpdateHidden: false,
-    DeleteHidden: false
-})
-```
-
 ## File Naming Conventions
 
 - CDS files: `kebab-case.cds`
 - CSV data: `namespace-ENTITY_NAME.csv` (e.g., `fuelsphere-MASTER_AIRPORTS.csv`)
 - JS handlers: `entity-name.js`
 
-## Testing URLs
+## Related Projects
 
-```
-# Service index
-http://localhost:4004
-
-# OData metadata
-http://localhost:4004/api/master-data/$metadata
-
-# Entity data
-http://localhost:4004/api/master-data/Airports
-
-# Fiori preview
-http://localhost:4004/$fiori-preview/MasterDataService/Airports
-```
-
-## BTP Services Required
-
-| Service | Plan | Purpose |
-|---------|------|---------|
-| SAP HANA Cloud | hdi-shared | Database |
-| XSUAA | application | Authentication |
-| Destination | lite | S/4HANA connectivity |
-| HTML5 Repo | app-host | UI hosting |
-| App Logging | lite | Logs |
+- **FuelSphere-UI**: Fiori UI applications (../FuelSphere-UI)

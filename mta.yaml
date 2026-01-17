@@ -1,7 +1,7 @@
 _schema-version: "3.2"
 ID: fuelsphere
 version: 1.0.0
-description: "FuelSphere - Airline Fuel Lifecycle Management Solution"
+description: "FuelSphere - CAPM Backend for Airline Fuel Lifecycle Management"
 
 parameters:
   enable-parallel-deployments: true
@@ -20,7 +20,7 @@ modules:
     path: gen/srv
     parameters:
       buildpack: nodejs_buildpack
-      memory: 256M
+      memory: 512M
       disk-quota: 1024M
     build-parameters:
       builder: npm
@@ -44,60 +44,6 @@ modules:
       disk-quota: 1024M
     requires:
       - name: fuelsphere-db
-
-  # ==================== UI MODULE ====================
-  - name: fuelsphere-app
-    type: approuter.nodejs
-    path: app/router
-    parameters:
-      buildpack: nodejs_buildpack
-      memory: 256M
-      disk-quota: 256M
-    build-parameters:
-      builder: npm
-      requires:
-        - name: fuelsphere-ui
-          artifacts:
-            - ./*
-          target-path: resources
-    requires:
-      - name: srv-api
-        group: destinations
-        properties:
-          name: srv-api
-          url: ~{srv-url}
-          forwardAuthToken: true
-      - name: fuelsphere-auth
-      - name: fuelsphere-destination
-      - name: fuelsphere-html5-repo-runtime
-
-  # ==================== UI DEPLOYER ====================
-  - name: fuelsphere-ui-deployer
-    type: com.sap.application.content
-    path: .
-    requires:
-      - name: fuelsphere-html5-repo-host
-        parameters:
-          content-target: true
-    build-parameters:
-      build-result: resources
-      requires:
-        - name: fuelsphere-ui
-          artifacts:
-            - fuelsphere.zip
-          target-path: resources/
-
-  # ==================== UI BUILD ====================
-  - name: fuelsphere-ui
-    type: html5
-    path: app/airports
-    build-parameters:
-      build-result: dist
-      builder: custom
-      commands:
-        - npm install
-        - npm run build
-      supported-platforms: []
 
 resources:
   # ==================== HDI CONTAINER ====================
@@ -133,21 +79,17 @@ resources:
         init_data:
           instance:
             existing_destinations_policy: update
-            destinations: []
-
-  # ==================== HTML5 REPO HOST ====================
-  - name: fuelsphere-html5-repo-host
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-host
-
-  # ==================== HTML5 REPO RUNTIME ====================
-  - name: fuelsphere-html5-repo-runtime
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-runtime
+            destinations:
+              - Name: S4HC_TECHNICAL
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: OAuth2ClientCredentials
+                Description: S/4HANA Cloud Technical User
+              - Name: S4HC_USER
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: OAuth2SAMLBearerAssertion
+                Description: S/4HANA Cloud Principal Propagation
 
   # ==================== APPLICATION LOGGING ====================
   - name: fuelsphere-logging

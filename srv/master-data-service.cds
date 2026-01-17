@@ -7,8 +7,7 @@
 
 using { fuelsphere as db } from '../db/schema';
 
-@path: '/api/master-data'
-// @requires: 'authenticated-user' - disabled for local dev, enable for production
+@path: '/odata/v4/master'
 service MasterDataService {
 
     // ========================================================================

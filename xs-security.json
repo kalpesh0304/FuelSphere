@@ -2,268 +2,250 @@
   "xsappname": "fuelsphere",
   "tenant-mode": "dedicated",
   "description": "FuelSphere - Airline Fuel Lifecycle Management Solution",
+
   "scopes": [
     {
-      "name": "$XSAPPNAME.master-data.read",
-      "description": "Read master data"
+      "name": "$XSAPPNAME.MasterDataRead",
+      "description": "Read access to master data entities"
     },
     {
-      "name": "$XSAPPNAME.master-data.write",
-      "description": "Create and update master data"
+      "name": "$XSAPPNAME.MasterDataWrite",
+      "description": "Create and update master data records"
     },
     {
-      "name": "$XSAPPNAME.fuel-orders.read",
-      "description": "Read fuel orders"
+      "name": "$XSAPPNAME.MasterDataAdmin",
+      "description": "Full master data administration including delete"
     },
     {
-      "name": "$XSAPPNAME.fuel-orders.write",
-      "description": "Create and update fuel orders"
+      "name": "$XSAPPNAME.FuelOrderCreate",
+      "description": "Create and submit fuel orders"
     },
     {
-      "name": "$XSAPPNAME.fuel-orders.approve",
-      "description": "Approve fuel orders"
+      "name": "$XSAPPNAME.FuelOrderApprove",
+      "description": "Approve or reject fuel orders"
     },
     {
-      "name": "$XSAPPNAME.invoices.read",
-      "description": "Read invoices"
+      "name": "$XSAPPNAME.ePODCapture",
+      "description": "Capture electronic proof of delivery"
     },
     {
-      "name": "$XSAPPNAME.invoices.write",
-      "description": "Create and update invoices"
+      "name": "$XSAPPNAME.ePODApprove",
+      "description": "Approve ePOD records"
     },
     {
-      "name": "$XSAPPNAME.invoices.post",
-      "description": "Post invoices to S/4HANA"
+      "name": "$XSAPPNAME.InvoiceVerify",
+      "description": "Verify and process invoices"
     },
     {
-      "name": "$XSAPPNAME.invoices.approve",
-      "description": "Approve invoices"
+      "name": "$XSAPPNAME.InvoiceApprove",
+      "description": "Approve invoices for payment"
     },
     {
-      "name": "$XSAPPNAME.planning.read",
-      "description": "Read planning data"
+      "name": "$XSAPPNAME.FinancePost",
+      "description": "Post journal entries to S/4HANA"
     },
     {
-      "name": "$XSAPPNAME.planning.write",
-      "description": "Create and update planning data"
+      "name": "$XSAPPNAME.BurnDataView",
+      "description": "View fuel burn and ROB data"
     },
     {
-      "name": "$XSAPPNAME.contracts.read",
-      "description": "Read contracts"
+      "name": "$XSAPPNAME.BurnDataEdit",
+      "description": "Edit and correct fuel burn records"
     },
     {
-      "name": "$XSAPPNAME.contracts.write",
-      "description": "Create and update contracts"
+      "name": "$XSAPPNAME.ContractManage",
+      "description": "Manage fuel purchase contracts"
     },
     {
-      "name": "$XSAPPNAME.analytics.read",
-      "description": "Read analytics and reports"
+      "name": "$XSAPPNAME.PlanningAccess",
+      "description": "Access fuel planning and forecasting"
     },
     {
-      "name": "$XSAPPNAME.integration.admin",
-      "description": "Administer integration settings"
+      "name": "$XSAPPNAME.ReportView",
+      "description": "View reports and analytics"
     },
     {
-      "name": "$XSAPPNAME.audit-log.read",
-      "description": "Read audit logs"
+      "name": "$XSAPPNAME.IntegrationMonitor",
+      "description": "Monitor integration status and errors"
     },
     {
-      "name": "$XSAPPNAME.config.admin",
-      "description": "Administer system configuration"
-    },
-    {
-      "name": "$XSAPPNAME.user.admin",
-      "description": "Administer users and roles"
+      "name": "$XSAPPNAME.AdminAccess",
+      "description": "Full system administration access"
     }
   ],
+
   "attributes": [
     {
-      "name": "station",
-      "description": "Assigned station codes (comma-separated)",
+      "name": "CompanyCode",
+      "description": "Company code for organizational filtering",
       "valueType": "string"
     },
     {
-      "name": "region",
-      "description": "Assigned region for multi-station access",
+      "name": "Plant",
+      "description": "Plant/Airport code for location filtering",
       "valueType": "string"
     },
     {
-      "name": "approvalLimitKg",
-      "description": "Fuel order approval limit in kg",
-      "valueType": "int"
-    },
-    {
-      "name": "approvalLimitUSD",
-      "description": "Invoice approval limit in USD",
-      "valueType": "int"
+      "name": "CostCenter",
+      "description": "Cost center for financial filtering",
+      "valueType": "string"
     }
   ],
+
   "role-templates": [
     {
+      "name": "MasterDataManager",
+      "description": "Master Data Manager - Maintains aircraft, airports, suppliers, products, contracts",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.MasterDataWrite"
+      ],
+      "attribute-references": [
+        "CompanyCode",
+        "Plant"
+      ]
+    },
+    {
       "name": "FuelPlanner",
-      "description": "Fuel Planning Manager - Strategic fuel planning & forecasting",
+      "description": "Fuel Planner - Demand forecasting, price planning, budget management",
       "scope-references": [
-        "$XSAPPNAME.planning.read",
-        "$XSAPPNAME.planning.write",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.master-data.read",
-        "$XSAPPNAME.analytics.read"
-      ]
-    },
-    {
-      "name": "ContractsManager",
-      "description": "Fuel Contracts Manager - Supplier contracts & pricing",
-      "scope-references": [
-        "$XSAPPNAME.contracts.read",
-        "$XSAPPNAME.contracts.write",
-        "$XSAPPNAME.master-data.read",
-        "$XSAPPNAME.fuel-orders.read"
-      ]
-    },
-    {
-      "name": "FinanceManager",
-      "description": "Finance Manager - Invoice processing & financial control",
-      "scope-references": [
-        "$XSAPPNAME.invoices.read",
-        "$XSAPPNAME.invoices.write",
-        "$XSAPPNAME.invoices.post",
-        "$XSAPPNAME.invoices.approve",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.analytics.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.FuelOrderCreate",
+        "$XSAPPNAME.PlanningAccess",
+        "$XSAPPNAME.ReportView"
       ],
       "attribute-references": [
-        "approvalLimitUSD"
-      ]
-    },
-    {
-      "name": "FinanceController",
-      "description": "Finance Controller - Invoice verification & reconciliation",
-      "scope-references": [
-        "$XSAPPNAME.invoices.read",
-        "$XSAPPNAME.invoices.write",
-        "$XSAPPNAME.invoices.post",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.analytics.read"
-      ],
-      "attribute-references": [
-        "approvalLimitUSD"
-      ]
-    },
-    {
-      "name": "OperationsManager",
-      "description": "Operations Manager - Station operations & fuel coordination",
-      "scope-references": [
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.fuel-orders.write",
-        "$XSAPPNAME.fuel-orders.approve",
-        "$XSAPPNAME.master-data.read",
-        "$XSAPPNAME.planning.read",
-        "$XSAPPNAME.analytics.read"
-      ],
-      "attribute-references": [
-        "region",
-        "approvalLimitKg"
+        "CompanyCode",
+        "Plant"
       ]
     },
     {
       "name": "StationCoordinator",
-      "description": "Station Coordinator - Daily station fuel operations",
+      "description": "Station Coordinator - Fuel orders, ePOD capture, uplift confirmation",
       "scope-references": [
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.fuel-orders.write",
-        "$XSAPPNAME.master-data.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.FuelOrderCreate",
+        "$XSAPPNAME.ePODCapture"
       ],
       "attribute-references": [
-        "station",
-        "approvalLimitKg"
+        "Plant"
       ]
     },
     {
-      "name": "APClerk",
-      "description": "Accounts Payable Clerk - Invoice data entry & verification",
+      "name": "ProcurementSpecialist",
+      "description": "Procurement Specialist - Supplier relationships, contracts, CPE",
       "scope-references": [
-        "$XSAPPNAME.invoices.read",
-        "$XSAPPNAME.invoices.write",
-        "$XSAPPNAME.fuel-orders.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.ContractManage",
+        "$XSAPPNAME.ReportView"
+      ],
+      "attribute-references": [
+        "CompanyCode"
       ]
     },
     {
-      "name": "IntegrationAdmin",
-      "description": "Integration Administrator - System integration & monitoring",
+      "name": "FinanceController",
+      "description": "Finance Controller - Invoice verification, approvals, settlements",
       "scope-references": [
-        "$XSAPPNAME.integration.admin",
-        "$XSAPPNAME.master-data.read",
-        "$XSAPPNAME.master-data.write",
-        "$XSAPPNAME.audit-log.read",
-        "$XSAPPNAME.analytics.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.InvoiceVerify",
+        "$XSAPPNAME.InvoiceApprove",
+        "$XSAPPNAME.FinancePost",
+        "$XSAPPNAME.ReportView"
+      ],
+      "attribute-references": [
+        "CompanyCode"
       ]
     },
     {
-      "name": "Analyst",
-      "description": "Fuel Analyst - Data analysis & reporting",
+      "name": "OperationsManager",
+      "description": "Operations Manager - Burn monitoring, ROB tracking, exception handling",
       "scope-references": [
-        "$XSAPPNAME.analytics.read",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.planning.read",
-        "$XSAPPNAME.invoices.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.BurnDataView",
+        "$XSAPPNAME.BurnDataEdit",
+        "$XSAPPNAME.FuelOrderApprove",
+        "$XSAPPNAME.ePODApprove",
+        "$XSAPPNAME.ReportView"
+      ],
+      "attribute-references": [
+        "CompanyCode",
+        "Plant"
       ]
     },
     {
-      "name": "Auditor",
-      "description": "Internal Auditor - Compliance & audit review",
+      "name": "IntegrationAdministrator",
+      "description": "Integration Administrator - API health, integration monitoring",
       "scope-references": [
-        "$XSAPPNAME.audit-log.read",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.invoices.read",
-        "$XSAPPNAME.contracts.read",
-        "$XSAPPNAME.analytics.read"
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.IntegrationMonitor",
+        "$XSAPPNAME.ReportView"
       ]
     },
     {
-      "name": "FullAdmin",
-      "description": "System Administrator - Full system access",
+      "name": "SystemAdministrator",
+      "description": "System Administrator - Full system administration",
       "scope-references": [
-        "$XSAPPNAME.master-data.read",
-        "$XSAPPNAME.master-data.write",
-        "$XSAPPNAME.fuel-orders.read",
-        "$XSAPPNAME.fuel-orders.write",
-        "$XSAPPNAME.fuel-orders.approve",
-        "$XSAPPNAME.invoices.read",
-        "$XSAPPNAME.invoices.write",
-        "$XSAPPNAME.invoices.post",
-        "$XSAPPNAME.invoices.approve",
-        "$XSAPPNAME.planning.read",
-        "$XSAPPNAME.planning.write",
-        "$XSAPPNAME.contracts.read",
-        "$XSAPPNAME.contracts.write",
-        "$XSAPPNAME.analytics.read",
-        "$XSAPPNAME.integration.admin",
-        "$XSAPPNAME.audit-log.read",
-        "$XSAPPNAME.config.admin",
-        "$XSAPPNAME.user.admin"
+        "$XSAPPNAME.AdminAccess",
+        "$XSAPPNAME.MasterDataAdmin",
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.MasterDataWrite",
+        "$XSAPPNAME.FuelOrderCreate",
+        "$XSAPPNAME.FuelOrderApprove",
+        "$XSAPPNAME.ePODCapture",
+        "$XSAPPNAME.ePODApprove",
+        "$XSAPPNAME.InvoiceVerify",
+        "$XSAPPNAME.InvoiceApprove",
+        "$XSAPPNAME.FinancePost",
+        "$XSAPPNAME.BurnDataView",
+        "$XSAPPNAME.BurnDataEdit",
+        "$XSAPPNAME.ContractManage",
+        "$XSAPPNAME.PlanningAccess",
+        "$XSAPPNAME.ReportView",
+        "$XSAPPNAME.IntegrationMonitor"
+      ]
+    },
+    {
+      "name": "Viewer",
+      "description": "Viewer - Read-only access for reporting and auditing",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.ReportView"
+      ],
+      "attribute-references": [
+        "CompanyCode",
+        "Plant"
       ]
     }
   ],
+
   "role-collections": [
     {
+      "name": "FuelSphere_MasterDataManager",
+      "description": "Master Data Manager role collection",
+      "role-template-references": [
+        "$XSAPPNAME.MasterDataManager"
+      ]
+    },
+    {
       "name": "FuelSphere_FuelPlanner",
-      "description": "Fuel Planning Manager role collection",
+      "description": "Fuel Planner role collection",
       "role-template-references": [
         "$XSAPPNAME.FuelPlanner"
       ]
     },
     {
-      "name": "FuelSphere_ContractsManager",
-      "description": "Fuel Contracts Manager role collection",
+      "name": "FuelSphere_StationCoordinator",
+      "description": "Station Coordinator role collection",
       "role-template-references": [
-        "$XSAPPNAME.ContractsManager"
+        "$XSAPPNAME.StationCoordinator"
       ]
     },
     {
-      "name": "FuelSphere_FinanceManager",
-      "description": "Finance Manager role collection",
+      "name": "FuelSphere_ProcurementSpecialist",
+      "description": "Procurement Specialist role collection",
       "role-template-references": [
-        "$XSAPPNAME.FinanceManager"
+        "$XSAPPNAME.ProcurementSpecialist"
       ]
     },
     {
@@ -281,53 +263,33 @@
       ]
     },
     {
-      "name": "FuelSphere_StationCoordinator",
-      "description": "Station Coordinator role collection",
-      "role-template-references": [
-        "$XSAPPNAME.StationCoordinator"
-      ]
-    },
-    {
-      "name": "FuelSphere_APClerk",
-      "description": "Accounts Payable Clerk role collection",
-      "role-template-references": [
-        "$XSAPPNAME.APClerk"
-      ]
-    },
-    {
       "name": "FuelSphere_IntegrationAdmin",
       "description": "Integration Administrator role collection",
       "role-template-references": [
-        "$XSAPPNAME.IntegrationAdmin"
+        "$XSAPPNAME.IntegrationAdministrator"
       ]
     },
     {
-      "name": "FuelSphere_Analyst",
-      "description": "Fuel Analyst role collection",
-      "role-template-references": [
-        "$XSAPPNAME.Analyst"
-      ]
-    },
-    {
-      "name": "FuelSphere_Auditor",
-      "description": "Internal Auditor role collection",
-      "role-template-references": [
-        "$XSAPPNAME.Auditor"
-      ]
-    },
-    {
-      "name": "FuelSphere_FullAdmin",
+      "name": "FuelSphere_SystemAdmin",
       "description": "System Administrator role collection",
       "role-template-references": [
-        "$XSAPPNAME.FullAdmin"
+        "$XSAPPNAME.SystemAdministrator"
+      ]
+    },
+    {
+      "name": "FuelSphere_Viewer",
+      "description": "Viewer role collection",
+      "role-template-references": [
+        "$XSAPPNAME.Viewer"
       ]
     }
   ],
+
   "oauth2-configuration": {
     "token-validity": 43200,
+    "refresh-token-validity": 604800,
     "redirect-uris": [
-      "https://*.cfapps.*.hana.ondemand.com/**",
-      "https://*.hana.ondemand.com/**"
+      "https://*.cfapps.*.hana.ondemand.com/**"
     ]
   }
 }
