@@ -283,6 +283,226 @@ entity CONFIG_APPROVAL_LIMITS : cuid {
 }
 
 // ============================================================================
+// FLIGHT SCHEDULE (For Fuel Order Reference)
+// ============================================================================
+
+/**
+ * FLIGHT_SCHEDULE - Flight Schedule Master
+ * Source: External flight ops system or manual entry
+ * Used for linking fuel orders to specific flights
+ */
+entity FLIGHT_SCHEDULE : cuid, AuditTrail {
+        flight_number       : String(10) @mandatory;    // Flight number (e.g., PR101)
+        flight_date         : Date @mandatory;          // Flight date
+        aircraft            : Association to AIRCRAFT_MASTER on aircraft.type_code = aircraft_type;
+        aircraft_type       : String(10);               // FK to AIRCRAFT_MASTER.type_code
+        aircraft_reg        : String(10);               // Aircraft registration (e.g., RP-C1234)
+        origin              : Association to MASTER_AIRPORTS on origin.iata_code = origin_airport;
+        origin_airport      : String(3) @mandatory;     // Departure airport IATA
+        destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
+        destination_airport : String(3) @mandatory;     // Arrival airport IATA
+        scheduled_departure : Time;                     // Scheduled departure time
+        scheduled_arrival   : Time;                     // Scheduled arrival time
+        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED
+}
+
+// ============================================================================
+// FUEL ORDERS MODULE (FDD-04)
+// ============================================================================
+
+/**
+ * Order Status Enumeration
+ * Draft → Submitted → Confirmed → InProgress → Delivered → Cancelled
+ */
+type OrderStatus : String(20) enum {
+    Draft       = 'Draft';
+    Submitted   = 'Submitted';
+    Confirmed   = 'Confirmed';
+    InProgress  = 'InProgress';
+    Delivered   = 'Delivered';
+    Cancelled   = 'Cancelled';
+}
+
+/**
+ * Order Priority Enumeration
+ */
+type OrderPriority : String(10) enum {
+    Normal  = 'Normal';
+    High    = 'High';
+    Urgent  = 'Urgent';
+}
+
+/**
+ * Delivery Status Enumeration
+ */
+type DeliveryStatus : String(20) enum {
+    Pending   = 'Pending';
+    Verified  = 'Verified';
+    Posted    = 'Posted';
+    Disputed  = 'Disputed';
+}
+
+/**
+ * Ticket Status Enumeration
+ */
+type TicketStatus : String(20) enum {
+    Open      = 'Open';
+    Attached  = 'Attached';
+    Verified  = 'Verified';
+    Closed    = 'Closed';
+}
+
+/**
+ * FUEL_ORDERS - Core Fuel Order Entity
+ * Source: FuelSphere native
+ * Volume: ~300,000/year
+ *
+ * Order Number Format: FO-{STATION}-{YYYYMMDD}-{SEQ}
+ * Example: FO-MNL-20260117-001
+ *
+ * Innovative ePOD-triggered workflow:
+ * - PO/GR created in S/4HANA only after ePOD digital signature capture
+ */
+entity FUEL_ORDERS : cuid, AuditTrail {
+        order_number        : String(25) @mandatory;    // FO-{STATION}-{YYYYMMDD}-{SEQ}
+
+        // Flight Reference (optional - may be created before flight assignment)
+        flight              : Association to FLIGHT_SCHEDULE;
+
+        // Station (Delivery Location)
+        airport             : Association to MASTER_AIRPORTS;
+        station_code        : String(3) @mandatory;     // IATA code for quick reference
+
+        // Supplier & Contract
+        supplier            : Association to MASTER_SUPPLIERS;
+        contract            : Association to MASTER_CONTRACTS;
+
+        // Product
+        product             : Association to MASTER_PRODUCTS;
+        uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+        uom_code            : String(3) default 'KG';   // Default to KG
+
+        // Quantity & Pricing
+        ordered_quantity    : Decimal(12,2) @mandatory; // Ordered fuel quantity (kg)
+        unit_price          : Decimal(15,4);            // Unit price from CPE
+        total_amount        : Decimal(15,2);            // Total order amount
+        currency_code       : String(3) default 'USD';  // ISO currency code
+
+        // Timing
+        requested_date      : Date @mandatory;          // Requested delivery date
+        requested_time      : Time;                     // Requested delivery time
+
+        // Priority & Status
+        priority            : OrderPriority default 'Normal';
+        status              : OrderStatus default 'Draft';
+
+        // S/4HANA References (populated after ePOD)
+        s4_po_number        : String(10);               // S/4HANA Purchase Order Number
+        s4_po_item          : String(5);                // PO Line Item
+
+        // Notes & Comments
+        notes               : String(1000);             // Order notes/special instructions
+
+        // Cancellation
+        cancelled_reason    : String(500);              // Reason for cancellation
+        cancelled_by        : String(100);              // User who cancelled
+        cancelled_at        : DateTime;                 // Cancellation timestamp
+
+        // Composition: One order can have multiple deliveries and tickets
+        deliveries          : Composition of many FUEL_DELIVERIES on deliveries.order = $self;
+        tickets             : Composition of many FUEL_TICKETS on tickets.order = $self;
+}
+
+/**
+ * FUEL_DELIVERIES - ePOD (Electronic Proof of Delivery) Records
+ * Source: FuelSphere native
+ * Volume: ~300,000/year
+ *
+ * Delivery Number Format: EPD-{STATION}-{YYYYMMDD}-{SEQ}
+ * Example: EPD-MNL-20260117-001
+ *
+ * Key Feature: Dual digital signatures (pilot + ground crew) trigger
+ * automatic PO/GR creation in S/4HANA
+ */
+entity FUEL_DELIVERIES : cuid, AuditTrail {
+        order               : Association to FUEL_ORDERS @mandatory;
+        delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
+
+        // Delivery Details
+        delivery_date       : Date @mandatory;          // Actual delivery date
+        delivery_time       : Time @mandatory;          // Actual delivery time
+        delivered_quantity  : Decimal(12,2) @mandatory; // Actual delivered quantity (kg)
+
+        // Quality Measurements
+        temperature         : Decimal(5,2);             // Fuel temperature (°C)
+        density             : Decimal(8,4);             // Measured density (kg/L)
+        temperature_corrected_qty : Decimal(12,2);      // Temperature-corrected quantity
+
+        // Delivery Vehicle & Personnel
+        vehicle_id          : String(20);               // Delivery vehicle ID
+        driver_name         : String(100);              // Driver name
+
+        // Digital Signatures (stored as base64 or reference to Object Store)
+        pilot_signature     : LargeBinary;              // Pilot signature image
+        pilot_name          : String(100);              // Pilot name
+        ground_crew_signature : LargeBinary;            // Ground crew signature image
+        ground_crew_name    : String(100);              // Ground crew name
+        signature_timestamp : Timestamp;                // Signature capture time
+        signature_location  : String(100);              // GPS coordinates or location
+
+        // S/4HANA References (populated after signature)
+        s4_gr_number        : String(10);               // S/4HANA Material Document Number
+        s4_gr_year          : String(4);                // Material Document Year
+        s4_gr_item          : String(4);                // Material Document Item
+
+        // Status & Variance
+        status              : DeliveryStatus default 'Pending';
+        quantity_variance   : Decimal(12,2);            // Difference from ordered qty
+        variance_percentage : Decimal(5,2);             // Variance as percentage
+        variance_flag       : Boolean default false;    // True if variance > 5%
+        variance_reason     : String(500);              // Explanation for variance
+}
+
+/**
+ * FUEL_TICKETS - Individual Fuel Tickets
+ * Source: FuelSphere native
+ * Volume: ~350,000/year
+ *
+ * Ticket Number Format: FT-{STATION}-{YYYYMMDD}-{SEQ}
+ * Example: FT-MNL-20260117-001
+ *
+ * Multiple tickets may be associated with a single order/delivery
+ */
+entity FUEL_TICKETS : cuid, AuditTrail {
+        order               : Association to FUEL_ORDERS @mandatory;
+        delivery            : Association to FUEL_DELIVERIES;  // Optional link to specific delivery
+
+        ticket_number       : String(50) @mandatory;    // Physical ticket number from supplier
+        internal_number     : String(25);               // FT-{STATION}-{YYYYMMDD}-{SEQ}
+
+        // Flight Reference
+        aircraft_reg        : String(10);               // Aircraft registration
+        flight_number       : String(10);               // Flight number
+
+        // Quantity
+        quantity            : Decimal(15,2) @mandatory; // Quantity on ticket (kg)
+        uom_code            : String(3) default 'KG';   // Unit of measure
+
+        // Timing
+        delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket
+
+        // Supplier Reference
+        supplier_ticket_ref : String(50);               // Supplier's ticket reference
+
+        // Status
+        status              : TicketStatus default 'Open';
+
+        // Verification
+        verified_by         : String(100);              // User who verified
+        verified_at         : DateTime;                 // Verification timestamp
+}
+
+// ============================================================================
 // AUDIT LOG (For Compliance - HLD Section 8)
 // ============================================================================
 
