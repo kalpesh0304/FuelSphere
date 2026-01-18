@@ -279,6 +279,47 @@ npm rebuild
 - CSV data: `namespace-ENTITY_NAME.csv` (e.g., `fuelsphere-MASTER_AIRPORTS.csv`)
 - JS handlers: `entity-name.js`
 
+## Document Handling
+
+### Reading .docx Files
+
+Claude's Read tool cannot read `.docx` files directly (they are binary ZIP archives).
+
+**To extract text from .docx files, use this command:**
+
+```bash
+unzip -p <file.docx> word/document.xml | sed -e 's/<[^>]*>//g' | tr -s ' \n'
+```
+
+| Step | Purpose |
+|------|---------|
+| `unzip -p` | Extract document.xml from ZIP without creating files |
+| `sed -e 's/<[^>]*>//g'` | Strip XML tags, leaving only text |
+| `tr -s ' \n'` | Clean up extra whitespace |
+
+**Limitations:**
+- Loses formatting (bold, tables, headers)
+- Images/diagrams not accessible
+- Complex tables may be hard to read
+
+### Preferred Document Formats
+
+For FDD and design documents, prefer these formats (in order):
+
+| Format | Readability | Best For |
+|--------|-------------|----------|
+| Markdown (.md) | Excellent | All documentation |
+| Plain text (.txt) | Excellent | Simple specs |
+| Screenshots/Images | Good | Diagrams, UI mockups |
+| .docx (with extraction) | Limited | When no alternative |
+
+### FDD Document Location
+
+FDD documents are stored in `docs/original/`:
+- `FDD-03-HLD_Contracts_CPE_Integration_v2_0.docx`
+- `FDD-04-HLD_Fuel_Orders_Milestones_v1.0.docx`
+- `FDD-05-HLD_FuelTicket_ePOD_v1_0.docx`
+
 ## Related Projects
 
 - **FuelSphere-UI**: Fiori UI applications (../FuelSphere-UI)
