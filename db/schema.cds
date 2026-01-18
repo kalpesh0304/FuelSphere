@@ -749,3 +749,283 @@ entity AUDIT_LOG : cuid {
         ip_address      : String(50);             // Client IP
         user_agent      : String(500);            // Browser/client info
 }
+
+// ============================================================================
+// ANNUAL PLANNING & FORECASTING MODULE (FDD-02)
+// Strategic planning backbone for demand forecasting and budget management
+// ============================================================================
+
+/**
+ * Planning Version Type Enumeration
+ */
+type PlanningVersionType : String(20) enum {
+    Budget      = 'BUDGET';
+    Forecast    = 'FORECAST';
+    Scenario    = 'SCENARIO';
+}
+
+/**
+ * Planning Version Status Enumeration
+ * Draft → In Review → Approved → Locked
+ */
+type PlanningVersionStatus : String(20) enum {
+    Draft       = 'DRAFT';
+    InReview    = 'IN_REVIEW';
+    Approved    = 'APPROVED';
+    Locked      = 'LOCKED';
+}
+
+/**
+ * SAC Writeback Status Enumeration
+ */
+type SACWritebackStatus : String(20) enum {
+    Pending     = 'PENDING';
+    Success     = 'SUCCESS';
+    Failed      = 'FAILED';
+}
+
+/**
+ * Planning Period Granularity
+ */
+type PlanningPeriod : String(10) enum {
+    Monthly     = 'MONTHLY';
+    Quarterly   = 'QUARTERLY';
+}
+
+/**
+ * Price Source Enumeration
+ */
+type PriceSource : String(20) enum {
+    Derived     = 'DERIVED';    // From Contracts/CPE module
+    Manual      = 'MANUAL';     // Manual entry
+    Contract    = 'CONTRACT';   // From contract fixed price
+}
+
+/**
+ * Demand Calculation Method Enumeration
+ */
+type DemandCalculationMethod : String(20) enum {
+    Standard    = 'STANDARD';   // Route-Aircraft Matrix
+    Historical  = 'HISTORICAL'; // Historical variance analysis
+    Manual      = 'MANUAL';     // Manual override
+}
+
+/**
+ * PLANNING_VERSION - Budget/Forecast Version Header
+ * Source: FuelSphere native
+ * Volume: ~50/year
+ *
+ * Version ID Format: PV-{TYPE}-{FISCAL_YEAR}-{SEQ}
+ * Example: PV-BUDGET-2026-001
+ *
+ * Key Capability: SAP Analytics Cloud (SAC) writeback for financial planning
+ */
+entity PLANNING_VERSION : cuid, AuditTrail {
+        version_id          : String(20) @mandatory;      // PV-{TYPE}-{YEAR}-{SEQ}
+        version_name        : String(100) @mandatory;     // Display name
+        version_type        : PlanningVersionType @mandatory; // BUDGET / FORECAST / SCENARIO
+        fiscal_year         : String(4) @mandatory;       // Fiscal year (e.g., 2026)
+        planning_period     : PlanningPeriod default 'MONTHLY'; // MONTHLY / QUARTERLY
+        status              : PlanningVersionStatus default 'DRAFT';
+        description         : String(500);                // Version description
+
+        // Flight Schedule Reference (optional)
+        based_on_schedule   : Association to FLIGHT_SCHEDULE;  // Source schedule for calculations
+
+        // Approval Workflow
+        approved_by         : String(255);                // Approver user ID
+        approved_at         : Timestamp;                  // Approval timestamp
+
+        // SAC Integration
+        sac_writeback_status : SACWritebackStatus default 'PENDING';
+        sac_model_id        : String(100);                // SAC model identifier
+        sac_writeback_at    : Timestamp;                  // Last writeback timestamp
+
+        // Compositions
+        lines               : Composition of many PLANNING_LINE on lines.version = $self;
+        calculations        : Composition of many DEMAND_CALCULATION on calculations.version = $self;
+}
+
+/**
+ * PLANNING_LINE - Detailed Planning Data by Period and Station
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Contains calculated fuel demand, price assumptions, and projected costs
+ * by period (month/quarter) and station (airport).
+ */
+entity PLANNING_LINE : cuid {
+        version             : Association to PLANNING_VERSION @mandatory;
+        airport             : Association to MASTER_AIRPORTS @mandatory;
+        period              : String(10) @mandatory;      // Period (e.g., 2026-01, 2026-Q1)
+
+        // Planned Volume
+        planned_volume      : Decimal(15,2) @mandatory;   // Planned fuel volume (kg)
+        uom_code            : String(3) default 'KG';     // Unit of measure
+
+        // Pricing
+        planned_price       : Decimal(15,4) @mandatory;   // Price assumption per unit
+        planned_cost        : Decimal(18,2) @mandatory;   // Calculated fuel cost
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;       // Currency code
+        price_source        : PriceSource default 'DERIVED'; // DERIVED / MANUAL / CONTRACT
+
+        // Flight Statistics
+        flight_count        : Integer default 0;          // Number of flights in period
+
+        // Variance (vs. prior year)
+        prior_year_volume   : Decimal(15,2);              // Prior year volume (kg)
+        prior_year_cost     : Decimal(18,2);              // Prior year cost
+        volume_variance_pct : Decimal(5,2);               // Volume variance %
+        cost_variance_pct   : Decimal(5,2);               // Cost variance %
+
+        // Notes
+        notes               : String(500);                // Line-level notes
+}
+
+/**
+ * ROUTE_AIRCRAFT_MATRIX - Standard Fuel Consumption by Route/Aircraft
+ * Source: FuelSphere native
+ * Volume: ~5,000 records
+ *
+ * Fuel Requirement Calculation Formula (per FDD-02):
+ * Total Fuel Required = Trip Fuel + Taxi Fuel + Contingency + Alternate + Reserve + Extra
+ *
+ * Used for demand calculations based on flight schedules.
+ */
+entity ROUTE_AIRCRAFT_MATRIX : cuid, ActiveStatus, AuditTrail {
+        route               : Association to ROUTE_MASTER @mandatory;
+        aircraft_type       : Association to AIRCRAFT_MASTER @mandatory;
+
+        // Fuel Components (all in kg)
+        trip_fuel           : Decimal(12,2) @mandatory;   // Trip fuel requirement
+        taxi_fuel           : Decimal(10,2) default 0;    // Taxi fuel (ground operations)
+        contingency_fuel    : Decimal(10,2) default 0;    // Contingency (typically 5% of trip)
+        alternate_fuel      : Decimal(10,2);              // Fuel to alternate airport
+        reserve_fuel        : Decimal(10,2) default 0;    // Final reserve (30-45 min holding)
+        extra_fuel          : Decimal(10,2) default 0;    // Extra/discretionary fuel
+
+        // Calculated Total
+        total_standard_fuel : Decimal(12,2) @mandatory;   // Total calculated fuel (kg)
+
+        // Seasonal Adjustments
+        summer_factor       : Decimal(5,4) default 1.0000; // Summer adjustment factor
+        winter_factor       : Decimal(5,4) default 1.0000; // Winter adjustment factor
+
+        // Validity Period
+        effective_from      : Date @mandatory;            // Validity start date
+        effective_to        : Date;                       // Validity end date (NULL = open-ended)
+
+        // Source & Notes
+        data_source         : String(50);                 // OPERATIONAL / MANUFACTURER / CALCULATED
+        notes               : String(500);                // Notes on fuel requirements
+}
+
+/**
+ * DEMAND_CALCULATION - Calculated Fuel Demand Results
+ * Source: FuelSphere native
+ * Volume: ~1,000,000/year
+ *
+ * Stores calculated fuel demand per flight/route based on
+ * Route-Aircraft Matrix and flight schedule.
+ */
+entity DEMAND_CALCULATION : cuid {
+        version             : Association to PLANNING_VERSION @mandatory;
+        flight_schedule     : Association to FLIGHT_SCHEDULE;    // Source flight
+        route               : Association to ROUTE_MASTER @mandatory;
+        aircraft_type       : Association to AIRCRAFT_MASTER @mandatory;
+
+        // Calculated Demand
+        calculated_demand   : Decimal(15,2) @mandatory;   // Calculated fuel demand (kg)
+        uom_code            : String(3) default 'KG';     // Unit of measure
+
+        // Calculation Details
+        calculation_method  : DemandCalculationMethod @mandatory; // STANDARD / HISTORICAL / MANUAL
+        matrix_used         : Association to ROUTE_AIRCRAFT_MATRIX; // Matrix used for calculation
+        seasonal_factor     : Decimal(5,4) default 1.0000; // Seasonal adjustment applied
+        adjustment_factor   : Decimal(5,4) default 1.0000; // Manual adjustment factor
+
+        // Historical Reference
+        historical_avg      : Decimal(15,2);              // Historical average demand
+        historical_variance : Decimal(5,2);               // Variance from historical
+
+        // Timing
+        calculation_date    : Date @mandatory;            // Date for which demand is calculated
+        calculated_at       : Timestamp @cds.on.insert: $now; // Calculation timestamp
+
+        // Notes
+        notes               : String(500);                // Calculation notes
+}
+
+/**
+ * PRICE_ASSUMPTION - Price Forecasts by Station/Period
+ * Source: FuelSphere native
+ * Volume: ~50,000/year
+ *
+ * Stores price assumptions for planning from Contracts/CPE module
+ * or manual entry for scenario analysis.
+ */
+entity PRICE_ASSUMPTION : cuid, AuditTrail {
+        version             : Association to PLANNING_VERSION @mandatory;
+        airport             : Association to MASTER_AIRPORTS @mandatory;
+        product             : Association to MASTER_PRODUCTS @mandatory;
+        period              : String(10) @mandatory;      // Period (e.g., 2026-01)
+
+        // Price Assumptions
+        unit_price          : Decimal(15,4) @mandatory;   // Assumed unit price
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;       // Currency code
+        uom_code            : String(3) default 'KG';     // Unit of measure
+
+        // Source
+        price_source        : PriceSource @mandatory;     // DERIVED / MANUAL / CONTRACT
+        source_contract     : Association to MASTER_CONTRACTS; // Source contract (if applicable)
+        source_formula      : Association to PRICING_FORMULA;  // Source formula (if derived)
+
+        // Index Reference (if derived)
+        base_index          : Association to MARKET_INDEX;     // Base index used
+        index_value         : Decimal(15,4);              // Index value used
+        index_date          : Date;                       // Index effective date
+
+        // Effective Period
+        effective_from      : Date @mandatory;
+        effective_to        : Date;
+
+        // Notes
+        notes               : String(500);                // Price assumption notes
+}
+
+/**
+ * SCENARIO_COMPARISON - Version Comparison Analysis
+ * Source: FuelSphere native
+ * Volume: ~200/year
+ *
+ * Stores comparison results between planning versions
+ * for scenario analysis and decision support.
+ */
+entity SCENARIO_COMPARISON : cuid, AuditTrail {
+        comparison_name     : String(100) @mandatory;     // Comparison display name
+        description         : String(500);                // Comparison description
+
+        // Versions Being Compared
+        base_version        : Association to PLANNING_VERSION @mandatory;    // Base/reference version
+        compare_version     : Association to PLANNING_VERSION @mandatory;    // Version to compare
+
+        // Summary Metrics
+        total_volume_base   : Decimal(18,2);              // Total volume in base version
+        total_volume_compare: Decimal(18,2);              // Total volume in compare version
+        volume_variance     : Decimal(18,2);              // Volume difference
+        volume_variance_pct : Decimal(5,2);               // Volume variance %
+
+        total_cost_base     : Decimal(18,2);              // Total cost in base version
+        total_cost_compare  : Decimal(18,2);              // Total cost in compare version
+        cost_variance       : Decimal(18,2);              // Cost difference
+        cost_variance_pct   : Decimal(5,2);               // Cost variance %
+
+        currency_code       : String(3) @mandatory;       // Comparison currency
+
+        // Analysis Results
+        analysis_summary    : LargeString;                // JSON summary of analysis
+        comparison_date     : Timestamp @cds.on.insert: $now; // Comparison timestamp
+        compared_by         : String(255);                // User who ran comparison
+}
