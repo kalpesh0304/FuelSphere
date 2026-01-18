@@ -659,10 +659,12 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         delivery_time       : Time @mandatory;          // Actual delivery time
         delivered_quantity  : Decimal(12,2) @mandatory; // Actual delivered quantity (kg)
 
-        // Quality Measurements
+        // Quality Measurements (FDD-05 validation rules)
+        @assert.range: [-40, 50]  // VAL-EPD-003: Must be between -40°C and +50°C
         temperature         : Decimal(5,2);             // Fuel temperature (°C)
+        @assert.range: [0.775, 0.840]  // VAL-EPD-004: Jet fuel density range (kg/L)
         density             : Decimal(8,4);             // Measured density (kg/L)
-        temperature_corrected_qty : Decimal(12,2);      // Temperature-corrected quantity
+        temperature_corrected_qty : Decimal(12,2);      // Temperature-corrected quantity (to 15°C ref)
 
         // Delivery Vehicle & Personnel
         vehicle_id          : String(20);               // Delivery vehicle ID

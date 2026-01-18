@@ -116,6 +116,22 @@ service FuelOrderService {
          * Transitions: Pending/Verified → Disputed
          */
         action dispute(reason: String) returns FuelDeliveries;
+
+        /**
+         * Calculate temperature-corrected quantity (FDD-05)
+         * Corrects volume to 15°C reference temperature per ASTM D1250
+         * Formula: Corrected = Measured × [1 - α × (T - 15)]
+         * where α = 0.00099 for Jet A/A-1
+         */
+        action calculateTemperatureCorrection() returns TemperatureCorrectionResult;
+
+        /**
+         * Validate delivery data per FDD-05 rules
+         * - VAL-EPD-001: Quantity > 0 and <= ordered + 5%
+         * - VAL-EPD-003: Temperature between -40°C and +50°C
+         * - VAL-EPD-004: Density between 0.775 and 0.840 kg/L
+         */
+        action validateDelivery() returns DeliveryValidationResult;
     };
 
     // ========================================================================
@@ -277,4 +293,51 @@ service FuelOrderService {
         priority : String(10);
         count    : Integer;
     };
+
+    /**
+     * Temperature Correction Result (FDD-05)
+     * Applies ASTM D1250 correction to 15°C reference
+     */
+    type TemperatureCorrectionResult {
+        success                 : Boolean;
+        deliveryNumber          : String(25);
+        measuredQuantity        : Decimal(12,2);
+        measuredTemperature     : Decimal(5,2);
+        measuredDensity         : Decimal(8,4);
+        correctionFactor        : Decimal(8,6);
+        correctedQuantity       : Decimal(12,2);
+        referenceTemperature    : Decimal(5,2);  // Always 15°C
+        message                 : String(500);
+    };
+
+    /**
+     * Delivery Validation Result (FDD-05)
+     */
+    type DeliveryValidationResult {
+        isValid         : Boolean;
+        deliveryNumber  : String(25);
+        errors          : array of ValidationError;
+        warnings        : array of ValidationError;
+    };
+
+    type ValidationError {
+        code        : String(10);   // EPD4xx error codes
+        field       : String(50);
+        message     : String(500);
+        severity    : String(10);   // ERROR / WARNING
+    };
+
+    // ========================================================================
+    // ERROR CODES (FDD-05 Section 7.6.5)
+    // ========================================================================
+    // EPD401 - Delivered quantity exceeds tolerance (>5% variance)
+    // EPD402 - Missing required signature before status change
+    // EPD403 - Temperature out of range (-40°C to +50°C)
+    // EPD404 - Density out of specification (0.775 - 0.840 kg/L)
+    // EPD410 - Duplicate ticket number for supplier
+    // EPD411 - Meter reading does not match ticket quantity
+    // INT401 - S/4HANA PO creation failed
+    // INT402 - S/4HANA GR posting failed
+    // INT403 - Shell Skypad communication timeout
+    // INT404 - Object Store PDF upload failed
 }
