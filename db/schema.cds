@@ -206,18 +206,146 @@ entity MASTER_PRODUCTS : cuid, ActiveStatus, AuditTrail {
  * Source: FuelSphere native with S/4HANA reference
  * Sync: Bidirectional Real-time
  *
- * Fields aligned with HLD Section 3.2
+ * Enhanced for FDD-03 Contracts & CPE Integration
  */
 entity MASTER_CONTRACTS : cuid, ActiveStatus, AuditTrail {
-        contract_number : String(20) @mandatory;  // Contract number
-        contract_name   : String(100) @mandatory; // Contract description
-        supplier        : Association to MASTER_SUPPLIERS;
-        valid_from      : Date @mandatory;        // Contract start date
-        valid_to        : Date @mandatory;        // Contract end date
-        contract_type   : String(20) @mandatory;  // Contract type
-        price_type      : String(20) @mandatory;  // CPE / FIXED / INDEX
-        currency        : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
-        currency_code   : String(3) @mandatory;   // FK to CURRENCY_MASTER.currency_code
+        contract_number     : String(20) @mandatory;  // Contract number
+        contract_name       : String(100) @mandatory; // Contract description
+        supplier            : Association to MASTER_SUPPLIERS;
+        valid_from          : Date @mandatory;        // Contract start date
+        valid_to            : Date @mandatory;        // Contract end date
+        contract_type       : String(20) @mandatory;  // SPOT / TERM / FRAMEWORK
+        price_type          : String(20) @mandatory;  // CPE / FIXED / INDEX
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;   // FK to CURRENCY_MASTER.currency_code
+        payment_terms       : String(20);             // Payment terms (NET30, etc.)
+        incoterms           : String(10);             // Incoterms (DAP, FCA, etc.)
+        min_volume_kg       : Decimal(15,2);          // Minimum annual volume
+        max_volume_kg       : Decimal(15,2);          // Maximum annual volume
+        s4_contract_number  : String(10);             // S/4HANA Contract (EBELN)
+        // Compositions
+        priceElements       : Composition of many CONTRACT_PRICE_ELEMENTS on priceElements.contract = $self;
+        locations           : Composition of many CONTRACT_LOCATIONS on locations.contract = $self;
+        products            : Composition of many CONTRACT_PRODUCTS on products.contract = $self;
+}
+
+// ============================================================================
+// CONTRACTS & CPE ENTITIES (FDD-03)
+// ============================================================================
+
+/**
+ * Price Element Type Enumeration
+ */
+type PriceElementType : String(20) enum {
+    INDEX       = 'INDEX';       // Based on external price index
+    FIXED       = 'FIXED';       // Fixed amount per unit
+    PERCENTAGE  = 'PERCENTAGE';  // Percentage of subtotal
+    FORMULA     = 'FORMULA';     // Calculated from expression
+}
+
+/**
+ * Price Element Operation Enumeration
+ */
+type PriceElementOperation : String(10) enum {
+    ADD      = 'ADD';       // Add to subtotal
+    SUBTRACT = 'SUBTRACT';  // Subtract from subtotal
+    MULTIPLY = 'MULTIPLY';  // Multiply subtotal
+}
+
+/**
+ * CONTRACT_PRICE_ELEMENTS - CPE Formula Components
+ * Source: FuelSphere native
+ *
+ * Defines the pricing formula components for fuel contracts.
+ * Elements are applied in sequence order to calculate final price.
+ */
+entity CONTRACT_PRICE_ELEMENTS : cuid, ActiveStatus, AuditTrail {
+        contract            : Association to MASTER_CONTRACTS @mandatory;
+        element_code        : String(20) @mandatory;      // Element code (BASE, DIFF, TAX, ITP)
+        element_name        : String(100) @mandatory;     // Element description
+        element_type        : PriceElementType @mandatory; // INDEX / FIXED / PERCENTAGE / FORMULA
+        sequence            : Integer @mandatory;         // Calculation sequence (1-99)
+        price_index         : Association to PRICE_INDICES;
+        fixed_value         : Decimal(15,4);              // Fixed value (if FIXED type)
+        percentage_value    : Decimal(8,4);               // Percentage (if PERCENTAGE type)
+        formula_expression  : String(500);                // Formula (if FORMULA type)
+        operation           : PriceElementOperation default 'ADD';
+        uom_code            : String(3);                  // Unit of measure (KG, LTR, GAL)
+        currency_code       : String(3);                  // Currency for this element
+        valid_from          : Date @mandatory;            // Element validity start
+        valid_to            : Date;                       // Element validity end
+}
+
+/**
+ * CONTRACT_LOCATIONS - Airport/Plant Assignments
+ * Source: FuelSphere native
+ *
+ * Assigns contracts to specific airports/plants where they can be used.
+ */
+entity CONTRACT_LOCATIONS : cuid, ActiveStatus, AuditTrail {
+        contract            : Association to MASTER_CONTRACTS @mandatory;
+        airport             : Association to MASTER_AIRPORTS;
+        plant_code          : String(4);                  // FK to T001W_PLANT.werks
+        location_type       : String(20) default 'PRIMARY'; // PRIMARY / ALTERNATE
+        location_premium    : Decimal(15,4);              // Location-specific premium per unit
+        priority            : Integer default 1;          // Selection priority (1=highest)
+        valid_from          : Date @mandatory;            // Location validity start
+        valid_to            : Date;                       // Location validity end
+}
+
+/**
+ * CONTRACT_PRODUCTS - Product Assignments per Contract
+ * Source: FuelSphere native
+ *
+ * Defines which fuel products are covered under each contract.
+ */
+entity CONTRACT_PRODUCTS : cuid, ActiveStatus, AuditTrail {
+        contract            : Association to MASTER_CONTRACTS @mandatory;
+        product             : Association to MASTER_PRODUCTS @mandatory;
+        product_premium     : Decimal(15,4);              // Product-specific premium per unit
+        min_quantity        : Decimal(15,2);              // Minimum order quantity
+        max_quantity        : Decimal(15,2);              // Maximum order quantity
+        is_default          : Boolean default false;      // Default product for contract
+}
+
+/**
+ * PRICE_INDICES - External Price Index Definitions
+ * Source: External (Platts, Argus, etc.)
+ *
+ * Defines price indices used in CPE formulas.
+ */
+entity PRICE_INDICES : cuid, ActiveStatus, AuditTrail {
+        index_code              : String(20) @mandatory;  // Index code (PLATTS_SG, MOPS, etc.)
+        index_name              : String(100) @mandatory; // Full index name
+        index_provider          : String(50) @mandatory;  // Provider (Platts, Argus, etc.)
+        index_region            : String(50) @mandatory;  // Geographic region
+        product_type            : String(20) @mandatory;  // JET_FUEL / AVGAS / BIOFUEL
+        currency                : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code           : String(3) @mandatory;   // Index currency
+        uom                     : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+        uom_code                : String(3) @mandatory;   // Index UoM (BBL, MT, KG)
+        publication_frequency   : String(20) @mandatory;  // DAILY / WEEKLY / MONTHLY
+        publication_lag_days    : Integer default 0;      // Days after period end
+        data_source_url         : String(500);            // External data source URL
+        // Composition
+        values                  : Composition of many PRICE_INDEX_VALUES on values.priceIndex = $self;
+}
+
+/**
+ * PRICE_INDEX_VALUES - Historical Price Index Values
+ * Source: External (Platts, Argus, etc.)
+ *
+ * Stores historical price values for each index.
+ */
+entity PRICE_INDEX_VALUES : cuid {
+        priceIndex          : Association to PRICE_INDICES @mandatory;
+        effective_date      : Date @mandatory;            // Price effective date
+        price_value         : Decimal(15,4) @mandatory;   // Index price value
+        price_low           : Decimal(15,4);              // Daily low (if available)
+        price_high          : Decimal(15,4);              // Daily high (if available)
+        source_reference    : String(100);                // Publication reference
+        imported_at         : DateTime @cds.on.insert: $now;
+        imported_by         : String(100);                // Import user/system
 }
 
 // ============================================================================
