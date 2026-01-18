@@ -1,0 +1,224 @@
+{
+  "metadata": {
+    "screenId": "FUEL_ORDER_DASHBOARD_BY_SUPPLIER_001",
+    "screenName": "Fuel Order Dashboard (By Supplier)",
+    "module": "Fuel Operations",
+    "sapFioriFloorplan": "Overview Page",
+    "userPersonas": [
+      "Operations Manager",
+      "Procurement Manager"
+    ],
+    "authorizedRoles": [
+      "Operator",
+      "Procurement"
+    ],
+    "responsiveBreakpoints": [
+      "Desktop (1920px)",
+      "Tablet (768px)",
+      "Mobile (375px)"
+    ],
+    "layoutType": "Full-width Dashboard with Filters",
+    "implementationStatus": "Implemented"
+  },
+  "layoutStructure": {
+    "gridSystem": "8px base grid (--spacing-xs through --spacing-xxl)",
+    "containerMaxWidth": "1600px",
+    "pageLayoutType": "Full-width Dashboard",
+    "sections": [
+      {
+        "sectionId": "kpi-header",
+        "sectionName": "KPI Header",
+        "position": "Top",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-m)"
+      },
+      {
+        "sectionId": "main-content",
+        "sectionName": "Main Content Area",
+        "position": "Middle",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-m)"
+      },
+      {
+        "sectionId": "charts",
+        "sectionName": "Charts Section",
+        "position": "Bottom",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-m)"
+      }
+    ]
+  },
+  "componentInventory": [
+    {
+      "componentId": "kpi-tiles",
+      "componentType": "KPI Tiles",
+      "sapUI5Equivalent": "sap.m.GenericTile",
+      "properties": {
+        "layout": "Grid",
+        "columns": 4,
+        "backgroundColor": "var(--card)",
+        "borderColor": "var(--border)",
+        "borderRadius": "var(--radius-card)"
+      },
+      "dimensions": {
+        "width": "calc(25% - var(--spacing-m))",
+        "height": "120px",
+        "padding": "var(--spacing-m)"
+      }
+    },
+    {
+      "componentId": "charts",
+      "componentType": "Charts",
+      "sapUI5Equivalent": "sap.viz.ui5.controls",
+      "properties": {
+        "chartTypes": [
+          "Line",
+          "Bar",
+          "Donut",
+          "Area"
+        ],
+        "colorPalette": [
+          "var(--primary-blue)",
+          "var(--secondary-blue)",
+          "var(--info-blue)"
+        ],
+        "interactive": true
+      },
+      "dimensions": {
+        "width": "100%",
+        "height": "400px"
+      }
+    }
+  ],
+  "dataModel": {
+    "entityName": "FuelOrder",
+    "description": "Primary entity for Fuel Order Dashboard (By Supplier)",
+    "fields": [
+      {
+        "fieldName": "fuelOrderId",
+        "dataType": "UUID",
+        "description": "Unique FuelOrder identifier",
+        "key": true,
+        "required": true
+      },
+      {
+        "fieldName": "createdDate",
+        "dataType": "DateTime",
+        "description": "Creation timestamp",
+        "required": true
+      },
+      {
+        "fieldName": "createdBy",
+        "dataType": "String",
+        "description": "User who created the record",
+        "maxLength": 100,
+        "required": true
+      },
+      {
+        "fieldName": "lastModifiedDate",
+        "dataType": "DateTime",
+        "description": "Last modification timestamp",
+        "required": false
+      },
+      {
+        "fieldName": "status",
+        "dataType": "String",
+        "description": "Record status",
+        "enumValues": [
+          "Draft",
+          "Active",
+          "Completed",
+          "Cancelled"
+        ],
+        "required": true
+      }
+    ],
+    "associations": [
+      {
+        "associationName": "toUserCreated",
+        "targetEntity": "User",
+        "cardinality": "N:1",
+        "foreignKey": "createdBy"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "refresh-dashboard",
+      "actionType": "Refresh",
+      "trigger": "onClick",
+      "element": "Refresh Button",
+      "behavior": "Reload dashboard data"
+    },
+    {
+      "actionId": "navigate-to-details",
+      "actionType": "Navigation",
+      "trigger": "onClick",
+      "element": "View Details Link",
+      "behavior": "Navigate to detailed view"
+    }
+  ],
+  "visualSpecifications": {
+    "colors": {
+      "primaryBlue": "#0070F2 (var(--primary-blue))",
+      "secondaryBlue": "#5CAAFF (var(--secondary-blue))",
+      "infoBlue": "#0064D9 (var(--info-blue))",
+      "successGreen": "#30914C (var(--success-green))",
+      "warningAmber": "#E76500 (var(--warning-amber))",
+      "errorRed": "#D32F2F (var(--error-red))",
+      "background": "#F5F6F7 (var(--background))",
+      "card": "#FFFFFF (var(--card))",
+      "border": "#D9D9D9 (var(--border))",
+      "textPrimary": "#32363A (var(--text-primary))",
+      "textSecondary": "#6C6C6C (var(--text-secondary))",
+      "muted": "#F2F2F2 (var(--muted))"
+    },
+    "typography": {
+      "fontFamily": "'72', Arial, sans-serif",
+      "h1": "var(--text-h1) - 32px, font-weight: var(--font-weight-bold)",
+      "h2": "var(--text-h2) - 24px, font-weight: var(--font-weight-bold)",
+      "h3": "var(--text-h3) - 20px, font-weight: var(--font-weight-bold)",
+      "base": "var(--text-base) - 14px, font-weight: var(--font-weight-normal)",
+      "sm": "var(--text-sm) - 12px, font-weight: var(--font-weight-normal)",
+      "xs": "var(--text-xs) - 11px, font-weight: var(--font-weight-normal)"
+    },
+    "spacing": {
+      "xs": "4px (var(--spacing-xs))",
+      "s": "8px (var(--spacing-s))",
+      "m": "16px (var(--spacing-m))",
+      "l": "24px (var(--spacing-l))",
+      "xl": "32px (var(--spacing-xl))",
+      "xxl": "48px (var(--spacing-xxl))"
+    },
+    "borderRadius": {
+      "card": "8px (var(--radius-card))",
+      "button": "4px (var(--radius-button))"
+    },
+    "elevation": {
+      "sm": "0 1px 3px rgba(0,0,0,0.12) (var(--elevation-sm))",
+      "md": "0 2px 8px rgba(0,0,0,0.15) (var(--elevation-md))",
+      "lg": "0 4px 16px rgba(0,0,0,0.2) (var(--elevation-lg))"
+    },
+    "statusColors": {
+      "statusDraft": "#6C6C6C (var(--text-secondary))",
+      "statusSubmitted": "#0064D9 (var(--info-blue))",
+      "statusApproved": "#30914C (var(--success-green))",
+      "statusInProgress": "#E76500 (var(--warning-amber))",
+      "statusDelivered": "#30914C (var(--success-green))",
+      "statusCancelled": "#D32F2F (var(--error-red))",
+      "statusCompleted": "#30914C (var(--success-green))",
+      "statusPending": "#E76500 (var(--warning-amber))",
+      "statusRejected": "#D32F2F (var(--error-red))"
+    },
+    "icons": {
+      "search": "lucide-react Search",
+      "filter": "lucide-react Filter",
+      "settings": "lucide-react Settings",
+      "refresh": "lucide-react RefreshCw",
+      "pieChart": "lucide-react PieChart",
+      "trendingUp": "lucide-react TrendingUp",
+      "package": "lucide-react Package",
+      "alertCircle": "lucide-react AlertCircle"
+    }
+  }
+}
