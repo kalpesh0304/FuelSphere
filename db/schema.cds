@@ -215,7 +215,7 @@ entity MASTER_CONTRACTS : cuid, ActiveStatus, AuditTrail {
         valid_from          : Date @mandatory;        // Contract start date
         valid_to            : Date @mandatory;        // Contract end date
         contract_type       : String(20) @mandatory;  // SPOT / TERM / FRAMEWORK
-        price_type          : String(20) @mandatory;  // CPE / FIXED / INDEX
+        price_type          : String(20) @mandatory;  // CPE / FIXED / NATIVE (v2.0)
         currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
         currency_code       : String(3) @mandatory;   // FK to CURRENCY_MASTER.currency_code
         payment_terms       : String(20);             // Payment terms (NET30, etc.)
@@ -223,57 +223,195 @@ entity MASTER_CONTRACTS : cuid, ActiveStatus, AuditTrail {
         min_volume_kg       : Decimal(15,2);          // Minimum annual volume
         max_volume_kg       : Decimal(15,2);          // Maximum annual volume
         s4_contract_number  : String(10);             // S/4HANA Contract (EBELN)
-        // Compositions
-        priceElements       : Composition of many CONTRACT_PRICE_ELEMENTS on priceElements.contract = $self;
+        // Compositions (v2.0 - pricing formulas linked separately)
         locations           : Composition of many CONTRACT_LOCATIONS on locations.contract = $self;
         products            : Composition of many CONTRACT_PRODUCTS on products.contract = $self;
 }
 
 // ============================================================================
-// CONTRACTS & CPE ENTITIES (FDD-03)
+// CONTRACTS & CPE INTEGRATION v2.0 (FDD-03)
+// Dual Pricing Engine Architecture: CPE Adapter + Native Engine
 // ============================================================================
 
 /**
- * Price Element Type Enumeration
+ * Pricing Engine Mode - Runtime selection per company/tenant
  */
-type PriceElementType : String(20) enum {
-    INDEX       = 'INDEX';       // Based on external price index
+type PricingEngineMode : String(20) enum {
+    NATIVE      = 'NATIVE';      // FuelSphere Native Engine only
+    CPE         = 'CPE';         // S/4HANA CPE Adapter only
+    HYBRID      = 'HYBRID';      // Both engines with variance tracking
+}
+
+/**
+ * Formula Element Category - Per FDD-03 v2.0 Price Calculation Formula
+ */
+type FormulaElementCategory : String(20) enum {
+    MARKET_INDEX  = 'MARKET_INDEX';   // Base Index lookup (Platts, Argus)
+    SERVICE_FEE   = 'SERVICE_FEE';    // Fixed/% fees (Premium, ITP, Transport, Handling)
+    TAX           = 'TAX';            // Tax components (Excise, VAT, Other)
+}
+
+/**
+ * Formula Element Type
+ */
+type FormulaElementType : String(20) enum {
+    INDEX       = 'INDEX';       // Lookup from market index
     FIXED       = 'FIXED';       // Fixed amount per unit
     PERCENTAGE  = 'PERCENTAGE';  // Percentage of subtotal
-    FORMULA     = 'FORMULA';     // Calculated from expression
 }
 
 /**
- * Price Element Operation Enumeration
- */
-type PriceElementOperation : String(10) enum {
-    ADD      = 'ADD';       // Add to subtotal
-    SUBTRACT = 'SUBTRACT';  // Subtract from subtotal
-    MULTIPLY = 'MULTIPLY';  // Multiply subtotal
-}
-
-/**
- * CONTRACT_PRICE_ELEMENTS - CPE Formula Components
+ * PRICING_CONFIG - Pricing Engine Configuration
  * Source: FuelSphere native
  *
- * Defines the pricing formula components for fuel contracts.
- * Elements are applied in sequence order to calculate final price.
+ * Configures which pricing engine to use per company/tenant.
+ * Supports runtime selection and automatic fallback.
  */
-entity CONTRACT_PRICE_ELEMENTS : cuid, ActiveStatus, AuditTrail {
-        contract            : Association to MASTER_CONTRACTS @mandatory;
-        element_code        : String(20) @mandatory;      // Element code (BASE, DIFF, TAX, ITP)
-        element_name        : String(100) @mandatory;     // Element description
-        element_type        : PriceElementType @mandatory; // INDEX / FIXED / PERCENTAGE / FORMULA
-        sequence            : Integer @mandatory;         // Calculation sequence (1-99)
-        price_index         : Association to PRICE_INDICES;
-        fixed_value         : Decimal(15,4);              // Fixed value (if FIXED type)
-        percentage_value    : Decimal(8,4);               // Percentage (if PERCENTAGE type)
-        formula_expression  : String(500);                // Formula (if FORMULA type)
-        operation           : PriceElementOperation default 'ADD';
-        uom_code            : String(3);                  // Unit of measure (KG, LTR, GAL)
-        currency_code       : String(3);                  // Currency for this element
-        valid_from          : Date @mandatory;            // Element validity start
-        valid_to            : Date;                       // Element validity end
+entity PRICING_CONFIG : cuid, ActiveStatus, AuditTrail {
+        config_code         : String(20) @mandatory;      // Configuration identifier
+        company_code        : String(10);                 // Company code (NULL = default)
+        engine_mode         : PricingEngineMode default 'NATIVE'; // NATIVE / CPE / HYBRID
+        fallback_enabled    : Boolean default true;       // Auto-fallback to Native if CPE unavailable
+        variance_threshold  : Decimal(5,2) default 5.00;  // % threshold for hybrid comparison alerts
+        cpe_cache_ttl_mins  : Integer default 30;         // CPE cache TTL in minutes (15-30 per FDD)
+        cpe_endpoint_url    : String(500);                // S/4HANA CPE OData endpoint
+        valid_from          : Date @mandatory;
+        valid_to            : Date;
+}
+
+/**
+ * PRICING_FORMULA - Native Engine Formula Definitions
+ * Source: FuelSphere native
+ *
+ * Defines pricing formulas for the Native Engine.
+ * Formula: Final Price = Base Index + Premium + Into-Plane + Transport + Handling + Excise + VAT + Other
+ */
+entity PRICING_FORMULA : cuid, ActiveStatus, AuditTrail {
+        formula_code        : String(20) @mandatory;      // Formula identifier
+        formula_name        : String(100) @mandatory;     // Display name
+        description         : String(500);                // Formula description
+        contract            : Association to MASTER_CONTRACTS;  // Optional link to contract
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;       // Formula currency
+        uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+        uom_code            : String(3) @mandatory;       // Formula UoM (KG, LTR, GAL)
+        valid_from          : Date @mandatory;
+        valid_to            : Date;
+        // Composition
+        elements            : Composition of many PRICING_FORMULA_ELEMENT on elements.formula = $self;
+}
+
+/**
+ * PRICING_FORMULA_ELEMENT - Formula Component Elements
+ * Source: FuelSphere native
+ *
+ * Individual components of a pricing formula.
+ * Categories per FDD-03 v2.0:
+ * - MARKET_INDEX: BASE (Platts, Argus)
+ * - SERVICE_FEE: Premium, Into-Plane, Transport, Handling
+ * - TAX: Excise, VAT, Other
+ */
+entity PRICING_FORMULA_ELEMENT : cuid, ActiveStatus {
+        formula             : Association to PRICING_FORMULA @mandatory;
+        sequence            : Integer @mandatory;         // Calculation order (1-99)
+        element_code        : String(20) @mandatory;      // BASE, PREMIUM, ITP, TRANSPORT, HANDLING, EXCISE, VAT, OTHER
+        element_name        : String(100) @mandatory;     // Display name
+        category            : FormulaElementCategory @mandatory; // MARKET_INDEX / SERVICE_FEE / TAX
+        element_type        : FormulaElementType @mandatory;     // INDEX / FIXED / PERCENTAGE
+        market_index        : Association to MARKET_INDEX;       // FK if type = INDEX
+        fixed_value         : Decimal(15,4);              // Value if type = FIXED
+        percentage_value    : Decimal(8,4);               // Value if type = PERCENTAGE
+        currency_code       : String(3);                  // Element currency (may differ from formula)
+        is_taxable          : Boolean default true;       // Include in tax base calculation
+        valid_from          : Date;
+        valid_to            : Date;
+}
+
+/**
+ * MARKET_INDEX - Market Index Definitions
+ * Source: External (Platts, Argus, CME, etc.)
+ *
+ * Defines market indices for price lookups.
+ */
+entity MARKET_INDEX : cuid, ActiveStatus, AuditTrail {
+        index_code              : String(20) @mandatory;  // PLATTS_SG, MOPS_JET, ARGUS_EU, NYMEX_HO
+        index_name              : String(100) @mandatory; // Full index name
+        index_provider          : String(50) @mandatory;  // S&P Global Platts, Argus Media, CME Group
+        index_region            : String(50) @mandatory;  // Singapore, Asia Pacific, Northwest Europe
+        product_type            : String(20) @mandatory;  // JET_FUEL / AVGAS / BIOFUEL
+        currency                : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code           : String(3) @mandatory;   // Index currency (USD)
+        uom                     : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+        uom_code                : String(3) @mandatory;   // Index UoM (BBL, MT, KG)
+        publication_frequency   : String(20) @mandatory;  // DAILY / WEEKLY / MONTHLY
+        publication_lag_days    : Integer default 0;      // Days after period end
+        data_source_url         : String(500);            // External data API URL
+        // Composition
+        values                  : Composition of many INDEX_VALUE on values.marketIndex = $self;
+}
+
+/**
+ * INDEX_VALUE - Historical Market Index Values
+ * Source: External (Platts, Argus, etc.)
+ *
+ * Stores historical price values for market indices.
+ */
+entity INDEX_VALUE : cuid {
+        marketIndex         : Association to MARKET_INDEX @mandatory;
+        effective_date      : Date @mandatory;            // Price effective date
+        price_value         : Decimal(15,4) @mandatory;   // Index price value
+        price_low           : Decimal(15,4);              // Daily low
+        price_high          : Decimal(15,4);              // Daily high
+        source_reference    : String(100);                // Publication reference
+        imported_at         : DateTime @cds.on.insert: $now;
+        imported_by         : String(100);
+}
+
+/**
+ * DERIVED_PRICE - Price Calculation Results (Audit Trail)
+ * Source: FuelSphere native
+ *
+ * Stores calculated prices for audit and variance tracking.
+ * Records results from both Native and CPE engines in HYBRID mode.
+ */
+entity DERIVED_PRICE : cuid {
+        calculation_id      : String(36) @mandatory;      // Unique calculation reference
+        contract            : Association to MASTER_CONTRACTS;
+        formula             : Association to PRICING_FORMULA;
+        airport             : Association to MASTER_AIRPORTS;
+        product             : Association to MASTER_PRODUCTS;
+
+        // Calculation Context
+        calculation_date    : Date @mandatory;            // Price date used
+        quantity            : Decimal(15,2) @mandatory;   // Quantity for calculation
+        uom_code            : String(3) @mandatory;
+
+        // Engine Used
+        engine_mode         : PricingEngineMode @mandatory;
+        engine_used         : String(20) @mandatory;      // NATIVE / CPE
+
+        // Price Results
+        base_price          : Decimal(15,4);              // Base index price
+        total_service_fees  : Decimal(15,4);              // Sum of service fees
+        total_taxes         : Decimal(15,4);              // Sum of taxes
+        final_unit_price    : Decimal(15,4) @mandatory;   // Final price per unit
+        total_amount        : Decimal(15,2) @mandatory;   // Total = unit_price * quantity
+        currency_code       : String(3) @mandatory;
+
+        // Hybrid Mode Variance (if applicable)
+        cpe_unit_price      : Decimal(15,4);              // CPE calculated price
+        native_unit_price   : Decimal(15,4);              // Native calculated price
+        variance_amount     : Decimal(15,4);              // Absolute variance
+        variance_percentage : Decimal(5,2);               // Variance %
+        variance_flag       : Boolean default false;      // True if exceeds threshold
+
+        // Element Breakdown (JSON)
+        price_breakdown     : LargeString;                // JSON array of element details
+
+        // Audit
+        calculated_at       : DateTime @cds.on.insert: $now;
+        calculated_by       : String(100);
+        calculation_duration_ms : Integer;                // Performance tracking
 }
 
 /**
@@ -306,46 +444,6 @@ entity CONTRACT_PRODUCTS : cuid, ActiveStatus, AuditTrail {
         min_quantity        : Decimal(15,2);              // Minimum order quantity
         max_quantity        : Decimal(15,2);              // Maximum order quantity
         is_default          : Boolean default false;      // Default product for contract
-}
-
-/**
- * PRICE_INDICES - External Price Index Definitions
- * Source: External (Platts, Argus, etc.)
- *
- * Defines price indices used in CPE formulas.
- */
-entity PRICE_INDICES : cuid, ActiveStatus, AuditTrail {
-        index_code              : String(20) @mandatory;  // Index code (PLATTS_SG, MOPS, etc.)
-        index_name              : String(100) @mandatory; // Full index name
-        index_provider          : String(50) @mandatory;  // Provider (Platts, Argus, etc.)
-        index_region            : String(50) @mandatory;  // Geographic region
-        product_type            : String(20) @mandatory;  // JET_FUEL / AVGAS / BIOFUEL
-        currency                : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
-        currency_code           : String(3) @mandatory;   // Index currency
-        uom                     : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
-        uom_code                : String(3) @mandatory;   // Index UoM (BBL, MT, KG)
-        publication_frequency   : String(20) @mandatory;  // DAILY / WEEKLY / MONTHLY
-        publication_lag_days    : Integer default 0;      // Days after period end
-        data_source_url         : String(500);            // External data source URL
-        // Composition
-        values                  : Composition of many PRICE_INDEX_VALUES on values.priceIndex = $self;
-}
-
-/**
- * PRICE_INDEX_VALUES - Historical Price Index Values
- * Source: External (Platts, Argus, etc.)
- *
- * Stores historical price values for each index.
- */
-entity PRICE_INDEX_VALUES : cuid {
-        priceIndex          : Association to PRICE_INDICES @mandatory;
-        effective_date      : Date @mandatory;            // Price effective date
-        price_value         : Decimal(15,4) @mandatory;   // Index price value
-        price_low           : Decimal(15,4);              // Daily low (if available)
-        price_high          : Decimal(15,4);              // Daily high (if available)
-        source_reference    : String(100);                // Publication reference
-        imported_at         : DateTime @cds.on.insert: $now;
-        imported_by         : String(100);                // Import user/system
 }
 
 // ============================================================================

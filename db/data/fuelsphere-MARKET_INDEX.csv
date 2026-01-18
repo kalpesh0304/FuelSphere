@@ -1,0 +1,5 @@
+ID;index_code;index_name;index_provider;index_region;product_type;currency_code;uom_code;publication_frequency;publication_lag_days;data_source_url;is_active
+550e8400-e29b-41d4-a716-446655440101;PLATTS_SG;Platts Singapore Jet Kerosene;S&P Global Platts;Singapore;JET_FUEL;USD;BBL;DAILY;0;https://platts.com/singapore-jet;true
+550e8400-e29b-41d4-a716-446655440102;MOPS_JET;MOPS Jet Kerosene;Platts;Asia Pacific;JET_FUEL;USD;BBL;DAILY;0;https://platts.com/mops;true
+550e8400-e29b-41d4-a716-446655440103;ARGUS_EU;Argus European Jet;Argus Media;Northwest Europe;JET_FUEL;USD;MT;DAILY;0;https://argusmedia.com/jet;true
+550e8400-e29b-41d4-a716-446655440104;NYMEX_HO;NYMEX Heating Oil;CME Group;North America;JET_FUEL;USD;GAL;DAILY;0;https://cmegroup.com/ho;true

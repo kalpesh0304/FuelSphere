@@ -1,0 +1,3 @@
+ID;formula_code;formula_name;description;contract_ID;currency_code;uom_code;valid_from;valid_to;is_active
+550e8400-e29b-41d4-a716-446655440401;FRM-MNL-001;Manila Standard Formula;Standard pricing formula for Manila station with Platts Singapore base;550e8400-e29b-41d4-a716-446655440001;USD;KG;2026-01-01;;true
+550e8400-e29b-41d4-a716-446655440402;FRM-SIN-001;Singapore Standard Formula;Standard pricing formula for Singapore station with MOPS base;550e8400-e29b-41d4-a716-446655440002;USD;KG;2026-01-01;;true

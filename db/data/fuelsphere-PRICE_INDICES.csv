@@ -1,7 +1,0 @@
-ID,index_code,index_name,index_provider,index_region,product_type,currency_code,uom_code,publication_frequency,publication_lag_days,data_source_url,is_active,created_at,created_by,modified_at,modified_by
-e1f2a3b4-5555-4000-8000-000000000001,PLATTS_SG,Platts Singapore Jet Kerosene,S&P Global Platts,Singapore,JET_FUEL,USD,BBL,DAILY,0,https://www.spglobal.com/platts,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
-e1f2a3b4-5555-4000-8000-000000000002,MOPS_JET,MOPS Jet Kerosene FOB Singapore,S&P Global Platts,Asia Pacific,JET_FUEL,USD,BBL,DAILY,0,https://www.spglobal.com/platts,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
-e1f2a3b4-5555-4000-8000-000000000003,ARGUS_AP,Argus Asia-Pacific Jet Fuel,Argus Media,Asia Pacific,JET_FUEL,USD,MT,DAILY,0,https://www.argusmedia.com,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
-e1f2a3b4-5555-4000-8000-000000000004,NYMEX_HO,NYMEX Heating Oil Futures,CME Group,North America,JET_FUEL,USD,GAL,DAILY,0,https://www.cmegroup.com,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
-e1f2a3b4-5555-4000-8000-000000000005,ICE_GO,ICE Gasoil Futures,Intercontinental Exchange,Europe,JET_FUEL,USD,MT,DAILY,0,https://www.theice.com,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
-e1f2a3b4-5555-4000-8000-000000000006,PLATTS_ME,Platts Middle East Jet Kerosene,S&P Global Platts,Middle East,JET_FUEL,USD,BBL,DAILY,0,https://www.spglobal.com/platts,true,2024-01-01T00:00:00Z,SYSTEM,2024-01-01T00:00:00Z,SYSTEM
