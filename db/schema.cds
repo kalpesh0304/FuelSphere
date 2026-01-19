@@ -1601,3 +1601,197 @@ entity COMPLIANCE_AUDIT_LOGS : cuid {
         ip_address          : String(50);                 // Client IP address
         user_agent          : String(500);                // Browser/client info
 }
+
+// ============================================================================
+// FUEL BURN & ROB TRACKING MODULE (FDD-08)
+// Real-time fuel consumption tracking and ROB ledger management
+// Formula: ROB_current = ROB_previous + Uplift - Burn + Adjustment
+// ============================================================================
+
+/**
+ * Fuel Burn Data Source Enumeration
+ * Priority: ACARS > JEFFERSON > EFB > MANUAL
+ */
+type FuelBurnDataSource : String(20) enum {
+    ACARS       = 'ACARS';       // Aircraft Communications Addressing and Reporting System
+    Jefferson   = 'JEFFERSON';   // Jefferson fuel calculation system
+    EFB         = 'EFB';         // Electronic Flight Bag
+    Manual      = 'MANUAL';      // Manual entry
+}
+
+/**
+ * Fuel Burn Status Enumeration
+ */
+type FuelBurnStatus : String(20) enum {
+    Preliminary = 'PRELIMINARY'; // Pending confirmation
+    Confirmed   = 'CONFIRMED';   // Confirmed and accounted
+    Adjusted    = 'ADJUSTED';    // Manually adjusted
+    Rejected    = 'REJECTED';    // Rejected/invalid
+}
+
+/**
+ * ROB Ledger Entry Type
+ */
+type ROBEntryType : String(20) enum {
+    Flight      = 'FLIGHT';      // Post-flight ROB update
+    Uplift      = 'UPLIFT';      // Fuel uplift from ePOD
+    Adjustment  = 'ADJUSTMENT';  // Manual adjustment
+    Initial     = 'INITIAL';     // Initial load/setup
+    Transfer    = 'TRANSFER';    // Inter-tank transfer (if applicable)
+}
+
+/**
+ * Variance Status based on thresholds
+ * 0-5%: Normal, 5-10%: Warning, 10-20%: Exception, >20%: Critical
+ */
+type VarianceStatus : String(20) enum {
+    Normal      = 'NORMAL';      // 0% to ±5%
+    Warning     = 'WARNING';     // >5% to ±10%
+    Exception   = 'EXCEPTION';   // >10% to ±20%
+    Critical    = 'CRITICAL';    // >20%
+}
+
+/**
+ * FUEL_BURNS - Fuel Burn Records
+ * Source: ACARS, EFB, Jefferson, Manual
+ * Volume: ~500,000/year
+ *
+ * Records fuel consumption for each flight
+ * Integrates with external systems: ACARS, EFB, Jefferson
+ */
+entity FUEL_BURNS : cuid, AuditTrail {
+        // Flight & Aircraft Reference
+        flight              : Association to FLIGHT_SCHEDULE;  // Associated flight
+        aircraft            : Association to AIRCRAFT_MASTER @mandatory;
+        tail_number         : String(10) @mandatory;      // Aircraft registration (denormalized)
+
+        // Burn Date/Time
+        burn_date           : Date @mandatory;            // Burn record date
+        burn_time           : Time;                       // Burn record time
+        block_off_time      : DateTime;                   // Block-off (departure) time
+        block_on_time       : DateTime;                   // Block-on (arrival) time
+        flight_duration_mins : Integer;                   // Flight duration in minutes
+
+        // Route Information
+        origin_airport      : Association to MASTER_AIRPORTS;
+        destination_airport : Association to MASTER_AIRPORTS;
+
+        // Fuel Quantities (all in kg)
+        planned_burn_kg     : Decimal(12,2);              // Planned fuel burn from Jefferson
+        actual_burn_kg      : Decimal(12,2) @mandatory;   // Actual fuel burn
+        taxi_out_kg         : Decimal(10,2);              // Taxi-out fuel
+        taxi_in_kg          : Decimal(10,2);              // Taxi-in fuel
+        trip_fuel_kg        : Decimal(12,2);              // Trip fuel (cruise)
+
+        // Variance Calculation
+        variance_kg         : Decimal(12,2);              // Variance = actual - planned
+        variance_pct        : Decimal(5,2);               // Variance percentage
+        variance_status     : VarianceStatus;             // NORMAL, WARNING, EXCEPTION, CRITICAL
+
+        // Data Source & Status
+        data_source         : FuelBurnDataSource @mandatory; // ACARS, JEFFERSON, EFB, MANUAL
+        source_message_id   : String(50);                 // External message ID (ACARS/EFB)
+        status              : FuelBurnStatus default 'PRELIMINARY';
+
+        // Confirmation
+        confirmed_by        : String(100);                // User who confirmed
+        confirmed_at        : DateTime;                   // Confirmation timestamp
+
+        // Exception Handling
+        requires_review     : Boolean default false;      // True if variance exceeds threshold
+        review_notes        : String(1000);               // Review/investigation notes
+        reviewed_by         : String(100);                // Reviewer
+        reviewed_at         : DateTime;                   // Review timestamp
+
+        // Finance Integration (FDD-10)
+        finance_posted      : Boolean default false;      // True if posted to Finance
+        finance_post_date   : DateTime;                   // Finance posting timestamp
+}
+
+/**
+ * ROB_LEDGER - Remaining on Board Fuel Ledger
+ * Source: FuelSphere native
+ * Volume: ~1,000,000/year
+ *
+ * Per-aircraft fuel inventory tracking
+ * Formula: closingROBKg = openingROBKg + upliftKg - burnKg + adjustmentKg
+ */
+entity ROB_LEDGER : cuid, AuditTrail {
+        // Aircraft Reference
+        aircraft            : Association to AIRCRAFT_MASTER @mandatory;
+        tail_number         : String(10) @mandatory;      // Aircraft registration (denormalized)
+
+        // Record Timestamp
+        record_date         : Date @mandatory;            // Record date
+        record_time         : Time @mandatory;            // Record time
+        sequence            : Integer @mandatory;         // Sequence within day for ordering
+
+        // Location
+        airport             : Association to MASTER_AIRPORTS @mandatory;
+        airport_code        : String(3) @mandatory;       // IATA code (denormalized)
+
+        // Associated Records
+        flight              : Association to FLIGHT_SCHEDULE; // Associated flight (if applicable)
+        fuel_burn           : Association to FUEL_BURNS;      // Associated burn record
+        fuel_delivery       : Association to FUEL_DELIVERIES; // Associated ePOD/uplift
+
+        // Entry Type
+        entry_type          : ROBEntryType @mandatory;    // FLIGHT, UPLIFT, ADJUSTMENT, INITIAL
+
+        // ROB Calculation Components (all in kg)
+        opening_rob_kg      : Decimal(12,2) @mandatory;   // Opening ROB (previous closing)
+        uplift_kg           : Decimal(12,2) default 0;    // Fuel added (from ePOD)
+        burn_kg             : Decimal(12,2) default 0;    // Fuel consumed
+        adjustment_kg       : Decimal(12,2) default 0;    // Manual adjustment (+/-)
+        @assert.range: [0, null]  // Closing ROB cannot be negative (FB402)
+        closing_rob_kg      : Decimal(12,2) @mandatory;   // Closing ROB (calculated)
+
+        // Fuel Capacity Reference
+        max_capacity_kg     : Decimal(12,2);              // Aircraft max fuel capacity
+
+        // Validation
+        rob_percentage      : Decimal(5,2);               // ROB as % of capacity
+
+        // Adjustment Details (if entry_type = ADJUSTMENT)
+        adjustment_reason   : String(500);                // Reason for manual adjustment
+        adjustment_approved_by : String(100);             // Approver (Ops Manager)
+        adjustment_approved_at : DateTime;                // Approval timestamp
+
+        // Data Quality
+        data_source         : String(20);                 // Source of ROB data
+        is_estimated        : Boolean default false;      // True if ROB is estimated
+}
+
+/**
+ * FUEL_BURN_EXCEPTIONS - Variance Exception Queue
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Tracks fuel burn variances requiring investigation
+ */
+entity FUEL_BURN_EXCEPTIONS : cuid, AuditTrail {
+        fuel_burn           : Association to FUEL_BURNS @mandatory;
+        aircraft            : Association to AIRCRAFT_MASTER @mandatory;
+        tail_number         : String(10) @mandatory;
+
+        // Exception Details
+        exception_date      : Date @mandatory;
+        variance_kg         : Decimal(12,2) @mandatory;
+        variance_pct        : Decimal(5,2) @mandatory;
+        variance_status     : VarianceStatus @mandatory;
+
+        // Investigation
+        status              : String(20) default 'OPEN'; // OPEN, INVESTIGATING, RESOLVED, CLOSED
+        assigned_to         : String(100);               // Investigator
+        assigned_at         : DateTime;
+
+        // Resolution
+        root_cause          : String(500);               // Identified root cause
+        corrective_action   : String(500);               // Action taken
+        resolved_by         : String(100);               // User who resolved
+        resolved_at         : DateTime;                  // Resolution timestamp
+
+        // Linked Issues
+        maintenance_related : Boolean default false;     // True if maintenance issue
+        maintenance_order   : String(20);                // Linked maintenance order number
+}
