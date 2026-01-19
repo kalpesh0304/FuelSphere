@@ -41,8 +41,10 @@ aspect ActiveStatus {
 
 /**
  * T005_COUNTRY - SAP Country Master
- * Source: S/4HANA API_COUNTRY_SRV
+ * Source: S/4HANA API_COUNTRY_SRV + FuelSphere Compliance (FDD-07)
  * Sync: Daily
+ *
+ * Extended with embargo/sanction fields for FDD-07 Compliance Module
  */
 entity T005_COUNTRY : ActiveStatus {
     key land1       : String(3);      // SAP Country key (PK)
@@ -52,6 +54,13 @@ entity T005_COUNTRY : ActiveStatus {
         landgr      : String(3);      // Country group/region
         currcode    : String(3);      // Currency code (FK to CURRENCY_MASTER)
         spras       : String(2);      // Language key
+
+        // FDD-07 Embargo & Compliance Fields
+        is_embargoed        : Boolean default false;  // Embargo/sanction flag
+        embargo_effective_date : Date;                // Date embargo became effective
+        embargo_reason      : String(500);            // Regulatory reference for embargo
+        sanction_programs   : String(200);            // Applicable programs (OFAC, EU, UN)
+        risk_level          : String(10);             // HIGH, MEDIUM, LOW
 }
 
 /**
@@ -1363,4 +1372,232 @@ entity GR_IR_CLEARING : cuid, AuditTrail {
         clearing_status     : String(20) @mandatory;      // OPEN / CLEARED / PARTIAL
         clearing_date       : Date;                       // Clearing date
         cleared_by          : String(255);                // User who cleared
+}
+
+// ============================================================================
+// EMBARGO & COMPLIANCE MODULE (FDD-07)
+// Regulatory control center for sanctions screening and compliance
+// ============================================================================
+
+/**
+ * Entity Type Enumeration for Sanctions
+ */
+type SanctionedEntityType : String(20) enum {
+    Individual      = 'INDIVIDUAL';
+    Organization    = 'ORGANIZATION';
+    Vessel          = 'VESSEL';
+    Aircraft        = 'AIRCRAFT';
+}
+
+/**
+ * Compliance Check Result Enumeration
+ */
+type ComplianceCheckResult : String(20) enum {
+    Pass            = 'PASS';
+    Block           = 'BLOCK';
+    Review          = 'REVIEW';
+}
+
+/**
+ * Compliance Check Type Enumeration
+ */
+type ComplianceCheckType : String(20) enum {
+    Country         = 'COUNTRY';
+    Supplier        = 'SUPPLIER';
+    Combined        = 'COMBINED';
+}
+
+/**
+ * Compliance Exception Status Enumeration
+ */
+type ComplianceExceptionStatus : String(20) enum {
+    Pending         = 'PENDING';
+    Approved        = 'APPROVED';
+    Rejected        = 'REJECTED';
+    Expired         = 'EXPIRED';
+}
+
+/**
+ * Sanction Jurisdiction Enumeration
+ */
+type SanctionJurisdiction : String(10) enum {
+    US              = 'US';       // OFAC
+    EU              = 'EU';       // European Union
+    UN              = 'UN';       // United Nations
+    UK              = 'UK';       // UK OFSI
+}
+
+/**
+ * SANCTION_LISTS - Sanction List Definitions
+ * Source: FuelSphere native (manually imported)
+ * Volume: ~10 records
+ *
+ * Defines available sanction lists with version control
+ * Lists: OFAC SDN, OFAC Consolidated, EU CFT, UN SC, UK OFSI
+ */
+entity SANCTION_LISTS : cuid, ActiveStatus, AuditTrail {
+        list_code           : String(20) @mandatory;      // OFAC_SDN, EU_CFT, UN_SC, UK_OFSI
+        list_name           : String(100) @mandatory;     // Full sanction list name
+        jurisdiction        : SanctionJurisdiction @mandatory; // US, EU, UN, UK
+        description         : String(500);                // List description
+        last_update         : DateTime @mandatory;        // Last list update timestamp
+        version             : String(20) @mandatory;      // List version identifier
+        source_url          : String(500);                // Official source URL
+        update_frequency    : String(20);                 // DAILY, WEEKLY, MONTHLY
+        entity_count        : Integer default 0;          // Number of entities in list
+
+        // Compositions
+        entities            : Composition of many SANCTIONED_ENTITIES on entities.sanction_list = $self;
+}
+
+/**
+ * SANCTIONED_ENTITIES - Entities on Sanction Lists
+ * Source: FuelSphere native (imported from authoritative sources)
+ * Volume: ~5,000 records
+ *
+ * Individual persons, organizations, vessels, or aircraft on sanction lists
+ */
+entity SANCTIONED_ENTITIES : cuid, ActiveStatus {
+        sanction_list       : Association to SANCTION_LISTS @mandatory;
+        entity_name         : String(200) @mandatory;     // Primary entity name
+        entity_type         : SanctionedEntityType @mandatory; // INDIVIDUAL, ORGANIZATION, VESSEL, AIRCRAFT
+        aliases             : String(1000);               // Alternate names (semicolon-separated)
+        country             : Association to T005_COUNTRY; // Associated country
+        identifiers         : String(500);                // ID numbers (passport, tax ID, vessel IMO, etc.)
+        listing_date        : Date @mandatory;            // Date added to sanction list
+        delisting_date      : Date;                       // Date removed (if applicable)
+        remarks             : String(2000);               // Additional details from sanction list
+        program             : String(100);                // Specific sanction program
+        source_reference    : String(100);                // Reference in source list
+}
+
+/**
+ * COMPLIANCE_CHECKS - Compliance Screening Transactions
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Records every compliance screening performed during transaction processing
+ * Triggered by: Fuel Order creation (FDD-04), ePOD capture (FDD-05), Invoice entry (FDD-06)
+ */
+entity COMPLIANCE_CHECKS : cuid {
+        check_timestamp     : DateTime @cds.on.insert: $now; // When check was performed
+        source_module       : String(20) @mandatory;      // FDD-04, FDD-05, FDD-06
+        source_entity_type  : String(50) @mandatory;      // FUEL_ORDER, FUEL_DELIVERY, INVOICE
+        source_entity_id    : UUID @mandatory;            // Source transaction ID
+
+        // Screening Subjects
+        check_type          : ComplianceCheckType @mandatory; // COUNTRY, SUPPLIER, COMBINED
+        screened_country    : Association to T005_COUNTRY;    // Country screened
+        screened_supplier   : Association to MASTER_SUPPLIERS; // Supplier screened
+        screened_value      : String(200);                // Additional screened value (aircraft reg, etc.)
+
+        // Match Results
+        match_found         : Boolean default false;      // True if potential match found
+        match_score         : Decimal(5,2);               // Match confidence (0-100)
+        matched_entity      : Association to SANCTIONED_ENTITIES; // Matched sanction entity (if any)
+        matched_list        : Association to SANCTION_LISTS;      // Sanction list matched against
+
+        // Decision
+        result              : ComplianceCheckResult @mandatory; // PASS, BLOCK, REVIEW
+        block_reason        : String(500);                // Reason for block (if applicable)
+        auto_decision       : Boolean default true;       // True if system decided, false if manual
+
+        // Audit
+        performed_by        : String(100) @mandatory;     // User or 'SYSTEM'
+        reviewed_by         : String(100);                // Reviewer (if manual review)
+        reviewed_at         : DateTime;                   // Review timestamp
+
+        // Hash for tamper-evidence
+        check_hash          : String(64);                 // SHA-256 hash of check record
+}
+
+/**
+ * COMPLIANCE_EXCEPTIONS - Approved Exceptions to Compliance Blocks
+ * Source: FuelSphere native
+ * Volume: ~1,000/year
+ *
+ * Time-limited exceptions granted for blocked transactions with business justification
+ * Requires dual approval: Compliance Officer + Legal Counsel (for sanctions)
+ */
+entity COMPLIANCE_EXCEPTIONS : cuid, AuditTrail {
+        exception_number    : String(20) @mandatory;      // EXC-{YYYY}-{SEQ}
+        compliance_check    : Association to COMPLIANCE_CHECKS @mandatory; // Original blocking check
+
+        // Request Details
+        requested_by        : String(100) @mandatory;     // User requesting exception
+        request_date        : DateTime @cds.on.insert: $now; // Request timestamp
+        @assert.range: true
+        justification       : String(2000) @mandatory;    // Business justification (min 50 chars per FDD)
+
+        // Exception Scope
+        exception_type      : String(20) @mandatory;      // COUNTRY, SUPPLIER, TRANSACTION
+        applies_to_country  : Association to T005_COUNTRY;    // Country exception applies to
+        applies_to_supplier : Association to MASTER_SUPPLIERS; // Supplier exception applies to
+        single_use          : Boolean default false;      // True = one-time use only
+
+        // Approval Workflow
+        status              : ComplianceExceptionStatus default 'PENDING';
+
+        // First-level: Compliance Officer
+        approved_by         : String(100);                // Compliance Officer approver
+        approved_at         : DateTime;                   // First approval timestamp
+        approver_comments   : String(1000);               // Approver comments
+
+        // Second-level: Legal Counsel (required for sanctions exceptions)
+        legal_approval_required : Boolean default false;  // True if sanctions-related
+        legal_approved_by   : String(100);                // Legal Counsel approver
+        legal_approved_at   : DateTime;                   // Legal approval timestamp
+        legal_comments      : String(1000);               // Legal comments
+
+        // Rejection
+        rejected_by         : String(100);                // User who rejected
+        rejected_at         : DateTime;                   // Rejection timestamp
+        rejection_reason    : String(500);                // Reason for rejection
+
+        // Validity
+        effective_from      : Date;                       // Exception start date
+        expiry_date         : Date;                       // Exception expiry (max 12 months per FDD)
+        conditions          : String(1000);               // Conditions attached to exception
+
+        // Usage Tracking
+        usage_count         : Integer default 0;          // Number of times exception used
+        last_used_at        : DateTime;                   // Last usage timestamp
+}
+
+/**
+ * COMPLIANCE_AUDIT_LOGS - Tamper-Evident Audit Trail
+ * Source: FuelSphere native
+ * Volume: ~2,000,000/year
+ * Retention: 7 years
+ *
+ * Immutable audit log for all compliance-related actions
+ * Uses cryptographic hash chain for tamper detection
+ */
+entity COMPLIANCE_AUDIT_LOGS : cuid {
+        log_timestamp       : DateTime @cds.on.insert: $now; // Log entry timestamp
+        log_sequence        : Integer @mandatory;         // Sequential log number (for hash chain)
+
+        // Action Details
+        action_type         : String(30) @mandatory;      // CHECK, EXCEPTION_REQUEST, APPROVAL, REJECTION, LIST_UPDATE
+        action_description  : String(500) @mandatory;     // Human-readable description
+        user_id             : String(100) @mandatory;     // User who performed action
+        user_role           : String(50);                 // User's role at time of action
+
+        // Related Entities
+        related_check_id    : UUID;                       // Related compliance check
+        related_exception_id : UUID;                      // Related exception
+        related_list_id     : UUID;                       // Related sanction list
+
+        // Data Snapshot
+        old_values          : LargeString;                // JSON of values before change
+        new_values          : LargeString;                // JSON of values after change
+
+        // Tamper Evidence (SOX-CMP-003)
+        previous_hash       : String(64);                 // Hash of previous log entry
+        current_hash        : String(64) @mandatory;      // SHA-256 hash of this entry
+        hash_verified       : Boolean;                    // True if hash chain intact
+
+        // Client Info
+        ip_address          : String(50);                 // Client IP address
+        user_agent          : String(500);                // Browser/client info
 }
