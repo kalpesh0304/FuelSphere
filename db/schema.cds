@@ -1029,3 +1029,338 @@ entity SCENARIO_COMPARISON : cuid, AuditTrail {
         comparison_date     : Timestamp @cds.on.insert: $now; // Comparison timestamp
         compared_by         : String(255);                // User who ran comparison
 }
+
+// ============================================================================
+// INVOICE VERIFICATION MODULE (FDD-06)
+// Financial control hub with three-way matching and approval workflows
+// ============================================================================
+
+/**
+ * Invoice Status Enumeration
+ * Draft → Verified → Posted → Paid → Cancelled
+ */
+type InvoiceStatus : String(20) enum {
+    Draft       = 'DRAFT';
+    Verified    = 'VERIFIED';
+    Posted      = 'POSTED';
+    Paid        = 'PAID';
+    Cancelled   = 'CANCELLED';
+}
+
+/**
+ * Invoice Match Status Enumeration
+ */
+type InvoiceMatchStatus : String(20) enum {
+    Unmatched       = 'UNMATCHED';
+    Matched         = 'MATCHED';
+    PartialMatch    = 'PARTIAL_MATCH';
+    PriceVariance   = 'PRICE_VARIANCE';
+    QuantityVariance = 'QTY_VARIANCE';
+    Exception       = 'EXCEPTION';
+}
+
+/**
+ * Invoice Approval Status Enumeration
+ */
+type InvoiceApprovalStatus : String(20) enum {
+    Pending     = 'PENDING';
+    Approved    = 'APPROVED';
+    Rejected    = 'REJECTED';
+    Escalated   = 'ESCALATED';
+}
+
+/**
+ * Approval Action Type
+ */
+type ApprovalAction : String(20) enum {
+    Submit      = 'SUBMIT';
+    Approve     = 'APPROVE';
+    Reject      = 'REJECT';
+    Escalate    = 'ESCALATE';
+    Return      = 'RETURN';
+}
+
+/**
+ * Tolerance Type Enumeration
+ */
+type ToleranceType : String(20) enum {
+    Price       = 'PRICE';
+    Quantity    = 'QUANTITY';
+    Amount      = 'AMOUNT';
+    Date        = 'DATE';
+}
+
+/**
+ * INVOICES - Supplier Invoice Header
+ * Source: FuelSphere native + S/4HANA
+ * Volume: ~50,000/year
+ *
+ * Invoice Number Format: INV-{SUPPLIER_CODE}-{YYYYMMDD}-{SEQ}
+ * Example: INV-SHELL-20260117-001
+ *
+ * Key Features:
+ * - Three-way matching: PO ↔ GR (ePOD) ↔ Invoice
+ * - Configurable tolerance rules
+ * - Dual approval workflow for exceptions
+ * - S/4HANA FI posting on approval
+ */
+entity INVOICES : cuid, AuditTrail {
+        invoice_number      : String(20) @mandatory;      // Supplier invoice number (unique per supplier)
+        internal_number     : String(25);                 // INV-{SUPPLIER}-{DATE}-{SEQ}
+
+        // Supplier
+        supplier            : Association to MASTER_SUPPLIERS @mandatory;
+
+        // Dates
+        invoice_date        : Date @mandatory;            // Invoice date from supplier
+        posting_date        : Date;                       // FI posting date
+        due_date            : Date;                       // Payment due date
+        baseline_date       : Date;                       // Baseline date for payment terms
+
+        // Amounts
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;       // Invoice currency
+        net_amount          : Decimal(15,2) @mandatory;   // Net invoice amount
+        tax_amount          : Decimal(15,2) default 0;    // Tax amount
+        gross_amount        : Decimal(15,2) @mandatory;   // Gross amount (net + tax)
+
+        // Payment Terms
+        payment_terms       : String(20);                 // Payment terms (NET30, etc.)
+        discount_percent    : Decimal(5,2);               // Early payment discount %
+        discount_date       : Date;                       // Discount valid until
+
+        // Three-Way Match Results
+        match_status        : InvoiceMatchStatus default 'UNMATCHED';
+        price_variance      : Decimal(15,2);              // Total price variance amount
+        quantity_variance   : Decimal(12,2);              // Total quantity variance
+        variance_percentage : Decimal(5,2);               // Overall variance %
+
+        // Approval
+        approval_status     : InvoiceApprovalStatus default 'PENDING';
+        requires_dual_approval : Boolean default false;   // True if variance exceeds threshold
+        first_approver      : String(255);                // First approver user ID
+        first_approved_at   : Timestamp;                  // First approval timestamp
+        final_approver      : String(255);                // Final approver user ID
+        final_approved_at   : Timestamp;                  // Final approval timestamp
+
+        // S/4HANA FI Reference
+        s4_document_number  : String(10);                 // S/4HANA FI Document Number
+        s4_fiscal_year      : String(4);                  // Fiscal year
+        s4_company_code     : String(4);                  // Company code
+        fi_posting_status   : String(20);                 // SUCCESS / FAILED / PENDING
+
+        // Status & Notes
+        status              : InvoiceStatus default 'DRAFT';
+        notes               : String(1000);               // Invoice notes
+        rejection_reason    : String(500);                // Reason if rejected
+
+        // Duplicate Check
+        is_duplicate        : Boolean default false;      // Duplicate flag
+        duplicate_of        : Association to INVOICES;    // Link to original if duplicate
+
+        // Compositions
+        items               : Composition of many INVOICE_ITEMS on items.invoice = $self;
+        matches             : Composition of many INVOICE_MATCHES on matches.invoice = $self;
+        approvals           : Composition of many INVOICE_APPROVALS on approvals.invoice = $self;
+}
+
+/**
+ * INVOICE_ITEMS - Invoice Line Items
+ * Source: FuelSphere native
+ * Volume: ~200,000/year
+ *
+ * Links to PO/GR for three-way matching
+ */
+entity INVOICE_ITEMS : cuid {
+        invoice             : Association to INVOICES @mandatory;
+        line_number         : Integer @mandatory;         // Line item number (10, 20, 30...)
+
+        // Product
+        product             : Association to MASTER_PRODUCTS;
+        description         : String(255);                // Line item description
+
+        // PO Reference
+        po_number           : String(10);                 // Purchase Order reference
+        po_item             : String(5);                  // PO line item number
+
+        // Quantity
+        quantity            : Decimal(12,3) @mandatory;   // Invoice quantity
+        uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+        uom_code            : String(3) @mandatory;       // Unit of measure
+
+        // Pricing
+        unit_price          : Decimal(15,4) @mandatory;   // Price per unit
+        net_amount          : Decimal(15,2) @mandatory;   // Line net amount
+        tax_code            : String(2);                  // Tax code
+        tax_amount          : Decimal(15,2) default 0;    // Line tax amount
+
+        // Delivery Reference (for three-way match)
+        delivery            : Association to FUEL_DELIVERIES;  // Linked ePOD/GR
+        fuel_order          : Association to FUEL_ORDERS;      // Linked fuel order
+
+        // Cost Assignment
+        cost_center         : String(10);                 // Cost center
+        gl_account          : String(10);                 // G/L account
+
+        // Match Status (per line)
+        line_match_status   : InvoiceMatchStatus default 'UNMATCHED';
+        price_variance_pct  : Decimal(5,2);               // Price variance %
+        qty_variance_pct    : Decimal(5,2);               // Quantity variance %
+}
+
+/**
+ * INVOICE_MATCHES - Three-Way Match Results
+ * Source: FuelSphere native
+ * Volume: ~200,000/year
+ *
+ * Stores detailed match results linking PO, GR (ePOD), and Invoice
+ */
+entity INVOICE_MATCHES : cuid {
+        invoice             : Association to INVOICES @mandatory;
+        invoice_item        : Association to INVOICE_ITEMS @mandatory;
+
+        // PO Data (from S/4HANA)
+        po_number           : String(10) @mandatory;      // Purchase Order number
+        po_item             : String(5);                  // PO line item
+        po_quantity         : Decimal(12,3);              // PO ordered quantity
+        po_price            : Decimal(15,4);              // PO unit price
+        po_amount           : Decimal(15,2);              // PO line amount
+
+        // GR Data (from ePOD/S/4HANA)
+        gr_number           : String(10);                 // Goods Receipt document number
+        gr_year             : String(4);                  // GR fiscal year
+        gr_item             : String(4);                  // GR line item
+        gr_quantity         : Decimal(12,3);              // GR received quantity
+        gr_date             : Date;                       // GR posting date
+
+        // Invoice Data (snapshot)
+        inv_quantity        : Decimal(12,3) @mandatory;   // Invoice quantity
+        inv_price           : Decimal(15,4) @mandatory;   // Invoice unit price
+        inv_amount          : Decimal(15,2) @mandatory;   // Invoice line amount
+
+        // Variance Calculations
+        quantity_variance   : Decimal(12,3);              // Qty difference (Invoice - GR)
+        quantity_variance_pct : Decimal(5,2);             // Qty variance %
+        price_variance      : Decimal(15,4);              // Price difference (Invoice - PO)
+        price_variance_pct  : Decimal(5,2);               // Price variance %
+        amount_variance     : Decimal(15,2);              // Amount difference
+
+        // Match Result
+        match_status        : InvoiceMatchStatus @mandatory;
+        match_date          : DateTime @cds.on.insert: $now; // When match was performed
+        matched_by          : String(255);                // User/system who matched
+
+        // Tolerance Reference
+        tolerance_rule      : Association to TOLERANCE_RULES; // Tolerance rule applied
+        within_tolerance    : Boolean default false;      // True if variance within tolerance
+
+        // Notes
+        match_notes         : String(500);                // Match notes/comments
+}
+
+/**
+ * INVOICE_APPROVALS - Approval Workflow History
+ * Source: FuelSphere native
+ * Volume: ~60,000/year
+ *
+ * Complete audit trail of all approval actions
+ */
+entity INVOICE_APPROVALS : cuid {
+        invoice             : Association to INVOICES @mandatory;
+
+        // Approval Action
+        sequence            : Integer @mandatory;         // Approval sequence (1, 2, ...)
+        action              : ApprovalAction @mandatory;  // SUBMIT, APPROVE, REJECT, ESCALATE
+        action_date         : DateTime @cds.on.insert: $now; // Action timestamp
+        action_by           : String(255) @mandatory;     // User who performed action
+
+        // Decision Details
+        comments            : String(1000);               // Approver comments
+        rejection_reason    : String(500);                // Reason if rejected
+
+        // Value at Time of Action
+        invoice_amount      : Decimal(15,2);              // Invoice amount at action time
+        variance_amount     : Decimal(15,2);              // Variance amount at action time
+
+        // Approval Limits
+        approver_limit      : Decimal(15,2);              // Approver's value limit
+        within_limit        : Boolean;                    // True if within approver's limit
+
+        // Escalation
+        escalated_to        : String(255);                // User escalated to (if applicable)
+        escalation_reason   : String(500);                // Reason for escalation
+}
+
+/**
+ * TOLERANCE_RULES - Variance Tolerance Configuration
+ * Source: FuelSphere native (configuration)
+ * Volume: ~50 records
+ *
+ * Configurable thresholds for price, quantity, and amount variances
+ * by company code, supplier category, or product type
+ */
+entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
+        rule_code           : String(20) @mandatory;      // Rule identifier
+        rule_name           : String(100) @mandatory;     // Display name
+        description         : String(500);                // Rule description
+
+        // Scope
+        company_code        : String(4);                  // Company code (NULL = all)
+        supplier_category   : String(20);                 // Supplier category (NULL = all)
+        product_type        : String(20);                 // Product type (NULL = all)
+
+        // Tolerance Type & Values
+        tolerance_type      : ToleranceType @mandatory;   // PRICE / QUANTITY / AMOUNT / DATE
+        lower_limit         : Decimal(10,4);              // Lower tolerance (negative variance)
+        upper_limit         : Decimal(10,4);              // Upper tolerance (positive variance)
+        is_percentage       : Boolean default true;       // True = %, False = absolute value
+        currency_code       : String(3);                  // Currency (if absolute amount)
+
+        // Blocking Behavior
+        block_on_exceed     : Boolean default true;       // Block invoice if exceeded
+        require_dual_approval : Boolean default true;     // Require dual approval if exceeded
+
+        // Priority
+        priority            : Integer default 100;        // Rule priority (lower = higher priority)
+
+        // Validity
+        valid_from          : Date @mandatory;
+        valid_to            : Date;
+}
+
+/**
+ * GR_IR_CLEARING - Goods Receipt / Invoice Receipt Clearing
+ * Source: FuelSphere native + S/4HANA
+ * Volume: ~50,000/year
+ *
+ * Tracks GR/IR clearing entries for account reconciliation
+ */
+entity GR_IR_CLEARING : cuid, AuditTrail {
+        // References
+        invoice             : Association to INVOICES @mandatory;
+        invoice_item        : Association to INVOICE_ITEMS;
+        delivery            : Association to FUEL_DELIVERIES;
+
+        // S/4HANA References
+        gr_document         : String(10);                 // GR Material Document
+        gr_year             : String(4);                  // GR Fiscal Year
+        ir_document         : String(10);                 // Invoice Document
+        ir_year             : String(4);                  // Invoice Fiscal Year
+        clearing_document   : String(10);                 // Clearing Document
+        clearing_year       : String(4);                  // Clearing Fiscal Year
+
+        // Amounts
+        gr_amount           : Decimal(15,2);              // GR posted amount
+        ir_amount           : Decimal(15,2);              // IR posted amount
+        clearing_amount     : Decimal(15,2);              // Cleared amount
+        difference_amount   : Decimal(15,2);              // Uncleared difference
+        currency_code       : String(3) @mandatory;       // Currency
+
+        // G/L Account
+        gr_ir_account       : String(10);                 // GR/IR clearing account
+
+        // Status
+        clearing_status     : String(20) @mandatory;      // OPEN / CLEARED / PARTIAL
+        clearing_date       : Date;                       // Clearing date
+        cleared_by          : String(255);                // User who cleared
+}
