@@ -2115,3 +2115,541 @@ entity ACCRUAL_ENTRIES : cuid, AuditTrail {
         actual_amount       : Decimal(15,2);              // Actual invoice amount
         variance_amount     : Decimal(15,2);              // Accrual vs. actual variance
 }
+
+// ============================================================================
+// FDD-11: INTEGRATION MONITORING
+// ============================================================================
+
+/**
+ * Integration Monitoring Types
+ */
+type IntegrationDirection : String(10) enum { INBOUND; OUTBOUND; BIDIRECTIONAL }
+type IntegrationStatus : String(20) enum { SUCCESS; FAILURE; PARTIAL; TIMEOUT; PENDING; RETRYING }
+type MessageSeverity : String(10) enum { INFO; WARNING; ERROR; CRITICAL }
+type HealthStatus : String(15) enum { HEALTHY; DEGRADED; UNHEALTHY; UNKNOWN }
+type AlertSeverity : String(10) enum { LOW; MEDIUM; HIGH; CRITICAL }
+type RetryStatus : String(15) enum { PENDING; IN_PROGRESS; SUCCESS; FAILED; EXHAUSTED; CANCELLED }
+type SyncDirection : String(10) enum { S4_TO_FS; FS_TO_S4; BIDIRECTIONAL }
+
+/**
+ * INTEGRATION_MESSAGES - API Request/Response Logs
+ * Source: FuelSphere native
+ * Volume: ~5,000,000/year
+ *
+ * Logs all API calls for monitoring, troubleshooting, and audit
+ * INT001 - General info, INT4xx - Errors
+ */
+entity INTEGRATION_MESSAGES : cuid {
+        // Message Identification
+        correlation_id      : UUID @mandatory;               // Unique transaction correlation
+        message_id          : String(50);                    // External message ID
+        sequence_number     : Integer default 1;             // For multi-step transactions
+
+        // Timing
+        timestamp           : DateTime @mandatory;           // Message timestamp
+        request_time        : DateTime;                      // Request sent time
+        response_time       : DateTime;                      // Response received time
+        duration_ms         : Integer;                       // Processing duration (milliseconds)
+
+        // Integration Details
+        integration_name    : String(50) @mandatory;         // e.g., S4_JOURNAL_ENTRY, ACARS_INGEST
+        direction           : IntegrationDirection @mandatory;
+        endpoint_url        : String(500);                   // Target endpoint
+        http_method         : String(10);                    // GET, POST, PUT, DELETE, PATCH
+
+        // Source/Target
+        source_system       : String(30) @mandatory;         // FUELSPHERE, S4HANA, ACARS, etc.
+        target_system       : String(30) @mandatory;
+        company_code        : String(4);                     // If company-specific
+
+        // Request/Response
+        request_headers     : LargeString;                   // Request headers (sanitized)
+        request_payload     : LargeString;                   // Request body (truncated/masked)
+        response_headers    : LargeString;                   // Response headers
+        response_payload    : LargeString;                   // Response body (truncated)
+        payload_size_bytes  : Integer;                       // Payload size
+
+        // Status
+        http_status_code    : Integer;                       // HTTP response code
+        status              : IntegrationStatus @mandatory;
+        error_code          : String(20);                    // INT4xx error codes
+        error_message       : String(1000);                  // Error description
+
+        // Business Reference
+        business_object_type : String(50);                   // INVOICE, FUEL_ORDER, etc.
+        business_object_id  : UUID;                          // Reference to business entity
+        business_object_key : String(100);                   // Human-readable key
+
+        // User Context
+        user_id             : String(100);                   // Initiating user
+        user_ip             : String(45);                    // Client IP address
+
+        // Retry Information
+        retry_count         : Integer default 0;             // Number of retry attempts
+        is_retry            : Boolean default false;         // Is this a retry attempt
+        original_message_id : UUID;                          // Original message if retry
+
+        // Cleanup
+        retention_days      : Integer default 90;            // Days to retain
+        is_archived         : Boolean default false;
+}
+
+/**
+ * SYSTEM_HEALTH_LOGS - Component Health Check Results
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Records health check results for all integrated systems
+ */
+entity SYSTEM_HEALTH_LOGS : cuid {
+        // Check Identification
+        check_id            : String(50) @mandatory;         // Health check identifier
+        check_name          : String(100) @mandatory;        // Human-readable name
+
+        // Timing
+        check_time          : DateTime @mandatory;           // When check was performed
+        next_check_time     : DateTime;                      // Scheduled next check
+        duration_ms         : Integer;                       // Check duration
+
+        // Component Details
+        component_name      : String(50) @mandatory;         // FUELSPHERE, S4HANA, HANA_DB, etc.
+        component_type      : String(30) @mandatory;         // API, DATABASE, SERVICE, QUEUE
+        environment         : String(20) @mandatory;         // DEV, QA, PROD
+
+        // Status
+        status              : HealthStatus @mandatory;
+        previous_status     : HealthStatus;                  // For trend tracking
+        status_changed      : Boolean default false;         // Did status change?
+
+        // Metrics
+        response_time_ms    : Integer;                       // Response time
+        cpu_usage_pct       : Decimal(5,2);                  // CPU utilization
+        memory_usage_pct    : Decimal(5,2);                  // Memory utilization
+        disk_usage_pct      : Decimal(5,2);                  // Disk utilization
+        active_connections  : Integer;                       // Active connections
+        queue_depth         : Integer;                       // Message queue depth
+
+        // Thresholds
+        response_threshold_ms : Integer;                     // Threshold for degraded
+        critical_threshold_ms : Integer;                     // Threshold for unhealthy
+
+        // Details
+        details             : LargeString;                   // Detailed check output
+        error_message       : String(1000);                  // Error if unhealthy
+
+        // Alert Triggered
+        alert_triggered     : Boolean default false;
+        alert_id            : UUID;                          // Reference to alert
+}
+
+/**
+ * ERROR_LOGS - Integration Error Details
+ * Source: FuelSphere native
+ * Volume: ~100,000/year
+ *
+ * Detailed error logging for troubleshooting
+ * Error codes: INT401-INT410 per FDD-11
+ */
+entity ERROR_LOGS : cuid {
+        // Error Identification
+        error_id            : String(50) @mandatory;         // Unique error identifier
+        correlation_id      : UUID;                          // Link to integration message
+        timestamp           : DateTime @mandatory;
+
+        // Error Details
+        error_code          : String(20) @mandatory;         // INT4xx code
+        error_type          : String(50) @mandatory;         // CONNECTION, TIMEOUT, VALIDATION, etc.
+        severity            : MessageSeverity @mandatory;
+        error_message       : String(1000) @mandatory;       // Error description
+        error_details       : LargeString;                   // Full error details/stack trace
+
+        // Context
+        integration_name    : String(50) @mandatory;
+        source_system       : String(30) @mandatory;
+        target_system       : String(30) @mandatory;
+        component           : String(50);                    // Component where error occurred
+        method_name         : String(100);                   // Method/function name
+        line_number         : Integer;                       // Code line number
+
+        // Business Context
+        business_object_type : String(50);
+        business_object_id  : UUID;
+        business_object_key : String(100);
+        company_code        : String(4);
+
+        // User Context
+        user_id             : String(100);
+        session_id          : String(100);
+
+        // Resolution
+        is_resolved         : Boolean default false;
+        resolved_by         : String(100);
+        resolved_at         : DateTime;
+        resolution_notes    : String(1000);
+        root_cause          : String(500);
+
+        // Related Items
+        exception_item_id   : UUID;                          // Link to exception item if created
+}
+
+/**
+ * EXCEPTION_ITEMS - Failed Transactions Pending Retry
+ * Source: FuelSphere native
+ * Volume: ~50,000/year
+ *
+ * Queue for failed transactions that need retry or manual intervention
+ */
+entity EXCEPTION_ITEMS : cuid, AuditTrail {
+        // Exception Identification
+        exception_number    : String(25) @mandatory;         // EXC-{DATE}-{SEQ}
+        correlation_id      : UUID @mandatory;               // Link to original transaction
+        original_message_id : UUID;                          // Original integration message
+
+        // Source Transaction
+        integration_name    : String(50) @mandatory;
+        source_system       : String(30) @mandatory;
+        target_system       : String(30) @mandatory;
+        direction           : IntegrationDirection @mandatory;
+
+        // Business Reference
+        business_object_type : String(50) @mandatory;
+        business_object_id  : UUID;
+        business_object_key : String(100);
+        company_code        : String(4);
+
+        // Error Details
+        error_code          : String(20) @mandatory;
+        error_message       : String(1000) @mandatory;
+        error_details       : LargeString;
+        first_failure_time  : DateTime @mandatory;
+        last_failure_time   : DateTime;
+
+        // Payload
+        original_payload    : LargeString;                   // Original request payload
+        payload_hash        : String(64);                    // SHA-256 for integrity
+
+        // Retry Management
+        retry_status        : RetryStatus default 'PENDING';
+        retry_count         : Integer default 0;
+        max_retries         : Integer default 3;
+        next_retry_time     : DateTime;                      // Exponential backoff
+        retry_interval_mins : Integer default 15;            // Base retry interval
+        last_retry_error    : String(1000);
+
+        // Priority & SLA
+        priority            : AlertSeverity default 'MEDIUM';
+        sla_deadline        : DateTime;                      // Resolution deadline
+        sla_breached        : Boolean default false;
+
+        // Assignment
+        assigned_to         : String(100);                   // Assigned resolver
+        assigned_at         : DateTime;
+        escalated_to        : String(100);                   // Escalation contact
+        escalated_at        : DateTime;
+
+        // Resolution
+        status              : String(20) default 'OPEN';     // OPEN, IN_PROGRESS, RESOLVED, CANCELLED
+        resolution_type     : String(30);                    // AUTO_RETRY, MANUAL_FIX, SKIPPED, DATA_CORRECTION
+        resolution_notes    : LargeString;
+        resolved_by         : String(100);
+        resolved_at         : DateTime;
+
+        // Notifications
+        notification_sent   : Boolean default false;
+        notification_count  : Integer default 0;
+}
+
+/**
+ * API_PERFORMANCE_METRICS - Response Time Statistics
+ * Source: FuelSphere native
+ * Volume: ~10,000,000/year
+ *
+ * Aggregated API performance metrics for monitoring and SLA tracking
+ */
+entity API_PERFORMANCE_METRICS : cuid {
+        // Metric Period
+        metric_date         : Date @mandatory;
+        metric_hour         : Integer;                       // 0-23, null for daily
+        period_type         : String(10) @mandatory;         // HOURLY, DAILY, WEEKLY
+
+        // Integration Details
+        integration_name    : String(50) @mandatory;
+        endpoint_url        : String(500);
+        http_method         : String(10);
+        source_system       : String(30) @mandatory;
+        target_system       : String(30) @mandatory;
+
+        // Call Statistics
+        total_calls         : Integer @mandatory;            // Total API calls
+        successful_calls    : Integer @mandatory;            // Successful calls
+        failed_calls        : Integer @mandatory;            // Failed calls
+        timeout_calls       : Integer default 0;             // Timeout calls
+        success_rate_pct    : Decimal(5,2);                  // Success percentage
+
+        // Response Time Statistics (milliseconds)
+        avg_response_time   : Decimal(10,2);                 // Average response time
+        min_response_time   : Integer;                       // Minimum response time
+        max_response_time   : Integer;                       // Maximum response time
+        p50_response_time   : Integer;                       // 50th percentile (median)
+        p90_response_time   : Integer;                       // 90th percentile
+        p95_response_time   : Integer;                       // 95th percentile
+        p99_response_time   : Integer;                       // 99th percentile
+        std_deviation       : Decimal(10,2);                 // Standard deviation
+
+        // Throughput
+        requests_per_second : Decimal(10,2);                 // Avg requests/second
+        peak_requests_per_second : Decimal(10,2);            // Peak requests/second
+        total_bytes_sent    : Integer64;                     // Total bytes sent
+        total_bytes_received : Integer64;                    // Total bytes received
+
+        // Error Breakdown
+        error_4xx_count     : Integer default 0;             // Client errors
+        error_5xx_count     : Integer default 0;             // Server errors
+        retry_count         : Integer default 0;             // Retry attempts
+
+        // SLA Tracking
+        sla_target_ms       : Integer;                       // SLA target response time
+        sla_compliance_pct  : Decimal(5,2);                  // % within SLA
+        sla_breaches        : Integer default 0;             // Count of SLA breaches
+
+        // Calculated At
+        calculated_at       : DateTime @mandatory;
+}
+
+/**
+ * DATA_SYNC_STATUS - Master Data Synchronization Records
+ * Source: FuelSphere native
+ * Volume: ~200,000/year
+ *
+ * Tracks synchronization of master data between FuelSphere and S/4HANA
+ */
+entity DATA_SYNC_STATUS : cuid, AuditTrail {
+        // Sync Identification
+        sync_id             : String(50) @mandatory;         // SYNC-{ENTITY}-{DATE}-{SEQ}
+        sync_name           : String(100);                   // Sync job name
+
+        // Timing
+        sync_start_time     : DateTime @mandatory;
+        sync_end_time       : DateTime;
+        duration_seconds    : Integer;
+
+        // Sync Details
+        entity_type         : String(50) @mandatory;         // SUPPLIER, PRODUCT, AIRPORT, etc.
+        direction           : SyncDirection @mandatory;
+        company_code        : String(4);                     // If company-specific
+        sync_mode           : String(20) @mandatory;         // FULL, DELTA, INCREMENTAL
+
+        // Filter Criteria
+        filter_criteria     : String(500);                   // Applied filters
+        last_sync_timestamp : DateTime;                      // For delta sync
+
+        // Statistics
+        records_processed   : Integer default 0;
+        records_created     : Integer default 0;
+        records_updated     : Integer default 0;
+        records_deleted     : Integer default 0;
+        records_skipped     : Integer default 0;
+        records_failed      : Integer default 0;
+
+        // Status
+        status              : IntegrationStatus @mandatory;
+        error_count         : Integer default 0;
+        warning_count       : Integer default 0;
+        error_summary       : LargeString;                   // Summary of errors
+
+        // Checkpoints
+        last_processed_key  : String(100);                   // For restart capability
+        checkpoint_data     : LargeString;                   // Checkpoint state JSON
+
+        // Triggered By
+        trigger_type        : String(20) @mandatory;         // SCHEDULED, MANUAL, EVENT
+        triggered_by        : String(100);
+        schedule_id         : String(50);                    // If scheduled job
+
+        // Notifications
+        notification_sent   : Boolean default false;
+}
+
+/**
+ * INTEGRATION_CONFIGS - Integration Configuration Settings
+ * Source: FuelSphere native
+ * Volume: ~200 records
+ *
+ * Configuration parameters for all integrations
+ */
+entity INTEGRATION_CONFIGS : cuid, ActiveStatus, AuditTrail {
+        // Configuration Identification
+        config_key          : String(100) @mandatory;        // Unique config key
+        config_name         : String(100) @mandatory;        // Display name
+        config_group        : String(50) @mandatory;         // S4_INTEGRATION, ACARS, etc.
+
+        // Value
+        config_value        : String(1000) @mandatory;       // Configuration value
+        config_type         : String(20) @mandatory;         // STRING, INTEGER, BOOLEAN, JSON
+        default_value       : String(1000);                  // Default if not set
+        is_encrypted        : Boolean default false;         // Is value encrypted?
+
+        // Scope
+        company_code        : String(4);                     // Company-specific, null=global
+        environment         : String(20);                    // DEV, QA, PROD, null=all
+
+        // Validation
+        validation_regex    : String(500);                   // Regex for validation
+        min_value           : Decimal(15,4);                 // Minimum numeric value
+        max_value           : Decimal(15,4);                 // Maximum numeric value
+        allowed_values      : String(1000);                  // Comma-separated list
+
+        // Documentation
+        description         : String(500);                   // Config description
+        example_value       : String(500);                   // Example usage
+
+        // Change Control
+        requires_restart    : Boolean default false;         // Requires service restart?
+        last_changed_reason : String(500);                   // Reason for last change
+}
+
+/**
+ * ALERT_DEFINITIONS - Alert Rules and Notifications
+ * Source: FuelSphere native
+ * Volume: ~50 records
+ *
+ * Defines monitoring alerts and notification rules
+ */
+entity ALERT_DEFINITIONS : cuid, ActiveStatus, AuditTrail {
+        // Alert Identification
+        alert_code          : String(30) @mandatory;         // Unique alert code
+        alert_name          : String(100) @mandatory;        // Alert display name
+        description         : String(500);                   // Alert description
+
+        // Scope
+        integration_name    : String(50);                    // Specific integration, null=all
+        component_name      : String(50);                    // Specific component
+        company_code        : String(4);                     // Company-specific
+
+        // Trigger Conditions
+        metric_type         : String(50) @mandatory;         // ERROR_RATE, RESPONSE_TIME, etc.
+        threshold_operator  : String(10) @mandatory;         // GT, LT, EQ, GTE, LTE
+        threshold_value     : Decimal(15,4) @mandatory;      // Trigger threshold
+        threshold_unit      : String(20);                    // MS, PERCENT, COUNT
+        evaluation_window_mins : Integer default 5;          // Window for evaluation
+        min_occurrences     : Integer default 1;             // Min occurrences to trigger
+
+        // Severity & Priority
+        severity            : AlertSeverity @mandatory;
+        auto_resolve        : Boolean default true;          // Auto-resolve when condition clears
+
+        // Notification
+        notification_channels : String(200);                 // EMAIL, SMS, SLACK, etc.
+        notification_recipients : String(1000);              // Recipient list
+        notification_template : String(50);                  // Template name
+        cooldown_mins       : Integer default 15;            // Min time between alerts
+        escalation_mins     : Integer;                       // Time to escalate
+        escalation_recipients : String(500);                 // Escalation contacts
+
+        // Actions
+        auto_action_enabled : Boolean default false;         // Auto remediation?
+        auto_action_type    : String(50);                    // RESTART, RETRY, SKIP, etc.
+        runbook_url         : String(500);                   // Link to runbook
+
+        // Statistics
+        last_triggered_at   : DateTime;
+        trigger_count       : Integer default 0;
+        false_positive_count : Integer default 0;
+}
+
+/**
+ * ALERT_INSTANCES - Triggered Alert Records
+ * Source: FuelSphere native
+ * Volume: ~50,000/year
+ *
+ * Records individual alert occurrences
+ */
+entity ALERT_INSTANCES : cuid {
+        // Alert Reference
+        alert_definition    : Association to ALERT_DEFINITIONS @mandatory;
+        alert_code          : String(30) @mandatory;         // Denormalized for queries
+
+        // Timing
+        triggered_at        : DateTime @mandatory;
+        acknowledged_at     : DateTime;
+        resolved_at         : DateTime;
+        duration_mins       : Integer;                       // Time to resolution
+
+        // Trigger Details
+        trigger_value       : Decimal(15,4) @mandatory;      // Value that triggered
+        threshold_value     : Decimal(15,4) @mandatory;      // Threshold at time
+        metric_type         : String(50) @mandatory;
+
+        // Context
+        correlation_id      : UUID;                          // Related transaction
+        integration_name    : String(50);
+        component_name      : String(50);
+        error_code          : String(20);
+        details             : LargeString;                   // Alert details JSON
+
+        // Status
+        status              : String(20) default 'ACTIVE';   // ACTIVE, ACKNOWLEDGED, RESOLVED, SUPPRESSED
+        severity            : AlertSeverity @mandatory;
+
+        // Assignment
+        acknowledged_by     : String(100);
+        resolved_by         : String(100);
+        resolution_notes    : String(1000);
+
+        // Notifications
+        notifications_sent  : Integer default 0;
+        last_notification_at : DateTime;
+        escalated           : Boolean default false;
+        escalated_at        : DateTime;
+}
+
+/**
+ * DATA_QUALITY_METRICS - Data Quality Scores
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Tracks data quality metrics for integrated data
+ */
+entity DATA_QUALITY_METRICS : cuid {
+        // Metric Period
+        metric_date         : Date @mandatory;
+        period_type         : String(10) @mandatory;         // DAILY, WEEKLY, MONTHLY
+
+        // Entity Details
+        entity_type         : String(50) @mandatory;         // SUPPLIER, INVOICE, etc.
+        entity_source       : String(30) @mandatory;         // S4HANA, FUELSPHERE, ACARS
+        company_code        : String(4);
+
+        // Record Counts
+        total_records       : Integer @mandatory;
+        valid_records       : Integer @mandatory;
+        invalid_records     : Integer @mandatory;
+        duplicate_records   : Integer default 0;
+        orphan_records      : Integer default 0;
+
+        // Quality Scores (0-100)
+        completeness_score  : Decimal(5,2);                  // Required fields populated
+        accuracy_score      : Decimal(5,2);                  // Values within valid ranges
+        consistency_score   : Decimal(5,2);                  // Cross-field consistency
+        timeliness_score    : Decimal(5,2);                  // Data freshness
+        uniqueness_score    : Decimal(5,2);                  // No duplicates
+        overall_score       : Decimal(5,2);                  // Weighted average
+
+        // Issue Breakdown
+        missing_required    : Integer default 0;             // Missing required fields
+        invalid_format      : Integer default 0;             // Format validation failures
+        out_of_range        : Integer default 0;             // Value range violations
+        referential_errors  : Integer default 0;             // FK violations
+        business_rule_errors : Integer default 0;            // Business rule violations
+
+        // Trend
+        previous_score      : Decimal(5,2);                  // Previous period score
+        score_change        : Decimal(5,2);                  // Change from previous
+
+        // Details
+        top_issues          : LargeString;                   // Top issues JSON
+        sample_errors       : LargeString;                   // Sample error records
+
+        // Calculated At
+        calculated_at       : DateTime @mandatory;
+}
