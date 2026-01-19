@@ -2653,3 +2653,414 @@ entity DATA_QUALITY_METRICS : cuid {
         // Calculated At
         calculated_at       : DateTime @mandatory;
 }
+
+// ============================================================================
+// FDD-12: REPORTING & ANALYTICS
+// ============================================================================
+
+/**
+ * Reporting & Analytics Types
+ */
+type ReportFormat : String(10) enum { PDF; EXCEL; CSV; HTML }
+type ReportStatus : String(15) enum { DRAFT; ACTIVE; ARCHIVED; DEPRECATED }
+type VarianceStatus : String(15) enum { OK; WARNING; CRITICAL }
+type KPICategory : String(30) enum { FINANCIAL; OPERATIONAL; COMPLIANCE; PERFORMANCE; QUALITY }
+type ChartType : String(20) enum { LINE; BAR; DONUT; AREA; COLUMN; WATERFALL; HEATMAP }
+type DashboardLayout : String(20) enum { GRID; FLEX; TABS; CARDS }
+type SnapshotType : String(20) enum { DAILY; WEEKLY; MONTHLY; QUARTERLY; YEARLY; ADHOC }
+type ExportStatus : String(15) enum { PENDING; IN_PROGRESS; COMPLETED; FAILED }
+
+/**
+ * REPORT_DEFINITIONS - Report Configuration and Templates
+ * Source: FuelSphere native
+ * Volume: ~100 records
+ *
+ * Defines available reports, their parameters, and output formats
+ */
+entity REPORT_DEFINITIONS : cuid, ActiveStatus, AuditTrail {
+        // Report Identification
+        report_code         : String(30) @mandatory;         // Unique report code
+        report_name         : String(100) @mandatory;        // Display name
+        report_description  : String(500);                   // Report description
+        report_category     : String(50) @mandatory;         // FINANCIAL, OPERATIONAL, etc.
+
+        // Report Type
+        report_type         : String(30) @mandatory;         // ANALYTICAL, LIST, SUMMARY, DETAIL
+        floorplan_type      : String(30);                    // ALP, LR, OP, WORKLIST
+        base_entity         : String(100);                   // Source entity/view name
+
+        // Parameters
+        parameters_config   : LargeString;                   // Parameter definitions JSON
+        default_filters     : LargeString;                   // Default filter values JSON
+        required_filters    : String(500);                   // Required filter fields
+
+        // Output Configuration
+        supported_formats   : String(50) default 'EXCEL,PDF'; // Comma-separated formats
+        default_format      : ReportFormat default 'EXCEL';
+        template_file       : String(200);                   // Template file path if applicable
+
+        // Scheduling
+        schedule_enabled    : Boolean default false;
+        schedule_cron       : String(50);                    // Cron expression
+        distribution_list   : String(1000);                  // Email recipients
+
+        // Access Control
+        required_scope      : String(50) @mandatory;         // Required authorization scope
+        company_codes       : String(100);                   // Allowed company codes (null = all)
+
+        // Metadata
+        version             : String(10) default '1.0';
+        last_generated_at   : DateTime;
+        generation_count    : Integer default 0;
+
+        // UI Configuration
+        columns_config      : LargeString;                   // Column definitions JSON
+        sort_config         : String(200);                   // Default sort configuration
+        group_config        : String(200);                   // Grouping configuration
+}
+
+/**
+ * DASHBOARD_CONFIGS - Dashboard Layout and Configuration
+ * Source: FuelSphere native
+ * Volume: ~50 records
+ *
+ * Defines dashboard layouts, tiles, and component arrangements
+ */
+entity DASHBOARD_CONFIGS : cuid, ActiveStatus, AuditTrail {
+        // Dashboard Identification
+        dashboard_code      : String(30) @mandatory;         // Unique dashboard code
+        dashboard_name      : String(100) @mandatory;        // Display name
+        dashboard_description : String(500);                 // Dashboard description
+
+        // Layout
+        layout_type         : DashboardLayout default 'GRID';
+        column_count        : Integer default 4;             // Grid columns
+        row_height          : Integer default 200;           // Default row height in pixels
+
+        // Target Audience
+        persona             : String(50) @mandatory;         // FINANCE_CONTROLLER, OPS_MANAGER, etc.
+        required_scope      : String(50) @mandatory;         // Required authorization scope
+        company_codes       : String(100);                   // Allowed company codes
+
+        // Tiles Configuration (JSON array of tile definitions)
+        tiles_config        : LargeString @mandatory;        // Tile definitions JSON
+        /**
+         * tiles_config JSON structure:
+         * [{
+         *   "tileId": "tile-001",
+         *   "title": "Invoice Processing Time",
+         *   "kpiCode": "KPI-INV-001",
+         *   "position": {"row": 0, "col": 0},
+         *   "size": {"width": 1, "height": 1},
+         *   "chartType": "KPI",
+         *   "drilldownTarget": "variance-analysis"
+         * }]
+         */
+
+        // Filters
+        global_filters      : LargeString;                   // Shared filters for all tiles
+        filter_bar_visible  : Boolean default true;
+
+        // Refresh
+        auto_refresh        : Boolean default false;
+        refresh_interval_sec : Integer default 300;          // Auto-refresh interval
+
+        // Home Page
+        is_home_page        : Boolean default false;         // Default landing page
+        display_order       : Integer default 100;           // Menu order
+}
+
+/**
+ * KPI_DEFINITIONS - KPI Configuration and Thresholds
+ * Source: FuelSphere native
+ * Volume: ~200 records
+ *
+ * Defines KPIs, calculation logic, and threshold values
+ */
+entity KPI_DEFINITIONS : cuid, ActiveStatus, AuditTrail {
+        // KPI Identification
+        kpi_code            : String(30) @mandatory;         // Unique KPI code
+        kpi_name            : String(100) @mandatory;        // Display name
+        kpi_description     : String(500);                   // KPI description
+        kpi_category        : KPICategory @mandatory;        // Category classification
+
+        // Calculation
+        calculation_logic   : String(1000) @mandatory;       // Formula or calculation method
+        source_entity       : String(100);                   // Source entity/view
+        aggregation_type    : String(20);                    // SUM, AVG, COUNT, MIN, MAX
+        time_dimension      : String(20) default 'DAILY';    // Aggregation period
+
+        // Thresholds
+        target_value        : Decimal(15,4);                 // Target/goal value
+        warning_threshold   : Decimal(15,4);                 // Warning level
+        critical_threshold  : Decimal(15,4);                 // Critical level
+        threshold_direction : String(10) default 'HIGHER';   // HIGHER=better, LOWER=better
+
+        // Display
+        uom                 : String(20) @mandatory;         // Unit of measure (%, $, days, count)
+        display_format      : String(50);                    // Number format pattern
+        decimal_places      : Integer default 2;
+        prefix              : String(10);                    // Currency symbol, etc.
+        suffix              : String(10);                    // %, pts, etc.
+
+        // Chart Configuration
+        trend_chart_type    : ChartType default 'LINE';
+        comparison_enabled  : Boolean default true;          // Show vs. prior period
+        sparkline_enabled   : Boolean default true;          // Show mini trend
+
+        // Scope
+        company_codes       : String(100);                   // Applicable company codes
+        applicable_modules  : String(200);                   // FDD modules using this KPI
+
+        // Metadata
+        owner_role          : String(50);                    // Responsible role
+        review_frequency    : String(20);                    // DAILY, WEEKLY, MONTHLY
+        last_reviewed_at    : DateTime;
+        last_reviewed_by    : String(100);
+}
+
+/**
+ * VARIANCE_RECORDS - Budget vs. Actual Variance Tracking
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Records variance analysis between planned and actual values
+ */
+entity VARIANCE_RECORDS : cuid, AuditTrail {
+        // Period & Scope
+        period              : String(7) @mandatory;          // YYYY-MM format
+        company_code        : String(4) @mandatory;          // SAP Company Code
+        fiscal_year         : String(4) @mandatory;          // Fiscal year
+
+        // Dimension (one of these is populated)
+        cost_center         : String(10);                    // S/4HANA Cost Center
+        profit_center       : String(10);                    // S/4HANA Profit Center
+        station_code        : String(3);                     // Airport IATA code
+        route_code          : String(20);                    // Route identifier
+        supplier_id         : UUID;                          // Supplier reference
+
+        // Variance Category
+        variance_category   : String(30) @mandatory;         // FUEL_COST, VOLUME, PRICE, etc.
+        variance_type       : String(20) @mandatory;         // BUDGET, FORECAST, PRIOR_YEAR
+
+        // Amounts
+        budget_amount       : Decimal(18,2) @mandatory;      // Planned/budgeted amount
+        actual_amount       : Decimal(18,2) @mandatory;      // Actual amount
+        variance_amount     : Decimal(18,2) @mandatory;      // Variance (Actual - Budget)
+        variance_pct        : Decimal(8,4);                  // Variance percentage
+        currency_code       : String(3) @mandatory;
+
+        // Quantities (if applicable)
+        budget_quantity     : Decimal(15,2);                 // Planned quantity
+        actual_quantity     : Decimal(15,2);                 // Actual quantity
+        quantity_variance   : Decimal(15,2);                 // Quantity variance
+        quantity_uom        : String(3);                     // Unit of measure
+
+        // Status & Thresholds
+        status              : VarianceStatus @mandatory;     // OK, WARNING, CRITICAL
+        threshold_breached  : Boolean default false;
+        threshold_value     : Decimal(8,4);                  // Threshold that was applied
+
+        // Analysis
+        root_cause          : String(500);                   // Explanation for variance
+        corrective_action   : String(500);                   // Planned action
+        analyzed_by         : String(100);
+        analyzed_at         : DateTime;
+
+        // Drill-down References
+        source_allocations  : String(1000);                  // Related allocation IDs (JSON)
+        source_invoices     : String(1000);                  // Related invoice IDs (JSON)
+
+        // Workflow
+        requires_review     : Boolean default false;
+        reviewed_by         : String(100);
+        reviewed_at         : DateTime;
+        review_notes        : String(500);
+}
+
+/**
+ * ANALYTICS_SNAPSHOTS - Point-in-Time Analytics Data
+ * Source: FuelSphere native
+ * Volume: ~1,000,000/year
+ *
+ * Captures aggregated metrics at specific points in time for historical analysis
+ */
+entity ANALYTICS_SNAPSHOTS : cuid {
+        // Snapshot Identification
+        snapshot_id         : String(50) @mandatory;         // SNAP-{TYPE}-{DATE}-{SEQ}
+        snapshot_type       : SnapshotType @mandatory;       // DAILY, WEEKLY, MONTHLY, etc.
+        snapshot_date       : Date @mandatory;               // Snapshot date
+        snapshot_time       : DateTime @mandatory;           // Exact capture time
+
+        // Scope
+        company_code        : String(4);                     // Company code (null = all)
+        metric_category     : String(50) @mandatory;         // Category of metrics
+
+        // Metric Data (JSON structure for flexible metrics)
+        metrics_data        : LargeString @mandatory;        // Aggregated metrics JSON
+        /**
+         * metrics_data JSON structure:
+         * {
+         *   "total_fuel_cost": 1250000.00,
+         *   "total_volume_kg": 5000000,
+         *   "invoice_count": 450,
+         *   "avg_price_per_kg": 0.85,
+         *   "variance_pct": 2.5,
+         *   ...
+         * }
+         */
+
+        // Dimensions Included
+        dimensions          : String(500);                   // Dimensions in snapshot
+
+        // Source Data
+        record_count        : Integer;                       // Number of source records
+        data_from_date      : Date;                          // Data range start
+        data_to_date        : Date;                          // Data range end
+
+        // Quality
+        is_complete         : Boolean default true;          // All data captured?
+        missing_data_notes  : String(500);                   // Notes on missing data
+
+        // Retention
+        retention_days      : Integer default 365;           // Days to retain
+        is_archived         : Boolean default false;
+        archived_at         : DateTime;
+}
+
+/**
+ * SAC_EXPORT_LOGS - SAP Analytics Cloud Export Tracking
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Tracks data exports to SAP Analytics Cloud for planning writeback
+ */
+entity SAC_EXPORT_LOGS : cuid, AuditTrail {
+        // Export Identification
+        export_id           : String(50) @mandatory;         // EXP-SAC-{DATE}-{SEQ}
+        export_name         : String(100);                   // Export description
+
+        // Timing
+        export_start_time   : DateTime @mandatory;
+        export_end_time     : DateTime;
+        duration_seconds    : Integer;
+
+        // Scope
+        period_from         : String(7) @mandatory;          // Start period (YYYY-MM)
+        period_to           : String(7) @mandatory;          // End period (YYYY-MM)
+        company_codes       : String(100);                   // Exported company codes
+        data_type           : String(50) @mandatory;         // BUDGET, FORECAST, ACTUALS
+
+        // SAC Target
+        sac_model_id        : String(100) @mandatory;        // SAC Planning Model ID
+        sac_version         : String(50);                    // SAC Version/Scenario
+        sac_connection_name : String(100);                   // BTP Destination name
+
+        // Statistics
+        records_exported    : Integer default 0;
+        records_created     : Integer default 0;
+        records_updated     : Integer default 0;
+        records_failed      : Integer default 0;
+        total_amount        : Decimal(18,2);                 // Sum of exported amounts
+        currency_code       : String(3);
+
+        // Status
+        status              : ExportStatus @mandatory;
+        error_count         : Integer default 0;
+        error_summary       : LargeString;                   // Error details
+
+        // Approval (for budget writeback)
+        requires_approval   : Boolean default true;
+        approved_by         : String(100);
+        approved_at         : DateTime;
+        approval_notes      : String(500);
+
+        // Triggered By
+        trigger_type        : String(20) @mandatory;         // MANUAL, SCHEDULED, APPROVAL
+        triggered_by        : String(100);
+        schedule_id         : String(50);
+}
+
+/**
+ * REPORT_EXECUTIONS - Report Generation History
+ * Source: FuelSphere native
+ * Volume: ~50,000/year
+ *
+ * Tracks report generation requests and outputs
+ */
+entity REPORT_EXECUTIONS : cuid {
+        // Report Reference
+        report_definition   : Association to REPORT_DEFINITIONS @mandatory;
+        report_code         : String(30) @mandatory;         // Denormalized
+
+        // Execution Details
+        execution_time      : DateTime @mandatory;           // When executed
+        duration_ms         : Integer;                       // Generation time
+        output_format       : ReportFormat @mandatory;       // Output format used
+
+        // Parameters Used
+        parameters_used     : LargeString;                   // Filter parameters JSON
+        period_from         : String(7);                     // Report period start
+        period_to           : String(7);                     // Report period end
+        company_code        : String(4);
+
+        // Output
+        output_file_name    : String(200);                   // Generated file name
+        output_file_path    : String(500);                   // Storage path
+        output_file_size    : Integer;                       // File size in bytes
+        row_count           : Integer;                       // Rows in report
+
+        // Status
+        status              : ExportStatus @mandatory;
+        error_message       : String(1000);                  // Error if failed
+
+        // User
+        requested_by        : String(100) @mandatory;
+        request_source      : String(20);                    // UI, SCHEDULED, API
+
+        // Distribution
+        distributed_to      : String(1000);                  // Recipients (if emailed)
+        distributed_at      : DateTime;
+}
+
+/**
+ * KPI_VALUES - Calculated KPI Values History
+ * Source: FuelSphere native
+ * Volume: ~500,000/year
+ *
+ * Stores calculated KPI values for trending and historical analysis
+ */
+entity KPI_VALUES : cuid {
+        // KPI Reference
+        kpi_definition      : Association to KPI_DEFINITIONS @mandatory;
+        kpi_code            : String(30) @mandatory;         // Denormalized
+
+        // Period
+        value_date          : Date @mandatory;               // Date of value
+        period_type         : String(10) @mandatory;         // DAILY, WEEKLY, MONTHLY
+        company_code        : String(4);                     // Scope (null = all)
+
+        // Value
+        kpi_value           : Decimal(18,4) @mandatory;      // Calculated value
+        target_value        : Decimal(18,4);                 // Target at time of calc
+        variance_from_target : Decimal(18,4);                // Difference from target
+        variance_pct        : Decimal(8,4);                  // % variance from target
+
+        // Comparison
+        prior_period_value  : Decimal(18,4);                 // Previous period value
+        prior_period_change : Decimal(18,4);                 // Change from prior
+        prior_period_change_pct : Decimal(8,4);              // % change from prior
+        yoy_value           : Decimal(18,4);                 // Same period last year
+        yoy_change_pct      : Decimal(8,4);                  // YoY % change
+
+        // Status
+        status              : VarianceStatus;                // OK, WARNING, CRITICAL
+        threshold_breached  : Boolean default false;
+
+        // Source
+        source_record_count : Integer;                       // Records used in calc
+        calculation_time    : DateTime @mandatory;           // When calculated
+
+        // Trend Data (mini sparkline)
+        trend_data          : String(500);                   // Last N values JSON
+}
