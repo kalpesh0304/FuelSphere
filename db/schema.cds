@@ -3064,3 +3064,587 @@ entity KPI_VALUES : cuid {
         // Trend Data (mini sparkline)
         trend_data          : String(500);                   // Last N values JSON
 }
+
+// ============================================================================
+// FDD-13: SECURITY MANAGEMENT
+// ============================================================================
+
+/**
+ * Security Management Types
+ */
+type UserStatus : String(15) enum { ACTIVE; INACTIVE; LOCKED; PENDING; SUSPENDED }
+type EventCategory : String(20) enum { AUTHENTICATION; AUTHORIZATION; DATA_CHANGE; FINANCIAL; SECURITY; ADMIN }
+type EventResult : String(10) enum { SUCCESS; FAILURE; PARTIAL }
+type CampaignStatus : String(20) enum { DRAFT; SCHEDULED; IN_PROGRESS; COMPLETED; CANCELLED }
+type ReviewDecision : String(15) enum { PENDING; CERTIFIED; REVOKED; ESCALATED }
+type SoDStatus : String(15) enum { DETECTED; EXCEPTION_PENDING; EXCEPTION_APPROVED; RESOLVED; ACCEPTED }
+type IncidentSeverity : String(15) enum { LOW; MEDIUM; HIGH; CRITICAL }
+type IncidentStatus : String(20) enum { NEW; TRIAGED; IN_PROGRESS; CONTAINED; RESOLVED; CLOSED }
+type AlertStatus : String(15) enum { ACTIVE; ACKNOWLEDGED; RESOLVED; SUPPRESSED }
+
+/**
+ * SECURITY_USERS - User Identity Management
+ * Source: FuelSphere + SAP IAS sync
+ * Volume: ~5,000 records
+ *
+ * User identity with attributes synchronized from SAP Identity Authentication Service
+ */
+entity SECURITY_USERS : cuid, AuditTrail {
+        // Identity
+        ias_user_id         : String(64);                    // SAP IAS user ID for federation
+        email               : String(256) @mandatory;        // User email address
+        user_name           : String(100) @mandatory;        // Login username
+        display_name        : String(256) @mandatory;        // Full name for display
+        first_name          : String(100);
+        last_name           : String(100);
+
+        // Organization
+        department          : String(100);                   // Organizational department
+        job_title           : String(100);                   // Job title
+        cost_center         : String(10);                    // Cost center assignment
+        company_code        : String(4);                     // Primary company code
+        location            : String(100);                   // Work location
+        manager             : Association to SECURITY_USERS; // Reporting manager
+
+        // Contact
+        phone               : String(30);
+        mobile              : String(30);
+
+        // Status
+        status              : UserStatus default 'PENDING';
+        status_reason       : String(500);                   // Reason for status change
+        locked_reason       : String(200);                   // If locked, why
+        lock_expiry         : DateTime;                      // Auto-unlock time
+
+        // Authentication
+        last_login_time     : DateTime;                      // Last successful login
+        last_login_ip       : String(45);                    // Last login IP address
+        failed_login_count  : Integer default 0;             // Consecutive failed logins
+        last_failed_login   : DateTime;                      // Last failed attempt
+        password_changed_at : DateTime;                      // Last password change
+        mfa_enabled         : Boolean default false;         // MFA status
+
+        // Lifecycle
+        provisioned_date    : DateTime;                      // Date provisioned
+        provisioned_by      : String(100);                   // Who provisioned
+        deactivated_date    : DateTime;                      // Date deactivated
+        deactivated_by      : String(100);                   // Who deactivated
+        deactivation_reason : String(500);                   // Why deactivated
+
+        // HR Integration
+        employee_id         : String(20);                    // HR system employee ID
+        employment_status   : String(20);                    // ACTIVE, TERMINATED, LOA
+        employment_end_date : Date;                          // Expected end date
+
+        // Composition
+        role_assignments    : Composition of many ROLE_ASSIGNMENTS on role_assignments.user = $self;
+}
+
+/**
+ * ROLE_ASSIGNMENTS - User to Role Mapping
+ * Source: FuelSphere native
+ * Volume: ~20,000 records
+ *
+ * User to role collection mapping with validity dates and approval tracking
+ */
+entity ROLE_ASSIGNMENTS : cuid, AuditTrail {
+        // Assignment
+        user                : Association to SECURITY_USERS @mandatory;
+        role_collection     : String(100) @mandatory;        // XSUAA Role Collection name
+        role_template       : String(100);                   // Role Template name
+        role_description    : String(500);                   // Role description
+
+        // Scope
+        company_code        : String(4);                     // Company code scope (null = all)
+        plant               : String(4);                     // Plant scope
+        cost_center         : String(10);                    // Cost center scope
+
+        // Validity
+        valid_from          : Date @mandatory;
+        valid_to            : Date;                          // Null = indefinite
+        is_temporary        : Boolean default false;         // Temporary assignment
+
+        // Status
+        status              : String(20) default 'ACTIVE';   // ACTIVE, EXPIRED, REVOKED, PENDING
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Approval
+        requires_approval   : Boolean default true;
+        approval_status     : String(20) default 'PENDING';  // PENDING, APPROVED, REJECTED
+        requested_by        : String(100) @mandatory;
+        requested_at        : DateTime @mandatory;
+        request_reason      : String(500);
+        approved_by         : String(100);
+        approved_at         : DateTime;
+        rejection_reason    : String(500);
+
+        // SoD Check
+        sod_checked         : Boolean default false;
+        sod_violations_found : Integer default 0;
+        sod_exception_id    : UUID;                          // Reference to exception if approved
+}
+
+/**
+ * ACCESS_REVIEW_CAMPAIGNS - Access Review Campaign Definition
+ * Source: FuelSphere native
+ * Volume: ~50/year
+ *
+ * Periodic access review campaign management for SOX compliance
+ */
+entity ACCESS_REVIEW_CAMPAIGNS : cuid, AuditTrail {
+        // Campaign Identification
+        campaign_code       : String(30) @mandatory;         // CAR-{YEAR}-Q{N}-{SEQ}
+        campaign_name       : String(200) @mandatory;        // Campaign display name
+        campaign_description : String(1000);                 // Campaign purpose
+
+        // Schedule
+        scheduled_start     : Date @mandatory;               // Campaign start date
+        scheduled_end       : Date @mandatory;               // Certification deadline
+        actual_start        : DateTime;                      // Actual start timestamp
+        actual_end          : DateTime;                      // Actual completion timestamp
+
+        // Scope
+        scope_type          : String(30) @mandatory;         // ALL_USERS, DEPARTMENT, ROLE, CUSTOM
+        scope_filter        : LargeString;                   // Filter criteria JSON
+        scope_company_codes : String(100);                   // Company codes in scope
+        include_inactive    : Boolean default false;         // Include inactive users
+
+        // Status
+        status              : CampaignStatus default 'DRAFT';
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Statistics
+        total_items         : Integer default 0;             // Total review items
+        certified_count     : Integer default 0;             // Items certified
+        revoked_count       : Integer default 0;             // Items revoked
+        pending_count       : Integer default 0;             // Items pending
+        escalated_count     : Integer default 0;             // Items escalated
+        completion_pct      : Decimal(5,2) default 0;        // Completion percentage
+
+        // Escalation
+        escalation_enabled  : Boolean default true;
+        escalation_days     : Integer default 7;             // Days before escalation
+        escalation_to       : String(100);                   // Escalation recipient
+        reminder_sent_at    : DateTime;
+        escalation_sent_at  : DateTime;
+
+        // Compliance
+        sox_relevant        : Boolean default true;          // SOX compliance campaign
+        evidence_generated  : Boolean default false;
+        evidence_file_path  : String(500);                   // Path to evidence report
+
+        // Owner
+        campaign_owner      : String(100) @mandatory;        // Campaign manager
+
+        // Composition
+        review_items        : Composition of many ACCESS_REVIEW_ITEMS on review_items.campaign = $self;
+}
+
+/**
+ * ACCESS_REVIEW_ITEMS - Individual Access Certification Items
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Individual access certification items within a campaign
+ */
+entity ACCESS_REVIEW_ITEMS : cuid, AuditTrail {
+        // Campaign Reference
+        campaign            : Association to ACCESS_REVIEW_CAMPAIGNS @mandatory;
+        item_number         : Integer @mandatory;            // Item sequence number
+
+        // Subject
+        user                : Association to SECURITY_USERS @mandatory;
+        role_assignment     : Association to ROLE_ASSIGNMENTS @mandatory;
+        role_collection     : String(100) @mandatory;        // Denormalized
+
+        // Reviewer
+        assigned_reviewer   : String(100) @mandatory;        // Manager or role owner
+        reviewer_type       : String(20);                    // MANAGER, ROLE_OWNER, DELEGATE
+
+        // Review Status
+        decision            : ReviewDecision default 'PENDING';
+        decision_date       : DateTime;
+        decision_by         : String(100);
+        decision_reason     : String(500);
+        decision_evidence   : String(500);                   // Supporting evidence
+
+        // Action
+        action_required     : Boolean default false;         // Requires follow-up action
+        action_type         : String(30);                    // REVOKE, MODIFY, INVESTIGATE
+        action_completed    : Boolean default false;
+        action_completed_at : DateTime;
+        action_completed_by : String(100);
+
+        // Escalation
+        is_escalated        : Boolean default false;
+        escalated_to        : String(100);
+        escalated_at        : DateTime;
+        escalation_reason   : String(500);
+
+        // Notifications
+        initial_notification_sent : DateTime;
+        reminder_sent_at    : DateTime;
+        reminder_count      : Integer default 0;
+
+        // Due
+        due_date            : Date @mandatory;
+        is_overdue          : Boolean default false;
+}
+
+/**
+ * SOD_VIOLATIONS - Segregation of Duties Violations
+ * Source: FuelSphere native
+ * Volume: ~1,000/year
+ *
+ * Detected segregation of duties conflicts
+ */
+entity SOD_VIOLATIONS : cuid, AuditTrail {
+        // Violation Identification
+        violation_code      : String(30) @mandatory;         // SOD-{DATE}-{SEQ}
+        detection_time      : DateTime @mandatory;           // When detected
+
+        // Subject
+        user                : Association to SECURITY_USERS @mandatory;
+
+        // Conflicting Roles
+        role_1              : String(100) @mandatory;        // First conflicting role
+        role_1_scope        : String(200);                   // Scope details
+        role_1_assignment   : Association to ROLE_ASSIGNMENTS;
+        role_2              : String(100) @mandatory;        // Second conflicting role
+        role_2_scope        : String(200);                   // Scope details
+        role_2_assignment   : Association to ROLE_ASSIGNMENTS;
+
+        // Rule Details
+        sod_rule_id         : String(50) @mandatory;         // Reference to SoD rule
+        sod_rule_name       : String(200);                   // Rule description
+        risk_level          : String(10) @mandatory;         // LOW, MEDIUM, HIGH, CRITICAL
+        risk_description    : String(500);                   // Business risk explanation
+
+        // Status
+        status              : SoDStatus default 'DETECTED';
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Detection Source
+        detection_source    : String(30) @mandatory;         // ROLE_ASSIGNMENT, PERIODIC_SCAN, MANUAL
+        trigger_action      : String(100);                   // What triggered detection
+
+        // Exception Reference
+        exception           : Association to SOD_EXCEPTIONS;
+}
+
+/**
+ * SOD_EXCEPTIONS - Segregation of Duties Exception Approvals
+ * Source: FuelSphere native
+ * Volume: ~200/year
+ *
+ * Approved exceptions for SoD violations with validity and controls
+ */
+entity SOD_EXCEPTIONS : cuid, AuditTrail {
+        // Exception Identification
+        exception_code      : String(30) @mandatory;         // SODEX-{DATE}-{SEQ}
+
+        // Violation Reference
+        violation           : Association to SOD_VIOLATIONS @mandatory;
+        user                : Association to SECURITY_USERS @mandatory;
+
+        // Exception Details
+        business_justification : LargeString @mandatory;     // Why exception needed
+        compensating_controls : LargeString @mandatory;      // Mitigating controls
+        risk_acceptance     : LargeString;                   // Accepted residual risk
+
+        // Validity
+        valid_from          : Date @mandatory;
+        valid_to            : Date @mandatory;               // Max 1 year typically
+        is_permanent        : Boolean default false;         // Requires CISO approval
+
+        // Status
+        status              : String(20) default 'PENDING';  // PENDING, APPROVED, REJECTED, EXPIRED
+        status_changed_at   : DateTime;
+
+        // Approval Workflow (Dual approval required)
+        requested_by        : String(100) @mandatory;
+        requested_at        : DateTime @mandatory;
+
+        first_approver      : String(100);                   // Manager/Business Owner
+        first_approval_date : DateTime;
+        first_approval_notes : String(500);
+
+        second_approver     : String(100);                   // Security Officer/CISO
+        second_approval_date : DateTime;
+        second_approval_notes : String(500);
+
+        rejected_by         : String(100);
+        rejection_date      : DateTime;
+        rejection_reason    : String(500);
+
+        // Review
+        last_review_date    : Date;
+        next_review_date    : Date;
+        review_count        : Integer default 0;
+}
+
+/**
+ * SECURITY_INCIDENTS - Security Incident Management
+ * Source: FuelSphere native
+ * Volume: ~500/year
+ *
+ * Security incident tracking from detection to resolution
+ */
+entity SECURITY_INCIDENTS : cuid, AuditTrail {
+        // Incident Identification
+        incident_code       : String(30) @mandatory;         // INC-{DATE}-{SEQ}
+        incident_title      : String(200) @mandatory;        // Brief description
+        incident_description : LargeString @mandatory;       // Detailed description
+
+        // Classification
+        severity            : IncidentSeverity @mandatory;
+        incident_type       : String(50) @mandatory;         // UNAUTHORIZED_ACCESS, DATA_BREACH, etc.
+        affected_systems    : String(500);                   // Comma-separated system names
+        affected_data       : String(500);                   // Type of data affected
+
+        // Status
+        status              : IncidentStatus default 'NEW';
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Timeline
+        detected_at         : DateTime @mandatory;           // When detected
+        reported_at         : DateTime @mandatory;           // When reported
+        triaged_at          : DateTime;                      // When triaged
+        contained_at        : DateTime;                      // When contained
+        resolved_at         : DateTime;                      // When resolved
+        closed_at           : DateTime;                      // When closed
+
+        // Metrics (MTTD, MTTR)
+        time_to_detect_mins : Integer;                       // Detection time
+        time_to_contain_mins : Integer;                      // Containment time
+        time_to_resolve_mins : Integer;                      // Resolution time
+
+        // Assignment
+        assigned_to         : String(100);                   // Incident handler
+        assigned_at         : DateTime;
+        escalated_to        : String(100);                   // Escalation contact
+        escalated_at        : DateTime;
+
+        // Reporter
+        reported_by         : String(100) @mandatory;
+        reporter_email      : String(256);
+        reporter_phone      : String(30);
+
+        // Related Entities
+        related_user_id     : UUID;                          // If user-related
+        related_alert_id    : UUID;                          // Triggering alert
+
+        // Investigation
+        root_cause          : LargeString;                   // Root cause analysis
+        impact_assessment   : LargeString;                   // Business impact
+        affected_user_count : Integer default 0;             // Number of users affected
+        affected_record_count : Integer default 0;           // Number of records affected
+
+        // Response
+        containment_actions : LargeString;                   // Containment steps taken
+        remediation_actions : LargeString;                   // Remediation steps
+        lessons_learned     : LargeString;                   // Lessons learned
+
+        // Compliance
+        requires_notification : Boolean default false;       // Requires external notification
+        notification_sent   : Boolean default false;
+        notification_date   : DateTime;
+        notification_details : String(500);
+}
+
+/**
+ * SECURITY_AUDIT_LOGS - Comprehensive Security Event Audit Trail
+ * Source: FuelSphere native
+ * Volume: ~5,000,000/year
+ *
+ * Immutable audit trail for all security-relevant events
+ */
+entity SECURITY_AUDIT_LOGS : cuid {
+        // Event Identification
+        event_id            : String(50) @mandatory;         // Unique event identifier
+        event_timestamp     : DateTime @mandatory;           // Precise timestamp
+        event_sequence      : Integer64;                     // Sequence for ordering
+
+        // Classification
+        event_category      : EventCategory @mandatory;
+        event_type          : String(50) @mandatory;         // LOGIN, LOGOUT, ROLE_ASSIGN, etc.
+        event_subtype       : String(50);                    // More specific classification
+
+        // Actor
+        user_id             : UUID;                          // User who performed action
+        user_name           : String(100);                   // Username (denormalized)
+        user_email          : String(256);                   // Email (denormalized)
+        actor_type          : String(20);                    // USER, SYSTEM, INTEGRATION
+
+        // Target
+        object_type         : String(100) @mandatory;        // Type of object affected
+        object_id           : String(256);                   // Identifier of object
+        object_name         : String(200);                   // Human-readable name
+
+        // Change Details
+        action              : String(50) @mandatory;         // CREATE, UPDATE, DELETE, READ, EXECUTE
+        old_value           : LargeString;                   // Previous value (JSON)
+        new_value           : LargeString;                   // New value (JSON)
+        changed_fields      : String(1000);                  // List of changed fields
+
+        // Result
+        result              : EventResult @mandatory;
+        result_code         : String(20);                    // Specific result code
+        error_message       : String(1000);                  // Error if failed
+
+        // Context
+        session_id          : String(100);                   // Session identifier
+        correlation_id      : UUID;                          // Request correlation
+        ip_address          : String(45) @mandatory;         // Client IP
+        user_agent          : String(500);                   // Browser/client info
+        geo_location        : String(100);                   // Approximate location
+
+        // Source
+        source_system       : String(50) @mandatory;         // FUELSPHERE, IAS, XSUAA
+        source_component    : String(100);                   // Specific component
+        api_endpoint        : String(500);                   // API endpoint called
+
+        // Compliance
+        sensitive_data      : Boolean default false;         // Involves sensitive data
+        financial_impact    : Boolean default false;         // Has financial impact
+        sox_relevant        : Boolean default false;         // SOX-relevant event
+
+        // Retention
+        retention_date      : Date @mandatory;               // Date after which can archive
+        is_archived         : Boolean default false;
+        archived_at         : DateTime;
+}
+
+/**
+ * SECURITY_ALERTS - Security Monitoring Alerts
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Security monitoring alerts with threshold-based triggers
+ */
+entity SECURITY_ALERTS : cuid {
+        // Alert Identification
+        alert_code          : String(30) @mandatory;         // ALRT-{DATE}-{SEQ}
+        alert_name          : String(200) @mandatory;        // Alert display name
+
+        // Classification
+        alert_type          : String(50) @mandatory;         // FAILED_LOGIN, ANOMALY, etc.
+        severity            : IncidentSeverity @mandatory;
+        priority            : Integer default 50;            // 1-100 priority score
+
+        // Trigger
+        triggered_at        : DateTime @mandatory;
+        trigger_rule        : String(100) @mandatory;        // Rule that triggered
+        trigger_threshold   : String(100);                   // Threshold breached
+        trigger_value       : Decimal(15,4);                 // Actual value
+
+        // Status
+        status              : AlertStatus default 'ACTIVE';
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Related Entity
+        related_user_id     : UUID;                          // If user-related
+        related_user_name   : String(100);
+        related_ip_address  : String(45);                    // If IP-related
+        related_event_id    : UUID;                          // Triggering event
+
+        // Details
+        alert_details       : LargeString;                   // Alert context JSON
+        recommended_action  : String(500);                   // Suggested response
+
+        // Response
+        acknowledged_by     : String(100);
+        acknowledged_at     : DateTime;
+        resolution_notes    : String(1000);
+        resolved_by         : String(100);
+        resolved_at         : DateTime;
+
+        // Escalation
+        auto_escalate       : Boolean default false;
+        escalation_time     : DateTime;                      // When to escalate
+        escalated           : Boolean default false;
+        escalated_to        : String(100);
+        escalated_at        : DateTime;
+
+        // Incident Created
+        incident_created    : Boolean default false;
+        incident_id         : UUID;                          // Reference to incident
+}
+
+/**
+ * SECURITY_CONFIGURATIONS - Security Policy Settings
+ * Source: FuelSphere native
+ * Volume: ~100 records
+ *
+ * Security configuration parameters and policy settings
+ */
+entity SECURITY_CONFIGURATIONS : cuid, ActiveStatus, AuditTrail {
+        // Configuration Identification
+        config_key          : String(100) @mandatory;        // Unique config key
+        config_name         : String(100) @mandatory;        // Display name
+        config_group        : String(50) @mandatory;         // PASSWORD, SESSION, LOCKOUT, etc.
+        config_description  : String(500);                   // Configuration description
+
+        // Value
+        config_value        : String(1000) @mandatory;       // Current value
+        config_type         : String(20) @mandatory;         // STRING, INTEGER, BOOLEAN, JSON
+        default_value       : String(1000);                  // Default value
+        min_value           : Decimal(15,4);                 // Minimum if numeric
+        max_value           : Decimal(15,4);                 // Maximum if numeric
+        allowed_values      : String(1000);                  // Comma-separated if enum
+
+        // Scope
+        company_code        : String(4);                     // Company-specific (null = global)
+
+        // Compliance
+        sox_relevant        : Boolean default false;         // SOX-controlled setting
+        requires_dual_approval : Boolean default false;      // Change requires dual approval
+
+        // Change Control
+        last_change_reason  : String(500);                   // Reason for last change
+        last_change_ticket  : String(50);                    // Change ticket reference
+
+        // Audit
+        change_count        : Integer default 0;             // Number of times changed
+}
+
+/**
+ * SOD_RULES - Segregation of Duties Rule Definitions
+ * Source: FuelSphere native
+ * Volume: ~100 records
+ *
+ * Defines SoD rules for automatic conflict detection
+ */
+entity SOD_RULES : cuid, ActiveStatus, AuditTrail {
+        // Rule Identification
+        rule_id             : String(50) @mandatory;         // SOD-RULE-{SEQ}
+        rule_name           : String(200) @mandatory;        // Rule display name
+        rule_description    : String(1000);                  // Rule explanation
+
+        // Conflicting Roles
+        role_1_pattern      : String(200) @mandatory;        // First role (pattern)
+        role_2_pattern      : String(200) @mandatory;        // Second role (pattern)
+
+        // Risk Assessment
+        risk_level          : String(10) @mandatory;         // LOW, MEDIUM, HIGH, CRITICAL
+        risk_category       : String(50);                    // FINANCIAL, OPERATIONAL, etc.
+        risk_description    : String(500);                   // Business risk explanation
+        potential_fraud_type : String(200);                  // Type of fraud this prevents
+
+        // Scope
+        company_codes       : String(100);                   // Applicable company codes
+
+        // Exception Policy
+        exception_allowed   : Boolean default true;          // Can exceptions be granted
+        max_exception_days  : Integer default 365;           // Maximum exception validity
+        requires_ciso_approval : Boolean default false;      // CISO approval required
+
+        // Compliance
+        sox_control_id      : String(30);                    // Related SOX control
+        regulatory_reference : String(200);                  // External regulation
+}
