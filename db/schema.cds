@@ -1795,3 +1795,323 @@ entity FUEL_BURN_EXCEPTIONS : cuid, AuditTrail {
         maintenance_related : Boolean default false;     // True if maintenance issue
         maintenance_order   : String(20);                // Linked maintenance order number
 }
+
+// ============================================================================
+// COST ALLOCATION MODULE (FDD-09)
+// Flight-level fuel cost assignment and S/4HANA CO integration
+// Formula: Flight Cost = (Qty x Unit Price) + Taxes + Into-Plane Fees + Surcharges
+// ============================================================================
+
+/**
+ * Allocation Type Enumeration
+ */
+type AllocationType : String(20) enum {
+    Actual      = 'ACTUAL';      // Actual cost from verified invoice
+    Accrual     = 'ACCRUAL';     // Estimated cost for period-end
+    Reversal    = 'REVERSAL';    // Accrual reversal on invoice receipt
+    Standard    = 'STANDARD';    // Standard cost for budgeting
+}
+
+/**
+ * Allocation Status Enumeration
+ */
+type AllocationStatus : String(20) enum {
+    Draft       = 'DRAFT';       // Not yet posted
+    Pending     = 'PENDING';     // Awaiting approval
+    Posted      = 'POSTED';      // Posted to S/4HANA CO
+    Reversed    = 'REVERSED';    // Reversed posting
+    Failed      = 'FAILED';      // Posting failed
+}
+
+/**
+ * Allocation Basis Enumeration
+ */
+type AllocationBasis : String(20) enum {
+    Quantity    = 'QUANTITY';    // Allocate based on fuel quantity
+    Amount      = 'AMOUNT';      // Allocate based on cost amount
+    Percentage  = 'PERCENTAGE';  // Fixed percentage allocation
+}
+
+/**
+ * Settlement Receiver Type
+ */
+type SettlementReceiverType : String(20) enum {
+    CostCenter  = 'COST_CENTER';
+    ProfitCenter = 'PROFIT_CENTER';
+    InternalOrder = 'INTERNAL_ORDER';
+    WBS         = 'WBS';         // Work Breakdown Structure element
+}
+
+/**
+ * Allocation Run Status
+ */
+type AllocationRunStatus : String(20) enum {
+    Scheduled   = 'SCHEDULED';
+    Running     = 'RUNNING';
+    Completed   = 'COMPLETED';
+    Failed      = 'FAILED';
+    Cancelled   = 'CANCELLED';
+}
+
+/**
+ * FLIGHT_COSTS - Flight-Level Cost Breakdown
+ * Source: FuelSphere native
+ * Volume: ~200,000/year
+ *
+ * Calculates total fuel cost per flight with component breakdown
+ * Formula: Total = Base Fuel + Taxes + Into-Plane Fees + Surcharges
+ */
+entity FLIGHT_COSTS : cuid, AuditTrail {
+        // Flight & Delivery Reference
+        flight              : Association to FLIGHT_SCHEDULE @mandatory;
+        fuel_delivery       : Association to FUEL_DELIVERIES @mandatory;
+        fuel_order          : Association to FUEL_ORDERS;
+        invoice             : Association to INVOICES;
+
+        // Cost Date
+        cost_date           : Date @mandatory;            // Cost calculation date
+
+        // Fuel Quantity
+        fuel_quantity_kg    : Decimal(12,2) @mandatory;   // Fuel quantity in kg
+        uom_code            : String(3) default 'KG';     // Unit of measure
+
+        // Pricing
+        unit_price          : Decimal(15,4) @mandatory;   // Price per unit
+        contract            : Association to MASTER_CONTRACTS; // Source contract
+        pricing_formula     : Association to PRICING_FORMULA;  // Pricing formula used
+
+        // Cost Components
+        base_fuel_cost      : Decimal(15,2) @mandatory;   // Base fuel cost (qty x price)
+        tax_amount          : Decimal(15,2) default 0;    // Tax component
+        into_plane_fees     : Decimal(15,2) default 0;    // Into-plane handling fees
+        surcharge_amount    : Decimal(15,2) default 0;    // Surcharges (fuel, security, etc.)
+        total_cost          : Decimal(15,2) @mandatory;   // Total flight fuel cost
+
+        // Currency
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;
+
+        // Route Information (for profitability)
+        origin_airport      : Association to MASTER_AIRPORTS;
+        destination_airport : Association to MASTER_AIRPORTS;
+        route               : Association to ROUTE_MASTER;
+
+        // Variance (vs. planned)
+        planned_cost        : Decimal(15,2);              // Planned/budgeted cost
+        variance_amount     : Decimal(15,2);              // Variance (actual - planned)
+        variance_pct        : Decimal(5,2);               // Variance percentage
+
+        // Status
+        is_allocated        : Boolean default false;      // True if allocated to CO
+        allocation_date     : Date;                       // When allocated
+}
+
+/**
+ * COST_ALLOCATIONS - Cost Allocation Records
+ * Source: FuelSphere native + S/4HANA CO
+ * Volume: ~500,000/year
+ *
+ * Records cost assignments to cost objects (cost center, profit center, internal order)
+ * Posted to S/4HANA CO via Journal Entry API
+ */
+entity COST_ALLOCATIONS : cuid, AuditTrail {
+        // Source Records
+        flight              : Association to FLIGHT_SCHEDULE;
+        flight_cost         : Association to FLIGHT_COSTS;
+        invoice             : Association to INVOICES;
+        fuel_delivery       : Association to FUEL_DELIVERIES;
+
+        // Allocation Details
+        allocation_date     : Date @mandatory;            // Allocation posting date
+        period              : String(7) @mandatory;       // Fiscal period (YYYY-MM)
+        company_code        : String(4) @mandatory;       // SAP Company Code
+
+        // Cost Objects (S/4HANA CO)
+        cost_center         : String(10);                 // S/4HANA Cost Center
+        internal_order      : String(12);                 // S/4HANA Internal Order (Statistical)
+        profit_center       : String(10);                 // S/4HANA Profit Center
+        wbs_element         : String(24);                 // WBS Element (if applicable)
+
+        // G/L Account
+        gl_account          : String(10) @mandatory;      // G/L Account for posting
+
+        // Amounts
+        allocated_amount    : Decimal(15,2) @mandatory;   // Allocated cost amount
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
+        currency_code       : String(3) @mandatory;
+
+        // Allocation Type & Status
+        allocation_type     : AllocationType @mandatory;  // ACTUAL, ACCRUAL, REVERSAL
+        status              : AllocationStatus default 'DRAFT';
+
+        // Allocation Rule Applied
+        allocation_rule     : Association to ALLOCATION_RULES;
+
+        // S/4HANA Posting Reference
+        s4_document_number  : String(10);                 // FI Document Number
+        s4_fiscal_year      : String(4);                  // Fiscal Year
+        s4_posting_date     : Date;                       // S/4HANA Posting Date
+        posting_error       : String(500);                // Error message if failed
+
+        // Accrual Reference (for reversals)
+        original_allocation : Association to COST_ALLOCATIONS; // Original accrual being reversed
+
+        // Approval
+        requires_approval   : Boolean default false;
+        approved_by         : String(100);
+        approved_at         : DateTime;
+
+        // CO-PA Characteristics (for profitability analysis)
+        copa_segment        : String(20);                 // Market segment
+        copa_route          : String(20);                 // Route code
+        copa_aircraft_type  : String(10);                 // Aircraft type
+}
+
+/**
+ * ALLOCATION_RULES - Allocation Rule Configuration
+ * Source: FuelSphere native
+ * Volume: ~100 records
+ *
+ * Configures how costs are allocated to cost objects
+ */
+entity ALLOCATION_RULES : cuid, ActiveStatus, AuditTrail {
+        rule_code           : String(20) @mandatory;      // Rule identifier
+        rule_name           : String(100) @mandatory;     // Rule display name
+        description         : String(500);                // Rule description
+
+        // Scope
+        company_code        : String(4) @mandatory;       // Company code scope
+
+        // Allocation Basis
+        allocation_basis    : AllocationBasis @mandatory; // QUANTITY, AMOUNT, PERCENTAGE
+        percentage_value    : Decimal(5,2);               // If basis = PERCENTAGE
+
+        // Settlement Receiver
+        settlement_receiver : SettlementReceiverType @mandatory; // COST_CENTER, PROFIT_CENTER, etc.
+        default_cost_center : String(10);                 // Default cost center
+        default_profit_center : String(10);               // Default profit center
+        default_internal_order : String(12);              // Default internal order
+
+        // G/L Account
+        gl_account          : String(10) @mandatory;      // G/L Account for posting
+
+        // Validity
+        effective_from      : Date @mandatory;
+        effective_to        : Date;
+
+        // Priority
+        priority            : Integer default 100;        // Rule priority (lower = higher)
+}
+
+/**
+ * ALLOCATION_RUNS - Allocation Batch Run Logs
+ * Source: FuelSphere native
+ * Volume: ~500/year
+ *
+ * Tracks execution of period-end allocation runs
+ */
+entity ALLOCATION_RUNS : cuid, AuditTrail {
+        run_number          : String(20) @mandatory;      // RUN-{PERIOD}-{SEQ}
+        run_name            : String(100);                // Run description
+
+        // Run Scope
+        company_code        : String(4) @mandatory;       // Company code
+        period              : String(7) @mandatory;       // Fiscal period (YYYY-MM)
+        run_type            : AllocationType @mandatory;  // ACTUAL, ACCRUAL, REVERSAL
+
+        // Timing
+        scheduled_date      : DateTime;                   // Scheduled execution time
+        started_at          : DateTime;                   // Actual start time
+        completed_at        : DateTime;                   // Completion time
+        duration_seconds    : Integer;                    // Run duration
+
+        // Status
+        status              : AllocationRunStatus default 'SCHEDULED';
+        error_message       : String(1000);               // Error details if failed
+
+        // Statistics
+        total_flights       : Integer default 0;          // Flights processed
+        total_allocations   : Integer default 0;          // Allocations created
+        total_amount        : Decimal(18,2) default 0;    // Total amount allocated
+        currency_code       : String(3);                  // Summary currency
+        failed_count        : Integer default 0;          // Failed allocations
+        skipped_count       : Integer default 0;          // Skipped (already allocated)
+
+        // Approval Workflow
+        requires_approval   : Boolean default true;       // Needs Finance Controller approval
+        approved_by         : String(100);
+        approved_at         : DateTime;
+        rejected_by         : String(100);
+        rejected_at         : DateTime;
+        rejection_reason    : String(500);
+
+        // Initiator
+        initiated_by        : String(100) @mandatory;     // User who started run
+}
+
+/**
+ * COST_CENTER_MAPPING - Station to Cost Center Mapping
+ * Source: FuelSphere native + S/4HANA
+ * Volume: ~500 records
+ *
+ * Maps airports/stations to S/4HANA cost centers for allocation
+ */
+entity COST_CENTER_MAPPING : cuid, ActiveStatus, AuditTrail {
+        // Station
+        airport             : Association to MASTER_AIRPORTS @mandatory;
+        airport_code        : String(3) @mandatory;       // IATA code (denormalized)
+
+        // Company Code
+        company_code        : String(4) @mandatory;       // SAP Company Code
+
+        // Cost Objects
+        cost_center         : String(10) @mandatory;      // S/4HANA Cost Center
+        cost_center_name    : String(40);                 // Cost center description
+        profit_center       : String(10);                 // S/4HANA Profit Center
+        profit_center_name  : String(40);                 // Profit center description
+
+        // Validity
+        effective_from      : Date @mandatory;
+        effective_to        : Date;
+
+        // Priority
+        priority            : Integer default 100;        // For overlapping mappings
+}
+
+/**
+ * ACCRUAL_ENTRIES - Period-End Accrual Records
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Tracks accrual entries for uninvoiced deliveries at period-end
+ */
+entity ACCRUAL_ENTRIES : cuid, AuditTrail {
+        accrual_number      : String(20) @mandatory;      // ACC-{PERIOD}-{SEQ}
+
+        // Period
+        period              : String(7) @mandatory;       // Fiscal period (YYYY-MM)
+        company_code        : String(4) @mandatory;
+
+        // Source
+        fuel_delivery       : Association to FUEL_DELIVERIES @mandatory;
+        flight              : Association to FLIGHT_SCHEDULE;
+
+        // Accrual Amount
+        accrual_amount      : Decimal(15,2) @mandatory;   // Estimated cost
+        currency_code       : String(3) @mandatory;
+
+        // Basis for Estimate
+        estimation_basis    : String(20) @mandatory;      // CONTRACT_PRICE, AVERAGE, LAST_PRICE
+        reference_price     : Decimal(15,4);              // Price used for estimation
+
+        // Status
+        status              : String(20) default 'OPEN';  // OPEN, REVERSED, INVOICED
+        allocation          : Association to COST_ALLOCATIONS; // Accrual allocation
+        reversal_allocation : Association to COST_ALLOCATIONS; // Reversal allocation
+
+        // Invoice Link (when received)
+        invoice             : Association to INVOICES;
+        invoice_date        : Date;
+        actual_amount       : Decimal(15,2);              // Actual invoice amount
+        variance_amount     : Decimal(15,2);              // Accrual vs. actual variance
+}
