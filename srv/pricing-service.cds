@@ -280,8 +280,8 @@ service PricingService {
     // REFERENCE DATA (Read-only)
     // ========================================================================
 
-    @readonly entity Currencies as projection on db.T001X_CURRENCY;
-    @readonly entity UnitsOfMeasure as projection on db.T006_UOM;
+    @readonly entity Currencies as projection on db.CURRENCY_MASTER;
+    @readonly entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
     @readonly entity Contracts as projection on db.MASTER_CONTRACTS;
     @readonly entity Suppliers as projection on db.MASTER_SUPPLIERS;
 
