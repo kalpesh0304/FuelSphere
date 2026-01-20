@@ -4,14 +4,14 @@
       "kind": "dummy",
       "users": {
         "alice": {
-          "roles": ["FullAdmin"],
+          "roles": ["AdminAccess", "FuelOrderCreate", "FuelOrderApprove", "ePODCapture", "ePODApprove", "InvoiceVerify", "InvoiceApprove", "FinancePost", "MasterDataAdmin", "ContractManage", "PlanningAccess", "ReportView", "IntegrationMonitor", "BurnDataEdit"],
           "attributes": {
             "station": ["*"],
             "region": ["*"]
           }
         },
         "kalpesh": {
-          "roles": ["FullAdmin"],
+          "roles": ["AdminAccess", "FuelOrderCreate", "FuelOrderApprove", "ePODCapture", "ePODApprove", "InvoiceVerify", "InvoiceApprove", "FinancePost", "MasterDataAdmin", "ContractManage", "PlanningAccess", "ReportView", "IntegrationMonitor", "BurnDataEdit"],
           "attributes": {
             "station": ["*"],
             "region": ["*"]
