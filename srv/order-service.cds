@@ -44,8 +44,8 @@ service FuelOrderService {
         deliveries  : redirected to FuelDeliveries,
         tickets     : redirected to FuelTickets,
         // Virtual elements for UI criticality coloring
-        virtual statusCriticality   : Integer,
-        virtual priorityCriticality : Integer
+        virtual null as statusCriticality   : Integer,
+        virtual null as priorityCriticality : Integer
     } actions {
         /**
          * Submit order to supplier
@@ -94,8 +94,8 @@ service FuelOrderService {
     entity FuelDeliveries as projection on db.FUEL_DELIVERIES {
         *,
         order : redirected to FuelOrders,
-        virtual statusCriticality   : Integer,
-        virtual varianceCriticality : Integer
+        virtual null as statusCriticality   : Integer,
+        virtual null as varianceCriticality : Integer
     } actions {
         /**
          * Capture dual digital signatures
