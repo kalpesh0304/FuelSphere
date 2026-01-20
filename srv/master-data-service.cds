@@ -38,7 +38,10 @@ service MasterDataService {
      * Access: integration-admin (Edit), others (View)
      */
     @odata.draft.enabled
-    entity Manufacturers as projection on db.MANUFACTURE;
+    entity Manufacturers as projection on db.MANUFACTURE {
+        *,
+        virtual null as activeCriticality : Integer
+    };
 
     /**
      * Aircraft - Aircraft Type Master
@@ -47,7 +50,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
-        manufacturer : redirected to Manufacturers
+        manufacturer : redirected to Manufacturers,
+        virtual null as activeCriticality : Integer
     };
 
     /**
@@ -58,7 +62,8 @@ service MasterDataService {
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries,
-        plant   : redirected to Plants
+        plant   : redirected to Plants,
+        virtual null as activeCriticality : Integer
     };
 
     /**
@@ -69,7 +74,8 @@ service MasterDataService {
     entity Routes as projection on db.ROUTE_MASTER {
         *,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        virtual null as activeCriticality : Integer
     };
 
     // ========================================================================
@@ -83,7 +89,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Suppliers as projection on db.MASTER_SUPPLIERS {
         *,
-        country : redirected to Countries
+        country : redirected to Countries,
+        virtual null as activeCriticality : Integer
     };
 
     /**
@@ -93,7 +100,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
-        uom : redirected to UnitsOfMeasure
+        uom : redirected to UnitsOfMeasure,
+        virtual null as activeCriticality : Integer
     };
 
     /**
@@ -104,7 +112,8 @@ service MasterDataService {
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
         supplier : redirected to Suppliers,
-        currency : redirected to Currencies
+        currency : redirected to Currencies,
+        virtual null as activeCriticality : Integer
     };
 
     // ========================================================================
