@@ -1,0 +1,7 @@
+ID;sanction_list_ID;entity_name;entity_type;aliases;country_land1;identifiers;listing_date;delisting_date;remarks;program;source_reference;is_active
+550e8400-e29b-41d4-a716-446655441101;550e8400-e29b-41d4-a716-446655441001;ACME Petroleum Corp;ORGANIZATION;ACME Oil; ACME Energy Trading;;Tax ID: 123456789;2020-03-15;;Listed for sanctions evasion activities in energy sector;IRAN;OFAC-2020-12345;true
+550e8400-e29b-41d4-a716-446655441102;550e8400-e29b-41d4-a716-446655441001;Global Fuel Services Ltd;ORGANIZATION;GFS Ltd; Global Fuel;;Company Reg: GFS-98765;2021-06-22;;Front company for sanctioned entity fuel transactions;SYRIA;OFAC-2021-67890;true
+550e8400-e29b-41d4-a716-446655441103;550e8400-e29b-41d4-a716-446655441003;EuroFuel Trading GmbH;ORGANIZATION;EFT GmbH;;VAT: DE123456789;2022-01-10;;Designated for circumventing EU energy sanctions;RUSSIA;EU-2022-0123;true
+550e8400-e29b-41d4-a716-446655441104;550e8400-e29b-41d4-a716-446655441004;Pacific Energy Partners;ORGANIZATION;PEP; Pacific Fuel;;Registration: PEP-2019-001;2019-11-05;;UN designated for proliferation financing;DPRK;UN-SC-1234;true
+550e8400-e29b-41d4-a716-446655441105;550e8400-e29b-41d4-a716-446655441001;MV Sea Trader;VESSEL;;IMO: 9123456;Vessel IMO: 9123456;2023-02-28;;Vessel involved in illicit fuel transfers;IRAN;OFAC-2023-V001;true
+550e8400-e29b-41d4-a716-446655441106;550e8400-e29b-41d4-a716-446655441005;North Star Aviation Fuel;ORGANIZATION;NSAF; NorthStar Fuel;;Company Number: UK12345678;2024-05-15;;Designated under UK Russia sanctions;RUSSIA;UK-2024-0567;true

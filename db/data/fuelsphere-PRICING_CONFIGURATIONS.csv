@@ -1,0 +1,4 @@
+ID;company_code;engine_type;native_enabled;cpe_enabled;comparison_mode;default_formula_ID;price_tolerance_percent;auto_derive_enabled;derive_schedule;audit_required;created_at;created_by;modified_at;modified_by;is_active
+550e8400-e29b-41d4-a716-446655446301;1000;HYBRID;true;true;true;550e8400-e29b-41d4-a716-446655446101;2.5000;true;0 6 * * *;true;2024-12-01T00:00:00Z;pricing.admin@airline.com;2024-12-01T00:00:00Z;pricing.admin@airline.com;true
+550e8400-e29b-41d4-a716-446655446302;2000;NATIVE;true;false;false;550e8400-e29b-41d4-a716-446655446102;5.0000;true;0 7 * * *;true;2024-12-01T00:00:00Z;pricing.admin@airline.com;2024-12-01T00:00:00Z;pricing.admin@airline.com;true
+550e8400-e29b-41d4-a716-446655446303;3000;SAP_CPE;false;true;false;;3.0000;false;;true;2024-12-01T00:00:00Z;pricing.admin@airline.com;2024-12-01T00:00:00Z;pricing.admin@airline.com;true
