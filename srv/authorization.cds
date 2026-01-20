@@ -119,8 +119,8 @@ annotate MasterDataService.Contracts with @(restrict: [
 // Actions
 // ----------------------------------------------------------------------------
 
-// syncFromS4HANA action - Restricted to IntegrationMonitor or AdminAccess
-annotate MasterDataService.syncFromS4HANA with @(requires: ['IntegrationMonitor', 'AdminAccess']);
+// syncFromS4HANA action - Restricted to IntegrationMonitor or AdminAccess (+ any for dev)
+annotate MasterDataService.syncFromS4HANA with @(requires: ['IntegrationMonitor', 'AdminAccess', 'any']);
 
 // ============================================================================
 // FUEL ORDER SERVICE - Authorization (FDD-04)
@@ -157,21 +157,21 @@ annotate FuelOrderService.FuelOrders with @(restrict: [
     { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
-// Submit action - Requires FuelOrderCreate scope
+// Submit action - Requires FuelOrderCreate scope (+ any for dev)
 annotate FuelOrderService.FuelOrders actions {
-    @(requires: 'FuelOrderCreate')
+    @(requires: ['FuelOrderCreate', 'any'])
     submit;
 
-    @(requires: 'FuelOrderApprove')
+    @(requires: ['FuelOrderApprove', 'any'])
     confirm;
 
-    @(requires: ['FuelOrderCreate', 'FuelOrderApprove'])
+    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'any'])
     startDelivery;
 
-    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'])
+    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess', 'any'])
     cancel;
 
-    @(requires: 'FuelOrderCreate')
+    @(requires: ['FuelOrderCreate', 'any'])
     calculatePrice;
 };
 
@@ -186,23 +186,23 @@ annotate FuelOrderService.FuelOrders actions {
  * - Finance Controller: Read for invoice matching
  */
 annotate FuelOrderService.FuelDeliveries with @(restrict: [
-    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
-    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: 'AdminAccess' }
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
-// ePOD Actions authorization
+// ePOD Actions authorization (+ any for dev)
 annotate FuelOrderService.FuelDeliveries actions {
     // Capture signatures - requires ePODCapture scope
     // This is the critical action that triggers S/4HANA PO/GR creation
-    @(requires: 'ePODCapture')
+    @(requires: ['ePODCapture', 'any'])
     captureSignatures;
 
-    @(requires: ['ePODCapture', 'ePODApprove'])
+    @(requires: ['ePODCapture', 'ePODApprove', 'any'])
     verifyQuantity;
 
-    @(requires: 'ePODApprove')
+    @(requires: ['ePODApprove', 'any'])
     dispute;
 };
 
@@ -217,17 +217,17 @@ annotate FuelOrderService.FuelDeliveries actions {
  * - Finance Controller: Read for invoice verification
  */
 annotate FuelOrderService.FuelTickets with @(restrict: [
-    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
-    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: 'AdminAccess' }
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.FuelTickets actions {
-    @(requires: 'ePODCapture')
+    @(requires: ['ePODCapture', 'any'])
     attachToDelivery;
 
-    @(requires: 'ePODApprove')
+    @(requires: ['ePODApprove', 'any'])
     verify;
 };
 
@@ -285,7 +285,7 @@ annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
 // Service-level Functions
 // ----------------------------------------------------------------------------
 
-annotate FuelOrderService.generateOrderNumber with @(requires: 'FuelOrderCreate');
-annotate FuelOrderService.generateDeliveryNumber with @(requires: 'ePODCapture');
-annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess']);
-annotate FuelOrderService.getOrdersBySupplier with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess']);
+annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate', 'any']);
+annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
+annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
+annotate FuelOrderService.getOrdersBySupplier with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
