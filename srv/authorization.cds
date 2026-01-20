@@ -289,3 +289,54 @@ annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate
 annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
 annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
 annotate FuelOrderService.getOrdersBySupplier with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
+
+// ============================================================================
+// TICKET SERVICE - Authorization (Standalone Ticket Management)
+// ============================================================================
+
+using TicketService from './ticket-service';
+
+// Service-level: Require authenticated user
+annotate TicketService with @(requires: 'authenticated-user');
+
+// FuelTickets - Full CRUD for development
+annotate TicketService.FuelTickets with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// Ticket actions
+annotate TicketService.FuelTickets actions {
+    @(requires: ['ePODCapture', 'any'])
+    attachToDelivery;
+
+    @(requires: ['ePODApprove', 'any'])
+    verify;
+
+    @(requires: ['ePODApprove', 'any'])
+    reject;
+};
+
+// Reference data - Read-only
+annotate TicketService.FuelOrders with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.FuelDeliveries with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.Airports with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.Suppliers with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+// Service-level functions
+annotate TicketService.generateTicketNumber with @(requires: ['ePODCapture', 'any']);
+annotate TicketService.getTicketsByOrder with @(requires: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any']);
+annotate TicketService.getUnattachedTickets with @(requires: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any']);
