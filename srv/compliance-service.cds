@@ -91,7 +91,7 @@ service ComplianceService {
     /**
      * SanctionedEntities - Entities on Sanction Lists
      */
-    @odata.draft.enabled
+    // @odata.draft.enabled
     entity SanctionedEntities as projection on db.SANCTIONED_ENTITIES {
         *,
         sanction_list : redirected to SanctionLists,
