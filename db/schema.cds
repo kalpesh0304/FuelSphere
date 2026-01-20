@@ -3648,3 +3648,461 @@ entity SOD_RULES : cuid, ActiveStatus, AuditTrail {
         sox_control_id      : String(30);                    // Related SOX control
         regulatory_reference : String(200);                  // External regulation
 }
+
+// ============================================================================
+// FDD-10: NATIVE PRICING ENGINE
+// ============================================================================
+
+/**
+ * Pricing Engine Types
+ */
+type PricingEngineType : String(20) enum { NATIVE; SAP_CPE; HYBRID }
+type FormulaType : String(20) enum { INDEX_LINKED; FIXED; FLOATING; TIERED }
+type FormulaStatus : String(20) enum { DRAFT; PENDING_APPROVAL; ACTIVE; EXPIRED; ARCHIVED }
+type ComponentType : String(30) enum {
+        BASE_INDEX;
+        PREMIUM;
+        PERCENTAGE;
+        INTO_PLANE;
+        TRANSPORT;
+        HANDLING;
+        EXCISE_DUTY;
+        VAT;
+        OTHER_TAX;
+        CUSTOM
+}
+type CalculationType : String(20) enum { FIXED; PERCENTAGE; LOOKUP; FORMULA }
+type ApplyToType : String(20) enum { BASE; CUMULATIVE; SUBTOTAL }
+type IndexProvider : String(20) enum { PLATTS; ARGUS; REUTERS; CUSTOM }
+type IndexFrequency : String(20) enum { DAILY; WEEKLY; MONTHLY }
+type VarianceFlag : String(15) enum { MATCH; MINOR; SIGNIFICANT; CRITICAL }
+
+/**
+ * PRICING_CONFIGURATIONS - Engine Selection per Company
+ * Source: FuelSphere native
+ * Volume: ~10 records
+ *
+ * Configures pricing engine selection (Native, SAP CPE, or Hybrid)
+ * per company code for flexible pricing strategy
+ */
+entity PRICING_CONFIGURATIONS : cuid, ActiveStatus, AuditTrail {
+        // Company Scope
+        company_code        : String(4) @mandatory;          // SAP Company Code
+
+        // Engine Selection
+        default_engine      : PricingEngineType default 'NATIVE';  // Primary engine
+        cpe_endpoint        : String(500);                   // SAP CPE API endpoint URL
+        cpe_destination     : String(100);                   // BTP Destination name
+
+        // Fallback Configuration
+        cpe_fallback_enabled : Boolean default true;         // Enable fallback to Native
+        fallback_threshold_ms : Integer default 5000;        // CPE timeout before fallback
+
+        // Hybrid Mode Settings
+        hybrid_comparison_enabled : Boolean default false;   // Compare Native vs CPE
+        variance_threshold_pct : Decimal(5,2) default 1.00;  // Variance alert threshold (%)
+        log_all_derivations : Boolean default false;         // Log even matching prices
+
+        // Automation
+        auto_derivation_enabled : Boolean default true;      // Enable scheduled derivation
+        derivation_schedule : String(50);                    // Cron expression
+        derivation_time     : Time;                          // Daily derivation time
+        price_validity_hours : Integer default 24;           // Price cache validity
+
+        // Defaults
+        default_currency    : Association to T001X_CURRENCY; // Default pricing currency
+        default_uom         : Association to T006_UOM;       // Default UoM (KG, LTR)
+
+        // Notifications
+        notify_on_variance  : Boolean default true;
+        notification_email  : String(500);                   // Alert recipients
+}
+
+/**
+ * PRICING_FORMULAS - Native Formula Definitions
+ * Source: FuelSphere native
+ * Volume: ~200 records
+ *
+ * Pricing formula builder with multi-component support
+ * Final Price = Base Index + Premium + Into-Plane + Transport + Handling + Taxes
+ */
+entity PRICING_FORMULAS : cuid, AuditTrail {
+        // Formula Identification
+        formula_id          : String(20) @mandatory;         // FRM-{SEQ}
+        formula_name        : String(100) @mandatory;        // Formula display name
+        formula_description : String(500);                   // Detailed description
+
+        // Formula Type
+        formula_type        : FormulaType @mandatory;        // INDEX_LINKED, FIXED, etc.
+        base_index_type     : String(30);                    // Primary index type reference
+
+        // Currency & UoM
+        currency            : Association to T001X_CURRENCY @mandatory;
+        uom                 : Association to T006_UOM @mandatory;
+
+        // Validity
+        valid_from          : Date @mandatory;               // Validity start date
+        valid_to            : Date;                          // Validity end date (null = indefinite)
+
+        // Versioning
+        version             : Integer default 1;             // Formula version number
+        previous_version_id : UUID;                          // Reference to prior version
+
+        // Status & Workflow
+        status              : FormulaStatus default 'DRAFT';
+        status_changed_at   : DateTime;
+        status_changed_by   : String(100);
+
+        // Approval Workflow (FPE-001, FPE-006)
+        requires_approval   : Boolean default true;
+        approval_threshold  : Decimal(15,2);                 // Dual approval if value > threshold
+        requested_by        : String(100);
+        requested_at        : DateTime;
+        approved_by         : String(100);                   // Must be different from creator
+        approved_at         : DateTime;
+        rejection_reason    : String(500);
+
+        // Second Approver (for high-value formulas)
+        second_approver     : String(100);
+        second_approved_at  : DateTime;
+
+        // Scope
+        company_code        : String(4);                     // Company-specific (null = all)
+        supplier_id         : UUID;                          // Supplier-specific (null = all)
+
+        // Composition
+        components          : Composition of many FORMULA_COMPONENTS on components.formula = $self;
+}
+
+/**
+ * FORMULA_COMPONENTS - Formula Building Blocks
+ * Source: FuelSphere native
+ * Volume: ~1,000 records
+ *
+ * Individual components that make up a pricing formula
+ * Calculated in sequence order
+ */
+entity FORMULA_COMPONENTS : cuid, AuditTrail {
+        // Parent Formula
+        formula             : Association to PRICING_FORMULAS @mandatory;
+
+        // Sequence & Identification
+        sequence            : Integer @mandatory;            // Calculation order (1-99)
+        component_name      : String(50) @mandatory;         // Display name
+        component_description : String(200);                 // Description
+
+        // Component Type
+        component_type      : ComponentType @mandatory;      // BASE_INDEX, PREMIUM, etc.
+        calculation_type    : CalculationType @mandatory;    // FIXED, PERCENTAGE, LOOKUP
+
+        // Values
+        fixed_value         : Decimal(15,4);                 // Fixed amount value
+        percentage_value    : Decimal(8,4);                  // Percentage markup
+        min_value           : Decimal(15,4);                 // Minimum cap
+        max_value           : Decimal(15,4);                 // Maximum cap
+
+        // Index Lookup
+        lookup_index        : Association to MARKET_INDICES; // Market index reference
+        index_offset_days   : Integer default 0;             // Days offset from price date
+        use_average         : Boolean default false;         // Use rolling average
+        average_days        : Integer default 5;             // Rolling average period
+
+        // Calculation Scope
+        apply_to            : ApplyToType default 'CUMULATIVE'; // BASE, CUMULATIVE, SUBTOTAL
+
+        // Currency Override
+        component_currency  : Association to T001X_CURRENCY; // Override currency
+        exchange_rate_type  : String(10);                    // Exchange rate type for conversion
+
+        // Conditional Logic
+        condition_field     : String(50);                    // Field for conditional application
+        condition_operator  : String(10);                    // EQ, NE, GT, LT, GTE, LTE
+        condition_value     : String(100);                   // Condition value
+
+        // Status
+        is_active           : Boolean default true;
+}
+
+/**
+ * MARKET_INDICES - Index Definitions
+ * Source: FuelSphere native
+ * Volume: ~50 records
+ *
+ * Market index definitions (Platts MOPS, Argus FOB, Reuters, Custom)
+ */
+entity MARKET_INDICES : cuid, ActiveStatus, AuditTrail {
+        // Index Identification
+        index_code          : String(30) @mandatory;         // PLATTS-JETA1-SIN, ARGUS-FOB-SING
+        index_name          : String(100) @mandatory;        // Index display name
+        index_description   : String(500);                   // Detailed description
+
+        // Provider
+        provider            : IndexProvider @mandatory;      // PLATTS, ARGUS, REUTERS, CUSTOM
+        provider_reference  : String(100);                   // Provider's index code
+
+        // Index Type
+        index_type          : String(30) @mandatory;         // PLATTS_MOPS, ARGUS_FOB_SING, etc.
+        product_type        : String(30);                    // JET_A1, AVGAS, etc.
+        region              : String(50);                    // SINGAPORE, ROTTERDAM, USGC
+
+        // Currency & UoM
+        currency            : Association to T001X_CURRENCY @mandatory;
+        uom                 : Association to T006_UOM @mandatory;
+
+        // Publication
+        frequency           : IndexFrequency default 'DAILY';
+        publication_time    : Time;                          // Daily publication time
+        timezone            : String(50) default 'UTC';      // Publication timezone
+        publication_lag_days : Integer default 0;            // Days after trade date
+
+        // Import Configuration
+        import_enabled      : Boolean default true;
+        import_source       : String(100);                   // File path or API endpoint
+        import_format       : String(20);                    // CSV, EXCEL, API
+        auto_import_enabled : Boolean default false;
+
+        // Validation
+        requires_verification : Boolean default true;        // FPE-004
+        min_expected_value  : Decimal(15,4);                 // Minimum plausible value
+        max_expected_value  : Decimal(15,4);                 // Maximum plausible value
+        max_daily_change_pct : Decimal(5,2);                 // Max % change threshold
+}
+
+/**
+ * MARKET_INDEX_VALUES - Daily Index Values
+ * Source: Import (CSV/Excel/Manual)
+ * Volume: ~365,000/year
+ *
+ * Daily market index values imported from external sources
+ */
+entity MARKET_INDEX_VALUES : cuid, AuditTrail {
+        // Index Reference
+        market_index        : Association to MARKET_INDICES @mandatory;
+
+        // Date & Value
+        effective_date      : Date @mandatory;               // Price effective date
+        index_value         : Decimal(15,4) @mandatory;      // Index value
+        previous_value      : Decimal(15,4);                 // Previous day value
+        daily_change        : Decimal(15,4);                 // Change from previous
+        daily_change_pct    : Decimal(8,4);                  // % change from previous
+
+        // Additional Values (some indices publish multiple)
+        high_value          : Decimal(15,4);                 // Daily high
+        low_value           : Decimal(15,4);                 // Daily low
+        average_value       : Decimal(15,4);                 // Daily average
+
+        // Import Details
+        import_source       : String(100);                   // File name or 'MANUAL'
+        import_batch_id     : String(50);                    // Import batch reference
+        imported_at         : DateTime @mandatory;
+        imported_by         : String(100) @mandatory;
+
+        // Verification (FPE-004)
+        verification_status : String(20) default 'PENDING';  // PENDING, VERIFIED, REJECTED
+        verified_by         : String(100);
+        verified_at         : DateTime;
+        verification_notes  : String(500);
+
+        // Flags
+        is_estimated        : Boolean default false;         // Estimated/interpolated value
+        is_holiday          : Boolean default false;         // Market holiday
+        is_corrected        : Boolean default false;         // Correction to prior value
+        correction_reason   : String(500);
+}
+
+/**
+ * DERIVED_PRICES - Calculated Daily Prices
+ * Source: FuelSphere native
+ * Volume: ~180,000/year
+ *
+ * Calculated fuel prices for contracts based on formulas and indices
+ */
+entity DERIVED_PRICES : cuid, AuditTrail {
+        // Contract Reference
+        contract            : Association to MASTER_CONTRACTS @mandatory;
+        contract_number     : String(35);                    // Denormalized for queries
+
+        // Formula Reference (if Native)
+        formula             : Association to PRICING_FORMULAS;
+        formula_version     : Integer;                       // Version used for calculation
+
+        // Price Details
+        price_date          : Date @mandatory;               // Price effective date
+        derived_price       : Decimal(15,4) @mandatory;      // Final calculated price
+        currency            : Association to T001X_CURRENCY @mandatory;
+        uom                 : Association to T006_UOM @mandatory;
+
+        // Base Index
+        base_index          : Association to MARKET_INDICES;
+        base_index_value    : Decimal(15,4);                 // Base index value used
+        base_index_date     : Date;                          // Index effective date
+
+        // Pricing Engine
+        pricing_engine      : String(20) @mandatory;         // NATIVE, SAP_CPE, NATIVE_FALLBACK
+
+        // Hybrid Comparison
+        cpe_price           : Decimal(15,4);                 // CPE price (hybrid mode)
+        price_variance      : Decimal(15,4);                 // Native vs CPE variance
+        variance_pct        : Decimal(8,4);                  // Variance percentage
+        variance_flag       : VarianceFlag;                  // MATCH, MINOR, SIGNIFICANT, CRITICAL
+
+        // Component Breakdown (JSON)
+        component_breakdown : LargeString;                   // JSON with calculation details
+        /**
+         * component_breakdown JSON structure:
+         * {
+         *   "baseIndex": { "name": "PLATTS-JETA1-SIN", "value": 85.50, "date": "2026-01-20" },
+         *   "components": [
+         *     { "name": "Premium", "type": "FIXED", "value": 2.50 },
+         *     { "name": "Into-Plane Fee", "type": "FIXED", "value": 8.00 },
+         *     { "name": "Handling", "type": "PERCENTAGE", "pct": 1.5, "value": 1.44 }
+         *   ],
+         *   "subtotals": { "beforeTax": 97.44, "taxes": 5.00, "final": 102.44 }
+         * }
+         */
+
+        // Calculation Metadata
+        calculated_at       : DateTime @mandatory;
+        calculation_duration_ms : Integer;                   // Processing time
+
+        // Status
+        is_current          : Boolean default true;          // Latest price for date
+        superseded_by       : UUID;                          // Reference to newer calculation
+        superseded_reason   : String(200);
+
+        // Validity
+        valid_from          : DateTime @mandatory;           // Price validity start
+        valid_to            : DateTime;                      // Price validity end
+}
+
+/**
+ * PRICE_DERIVATION_LOGS - Calculation Audit Trail
+ * Source: FuelSphere native
+ * Volume: ~1,000,000/year
+ *
+ * Complete audit trail for SOX compliance (FPE-005)
+ */
+entity PRICE_DERIVATION_LOGS : cuid {
+        // Derivation Reference
+        derived_price       : Association to DERIVED_PRICES;
+        derivation_batch_id : String(50);                    // Batch run identifier
+
+        // Timing
+        log_timestamp       : DateTime @mandatory;
+        sequence            : Integer @mandatory;            // Step sequence
+
+        // Log Entry
+        log_level           : String(10) @mandatory;         // INFO, DEBUG, WARNING, ERROR
+        log_category        : String(30) @mandatory;         // CONFIG, INDEX, COMPONENT, RESULT
+        log_message         : String(1000) @mandatory;       // Log message
+        log_details         : LargeString;                   // Additional details (JSON)
+
+        // Context
+        contract_id         : UUID;
+        formula_id          : UUID;
+        component_id        : UUID;
+        index_id            : UUID;
+
+        // Values (for audit)
+        input_value         : Decimal(15,4);                 // Input to calculation step
+        output_value        : Decimal(15,4);                 // Output from calculation step
+        calculation_expression : String(500);                // Formula expression used
+
+        // Error Details (if any)
+        error_code          : String(20);
+        error_message       : String(1000);
+        stack_trace         : LargeString;
+
+        // User Context
+        executed_by         : String(100);
+        execution_context   : String(50);                    // BATCH, MANUAL, API, SIMULATION
+}
+
+/**
+ * PRICE_SIMULATIONS - What-If Analysis
+ * Source: FuelSphere native
+ * Volume: ~10,000/year
+ *
+ * Price simulation and what-if analysis results
+ */
+entity PRICE_SIMULATIONS : cuid, AuditTrail {
+        // Simulation Identification
+        simulation_id       : String(30) @mandatory;         // SIM-{DATE}-{SEQ}
+        simulation_name     : String(100) @mandatory;        // Simulation description
+
+        // Scope
+        contract            : Association to MASTER_CONTRACTS;
+        formula             : Association to PRICING_FORMULAS;
+        simulation_date     : Date @mandatory;               // Target price date
+
+        // Index Overrides (JSON)
+        index_overrides     : LargeString;                   // Override index values
+        /**
+         * index_overrides JSON structure:
+         * [
+         *   { "indexCode": "PLATTS-JETA1-SIN", "overrideValue": 90.00 },
+         *   { "indexCode": "ARGUS-FOB-SING", "overrideValue": 88.50 }
+         * ]
+         */
+
+        // Component Overrides (JSON)
+        component_overrides : LargeString;                   // Override component values
+
+        // Results
+        simulated_price     : Decimal(15,4);                 // Calculated simulation price
+        current_price       : Decimal(15,4);                 // Current actual price
+        price_difference    : Decimal(15,4);                 // Difference
+        difference_pct      : Decimal(8,4);                  // % difference
+
+        // Breakdown
+        simulation_breakdown : LargeString;                  // Full calculation breakdown (JSON)
+
+        // Metadata
+        simulated_at        : DateTime @mandatory;
+        simulated_by        : String(100) @mandatory;
+        simulation_notes    : String(1000);
+}
+
+/**
+ * INDEX_IMPORT_BATCHES - Index Value Import Tracking
+ * Source: FuelSphere native
+ * Volume: ~5,000/year
+ *
+ * Tracks bulk imports of market index values
+ */
+entity INDEX_IMPORT_BATCHES : cuid, AuditTrail {
+        // Batch Identification
+        batch_id            : String(50) @mandatory;         // IMP-{DATE}-{SEQ}
+        batch_name          : String(100);                   // Import description
+
+        // Import Details
+        import_start_time   : DateTime @mandatory;
+        import_end_time     : DateTime;
+        duration_seconds    : Integer;
+
+        // Source
+        source_type         : String(20) @mandatory;         // FILE, MANUAL, API
+        source_file_name    : String(200);                   // Original file name
+        source_file_path    : String(500);                   // Storage path
+
+        // Scope
+        market_index        : Association to MARKET_INDICES; // Single index (null = multiple)
+        date_from           : Date @mandatory;               // Import date range start
+        date_to             : Date @mandatory;               // Import date range end
+
+        // Statistics
+        records_total       : Integer default 0;             // Total records in source
+        records_imported    : Integer default 0;             // Successfully imported
+        records_updated     : Integer default 0;             // Updated existing
+        records_skipped     : Integer default 0;             // Skipped (duplicates)
+        records_failed      : Integer default 0;             // Failed to import
+
+        // Status
+        status              : String(20) default 'PENDING';  // PENDING, IN_PROGRESS, COMPLETED, FAILED
+        error_summary       : LargeString;                   // Import errors summary
+
+        // Verification
+        requires_verification : Boolean default true;
+        verified_by         : String(100);
+        verified_at         : DateTime;
+}
