@@ -37,14 +37,14 @@ service MasterDataService {
      * Manufacturers - Aircraft Manufacturer Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Manufacturers as projection on db.MANUFACTURE;
 
     /**
      * Aircraft - Aircraft Type Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
         manufacturer : redirected to Manufacturers
@@ -54,7 +54,7 @@ service MasterDataService {
      * Airports - Airport Master
      * Access: integration-admin (Edit), ops-manager/fuel-planner (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries,
@@ -65,7 +65,7 @@ service MasterDataService {
      * Routes - Route Master
      * Access: fuel-planner (View), integration-admin (Edit)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Routes as projection on db.ROUTE_MASTER {
         *,
         origin      : redirected to Airports,
@@ -80,7 +80,7 @@ service MasterDataService {
      * Suppliers - Supplier/Vendor Master
      * Access: contracts-manager (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Suppliers as projection on db.MASTER_SUPPLIERS {
         *,
         country : redirected to Countries
@@ -90,7 +90,7 @@ service MasterDataService {
      * Products - Fuel Product Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
         uom : redirected to UnitsOfMeasure
@@ -100,7 +100,7 @@ service MasterDataService {
      * Contracts - Purchase Contract Master
      * Access: contracts-manager (Full), finance (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
         supplier : redirected to Suppliers,
