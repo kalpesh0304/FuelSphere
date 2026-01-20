@@ -40,19 +40,19 @@ annotate MasterDataService with @(requires: 'authenticated-user');
 // ----------------------------------------------------------------------------
 
 annotate MasterDataService.Countries with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.Currencies with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.UnitsOfMeasure with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.Plants with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -61,30 +61,30 @@ annotate MasterDataService.Plants with @(restrict: [
 
 // Manufacturers - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Manufacturers with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Aircraft - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Aircraft with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Airports - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Airports with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Routes - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Routes with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -93,16 +93,16 @@ annotate MasterDataService.Routes with @(restrict: [
 
 // Suppliers - Read by MasterDataRead, Write requires MasterDataWrite, Delete requires Admin
 annotate MasterDataService.Suppliers with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Products - Read by MasterDataRead, Write requires MasterDataWrite, Delete requires Admin
 annotate MasterDataService.Products with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Contracts - Confidential data, restricted access
@@ -110,9 +110,9 @@ annotate MasterDataService.Products with @(restrict: [
 // Write by ContractManage only
 // Delete by Admin only
 annotate MasterDataService.Contracts with @(restrict: [
-    { grant: 'READ', to: ['MasterDataRead', 'ContractManage', 'FinancePost'] },
-    { grant: ['CREATE', 'UPDATE'], to: 'ContractManage' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'ContractManage', 'FinancePost', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['ContractManage', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
