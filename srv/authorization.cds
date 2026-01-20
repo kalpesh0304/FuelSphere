@@ -238,11 +238,11 @@ annotate FuelOrderService.FuelTickets actions {
 // All reference entities are read-only in order service context
 // Read access granted to anyone with order-related scopes
 annotate FuelOrderService.Flights with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Airports with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Suppliers with @(restrict: [
@@ -250,7 +250,7 @@ annotate FuelOrderService.Suppliers with @(restrict: [
 ]);
 
 annotate FuelOrderService.Contracts with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ContractManage', 'FinancePost', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ContractManage', 'FinancePost', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Products with @(restrict: [
@@ -258,27 +258,27 @@ annotate FuelOrderService.Products with @(restrict: [
 ]);
 
 annotate FuelOrderService.Aircraft with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Manufacturers with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Countries with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Currencies with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Plants with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
