@@ -1,0 +1,231 @@
+{
+  "metadata": {
+    "screenId": "ROUTE_AIRCRAFT_MATRIX_001",
+    "screenName": "Route-Aircraft Matrix",
+    "module": "Planning & Forecasting",
+    "sapFioriFloorplan": "List Report",
+    "userPersonas": [
+      "Fuel Planning Manager"
+    ],
+    "authorizedRoles": [
+      "Planner"
+    ],
+    "responsiveBreakpoints": [
+      "Desktop (1920px)",
+      "Tablet (768px)",
+      "Mobile (375px)"
+    ],
+    "layoutType": "Full-width with Advanced FilterBar",
+    "implementationStatus": "Implemented"
+  },
+  "layoutStructure": {
+    "gridSystem": "8px base grid (--spacing-xs through --spacing-xxl)",
+    "containerMaxWidth": "1600px",
+    "pageLayoutType": "Full-width List Report with FilterBar",
+    "sections": [
+      {
+        "sectionId": "filter-bar",
+        "sectionName": "Filter Bar",
+        "position": "Top",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-m)"
+      },
+      {
+        "sectionId": "toolbar",
+        "sectionName": "Toolbar",
+        "position": "Below FilterBar",
+        "gridColumns": 12,
+        "spacing": "var(--spacing-s)"
+      },
+      {
+        "sectionId": "table",
+        "sectionName": "Responsive Table",
+        "position": "Main Content",
+        "gridColumns": 12,
+        "spacing": "0"
+      }
+    ]
+  },
+  "componentInventory": [
+    {
+      "componentId": "filter-bar",
+      "componentType": "Filter Bar",
+      "sapUI5Equivalent": "sap.ui.comp.filterbar.FilterBar",
+      "properties": {
+        "searchEnabled": true,
+        "showGoButton": true,
+        "backgroundColor": "var(--card)",
+        "borderBottom": "1px solid var(--border)"
+      },
+      "dimensions": {
+        "width": "100%",
+        "height": "Auto",
+        "padding": "var(--spacing-m)"
+      }
+    },
+    {
+      "componentId": "data-table",
+      "componentType": "Responsive Table",
+      "sapUI5Equivalent": "sap.m.Table",
+      "properties": {
+        "mode": "SingleSelectMaster",
+        "alternateRowColors": true,
+        "sticky": [
+          "ColumnHeaders",
+          "HeaderToolbar"
+        ],
+        "growing": true,
+        "growingThreshold": 50
+      },
+      "dimensions": {
+        "width": "100%",
+        "minHeight": "600px"
+      }
+    }
+  ],
+  "dataModel": {
+    "entityName": "Aircraft",
+    "description": "Primary entity for Route-Aircraft Matrix",
+    "fields": [
+      {
+        "fieldName": "aircraftId",
+        "dataType": "UUID",
+        "description": "Unique Aircraft identifier",
+        "key": true,
+        "required": true
+      },
+      {
+        "fieldName": "createdDate",
+        "dataType": "DateTime",
+        "description": "Creation timestamp",
+        "required": true
+      },
+      {
+        "fieldName": "createdBy",
+        "dataType": "String",
+        "description": "User who created the record",
+        "maxLength": 100,
+        "required": true
+      },
+      {
+        "fieldName": "lastModifiedDate",
+        "dataType": "DateTime",
+        "description": "Last modification timestamp",
+        "required": false
+      },
+      {
+        "fieldName": "status",
+        "dataType": "String",
+        "description": "Record status",
+        "enumValues": [
+          "Draft",
+          "Active",
+          "Completed",
+          "Cancelled"
+        ],
+        "required": true
+      }
+    ],
+    "associations": [
+      {
+        "associationName": "toUserCreated",
+        "targetEntity": "User",
+        "cardinality": "N:1",
+        "foreignKey": "createdBy"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "create-new",
+      "actionType": "Navigation",
+      "trigger": "onClick",
+      "element": "Create Button",
+      "behavior": "Navigate to creation form"
+    },
+    {
+      "actionId": "filter-data",
+      "actionType": "Filter",
+      "trigger": "onClick",
+      "element": "Go Button",
+      "behavior": "Apply filters to table data"
+    },
+    {
+      "actionId": "export-data",
+      "actionType": "Export",
+      "trigger": "onClick",
+      "element": "Export Button",
+      "behavior": "Export table data to Excel"
+    },
+    {
+      "actionId": "view-details",
+      "actionType": "Navigation",
+      "trigger": "onClick",
+      "element": "Table Row",
+      "behavior": "Navigate to detail page"
+    }
+  ],
+  "visualSpecifications": {
+    "colors": {
+      "primaryBlue": "#0070F2 (var(--primary-blue))",
+      "secondaryBlue": "#5CAAFF (var(--secondary-blue))",
+      "infoBlue": "#0064D9 (var(--info-blue))",
+      "successGreen": "#30914C (var(--success-green))",
+      "warningAmber": "#E76500 (var(--warning-amber))",
+      "errorRed": "#D32F2F (var(--error-red))",
+      "background": "#F5F6F7 (var(--background))",
+      "card": "#FFFFFF (var(--card))",
+      "border": "#D9D9D9 (var(--border))",
+      "textPrimary": "#32363A (var(--text-primary))",
+      "textSecondary": "#6C6C6C (var(--text-secondary))",
+      "muted": "#F2F2F2 (var(--muted))"
+    },
+    "typography": {
+      "fontFamily": "'72', Arial, sans-serif",
+      "h1": "var(--text-h1) - 32px, font-weight: var(--font-weight-bold)",
+      "h2": "var(--text-h2) - 24px, font-weight: var(--font-weight-bold)",
+      "h3": "var(--text-h3) - 20px, font-weight: var(--font-weight-bold)",
+      "base": "var(--text-base) - 14px, font-weight: var(--font-weight-normal)",
+      "sm": "var(--text-sm) - 12px, font-weight: var(--font-weight-normal)",
+      "xs": "var(--text-xs) - 11px, font-weight: var(--font-weight-normal)"
+    },
+    "spacing": {
+      "xs": "4px (var(--spacing-xs))",
+      "s": "8px (var(--spacing-s))",
+      "m": "16px (var(--spacing-m))",
+      "l": "24px (var(--spacing-l))",
+      "xl": "32px (var(--spacing-xl))",
+      "xxl": "48px (var(--spacing-xxl))"
+    },
+    "borderRadius": {
+      "card": "8px (var(--radius-card))",
+      "button": "4px (var(--radius-button))"
+    },
+    "elevation": {
+      "sm": "0 1px 3px rgba(0,0,0,0.12) (var(--elevation-sm))",
+      "md": "0 2px 8px rgba(0,0,0,0.15) (var(--elevation-md))",
+      "lg": "0 4px 16px rgba(0,0,0,0.2) (var(--elevation-lg))"
+    },
+    "statusColors": {
+      "statusDraft": "#6C6C6C (var(--text-secondary))",
+      "statusSubmitted": "#0064D9 (var(--info-blue))",
+      "statusApproved": "#30914C (var(--success-green))",
+      "statusInProgress": "#E76500 (var(--warning-amber))",
+      "statusDelivered": "#30914C (var(--success-green))",
+      "statusCancelled": "#D32F2F (var(--error-red))",
+      "statusCompleted": "#30914C (var(--success-green))",
+      "statusPending": "#E76500 (var(--warning-amber))",
+      "statusRejected": "#D32F2F (var(--error-red))"
+    },
+    "icons": {
+      "search": "lucide-react Search",
+      "filter": "lucide-react Filter",
+      "settings": "lucide-react Settings",
+      "refresh": "lucide-react RefreshCw",
+      "plus": "lucide-react Plus",
+      "download": "lucide-react Download",
+      "edit": "lucide-react Edit",
+      "trash": "lucide-react Trash2"
+    }
+  }
+}
