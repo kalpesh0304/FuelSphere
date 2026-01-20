@@ -101,7 +101,7 @@ service SecurityService {
      * RoleAssignments - User to Role Mapping
      * Includes approval workflow and SoD validation
      */
-    @odata.draft.enabled
+    // @odata.draft.enabled
     entity RoleAssignments as projection on db.ROLE_ASSIGNMENTS {
         *,
         user : redirected to SecurityUsers
