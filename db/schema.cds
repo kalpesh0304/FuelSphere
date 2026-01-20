@@ -2663,7 +2663,7 @@ entity DATA_QUALITY_METRICS : cuid {
  */
 type ReportFormat : String(10) enum { PDF; EXCEL; CSV; HTML }
 type ReportStatus : String(15) enum { DRAFT; ACTIVE; ARCHIVED; DEPRECATED }
-type VarianceStatus : String(15) enum { OK; WARNING; CRITICAL }
+type KPIVarianceStatus : String(15) enum { OK; WARNING; CRITICAL }
 type KPICategory : String(30) enum { FINANCIAL; OPERATIONAL; COMPLIANCE; PERFORMANCE; QUALITY }
 type ChartType : String(20) enum { LINE; BAR; DONUT; AREA; COLUMN; WATERFALL; HEATMAP }
 type DashboardLayout : String(20) enum { GRID; FLEX; TABS; CARDS }
@@ -3710,8 +3710,8 @@ entity PRICING_CONFIGURATIONS : cuid, ActiveStatus, AuditTrail {
         price_validity_hours : Integer default 24;           // Price cache validity
 
         // Defaults
-        default_currency    : Association to T001X_CURRENCY; // Default pricing currency
-        default_uom         : Association to T006_UOM;       // Default UoM (KG, LTR)
+        default_currency    : Association to CURRENCY_MASTER; // Default pricing currency
+        default_uom         : Association to UNIT_OF_MEASURE;       // Default UoM (KG, LTR)
 
         // Notifications
         notify_on_variance  : Boolean default true;
@@ -3737,8 +3737,8 @@ entity PRICING_FORMULAS : cuid, AuditTrail {
         base_index_type     : String(30);                    // Primary index type reference
 
         // Currency & UoM
-        currency            : Association to T001X_CURRENCY @mandatory;
-        uom                 : Association to T006_UOM @mandatory;
+        currency            : Association to CURRENCY_MASTER @mandatory;
+        uom                 : Association to UNIT_OF_MEASURE @mandatory;
 
         // Validity
         valid_from          : Date @mandatory;               // Validity start date
@@ -3811,7 +3811,7 @@ entity FORMULA_COMPONENTS : cuid, AuditTrail {
         apply_to            : ApplyToType default 'CUMULATIVE'; // BASE, CUMULATIVE, SUBTOTAL
 
         // Currency Override
-        component_currency  : Association to T001X_CURRENCY; // Override currency
+        component_currency  : Association to CURRENCY_MASTER; // Override currency
         exchange_rate_type  : String(10);                    // Exchange rate type for conversion
 
         // Conditional Logic
@@ -3846,8 +3846,8 @@ entity MARKET_INDICES : cuid, ActiveStatus, AuditTrail {
         region              : String(50);                    // SINGAPORE, ROTTERDAM, USGC
 
         // Currency & UoM
-        currency            : Association to T001X_CURRENCY @mandatory;
-        uom                 : Association to T006_UOM @mandatory;
+        currency            : Association to CURRENCY_MASTER @mandatory;
+        uom                 : Association to UNIT_OF_MEASURE @mandatory;
 
         // Publication
         frequency           : IndexFrequency default 'DAILY';
@@ -3929,8 +3929,8 @@ entity DERIVED_PRICES : cuid, AuditTrail {
         // Price Details
         price_date          : Date @mandatory;               // Price effective date
         derived_price       : Decimal(15,4) @mandatory;      // Final calculated price
-        currency            : Association to T001X_CURRENCY @mandatory;
-        uom                 : Association to T006_UOM @mandatory;
+        currency            : Association to CURRENCY_MASTER @mandatory;
+        uom                 : Association to UNIT_OF_MEASURE @mandatory;
 
         // Base Index
         base_index          : Association to MARKET_INDICES;
