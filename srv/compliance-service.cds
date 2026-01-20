@@ -90,6 +90,7 @@ service ComplianceService {
 
     /**
      * SanctionedEntities - Entities on Sanction Lists
+     * Note: Draft state inherited from parent SanctionLists via composition
      */
     // @odata.draft.enabled
     entity SanctionedEntities as projection on db.SANCTIONED_ENTITIES {

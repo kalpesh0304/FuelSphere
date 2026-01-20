@@ -100,6 +100,7 @@ service SecurityService {
     /**
      * RoleAssignments - User to Role Mapping
      * Includes approval workflow and SoD validation
+     * Note: Draft state inherited from parent SecurityUsers via composition
      */
     // @odata.draft.enabled
     entity RoleAssignments as projection on db.ROLE_ASSIGNMENTS {
