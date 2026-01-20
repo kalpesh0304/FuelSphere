@@ -3736,9 +3736,11 @@ entity PRICING_FORMULAS : cuid, AuditTrail {
         formula_type        : FormulaType @mandatory;        // INDEX_LINKED, FIXED, etc.
         base_index_type     : String(30);                    // Primary index type reference
 
-        // Currency & UoM
-        currency            : Association to CURRENCY_MASTER @mandatory;
-        uom                 : Association to UNIT_OF_MEASURE @mandatory;
+        // Currency & UoM (explicit FK fields for CSV loading)
+        currency_ID         : String(3) @mandatory;           // FK to CURRENCY_MASTER
+        uom_ID              : String(3) @mandatory;           // FK to UNIT_OF_MEASURE
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_ID;
+        uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_ID;
 
         // Validity
         valid_from          : Date @mandatory;               // Validity start date
@@ -3845,9 +3847,11 @@ entity MARKET_INDICES : cuid, ActiveStatus, AuditTrail {
         product_type        : String(30);                    // JET_A1, AVGAS, etc.
         region              : String(50);                    // SINGAPORE, ROTTERDAM, USGC
 
-        // Currency & UoM
-        currency            : Association to CURRENCY_MASTER @mandatory;
-        uom                 : Association to UNIT_OF_MEASURE @mandatory;
+        // Currency & UoM (explicit FK fields for CSV loading)
+        currency_ID         : String(3) @mandatory;           // FK to CURRENCY_MASTER
+        uom_ID              : String(3) @mandatory;           // FK to UNIT_OF_MEASURE
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_ID;
+        uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_ID;
 
         // Publication
         frequency           : IndexFrequency default 'DAILY';
