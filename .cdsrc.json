@@ -1,0 +1,83 @@
+{
+  "[development]": {
+    "auth": {
+      "kind": "dummy",
+      "users": {
+        "alice": {
+          "roles": ["FullAdmin"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
+        },
+        "kalpesh": {
+          "roles": ["FullAdmin"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
+        },
+        "planner": {
+          "roles": ["FuelPlanner"]
+        },
+        "ops": {
+          "roles": ["OperationsManager", "StationCoordinator"],
+          "attributes": {
+            "station": ["MNL", "CEB"],
+            "region": ["APAC"]
+          }
+        },
+        "finance": {
+          "roles": ["FinanceManager", "FinanceController"]
+        },
+        "analyst": {
+          "roles": ["Analyst"]
+        },
+        "*": true
+      }
+    }
+  },
+  "build": {
+    "target": ".",
+    "tasks": [
+      {
+        "for": "hana",
+        "src": "db",
+        "options": {
+          "model": ["db", "srv", "app"]
+        }
+      },
+      {
+        "for": "node-cf",
+        "src": "srv",
+        "options": {
+          "model": ["db", "srv", "app"]
+        }
+      }
+    ]
+  },
+  "requires": {
+    "db": {
+      "kind": "sql"
+    },
+    "[production]": {
+      "db": {
+        "kind": "hana"
+      },
+      "auth": {
+        "kind": "xsuaa"
+      }
+    }
+  },
+  "odata": {
+    "version": "v4"
+  },
+  "log": {
+    "levels": {
+      "cds": "info"
+    }
+  },
+  "features": {
+    "odata_new_parser": true
+  }
+}

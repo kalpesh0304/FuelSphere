@@ -1,0 +1,11 @@
+werks,name1,stras,ort01,land1_land1,regio,pstlz,spras,is_active
+MNL1,Manila NAIA Terminal 1,NAIA Complex,Pasay City,PH,NCR,1300,E,true
+MNL2,Manila NAIA Terminal 2,NAIA Complex,Pasay City,PH,NCR,1300,E,true
+CEB1,Cebu Mactan Intl,Mactan,Lapu-Lapu City,PH,VII,6015,E,true
+SIN1,Singapore Changi T1,Airport Blvd,Singapore,SG,,819643,E,true
+KUL1,Kuala Lumpur KLIA,KLIA,Sepang,MY,SLG,64000,E,true
+DXB1,Dubai Intl T1,Dubai Airport,Dubai,AE,DXB,,E,true
+NRT1,Tokyo Narita T1,Narita Airport,Narita,JP,CHI,282-0004,E,true
+HKG1,Hong Kong Intl T1,HKIA,Lantau,HK,,,E,true
+SYD1,Sydney Kingsford Smith,Airport Dr,Mascot,AU,NSW,2020,E,true
+LAX1,Los Angeles Intl,World Way,Los Angeles,US,CA,90045,E,true

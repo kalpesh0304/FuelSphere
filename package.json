@@ -1,0 +1,51 @@
+{
+  "name": "fuelsphere",
+  "version": "1.0.0",
+  "description": "FuelSphere - CAPM Backend for Airline Fuel Lifecycle Management",
+  "repository": "https://github.com/kalpesh0304/FuelSphere",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@sap/cds": "^8",
+    "@cap-js/hana": "^1",
+    "express": "^4",
+    "@sap/xsenv": "^5",
+    "@sap/xssec": "^4",
+    "passport": "^0.7",
+    "@sap/audit-logging": "^6"
+  },
+  "devDependencies": {
+    "@cap-js/sqlite": "^1",
+    "@sap/cds-dk": "^8"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "dev": "npm rebuild 2>/dev/null; cds watch --port 4004",
+    "test": "cds bind --exec jest --silent",
+    "build": "cds build --production",
+    "deploy": "cds deploy",
+    "postinstall": "npm rebuild 2>/dev/null || true"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "sql"
+      },
+      "[production]": {
+        "db": {
+          "kind": "hana"
+        },
+        "auth": {
+          "kind": "xsuaa"
+        }
+      }
+    },
+    "features": {
+      "fetch_csrf": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
