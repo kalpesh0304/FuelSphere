@@ -1,7 +1,7 @@
 ID;invoice_ID;sequence;action;action_date;action_by;comments;rejection_reason;invoice_amount;variance_amount;approver_limit;within_limit;escalated_to;escalation_reason
-550e8400-e29b-41d4-a716-446655440831;550e8400-e29b-41d4-a716-446655440801;1;SUBMIT;2026-01-15T09:30:00Z;ap.clerk@airline.com;Invoice verified and submitted for approval;;140000.00;0.00;;;
+550e8400-e29b-41d4-a716-446655440831;550e8400-e29b-41d4-a716-446655440801;1;SUBMIT;2026-01-15T09:30:00Z;ap.clerk@airline.com;Invoice verified and submitted for approval;;140000.00;0.00;;;;
 550e8400-e29b-41d4-a716-446655440832;550e8400-e29b-41d4-a716-446655440801;2;APPROVE;2026-01-16T10:00:00Z;finance.controller@airline.com;Approved - exact match with PO/GR;;140000.00;0.00;500000.00;true;;
-550e8400-e29b-41d4-a716-446655440833;550e8400-e29b-41d4-a716-446655440805;1;SUBMIT;2026-01-10T15:30:00Z;ap.clerk@airline.com;Singapore delivery invoice submitted;;192600.00;0.00;;;
+550e8400-e29b-41d4-a716-446655440833;550e8400-e29b-41d4-a716-446655440805;1;SUBMIT;2026-01-10T15:30:00Z;ap.clerk@airline.com;Singapore delivery invoice submitted;;192600.00;0.00;;;;
 550e8400-e29b-41d4-a716-446655440834;550e8400-e29b-41d4-a716-446655440805;2;APPROVE;2026-01-11T09:00:00Z;finance.controller@airline.com;First approval - within tolerance;;192600.00;0.00;500000.00;true;;
 550e8400-e29b-41d4-a716-446655440835;550e8400-e29b-41d4-a716-446655440805;3;APPROVE;2026-01-12T08:00:00Z;finance.manager@airline.com;Final approval for posting;;192600.00;0.00;1000000.00;true;;
-550e8400-e29b-41d4-a716-446655440836;550e8400-e29b-41d4-a716-446655440803;1;SUBMIT;2026-01-17T15:00:00Z;ap.clerk@airline.com;Invoice submitted - price variance flagged;;235200.00;10500.00;;;
+550e8400-e29b-41d4-a716-446655440836;550e8400-e29b-41d4-a716-446655440803;1;SUBMIT;2026-01-17T15:00:00Z;ap.clerk@airline.com;Invoice submitted - price variance flagged;;235200.00;10500.00;;;;
