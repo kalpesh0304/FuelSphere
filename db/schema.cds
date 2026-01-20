@@ -3135,6 +3135,7 @@ entity SECURITY_USERS : cuid, AuditTrail {
         employee_id         : String(20);                    // HR system employee ID
         employment_status   : String(20);                    // ACTIVE, TERMINATED, LOA
         employment_end_date : Date;                          // Expected end date
+        is_active           : Boolean default true;          // Active flag for filtering
 
         // Composition
         role_assignments    : Composition of many ROLE_ASSIGNMENTS on role_assignments.user = $self;
