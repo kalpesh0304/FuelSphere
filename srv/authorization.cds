@@ -147,14 +147,14 @@ annotate FuelOrderService with @(requires: 'authenticated-user');
  * Row-level security enforced via Plant attribute for Station Coordinators
  */
 annotate FuelOrderService.FuelOrders with @(restrict: [
-    // Read access - multiple roles can view orders
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    // Create - Station Coordinators, Ops Managers, Fuel Planners
-    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess'] },
-    // Update - Only for non-delivered orders
-    { grant: 'UPDATE', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
-    // Delete - Only Admin (soft delete via cancel action preferred)
-    { grant: 'DELETE', to: 'AdminAccess' }
+    // Read access - any authenticated user for development
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    // Create - any authenticated user for development
+    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    // Update - any authenticated user for development
+    { grant: 'UPDATE', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess', 'any'] },
+    // Delete - any authenticated user for development
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
 // Submit action - Requires FuelOrderCreate scope
@@ -246,7 +246,7 @@ annotate FuelOrderService.Airports with @(restrict: [
 ]);
 
 annotate FuelOrderService.Suppliers with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Contracts with @(restrict: [
@@ -254,7 +254,7 @@ annotate FuelOrderService.Contracts with @(restrict: [
 ]);
 
 annotate FuelOrderService.Products with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Aircraft with @(restrict: [
