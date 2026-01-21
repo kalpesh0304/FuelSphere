@@ -1348,18 +1348,41 @@ annotate service.Currencies with @(
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Currencies with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Currency',
             TypeNamePlural : 'Currencies',
-            Title          : { Value: currency_name }
+            Title          : { Value: currency_name },
+            Description    : { Value: currency_code }
         },
+        SelectionFields: [ currency_code ],
         LineItem: [
             { Value: currency_code, Label: 'Currency Code', ![@UI.Importance]: #High },
             { Value: currency_name, Label: 'Currency Name', ![@UI.Importance]: #High },
-            { Value: symbol, Label: 'Symbol', ![@UI.Importance]: #Medium }
-        ]
+            { Value: symbol, Label: 'Symbol', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'CurrencyDetails',
+                Target : '@UI.FieldGroup#CurrencyDetails',
+                Label  : 'Currency Details'
+            }
+        ],
+        FieldGroup#CurrencyDetails: {
+            Data: [
+                { Value: currency_code, Label: 'Currency Code' },
+                { Value: currency_name, Label: 'Currency Name' },
+                { Value: symbol, Label: 'Symbol' },
+                { Value: decimal_places, Label: 'Decimal Places' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        }
     }
 );
 
@@ -1368,19 +1391,56 @@ annotate service.Plants with @(
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Plants with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Plant',
             TypeNamePlural : 'Plants',
-            Title          : { Value: name1 }
+            Title          : { Value: name1 },
+            Description    : { Value: werks }
         },
-        SelectionFields: [ werks ],
+        SelectionFields: [ werks, ort01 ],
         LineItem: [
             { Value: werks, Label: 'Plant Code', ![@UI.Importance]: #High },
             { Value: name1, Label: 'Plant Name', ![@UI.Importance]: #High },
-            { Value: ort01, Label: 'City', ![@UI.Importance]: #Medium }
-        ]
+            { Value: ort01, Label: 'City', ![@UI.Importance]: #Medium },
+            { Value: land1_land1, Label: 'Country', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PlantDetails',
+                Target : '@UI.FieldGroup#PlantDetails',
+                Label  : 'Plant Details'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PlantAddress',
+                Target : '@UI.FieldGroup#PlantAddress',
+                Label  : 'Address'
+            }
+        ],
+        FieldGroup#PlantDetails: {
+            Data: [
+                { Value: werks, Label: 'Plant Code' },
+                { Value: name1, Label: 'Plant Name' },
+                { Value: spras, Label: 'Language' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        },
+        FieldGroup#PlantAddress: {
+            Data: [
+                { Value: stras, Label: 'Street' },
+                { Value: ort01, Label: 'City' },
+                { Value: regio, Label: 'Region' },
+                { Value: pstlz, Label: 'Postal Code' },
+                { Value: land1_land1, Label: 'Country' }
+            ]
+        }
     }
 );
 
@@ -1389,17 +1449,40 @@ annotate service.UnitsOfMeasure with @(
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.UnitsOfMeasure with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Unit of Measure',
             TypeNamePlural : 'Units of Measure',
-            Title          : { Value: uom_name }
+            Title          : { Value: uom_name },
+            Description    : { Value: uom_code }
         },
+        SelectionFields: [ uom_code, uom_category ],
         LineItem: [
             { Value: uom_code, Label: 'UoM Code', ![@UI.Importance]: #High },
             { Value: uom_name, Label: 'UoM Name', ![@UI.Importance]: #High },
-            { Value: uom_type, Label: 'Type', ![@UI.Importance]: #Medium }
-        ]
+            { Value: uom_category, Label: 'Category', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'UoMDetails',
+                Target : '@UI.FieldGroup#UoMDetails',
+                Label  : 'Unit of Measure Details'
+            }
+        ],
+        FieldGroup#UoMDetails: {
+            Data: [
+                { Value: uom_code, Label: 'UoM Code' },
+                { Value: uom_name, Label: 'UoM Name' },
+                { Value: uom_category, Label: 'Category' },
+                { Value: conversion_to_kg, Label: 'Conversion to KG' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        }
     }
 );
