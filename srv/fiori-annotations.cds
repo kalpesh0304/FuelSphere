@@ -1290,15 +1290,51 @@ annotate service.Countries with @(
         HeaderInfo: {
             TypeName       : 'Country',
             TypeNamePlural : 'Countries',
-            Title          : { Value: landx }
+            Title          : { Value: landx },
+            Description    : { Value: land1 }
         },
-        SelectionFields: [ land1, landgr ],
+        SelectionFields: [ land1, landgr, is_embargoed ],
         LineItem: [
             { Value: land1, Label: 'Country Code', ![@UI.Importance]: #High },
             { Value: landx, Label: 'Country Name', ![@UI.Importance]: #High },
             { Value: landgr, Label: 'Region', ![@UI.Importance]: #Medium },
-            { Value: currcode, Label: 'Currency', ![@UI.Importance]: #Medium }
-        ]
+            { Value: currcode, Label: 'Currency', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High },
+            { Value: is_embargoed, Label: 'Embargoed', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#CountryDetails',
+                Label  : 'General Information'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#ComplianceInfo',
+                Label  : 'Compliance'
+            }
+        ],
+        FieldGroup#CountryDetails: {
+            Data: [
+                { Value: land1, Label: 'Country Code' },
+                { Value: landx, Label: 'Country Name' },
+                { Value: landx50, Label: 'Full Name' },
+                { Value: landgr, Label: 'Region' },
+                { Value: currcode, Label: 'Currency' },
+                { Value: natio, Label: 'Nationality' },
+                { Value: spras, Label: 'Language' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        },
+        FieldGroup#ComplianceInfo: {
+            Data: [
+                { Value: is_embargoed, Label: 'Embargoed' },
+                { Value: embargo_effective_date, Label: 'Embargo Date' },
+                { Value: embargo_reason, Label: 'Embargo Reason' },
+                { Value: sanction_programs, Label: 'Sanction Programs' },
+                { Value: risk_level, Label: 'Risk Level' }
+            ]
+        }
     }
 );
 
