@@ -1285,7 +1285,10 @@ annotate service.Countries with @(
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Countries with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Country',
@@ -1305,11 +1308,13 @@ annotate service.Countries with @(
         Facets: [
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'GeneralInfo',
                 Target : '@UI.FieldGroup#CountryDetails',
                 Label  : 'General Information'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'ComplianceInfo',
                 Target : '@UI.FieldGroup#ComplianceInfo',
                 Label  : 'Compliance'
             }
