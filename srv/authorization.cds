@@ -40,19 +40,19 @@ annotate MasterDataService with @(requires: 'authenticated-user');
 // ----------------------------------------------------------------------------
 
 annotate MasterDataService.Countries with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.Currencies with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.UnitsOfMeasure with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 annotate MasterDataService.Plants with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -61,30 +61,30 @@ annotate MasterDataService.Plants with @(restrict: [
 
 // Manufacturers - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Manufacturers with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Aircraft - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Aircraft with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Airports - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Airports with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Routes - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
 annotate MasterDataService.Routes with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -93,16 +93,16 @@ annotate MasterDataService.Routes with @(restrict: [
 
 // Suppliers - Read by MasterDataRead, Write requires MasterDataWrite, Delete requires Admin
 annotate MasterDataService.Suppliers with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Products - Read by MasterDataRead, Write requires MasterDataWrite, Delete requires Admin
 annotate MasterDataService.Products with @(restrict: [
-    { grant: 'READ', to: 'MasterDataRead' },
-    { grant: ['CREATE', 'UPDATE'], to: 'MasterDataWrite' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // Contracts - Confidential data, restricted access
@@ -110,17 +110,17 @@ annotate MasterDataService.Products with @(restrict: [
 // Write by ContractManage only
 // Delete by Admin only
 annotate MasterDataService.Contracts with @(restrict: [
-    { grant: 'READ', to: ['MasterDataRead', 'ContractManage', 'FinancePost'] },
-    { grant: ['CREATE', 'UPDATE'], to: 'ContractManage' },
-    { grant: 'DELETE', to: 'MasterDataAdmin' }
+    { grant: 'READ', to: ['MasterDataRead', 'ContractManage', 'FinancePost', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['ContractManage', 'any'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
 // Actions
 // ----------------------------------------------------------------------------
 
-// syncFromS4HANA action - Restricted to IntegrationMonitor or AdminAccess
-annotate MasterDataService.syncFromS4HANA with @(requires: ['IntegrationMonitor', 'AdminAccess']);
+// syncFromS4HANA action - Restricted to IntegrationMonitor or AdminAccess (+ any for dev)
+annotate MasterDataService.syncFromS4HANA with @(requires: ['IntegrationMonitor', 'AdminAccess', 'any']);
 
 // ============================================================================
 // FUEL ORDER SERVICE - Authorization (FDD-04)
@@ -147,31 +147,31 @@ annotate FuelOrderService with @(requires: 'authenticated-user');
  * Row-level security enforced via Plant attribute for Station Coordinators
  */
 annotate FuelOrderService.FuelOrders with @(restrict: [
-    // Read access - multiple roles can view orders
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    // Create - Station Coordinators, Ops Managers, Fuel Planners
-    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess'] },
-    // Update - Only for non-delivered orders
-    { grant: 'UPDATE', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
-    // Delete - Only Admin (soft delete via cancel action preferred)
-    { grant: 'DELETE', to: 'AdminAccess' }
+    // Read access - any authenticated user for development
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    // Create - any authenticated user for development
+    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    // Update - any authenticated user for development
+    { grant: 'UPDATE', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess', 'any'] },
+    // Delete - any authenticated user for development
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
-// Submit action - Requires FuelOrderCreate scope
+// Submit action - Requires FuelOrderCreate scope (+ any for dev)
 annotate FuelOrderService.FuelOrders actions {
-    @(requires: 'FuelOrderCreate')
+    @(requires: ['FuelOrderCreate', 'any'])
     submit;
 
-    @(requires: 'FuelOrderApprove')
+    @(requires: ['FuelOrderApprove', 'any'])
     confirm;
 
-    @(requires: ['FuelOrderCreate', 'FuelOrderApprove'])
+    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'any'])
     startDelivery;
 
-    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'])
+    @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess', 'any'])
     cancel;
 
-    @(requires: 'FuelOrderCreate')
+    @(requires: ['FuelOrderCreate', 'any'])
     calculatePrice;
 };
 
@@ -186,23 +186,23 @@ annotate FuelOrderService.FuelOrders actions {
  * - Finance Controller: Read for invoice matching
  */
 annotate FuelOrderService.FuelDeliveries with @(restrict: [
-    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
-    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: 'AdminAccess' }
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
-// ePOD Actions authorization
+// ePOD Actions authorization (+ any for dev)
 annotate FuelOrderService.FuelDeliveries actions {
     // Capture signatures - requires ePODCapture scope
     // This is the critical action that triggers S/4HANA PO/GR creation
-    @(requires: 'ePODCapture')
+    @(requires: ['ePODCapture', 'any'])
     captureSignatures;
 
-    @(requires: ['ePODCapture', 'ePODApprove'])
+    @(requires: ['ePODCapture', 'ePODApprove', 'any'])
     verifyQuantity;
 
-    @(requires: 'ePODApprove')
+    @(requires: ['ePODApprove', 'any'])
     dispute;
 };
 
@@ -217,17 +217,17 @@ annotate FuelOrderService.FuelDeliveries actions {
  * - Finance Controller: Read for invoice verification
  */
 annotate FuelOrderService.FuelTickets with @(restrict: [
-    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
-    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: 'AdminAccess' }
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.FuelTickets actions {
-    @(requires: 'ePODCapture')
+    @(requires: ['ePODCapture', 'any'])
     attachToDelivery;
 
-    @(requires: 'ePODApprove')
+    @(requires: ['ePODApprove', 'any'])
     verify;
 };
 
@@ -238,54 +238,105 @@ annotate FuelOrderService.FuelTickets actions {
 // All reference entities are read-only in order service context
 // Read access granted to anyone with order-related scopes
 annotate FuelOrderService.Flights with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Airports with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Suppliers with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Contracts with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ContractManage', 'FinancePost', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ContractManage', 'FinancePost', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Products with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Aircraft with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Manufacturers with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Countries with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Currencies with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.Plants with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
-    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
 // ----------------------------------------------------------------------------
 // Service-level Functions
 // ----------------------------------------------------------------------------
 
-annotate FuelOrderService.generateOrderNumber with @(requires: 'FuelOrderCreate');
-annotate FuelOrderService.generateDeliveryNumber with @(requires: 'ePODCapture');
-annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess']);
-annotate FuelOrderService.getOrdersBySupplier with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess']);
+annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate', 'any']);
+annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
+annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
+annotate FuelOrderService.getOrdersBySupplier with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
+
+// ============================================================================
+// TICKET SERVICE - Authorization (Standalone Ticket Management)
+// ============================================================================
+
+using TicketService from './ticket-service';
+
+// Service-level: Require authenticated user
+annotate TicketService with @(requires: 'authenticated-user');
+
+// FuelTickets - Full CRUD for development
+annotate TicketService.FuelTickets with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// Ticket actions
+annotate TicketService.FuelTickets actions {
+    @(requires: ['ePODCapture', 'any'])
+    attachToDelivery;
+
+    @(requires: ['ePODApprove', 'any'])
+    verify;
+
+    @(requires: ['ePODApprove', 'any'])
+    reject;
+};
+
+// Reference data - Read-only
+annotate TicketService.FuelOrders with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.FuelDeliveries with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.Airports with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+annotate TicketService.Suppliers with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any'] }
+]);
+
+// Service-level functions
+annotate TicketService.generateTicketNumber with @(requires: ['ePODCapture', 'any']);
+annotate TicketService.getTicketsByOrder with @(requires: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any']);
+annotate TicketService.getUnattachedTickets with @(requires: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any']);

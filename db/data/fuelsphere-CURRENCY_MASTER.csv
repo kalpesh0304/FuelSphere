@@ -1,10 +1,10 @@
-currency_code,currency_name,decimal_places,symbol,is_active
-USD,US Dollar,2,$,true
-PHP,Philippine Peso,2,₱,true
-SGD,Singapore Dollar,2,S$,true
-MYR,Malaysian Ringgit,2,RM,true
-AED,UAE Dirham,2,د.إ,true
-JPY,Japanese Yen,0,¥,true
-AUD,Australian Dollar,2,A$,true
-HKD,Hong Kong Dollar,2,HK$,true
-THB,Thai Baht,2,฿,true
+currency_code;currency_name;decimal_places;symbol;is_active
+USD;US Dollar;2;$;true
+PHP;Philippine Peso;2;₱;true
+SGD;Singapore Dollar;2;S$;true
+MYR;Malaysian Ringgit;2;RM;true
+AED;UAE Dirham;2;د.إ;true
+JPY;Japanese Yen;0;¥;true
+AUD;Australian Dollar;2;A$;true
+HKD;Hong Kong Dollar;2;HK$;true
+THB;Thai Baht;2;฿;true

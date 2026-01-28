@@ -1285,80 +1285,252 @@ annotate service.Countries with @(
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Countries with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Country',
             TypeNamePlural : 'Countries',
-            Title          : { Value: landx }
+            Title          : { Value: landx },
+            Description    : { Value: land1 }
         },
-        SelectionFields: [ land1, landgr ],
+        SelectionFields: [ land1, landgr, is_embargoed ],
         LineItem: [
             { Value: land1, Label: 'Country Code', ![@UI.Importance]: #High },
             { Value: landx, Label: 'Country Name', ![@UI.Importance]: #High },
             { Value: landgr, Label: 'Region', ![@UI.Importance]: #Medium },
-            { Value: currcode, Label: 'Currency', ![@UI.Importance]: #Medium }
-        ]
+            { Value: currcode, Label: 'Currency', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High },
+            { Value: is_embargoed, Label: 'Embargoed', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'GeneralInfo',
+                Target : '@UI.FieldGroup#CountryDetails',
+                Label  : 'General Information'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ComplianceInfo',
+                Target : '@UI.FieldGroup#ComplianceInfo',
+                Label  : 'Compliance'
+            }
+        ],
+        FieldGroup#CountryDetails: {
+            Data: [
+                { Value: land1, Label: 'Country Code' },
+                { Value: landx, Label: 'Country Name' },
+                { Value: landx50, Label: 'Full Name' },
+                { Value: landgr, Label: 'Region' },
+                { Value: currcode, Label: 'Currency' },
+                { Value: natio, Label: 'Nationality' },
+                { Value: spras, Label: 'Language' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        },
+        FieldGroup#ComplianceInfo: {
+            Data: [
+                { Value: is_embargoed, Label: 'Embargoed' },
+                { Value: embargo_effective_date, Label: 'Embargo Date' },
+                { Value: embargo_reason, Label: 'Embargo Reason' },
+                { Value: sanction_programs, Label: 'Sanction Programs' },
+                { Value: risk_level, Label: 'Risk Level' }
+            ]
+        }
     }
 );
+
+// Field-level annotations for Countries
+annotate service.Countries with {
+    land1                   @title: 'Country Code';
+    landx                   @title: 'Country Name';
+    landx50                 @title: 'Full Name';
+    natio                   @title: 'Nationality';
+    landgr                  @title: 'Region';
+    currcode                @title: 'Currency';
+    spras                   @title: 'Language';
+    is_active               @title: 'Active';
+    is_embargoed            @title: 'Embargoed';
+    embargo_effective_date  @title: 'Embargo Date';
+    embargo_reason          @title: 'Embargo Reason';
+    sanction_programs       @title: 'Sanction Programs';
+    risk_level              @title: 'Risk Level';
+};
 
 annotate service.Currencies with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Currencies with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Currency',
             TypeNamePlural : 'Currencies',
-            Title          : { Value: currency_name }
+            Title          : { Value: currency_name },
+            Description    : { Value: currency_code }
         },
+        SelectionFields: [ currency_code ],
         LineItem: [
             { Value: currency_code, Label: 'Currency Code', ![@UI.Importance]: #High },
             { Value: currency_name, Label: 'Currency Name', ![@UI.Importance]: #High },
-            { Value: symbol, Label: 'Symbol', ![@UI.Importance]: #Medium }
-        ]
+            { Value: symbol, Label: 'Symbol', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'CurrencyDetails',
+                Target : '@UI.FieldGroup#CurrencyDetails',
+                Label  : 'Currency Details'
+            }
+        ],
+        FieldGroup#CurrencyDetails: {
+            Data: [
+                { Value: currency_code, Label: 'Currency Code' },
+                { Value: currency_name, Label: 'Currency Name' },
+                { Value: symbol, Label: 'Symbol' },
+                { Value: decimal_places, Label: 'Decimal Places' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        }
     }
 );
+
+// Field-level annotations for Currencies
+annotate service.Currencies with {
+    currency_code   @title: 'Currency Code';
+    currency_name   @title: 'Currency Name';
+    symbol          @title: 'Symbol';
+    decimal_places  @title: 'Decimal Places';
+    is_active       @title: 'Active';
+};
 
 annotate service.Plants with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.Plants with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Plant',
             TypeNamePlural : 'Plants',
-            Title          : { Value: name1 }
+            Title          : { Value: name1 },
+            Description    : { Value: werks }
         },
-        SelectionFields: [ werks ],
+        SelectionFields: [ werks, ort01 ],
         LineItem: [
             { Value: werks, Label: 'Plant Code', ![@UI.Importance]: #High },
             { Value: name1, Label: 'Plant Name', ![@UI.Importance]: #High },
-            { Value: ort01, Label: 'City', ![@UI.Importance]: #Medium }
-        ]
+            { Value: ort01, Label: 'City', ![@UI.Importance]: #Medium },
+            { Value: land1_land1, Label: 'Country', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PlantDetails',
+                Target : '@UI.FieldGroup#PlantDetails',
+                Label  : 'Plant Details'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PlantAddress',
+                Target : '@UI.FieldGroup#PlantAddress',
+                Label  : 'Address'
+            }
+        ],
+        FieldGroup#PlantDetails: {
+            Data: [
+                { Value: werks, Label: 'Plant Code' },
+                { Value: name1, Label: 'Plant Name' },
+                { Value: spras, Label: 'Language' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        },
+        FieldGroup#PlantAddress: {
+            Data: [
+                { Value: stras, Label: 'Street' },
+                { Value: ort01, Label: 'City' },
+                { Value: regio, Label: 'Region' },
+                { Value: pstlz, Label: 'Postal Code' },
+                { Value: land1_land1, Label: 'Country' }
+            ]
+        }
     }
 );
+
+// Field-level annotations for Plants
+annotate service.Plants with {
+    werks       @title: 'Plant Code';
+    name1       @title: 'Plant Name';
+    stras       @title: 'Street';
+    ort01       @title: 'City';
+    regio       @title: 'Region';
+    pstlz       @title: 'Postal Code';
+    land1_land1 @title: 'Country';
+    spras       @title: 'Language';
+    is_active   @title: 'Active';
+};
 
 annotate service.UnitsOfMeasure with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
         UpdateRestrictions: { Updatable: false },
         DeleteRestrictions: { Deletable: false }
-    },
+    }
+);
+
+annotate service.UnitsOfMeasure with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Unit of Measure',
             TypeNamePlural : 'Units of Measure',
-            Title          : { Value: uom_name }
+            Title          : { Value: uom_name },
+            Description    : { Value: uom_code }
         },
+        SelectionFields: [ uom_code, uom_category ],
         LineItem: [
             { Value: uom_code, Label: 'UoM Code', ![@UI.Importance]: #High },
             { Value: uom_name, Label: 'UoM Name', ![@UI.Importance]: #High },
-            { Value: uom_type, Label: 'Type', ![@UI.Importance]: #Medium }
-        ]
+            { Value: uom_category, Label: 'Category', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'UoMDetails',
+                Target : '@UI.FieldGroup#UoMDetails',
+                Label  : 'Unit of Measure Details'
+            }
+        ],
+        FieldGroup#UoMDetails: {
+            Data: [
+                { Value: uom_code, Label: 'UoM Code' },
+                { Value: uom_name, Label: 'UoM Name' },
+                { Value: uom_category, Label: 'Category' },
+                { Value: conversion_to_kg, Label: 'Conversion to KG' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        }
     }
 );
+
+// Field-level annotations for UnitsOfMeasure
+annotate service.UnitsOfMeasure with {
+    uom_code        @title: 'UoM Code';
+    uom_name        @title: 'UoM Name';
+    uom_category    @title: 'Category';
+    conversion_to_kg @title: 'Conversion to KG';
+    is_active       @title: 'Active';
+};

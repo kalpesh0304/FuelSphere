@@ -37,39 +37,45 @@ service MasterDataService {
      * Manufacturers - Aircraft Manufacturer Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
-    entity Manufacturers as projection on db.MANUFACTURE;
+    @odata.draft.enabled
+    entity Manufacturers as projection on db.MANUFACTURE {
+        *,
+        virtual null as activeCriticality : Integer
+    };
 
     /**
      * Aircraft - Aircraft Type Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
-        manufacturer : redirected to Manufacturers
+        manufacturer : redirected to Manufacturers,
+        virtual null as activeCriticality : Integer
     };
 
     /**
      * Airports - Airport Master
      * Access: integration-admin (Edit), ops-manager/fuel-planner (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries,
-        plant   : redirected to Plants
+        plant   : redirected to Plants,
+        virtual null as activeCriticality : Integer
     };
 
     /**
      * Routes - Route Master
      * Access: fuel-planner (View), integration-admin (Edit)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Routes as projection on db.ROUTE_MASTER {
         *,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        virtual null as activeCriticality : Integer
     };
 
     // ========================================================================
@@ -80,31 +86,34 @@ service MasterDataService {
      * Suppliers - Supplier/Vendor Master
      * Access: contracts-manager (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Suppliers as projection on db.MASTER_SUPPLIERS {
         *,
-        country : redirected to Countries
+        country : redirected to Countries,
+        virtual null as activeCriticality : Integer
     };
 
     /**
      * Products - Fuel Product Master
      * Access: integration-admin (Edit), others (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
-        uom : redirected to UnitsOfMeasure
+        uom : redirected to UnitsOfMeasure,
+        virtual null as activeCriticality : Integer
     };
 
     /**
      * Contracts - Purchase Contract Master
      * Access: contracts-manager (Full), finance (View)
      */
-    // @restrict in production - see PERSONA_AUTHORIZATION_MATRIX
+    @odata.draft.enabled
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
         supplier : redirected to Suppliers,
-        currency : redirected to Currencies
+        currency : redirected to Currencies,
+        virtual null as activeCriticality : Integer
     };
 
     // ========================================================================
