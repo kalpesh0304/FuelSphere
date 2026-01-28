@@ -37,8 +37,8 @@ annotate InvoiceService.Invoices with @(
             supplier_ID,
             invoice_date,
             status,
-            verification_status,
-            matching_status
+            approval_status,
+            match_status
         ],
 
         LineItem: [
@@ -54,19 +54,19 @@ annotate InvoiceService.Invoices with @(
                 ![@UI.Importance]: #High
             },
             {
-                Value: verification_status,
-                Label: 'Verification',
-                Criticality: verificationCriticality,
+                Value: approval_status,
+                Label: 'Approval',
+                Criticality: approvalCriticality,
                 ![@UI.Importance]: #Medium
             },
             {
-                Value: matching_status,
+                Value: match_status,
                 Label: 'Matching',
                 Criticality: matchingCriticality,
                 ![@UI.Importance]: #Medium
             },
             { Value: due_date, Label: 'Due Date', ![@UI.Importance]: #Medium },
-            { Value: s4_invoice_doc, Label: 'S/4 Doc', ![@UI.Importance]: #Low }
+            { Value: s4_document_number, Label: 'S/4 Doc', ![@UI.Importance]: #Low }
         ],
 
         PresentationVariant: {
@@ -97,7 +97,7 @@ annotate InvoiceService.Invoices with @(
         FieldGroup#InvoiceStatus: {
             Data: [
                 { Value: status, Label: 'Status', Criticality: statusCriticality },
-                { Value: verification_status, Label: 'Verification', Criticality: verificationCriticality }
+                { Value: approval_status, Label: 'Approval', Criticality: approvalCriticality }
             ]
         },
 
@@ -111,8 +111,8 @@ annotate InvoiceService.Invoices with @(
 
         FieldGroup#MatchingStatus: {
             Data: [
-                { Value: matching_status, Label: 'Matching', Criticality: matchingCriticality },
-                { Value: variance_amount, Label: 'Variance' }
+                { Value: match_status, Label: 'Matching', Criticality: matchingCriticality },
+                { Value: price_variance, Label: 'Variance' }
             ]
         },
 
@@ -171,9 +171,9 @@ annotate InvoiceService.Invoices with @(
             Label: 'General Information',
             Data: [
                 { Value: invoice_number, Label: 'Invoice Number' },
-                { Value: external_reference, Label: 'External Reference' },
+                { Value: internal_number, Label: 'Internal Number' },
                 { Value: invoice_date, Label: 'Invoice Date' },
-                { Value: receipt_date, Label: 'Receipt Date' },
+                { Value: posting_date, Label: 'Posting Date' },
                 { Value: due_date, Label: 'Due Date' },
                 { Value: payment_terms, Label: 'Payment Terms' },
                 { Value: status, Label: 'Status' }
@@ -185,8 +185,7 @@ annotate InvoiceService.Invoices with @(
             Data: [
                 { Value: supplier.supplier_name, Label: 'Supplier Name' },
                 { Value: supplier.supplier_code, Label: 'Supplier Code' },
-                { Value: supplier_invoice_number, Label: 'Supplier Invoice #' },
-                { Value: contract.contract_number, Label: 'Contract' }
+                { Value: invoice_number, Label: 'Supplier Invoice #' }
             ]
         },
 
@@ -197,48 +196,40 @@ annotate InvoiceService.Invoices with @(
                 { Value: tax_amount, Label: 'Tax Amount' },
                 { Value: gross_amount, Label: 'Gross Amount' },
                 { Value: currency_code, Label: 'Currency' },
-                { Value: exchange_rate, Label: 'Exchange Rate' },
-                { Value: local_currency_amount, Label: 'Local Currency Amount' },
-                { Value: local_currency, Label: 'Local Currency' }
+                { Value: discount_percent, Label: 'Discount %' },
+                { Value: discount_date, Label: 'Discount Date' }
             ]
         },
 
         FieldGroup#ThreeWayMatching: {
             Label: 'Three-Way Matching',
             Data: [
-                { Value: verification_status, Label: 'Verification Status' },
-                { Value: matching_status, Label: 'Matching Status' },
-                { Value: po_amount, Label: 'PO Amount' },
-                { Value: gr_amount, Label: 'GR Amount' },
-                { Value: invoice_amount, Label: 'Invoice Amount' },
-                { Value: variance_amount, Label: 'Variance Amount' },
+                { Value: match_status, Label: 'Match Status' },
+                { Value: approval_status, Label: 'Approval Status' },
+                { Value: price_variance, Label: 'Price Variance' },
+                { Value: quantity_variance, Label: 'Quantity Variance' },
                 { Value: variance_percentage, Label: 'Variance %' },
-                { Value: tolerance_exceeded, Label: 'Tolerance Exceeded' },
-                { Value: matched_at, Label: 'Matched At' },
-                { Value: matched_by, Label: 'Matched By' }
+                { Value: requires_dual_approval, Label: 'Requires Dual Approval' }
             ]
         },
 
         FieldGroup#InvoiceS4: {
             Label: 'S/4HANA Integration',
             Data: [
-                { Value: s4_invoice_doc, Label: 'Invoice Document' },
+                { Value: s4_document_number, Label: 'Invoice Document' },
                 { Value: s4_fiscal_year, Label: 'Fiscal Year' },
                 { Value: s4_company_code, Label: 'Company Code' },
-                { Value: s4_posting_date, Label: 'Posting Date' },
-                { Value: s4_document_date, Label: 'Document Date' }
+                { Value: fi_posting_status, Label: 'Posting Status' }
             ]
         },
 
         FieldGroup#Workflow: {
             Label: 'Approval Workflow',
             Data: [
-                { Value: submitted_by, Label: 'Submitted By' },
-                { Value: submitted_at, Label: 'Submitted At' },
-                { Value: approved_by, Label: 'Approved By' },
-                { Value: approved_at, Label: 'Approved At' },
-                { Value: rejected_by, Label: 'Rejected By' },
-                { Value: rejected_at, Label: 'Rejected At' },
+                { Value: first_approver, Label: 'First Approver' },
+                { Value: first_approved_at, Label: 'First Approved At' },
+                { Value: final_approver, Label: 'Final Approver' },
+                { Value: final_approved_at, Label: 'Final Approved At' },
                 { Value: rejection_reason, Label: 'Rejection Reason' }
             ]
         },
@@ -259,16 +250,40 @@ annotate InvoiceService.Invoices with @(
 annotate InvoiceService.Invoices with {
     ID                   @UI.Hidden;
     invoice_number       @title: 'Invoice Number' @mandatory;
+    internal_number      @title: 'Internal Number';
     invoice_date         @title: 'Invoice Date' @mandatory;
+    posting_date         @title: 'Posting Date';
     due_date             @title: 'Due Date';
+    baseline_date        @title: 'Baseline Date';
     net_amount           @title: 'Net Amount' @Measures.ISOCurrency: currency_code;
     tax_amount           @title: 'Tax Amount' @Measures.ISOCurrency: currency_code;
     gross_amount         @title: 'Gross Amount' @Measures.ISOCurrency: currency_code;
     currency_code        @title: 'Currency';
+    payment_terms        @title: 'Payment Terms';
+    discount_percent     @title: 'Discount %';
+    discount_date        @title: 'Discount Date';
+    match_status         @title: 'Match Status';
+    price_variance       @title: 'Price Variance' @Measures.ISOCurrency: currency_code;
+    quantity_variance    @title: 'Quantity Variance';
+    variance_percentage  @title: 'Variance %';
+    approval_status      @title: 'Approval Status';
+    requires_dual_approval @title: 'Requires Dual Approval';
+    first_approver       @title: 'First Approver';
+    first_approved_at    @title: 'First Approved At';
+    final_approver       @title: 'Final Approver';
+    final_approved_at    @title: 'Final Approved At';
+    s4_document_number   @title: 'S/4 Document' @Common.FieldControl: #ReadOnly;
+    s4_fiscal_year       @title: 'Fiscal Year' @Common.FieldControl: #ReadOnly;
+    s4_company_code      @title: 'Company Code' @Common.FieldControl: #ReadOnly;
+    fi_posting_status    @title: 'FI Posting Status' @Common.FieldControl: #ReadOnly;
     status               @title: 'Status';
-    verification_status  @title: 'Verification Status';
-    matching_status      @title: 'Matching Status';
-    variance_amount      @title: 'Variance' @Measures.ISOCurrency: currency_code;
+    notes                @title: 'Notes' @UI.MultiLineText;
+    rejection_reason     @title: 'Rejection Reason' @UI.MultiLineText;
+    is_duplicate         @title: 'Is Duplicate';
+    created_at           @title: 'Created At' @Common.FieldControl: #ReadOnly;
+    created_by           @title: 'Created By' @Common.FieldControl: #ReadOnly;
+    modified_at          @title: 'Modified At' @Common.FieldControl: #ReadOnly;
+    modified_by          @title: 'Modified By' @Common.FieldControl: #ReadOnly;
 };
 
 // =============================================================================
@@ -280,19 +295,19 @@ annotate InvoiceService.InvoiceItems with @(
         HeaderInfo: {
             TypeName       : 'Invoice Item',
             TypeNamePlural : 'Invoice Items',
-            Title          : { Value: item_number }
+            Title          : { Value: line_number }
         },
 
         LineItem: [
-            { Value: item_number, Label: 'Item', ![@UI.Importance]: #High },
+            { Value: line_number, Label: 'Item', ![@UI.Importance]: #High },
             { Value: description, Label: 'Description', ![@UI.Importance]: #High },
             { Value: quantity, Label: 'Quantity', ![@UI.Importance]: #High },
             { Value: unit_price, Label: 'Unit Price', ![@UI.Importance]: #High },
             { Value: net_amount, Label: 'Net Amount', ![@UI.Importance]: #High },
             { Value: tax_code, Label: 'Tax Code', ![@UI.Importance]: #Medium },
             { Value: tax_amount, Label: 'Tax Amount', ![@UI.Importance]: #Medium },
-            { Value: po_item, Label: 'PO Item', ![@UI.Importance]: #Low },
-            { Value: gr_item, Label: 'GR Item', ![@UI.Importance]: #Low }
+            { Value: po_number, Label: 'PO Number', ![@UI.Importance]: #Low },
+            { Value: po_item, Label: 'PO Item', ![@UI.Importance]: #Low }
         ],
 
         Facets: [
@@ -312,7 +327,7 @@ annotate InvoiceService.InvoiceItems with @(
 
         FieldGroup#ItemDetails: {
             Data: [
-                { Value: item_number, Label: 'Item Number' },
+                { Value: line_number, Label: 'Line Number' },
                 { Value: description, Label: 'Description' },
                 { Value: product.product_name, Label: 'Product' },
                 { Value: quantity, Label: 'Quantity' },
@@ -321,7 +336,8 @@ annotate InvoiceService.InvoiceItems with @(
                 { Value: net_amount, Label: 'Net Amount' },
                 { Value: tax_code, Label: 'Tax Code' },
                 { Value: tax_amount, Label: 'Tax Amount' },
-                { Value: gross_amount, Label: 'Gross Amount' }
+                { Value: cost_center, Label: 'Cost Center' },
+                { Value: gl_account, Label: 'G/L Account' }
             ]
         },
 
@@ -329,10 +345,9 @@ annotate InvoiceService.InvoiceItems with @(
             Data: [
                 { Value: po_number, Label: 'PO Number' },
                 { Value: po_item, Label: 'PO Item' },
-                { Value: gr_number, Label: 'GR Number' },
-                { Value: gr_item, Label: 'GR Item' },
-                { Value: matched_quantity, Label: 'Matched Quantity' },
-                { Value: variance_quantity, Label: 'Variance Quantity' }
+                { Value: line_match_status, Label: 'Line Match Status' },
+                { Value: price_variance_pct, Label: 'Price Variance %' },
+                { Value: qty_variance_pct, Label: 'Quantity Variance %' }
             ]
         }
     }
