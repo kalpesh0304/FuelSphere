@@ -38,7 +38,7 @@
     }
   },
   "build": {
-    "target": ".",
+    "target": "gen",
     "tasks": [
       {
         "for": "hana",

@@ -14,6 +14,25 @@ build-parameters:
         - npx cds build --production
 
 modules:
+  # ==================== APPLICATION ROUTER ====================
+  - name: fuelsphere-approuter
+    type: approuter.nodejs
+    path: app
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 256M
+      disk-quota: 512M
+    build-parameters:
+      builder: npm
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: fuelsphere-auth
+
   # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
     type: nodejs
