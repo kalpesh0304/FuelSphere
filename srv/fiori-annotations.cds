@@ -1343,6 +1343,23 @@ annotate service.Countries with @(
     }
 );
 
+// Field-level annotations for Countries
+annotate service.Countries with {
+    land1                   @title: 'Country Code';
+    landx                   @title: 'Country Name';
+    landx50                 @title: 'Full Name';
+    natio                   @title: 'Nationality';
+    landgr                  @title: 'Region';
+    currcode                @title: 'Currency';
+    spras                   @title: 'Language';
+    is_active               @title: 'Active';
+    is_embargoed            @title: 'Embargoed';
+    embargo_effective_date  @title: 'Embargo Date';
+    embargo_reason          @title: 'Embargo Reason';
+    sanction_programs       @title: 'Sanction Programs';
+    risk_level              @title: 'Risk Level';
+};
+
 annotate service.Currencies with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
@@ -1385,6 +1402,15 @@ annotate service.Currencies with @(
         }
     }
 );
+
+// Field-level annotations for Currencies
+annotate service.Currencies with {
+    currency_code   @title: 'Currency Code';
+    currency_name   @title: 'Currency Name';
+    symbol          @title: 'Symbol';
+    decimal_places  @title: 'Decimal Places';
+    is_active       @title: 'Active';
+};
 
 annotate service.Plants with @(
     Capabilities: {
@@ -1444,6 +1470,19 @@ annotate service.Plants with @(
     }
 );
 
+// Field-level annotations for Plants
+annotate service.Plants with {
+    werks       @title: 'Plant Code';
+    name1       @title: 'Plant Name';
+    stras       @title: 'Street';
+    ort01       @title: 'City';
+    regio       @title: 'Region';
+    pstlz       @title: 'Postal Code';
+    land1_land1 @title: 'Country';
+    spras       @title: 'Language';
+    is_active   @title: 'Active';
+};
+
 annotate service.UnitsOfMeasure with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
@@ -1486,3 +1525,12 @@ annotate service.UnitsOfMeasure with @(
         }
     }
 );
+
+// Field-level annotations for UnitsOfMeasure
+annotate service.UnitsOfMeasure with {
+    uom_code        @title: 'UoM Code';
+    uom_name        @title: 'UoM Name';
+    uom_category    @title: 'Category';
+    conversion_to_kg @title: 'Conversion to KG';
+    is_active       @title: 'Active';
+};
