@@ -250,26 +250,26 @@ annotate service.Aircraft with @(
         HeaderInfo: {
             TypeName       : 'Aircraft',
             TypeNamePlural : 'Aircraft',
-            Title          : { Value: aircraft_type },
-            Description    : { Value: iata_code },
+            Title          : { Value: aircraft_model },
+            Description    : { Value: type_code },
             ImageUrl       : 'sap-icon://flight'
         },
 
         SelectionFields: [
-            aircraft_type,
-            iata_code,
-            manufacturer_ID,
+            type_code,
+            aircraft_model,
+            manufacturer_code,
             is_active
         ],
 
         LineItem: [
-            { Value: aircraft_type, Label: 'Aircraft Type', ![@UI.Importance]: #High },
-            { Value: iata_code, Label: 'IATA Code', ![@UI.Importance]: #High },
-            { Value: icao_code, Label: 'ICAO Code', ![@UI.Importance]: #Medium },
-            { Value: manufacturer.manufacturer_name, Label: 'Manufacturer', ![@UI.Importance]: #Medium },
-            { Value: max_fuel_capacity_kg, Label: 'Max Fuel (kg)', ![@UI.Importance]: #High },
-            { Value: fuel_burn_rate_kg_hr, Label: 'Burn Rate (kg/hr)', ![@UI.Importance]: #Medium },
+            { Value: type_code, Label: 'Type Code', ![@UI.Importance]: #High },
+            { Value: aircraft_model, Label: 'Aircraft Model', ![@UI.Importance]: #High },
+            { Value: manufacturer.manufacture_name, Label: 'Manufacturer', ![@UI.Importance]: #Medium },
+            { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)', ![@UI.Importance]: #High },
+            { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)', ![@UI.Importance]: #Medium },
             { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Low },
+            { Value: fleet_size, Label: 'Fleet Size', ![@UI.Importance]: #Low },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -280,7 +280,7 @@ annotate service.Aircraft with @(
 
         PresentationVariant: {
             SortOrder: [
-                { Property: aircraft_type, Descending: false }
+                { Property: type_code, Descending: false }
             ],
             Visualizations: [ '@UI.LineItem' ]
         },
@@ -300,14 +300,15 @@ annotate service.Aircraft with @(
 
         FieldGroup#AircraftStatus: {
             Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality }
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: status, Label: 'Status' }
             ]
         },
 
         FieldGroup#FuelCapacity: {
             Data: [
-                { Value: max_fuel_capacity_kg, Label: 'Max Capacity (kg)' },
-                { Value: fuel_burn_rate_kg_hr, Label: 'Burn Rate (kg/hr)' }
+                { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)' },
+                { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)' }
             ]
         },
 
@@ -320,14 +321,8 @@ annotate service.Aircraft with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'FuelSpecs',
-                Label  : 'Fuel Specifications',
-                Target : '@UI.FieldGroup#FuelSpecs'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'Performance',
-                Label  : 'Performance Data',
+                Label  : 'Performance & Fleet',
                 Target : '@UI.FieldGroup#Performance'
             },
             {
@@ -341,37 +336,22 @@ annotate service.Aircraft with @(
         FieldGroup#AircraftGeneral: {
             Label: 'General Information',
             Data: [
-                { Value: aircraft_type, Label: 'Aircraft Type' },
-                { Value: iata_code, Label: 'IATA Code' },
-                { Value: icao_code, Label: 'ICAO Code' },
-                { Value: manufacturer.manufacturer_name, Label: 'Manufacturer' },
-                { Value: category, Label: 'Category' },
-                { Value: engine_type, Label: 'Engine Type' },
-                { Value: engine_count, Label: 'Number of Engines' },
+                { Value: type_code, Label: 'Type Code' },
+                { Value: aircraft_model, Label: 'Aircraft Model' },
+                { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
+                { Value: manufacturer_code, Label: 'Manufacturer Code' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
 
-        FieldGroup#FuelSpecs: {
-            Label: 'Fuel Specifications',
-            Data: [
-                { Value: max_fuel_capacity_kg, Label: 'Max Fuel Capacity (kg)' },
-                { Value: max_fuel_capacity_liters, Label: 'Max Fuel Capacity (L)' },
-                { Value: fuel_burn_rate_kg_hr, Label: 'Fuel Burn Rate (kg/hr)' },
-                { Value: taxi_fuel_kg, Label: 'Taxi Fuel (kg)' },
-                { Value: reserve_fuel_kg, Label: 'Reserve Fuel (kg)' },
-                { Value: min_landing_fuel_kg, Label: 'Min Landing Fuel (kg)' }
-            ]
-        },
-
         FieldGroup#Performance: {
-            Label: 'Performance Data',
+            Label: 'Performance & Fleet',
             Data: [
+                { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)' },
+                { Value: cruise_burn_kgph, Label: 'Cruise Burn Rate (kg/hr)' },
                 { Value: mtow_kg, Label: 'Max Takeoff Weight (kg)' },
-                { Value: max_payload_kg, Label: 'Max Payload (kg)' },
-                { Value: max_range_km, Label: 'Max Range (km)' },
-                { Value: cruise_speed_kmh, Label: 'Cruise Speed (km/h)' },
-                { Value: passenger_capacity, Label: 'Passenger Capacity' }
+                { Value: fleet_size, Label: 'Fleet Size' },
+                { Value: status, Label: 'Operational Status' }
             ]
         },
 
@@ -389,40 +369,33 @@ annotate service.Aircraft with @(
 
 // Field-level annotations for Aircraft
 annotate service.Aircraft with {
-    ID                      @UI.Hidden;
-    aircraft_type           @title: 'Aircraft Type' @mandatory;
-    iata_code               @title: 'IATA Code' @mandatory;
-    icao_code               @title: 'ICAO Code';
-    category                @title: 'Category';
-    engine_type             @title: 'Engine Type';
-    engine_count            @title: 'Engine Count';
-    max_fuel_capacity_kg    @title: 'Max Fuel (kg)' @mandatory;
-    max_fuel_capacity_liters @title: 'Max Fuel (L)';
-    fuel_burn_rate_kg_hr    @title: 'Burn Rate (kg/hr)';
-    taxi_fuel_kg            @title: 'Taxi Fuel (kg)';
-    reserve_fuel_kg         @title: 'Reserve Fuel (kg)';
-    min_landing_fuel_kg     @title: 'Min Landing Fuel (kg)';
-    mtow_kg                 @title: 'MTOW (kg)';
-    max_payload_kg          @title: 'Max Payload (kg)';
-    max_range_km            @title: 'Max Range (km)';
-    cruise_speed_kmh        @title: 'Cruise Speed (km/h)';
-    passenger_capacity      @title: 'Passenger Capacity';
-    is_active               @title: 'Active';
+    type_code        @title: 'Type Code';
+    aircraft_model   @title: 'Aircraft Model';
+    manufacturer_code @title: 'Manufacturer Code';
+    fuel_capacity_kg @title: 'Fuel Capacity (kg)';
+    mtow_kg          @title: 'MTOW (kg)';
+    cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
+    fleet_size       @title: 'Fleet Size';
+    status           @title: 'Status';
+    is_active        @title: 'Active';
+    created_at       @title: 'Created At';
+    created_by       @title: 'Created By';
+    modified_at      @title: 'Modified At';
+    modified_by      @title: 'Modified By';
 };
 
 // Value Help for Manufacturer
 annotate service.Aircraft with {
     manufacturer @(
         Common: {
-            Text: manufacturer.manufacturer_name,
+            Text: manufacturer.manufacture_name,
             TextArrangement: #TextFirst,
             ValueList: {
                 Label: 'Manufacturers',
                 CollectionPath: 'Manufacturers',
                 Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: manufacturer_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'manufacturer_code' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'manufacturer_name' }
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: manufacturer_code, ValueListProperty: 'manufacture_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'manufacture_name' }
                 ]
             }
         }
