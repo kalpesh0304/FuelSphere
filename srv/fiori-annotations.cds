@@ -420,24 +420,23 @@ annotate service.Routes with @(
             TypeName       : 'Route',
             TypeNamePlural : 'Routes',
             Title          : { Value: route_code },
-            Description    : { Value: route_name },
+            Description    : { Value: status },
             ImageUrl       : 'sap-icon://map-2'
         },
 
         SelectionFields: [
             route_code,
-            origin_ID,
-            destination_ID,
+            origin_airport,
+            destination_airport,
             is_active
         ],
 
         LineItem: [
             { Value: route_code, Label: 'Route Code', ![@UI.Importance]: #High },
-            { Value: route_name, Label: 'Route Name', ![@UI.Importance]: #High },
             { Value: origin.iata_code, Label: 'Origin', ![@UI.Importance]: #High },
             { Value: destination.iata_code, Label: 'Destination', ![@UI.Importance]: #High },
             { Value: distance_km, Label: 'Distance (km)', ![@UI.Importance]: #Medium },
-            { Value: flight_time_mins, Label: 'Flight Time (min)', ![@UI.Importance]: #Medium },
+            { Value: avg_flight_time, Label: 'Flight Time', ![@UI.Importance]: #Medium },
             { Value: fuel_required, Label: 'Fuel Required (kg)', ![@UI.Importance]: #High },
             {
                 Value: is_active,
@@ -474,14 +473,15 @@ annotate service.Routes with @(
 
         FieldGroup#RouteStatus: {
             Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality }
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: status, Label: 'Status' }
             ]
         },
 
         FieldGroup#RouteDistance: {
             Data: [
                 { Value: distance_km, Label: 'Distance (km)' },
-                { Value: flight_time_mins, Label: 'Flight Time (min)' }
+                { Value: avg_flight_time, Label: 'Flight Time' }
             ]
         },
 
@@ -512,12 +512,6 @@ annotate service.Routes with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'FuelCalculation',
-                Label  : 'Fuel Calculation',
-                Target : '@UI.FieldGroup#FuelCalculation'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'Administrative',
                 Label  : 'Administrative',
                 Target : '@UI.FieldGroup#RouteAdmin'
@@ -528,8 +522,8 @@ annotate service.Routes with @(
             Label: 'General Information',
             Data: [
                 { Value: route_code, Label: 'Route Code' },
-                { Value: route_name, Label: 'Route Name' },
-                { Value: route_type, Label: 'Route Type' },
+                { Value: status, Label: 'Operational Status' },
+                { Value: alternate_count, Label: 'Alternate Airports' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -537,9 +531,11 @@ annotate service.Routes with @(
         FieldGroup#RouteAirports: {
             Label: 'Origin & Destination',
             Data: [
+                { Value: origin_airport, Label: 'Origin Code' },
                 { Value: origin.iata_code, Label: 'Origin IATA' },
                 { Value: origin.airport_name, Label: 'Origin Airport' },
                 { Value: origin.city, Label: 'Origin City' },
+                { Value: destination_airport, Label: 'Destination Code' },
                 { Value: destination.iata_code, Label: 'Destination IATA' },
                 { Value: destination.airport_name, Label: 'Destination Airport' },
                 { Value: destination.city, Label: 'Destination City' }
@@ -550,20 +546,8 @@ annotate service.Routes with @(
             Label: 'Flight Data',
             Data: [
                 { Value: distance_km, Label: 'Distance (km)' },
-                { Value: distance_nm, Label: 'Distance (nm)' },
-                { Value: flight_time_mins, Label: 'Flight Time (min)' },
-                { Value: block_time_mins, Label: 'Block Time (min)' }
-            ]
-        },
-
-        FieldGroup#FuelCalculation: {
-            Label: 'Fuel Calculation',
-            Data: [
-                { Value: fuel_required, Label: 'Fuel Required (kg)' },
-                { Value: contingency_fuel, Label: 'Contingency Fuel (kg)' },
-                { Value: alternate_fuel, Label: 'Alternate Fuel (kg)' },
-                { Value: reserve_fuel, Label: 'Reserve Fuel (kg)' },
-                { Value: total_fuel, Label: 'Total Fuel (kg)' }
+                { Value: avg_flight_time, Label: 'Average Flight Time' },
+                { Value: fuel_required, Label: 'Fuel Required (kg)' }
             ]
         },
 
@@ -581,20 +565,19 @@ annotate service.Routes with @(
 
 // Field-level annotations for Routes
 annotate service.Routes with {
-    ID               @UI.Hidden;
-    route_code       @title: 'Route Code' @mandatory;
-    route_name       @title: 'Route Name' @mandatory;
-    route_type       @title: 'Route Type';
-    distance_km      @title: 'Distance (km)' @mandatory;
-    distance_nm      @title: 'Distance (nm)';
-    flight_time_mins @title: 'Flight Time (min)';
-    block_time_mins  @title: 'Block Time (min)';
-    fuel_required    @title: 'Fuel Required (kg)' @mandatory;
-    contingency_fuel @title: 'Contingency Fuel (kg)';
-    alternate_fuel   @title: 'Alternate Fuel (kg)';
-    reserve_fuel     @title: 'Reserve Fuel (kg)';
-    total_fuel       @title: 'Total Fuel (kg)';
-    is_active        @title: 'Active';
+    route_code          @title: 'Route Code';
+    origin_airport      @title: 'Origin';
+    destination_airport @title: 'Destination';
+    distance_km         @title: 'Distance (km)';
+    avg_flight_time     @title: 'Flight Time';
+    fuel_required       @title: 'Fuel Required (kg)';
+    alternate_count     @title: 'Alternate Airports';
+    status              @title: 'Status';
+    is_active           @title: 'Active';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Modified At';
+    modified_by         @title: 'Modified By';
 };
 
 // Value Help for Origin/Destination
@@ -607,8 +590,7 @@ annotate service.Routes with {
                 Label: 'Airports',
                 CollectionPath: 'Airports',
                 Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: origin_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'iata_code' },
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: origin_airport, ValueListProperty: 'iata_code' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'city' }
                 ]
@@ -624,8 +606,7 @@ annotate service.Routes with {
                 Label: 'Airports',
                 CollectionPath: 'Airports',
                 Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: destination_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'iata_code' },
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: destination_airport, ValueListProperty: 'iata_code' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'city' }
                 ]
