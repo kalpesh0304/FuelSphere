@@ -1205,23 +1205,20 @@ annotate service.Manufacturers with @(
         HeaderInfo: {
             TypeName       : 'Manufacturer',
             TypeNamePlural : 'Manufacturers',
-            Title          : { Value: manufacturer_name },
-            Description    : { Value: manufacturer_code },
+            Title          : { Value: manufacture_name },
+            Description    : { Value: manufacture_code },
             ImageUrl       : 'sap-icon://factory'
         },
 
         SelectionFields: [
-            manufacturer_code,
-            manufacturer_name,
-            country_of_origin,
+            manufacture_code,
+            manufacture_name,
             is_active
         ],
 
         LineItem: [
-            { Value: manufacturer_code, Label: 'Code', ![@UI.Importance]: #High },
-            { Value: manufacturer_name, Label: 'Name', ![@UI.Importance]: #High },
-            { Value: country_of_origin, Label: 'Country of Origin', ![@UI.Importance]: #Medium },
-            { Value: founded_year, Label: 'Founded', ![@UI.Importance]: #Low },
+            { Value: manufacture_code, Label: 'Manufacturer Code', ![@UI.Importance]: #High },
+            { Value: manufacture_name, Label: 'Manufacturer Name', ![@UI.Importance]: #High },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -1239,12 +1236,6 @@ annotate service.Manufacturers with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Aircraft',
-                Label  : 'Aircraft',
-                Target : 'aircraft/@UI.LineItem'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'Administrative',
                 Label  : 'Administrative',
                 Target : '@UI.FieldGroup#ManufacturerAdmin'
@@ -1254,12 +1245,8 @@ annotate service.Manufacturers with @(
         FieldGroup#ManufacturerGeneral: {
             Label: 'General Information',
             Data: [
-                { Value: manufacturer_code, Label: 'Manufacturer Code' },
-                { Value: manufacturer_name, Label: 'Manufacturer Name' },
-                { Value: country_of_origin, Label: 'Country of Origin' },
-                { Value: founded_year, Label: 'Founded Year' },
-                { Value: headquarters, Label: 'Headquarters' },
-                { Value: website, Label: 'Website' },
+                { Value: manufacture_code, Label: 'Manufacturer Code' },
+                { Value: manufacture_name, Label: 'Manufacturer Name' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -1275,6 +1262,17 @@ annotate service.Manufacturers with @(
         }
     }
 );
+
+// Field-level annotations for Manufacturers
+annotate service.Manufacturers with {
+    manufacture_code @title: 'Manufacturer Code';
+    manufacture_name @title: 'Manufacturer Name';
+    is_active        @title: 'Active';
+    created_at       @title: 'Created At';
+    created_by       @title: 'Created By';
+    modified_at      @title: 'Modified At';
+    modified_by      @title: 'Modified By';
+};
 
 // =============================================================================
 // REFERENCE DATA (Read-Only - S/4HANA Synchronized)
