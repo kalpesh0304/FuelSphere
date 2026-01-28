@@ -150,7 +150,6 @@ annotate service.Airports with @(
                 { Value: iata_code, Label: 'IATA Code' },
                 { Value: icao_code, Label: 'ICAO Code' },
                 { Value: airport_name, Label: 'Airport Name' },
-                { Value: alternate_name, Label: 'Alternate Name' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -161,9 +160,6 @@ annotate service.Airports with @(
                 { Value: city, Label: 'City' },
                 { Value: country_code, Label: 'Country Code' },
                 { Value: country.landx, Label: 'Country Name' },
-                { Value: latitude, Label: 'Latitude' },
-                { Value: longitude, Label: 'Longitude' },
-                { Value: elevation_ft, Label: 'Elevation (ft)' },
                 { Value: timezone, Label: 'Timezone' }
             ]
         },
@@ -172,9 +168,7 @@ annotate service.Airports with @(
             Label: 'S/4HANA Integration',
             Data: [
                 { Value: s4_plant_code, Label: 'Plant Code' },
-                { Value: s4_storage_location, Label: 'Storage Location' },
-                { Value: s4_profit_center, Label: 'Profit Center' },
-                { Value: s4_cost_center, Label: 'Cost Center' }
+                { Value: plant.name1, Label: 'Plant Name' }
             ]
         },
 
@@ -193,25 +187,18 @@ annotate service.Airports with @(
 // Field-level annotations for Airports
 annotate service.Airports with {
     ID              @UI.Hidden;
-    iata_code       @title: 'IATA Code' @mandatory;
+    iata_code       @title: 'IATA Code';
     icao_code       @title: 'ICAO Code';
-    airport_name    @title: 'Airport Name' @mandatory;
-    alternate_name  @title: 'Alternate Name';
-    city            @title: 'City' @mandatory;
-    country_code    @title: 'Country' @mandatory;
-    latitude        @title: 'Latitude';
-    longitude       @title: 'Longitude';
-    elevation_ft    @title: 'Elevation (ft)';
+    airport_name    @title: 'Airport Name';
+    city            @title: 'City';
+    country_code    @title: 'Country';
     timezone        @title: 'Timezone';
     s4_plant_code   @title: 'S/4 Plant Code';
-    s4_storage_location @title: 'Storage Location';
-    s4_profit_center @title: 'Profit Center';
-    s4_cost_center  @title: 'Cost Center';
     is_active       @title: 'Active';
-    created_at      @title: 'Created At' @Common.FieldControl: #ReadOnly;
-    created_by      @title: 'Created By' @Common.FieldControl: #ReadOnly;
-    modified_at     @title: 'Modified At' @Common.FieldControl: #ReadOnly;
-    modified_by     @title: 'Modified By' @Common.FieldControl: #ReadOnly;
+    created_at      @title: 'Created At';
+    created_by      @title: 'Created By';
+    modified_at     @title: 'Modified At';
+    modified_by     @title: 'Modified By';
 };
 
 // Value Help for Country
@@ -649,9 +636,9 @@ annotate service.Suppliers with @(
             { Value: supplier_code, Label: 'Supplier Code', ![@UI.Importance]: #High },
             { Value: supplier_name, Label: 'Supplier Name', ![@UI.Importance]: #High },
             { Value: supplier_type, Label: 'Type', ![@UI.Importance]: #Medium },
-            { Value: city, Label: 'City', ![@UI.Importance]: #Medium },
             { Value: country_code, Label: 'Country', ![@UI.Importance]: #Medium },
-            { Value: s4_vendor_code, Label: 'S/4 Vendor', ![@UI.Importance]: #Low },
+            { Value: payment_terms, Label: 'Payment Terms', ![@UI.Importance]: #Low },
+            { Value: s4_vendor_no, Label: 'S/4 Vendor', ![@UI.Importance]: #Low },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -701,27 +688,9 @@ annotate service.Suppliers with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Address',
-                Label  : 'Address',
-                Target : '@UI.FieldGroup#SupplierAddress'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'Contact',
-                Label  : 'Contact Information',
-                Target : '@UI.FieldGroup#SupplierContact'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'S4Integration',
                 Label  : 'S/4HANA Integration',
                 Target : '@UI.FieldGroup#SupplierS4'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'Contracts',
-                Label  : 'Contracts',
-                Target : 'contracts/@UI.LineItem'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -737,41 +706,17 @@ annotate service.Suppliers with @(
                 { Value: supplier_code, Label: 'Supplier Code' },
                 { Value: supplier_name, Label: 'Supplier Name' },
                 { Value: supplier_type, Label: 'Supplier Type' },
-                { Value: tax_id, Label: 'Tax ID' },
+                { Value: country_code, Label: 'Country Code' },
+                { Value: country.landx, Label: 'Country Name' },
                 { Value: is_active, Label: 'Active' }
-            ]
-        },
-
-        FieldGroup#SupplierAddress: {
-            Label: 'Address',
-            Data: [
-                { Value: address_line1, Label: 'Address Line 1' },
-                { Value: address_line2, Label: 'Address Line 2' },
-                { Value: city, Label: 'City' },
-                { Value: state_region, Label: 'State/Region' },
-                { Value: postal_code, Label: 'Postal Code' },
-                { Value: country_code, Label: 'Country' }
-            ]
-        },
-
-        FieldGroup#SupplierContact: {
-            Label: 'Contact Information',
-            Data: [
-                { Value: contact_person, Label: 'Contact Person' },
-                { Value: phone, Label: 'Phone' },
-                { Value: email, Label: 'Email' },
-                { Value: website, Label: 'Website' }
             ]
         },
 
         FieldGroup#SupplierS4: {
             Label: 'S/4HANA Integration',
             Data: [
-                { Value: s4_vendor_code, Label: 'Vendor Code' },
-                { Value: s4_company_code, Label: 'Company Code' },
-                { Value: s4_purchasing_org, Label: 'Purchasing Org' },
-                { Value: payment_terms, Label: 'Payment Terms' },
-                { Value: currency_code, Label: 'Currency' }
+                { Value: s4_vendor_no, Label: 'S/4 Vendor Number' },
+                { Value: payment_terms, Label: 'Payment Terms' }
             ]
         },
 
@@ -786,6 +731,22 @@ annotate service.Suppliers with @(
         }
     }
 );
+
+// Field-level annotations for Suppliers
+annotate service.Suppliers with {
+    ID              @UI.Hidden;
+    supplier_code   @title: 'Supplier Code';
+    supplier_name   @title: 'Supplier Name';
+    supplier_type   @title: 'Supplier Type';
+    country_code    @title: 'Country';
+    payment_terms   @title: 'Payment Terms';
+    s4_vendor_no    @title: 'S/4 Vendor Number';
+    is_active       @title: 'Active';
+    created_at      @title: 'Created At';
+    created_by      @title: 'Created By';
+    modified_at     @title: 'Modified At';
+    modified_by     @title: 'Modified By';
+};
 
 // =============================================================================
 // PRODUCTS - Enhanced List Report + Object Page
@@ -812,17 +773,17 @@ annotate service.Products with @(
         SelectionFields: [
             product_code,
             product_name,
-            product_category,
+            product_type,
             is_active
         ],
 
         LineItem: [
             { Value: product_code, Label: 'Product Code', ![@UI.Importance]: #High },
             { Value: product_name, Label: 'Product Name', ![@UI.Importance]: #High },
-            { Value: product_category, Label: 'Category', ![@UI.Importance]: #Medium },
+            { Value: product_type, Label: 'Product Type', ![@UI.Importance]: #Medium },
             { Value: specification, Label: 'Specification', ![@UI.Importance]: #Medium },
-            { Value: base_uom, Label: 'Base UoM', ![@UI.Importance]: #Low },
-            { Value: s4_material_code, Label: 'S/4 Material', ![@UI.Importance]: #Low },
+            { Value: uom_code, Label: 'UoM', ![@UI.Importance]: #Low },
+            { Value: s4_material_number, Label: 'S/4 Material', ![@UI.Importance]: #Low },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -870,8 +831,7 @@ annotate service.Products with @(
             Data: [
                 { Value: product_code, Label: 'Product Code' },
                 { Value: product_name, Label: 'Product Name' },
-                { Value: product_category, Label: 'Category' },
-                { Value: product_type, Label: 'Type' },
+                { Value: product_type, Label: 'Product Type' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -880,19 +840,15 @@ annotate service.Products with @(
             Label: 'Specifications',
             Data: [
                 { Value: specification, Label: 'Specification' },
-                { Value: base_uom, Label: 'Base UoM' },
-                { Value: density_at_15c, Label: 'Density @ 15°C' },
-                { Value: flash_point_celsius, Label: 'Flash Point (°C)' },
-                { Value: freeze_point_celsius, Label: 'Freeze Point (°C)' }
+                { Value: uom_code, Label: 'Unit of Measure' },
+                { Value: uom.uom_name, Label: 'UoM Name' }
             ]
         },
 
         FieldGroup#ProductS4: {
             Label: 'S/4HANA Integration',
             Data: [
-                { Value: s4_material_code, Label: 'Material Code' },
-                { Value: s4_material_group, Label: 'Material Group' },
-                { Value: s4_valuation_class, Label: 'Valuation Class' }
+                { Value: s4_material_number, Label: 'S/4 Material Number' }
             ]
         },
 
@@ -907,6 +863,22 @@ annotate service.Products with @(
         }
     }
 );
+
+// Field-level annotations for Products
+annotate service.Products with {
+    ID                  @UI.Hidden;
+    product_code        @title: 'Product Code';
+    product_name        @title: 'Product Name';
+    product_type        @title: 'Product Type';
+    specification       @title: 'Specification';
+    uom_code            @title: 'UoM';
+    s4_material_number  @title: 'S/4 Material Number';
+    is_active           @title: 'Active';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Modified At';
+    modified_by         @title: 'Modified By';
+};
 
 // =============================================================================
 // CONTRACTS - Enhanced List Report + Object Page
@@ -946,7 +918,7 @@ annotate service.Contracts with @(
             { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
             { Value: valid_from, Label: 'Valid From', ![@UI.Importance]: #Medium },
             { Value: valid_to, Label: 'Valid To', ![@UI.Importance]: #Medium },
-            { Value: total_value, Label: 'Total Value', ![@UI.Importance]: #Medium },
+            { Value: price_type, Label: 'Price Type', ![@UI.Importance]: #Medium },
             { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
             {
                 Value: is_active,
@@ -973,17 +945,13 @@ annotate service.Contracts with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#ContractValidity',
                 Label  : 'Validity'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#ContractValue',
-                Label  : 'Value'
             }
         ],
 
         FieldGroup#ContractStatus: {
             Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality }
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: contract_type, Label: 'Type' }
             ]
         },
 
@@ -991,13 +959,6 @@ annotate service.Contracts with @(
             Data: [
                 { Value: valid_from, Label: 'From' },
                 { Value: valid_to, Label: 'To' }
-            ]
-        },
-
-        FieldGroup#ContractValue: {
-            Data: [
-                { Value: total_value, Label: 'Value' },
-                { Value: currency_code, Label: 'Currency' }
             ]
         },
 
@@ -1017,7 +978,7 @@ annotate service.Contracts with @(
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'Pricing',
-                Label  : 'Pricing',
+                Label  : 'Pricing & Volume',
                 Target : '@UI.FieldGroup#ContractPricing'
             },
             {
@@ -1049,33 +1010,28 @@ annotate service.Contracts with @(
         FieldGroup#ContractParties: {
             Label: 'Contract Parties',
             Data: [
-                { Value: supplier.supplier_name, Label: 'Supplier' },
-                { Value: supplier.supplier_code, Label: 'Supplier Code' },
-                { Value: airport.airport_name, Label: 'Airport' },
-                { Value: airport.iata_code, Label: 'Airport IATA' }
+                { Value: supplier.supplier_name, Label: 'Supplier Name' },
+                { Value: supplier.supplier_code, Label: 'Supplier Code' }
             ]
         },
 
         FieldGroup#ContractPricing: {
-            Label: 'Pricing',
+            Label: 'Pricing & Volume',
             Data: [
-                { Value: pricing_type, Label: 'Pricing Type' },
-                { Value: base_price, Label: 'Base Price' },
-                { Value: total_value, Label: 'Total Value' },
+                { Value: price_type, Label: 'Price Type' },
                 { Value: currency_code, Label: 'Currency' },
-                { Value: min_quantity, Label: 'Min Quantity' },
-                { Value: max_quantity, Label: 'Max Quantity' },
-                { Value: quantity_uom, Label: 'Quantity UoM' }
+                { Value: currency.currency_name, Label: 'Currency Name' },
+                { Value: payment_terms, Label: 'Payment Terms' },
+                { Value: incoterms, Label: 'Incoterms' },
+                { Value: min_volume_kg, Label: 'Min Volume (kg)' },
+                { Value: max_volume_kg, Label: 'Max Volume (kg)' }
             ]
         },
 
         FieldGroup#ContractS4: {
             Label: 'S/4HANA Integration',
             Data: [
-                { Value: s4_contract_number, Label: 'S/4 Contract Number' },
-                { Value: s4_contract_item, Label: 'S/4 Contract Item' },
-                { Value: s4_purchasing_org, Label: 'Purchasing Org' },
-                { Value: s4_company_code, Label: 'Company Code' }
+                { Value: s4_contract_number, Label: 'S/4 Contract Number' }
             ]
         },
 
@@ -1090,6 +1046,28 @@ annotate service.Contracts with @(
         }
     }
 );
+
+// Field-level annotations for Contracts
+annotate service.Contracts with {
+    ID                  @UI.Hidden;
+    contract_number     @title: 'Contract Number';
+    contract_name       @title: 'Contract Name';
+    contract_type       @title: 'Contract Type';
+    price_type          @title: 'Price Type';
+    valid_from          @title: 'Valid From';
+    valid_to            @title: 'Valid To';
+    currency_code       @title: 'Currency';
+    payment_terms       @title: 'Payment Terms';
+    incoterms           @title: 'Incoterms';
+    min_volume_kg       @title: 'Min Volume (kg)';
+    max_volume_kg       @title: 'Max Volume (kg)';
+    s4_contract_number  @title: 'S/4 Contract Number';
+    is_active           @title: 'Active';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Modified At';
+    modified_by         @title: 'Modified By';
+};
 
 // Value Help for Contract associations
 annotate service.Contracts with {
@@ -1109,33 +1087,16 @@ annotate service.Contracts with {
         }
     );
 
-    airport @(
+    currency @(
         Common: {
-            Text: airport.airport_name,
+            Text: currency.currency_name,
             TextArrangement: #TextFirst,
             ValueList: {
-                Label: 'Airports',
-                CollectionPath: 'Airports',
+                Label: 'Currencies',
+                CollectionPath: 'Currencies',
                 Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: airport_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'iata_code' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' }
-                ]
-            }
-        }
-    );
-
-    product @(
-        Common: {
-            Text: product.product_name,
-            TextArrangement: #TextFirst,
-            ValueList: {
-                Label: 'Products',
-                CollectionPath: 'Products',
-                Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: product_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'product_code' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'product_name' }
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: currency_code, ValueListProperty: 'currency_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'currency_name' }
                 ]
             }
         }
