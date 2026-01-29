@@ -2065,9 +2065,9 @@ entity COST_CENTER_MAPPING : cuid, ActiveStatus, AuditTrail {
         company_code        : String(4) @mandatory;       // SAP Company Code
 
         // Cost Objects
-        cost_center         : String(10) @mandatory;      // S/4HANA Cost Center
+        cost_center         : String(20) @mandatory;      // S/4HANA Cost Center
         cost_center_name    : String(40);                 // Cost center description
-        profit_center       : String(10);                 // S/4HANA Profit Center
+        profit_center       : String(20);                 // S/4HANA Profit Center
         profit_center_name  : String(40);                 // Profit center description
 
         // Validity
