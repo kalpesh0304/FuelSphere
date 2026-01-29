@@ -5,7 +5,7 @@
     {
       "source": "^/odata/v4/(.*)$",
       "target": "/odata/v4/$1",
-      "destination": "fuelsphere-srv-api",
+      "destination": "srv-api",
       "authenticationType": "xsuaa",
       "csrfProtection": true
     },

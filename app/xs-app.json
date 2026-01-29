@@ -1,8 +1,14 @@
 {
-  "welcomeFile": "/index.html",
+  "welcomeFile": "/fuelsphere.airports/index.html",
   "authenticationMethod": "route",
   "sessionTimeout": 60,
   "routes": [
+    {
+      "source": "^/$",
+      "target": "/fuelsphere.airports/index.html",
+      "service": "html5-apps-repo-rt",
+      "authenticationType": "xsuaa"
+    },
     {
       "source": "^/odata/v4/(.*)$",
       "target": "/odata/v4/$1",
