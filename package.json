@@ -21,12 +21,14 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch",
-    "dev": "npm rebuild 2>/dev/null; cds watch --port 4004",
+    "undeploy": "cf undeploy fuelsphere --delete-services --delete-service-keys --delete-service-brokers",
+    "build": "rimraf resources mta_archives && mbt build --mtar archive",
+    "kill": "kill -9 $(lsof -PiTCP -sTCP:LISTEN | grep 4004 | awk '{print $2}')",
     "test": "cds bind --exec jest --silent",
-    "build": "cds build --production",
-    "build:mta": "cds build --production && mbt build",
     "deploy": "cds deploy",
-    "postinstall": "npm rebuild 2>/dev/null || true"
+    "deploy-config": "fiori add deploy-config",
+    "build:cf": "ui5 build preload --clean-dest --config ui5-deploy.yaml --include-task=generateCachebusterInfo",
+    "build:mta": "rimraf resources mta_archives && mbt build"
   },
   "cds": {
     "requires": {
