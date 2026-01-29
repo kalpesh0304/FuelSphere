@@ -1,5 +1,5 @@
 {
-  "welcomeFile": "/index.html",
+  "welcomeFile": "/odata/v4/master",
   "authenticationMethod": "route",
   "sessionTimeout": 60,
   "routes": [
@@ -18,9 +18,9 @@
       "csrfProtection": true
     },
     {
-      "source": "^(.*)$",
-      "target": "$1",
-      "service": "html5-apps-repo-rt",
+      "source": "^/(.*)$",
+      "target": "/$1",
+      "destination": "srv-api",
       "authenticationType": "xsuaa"
     }
   ]
