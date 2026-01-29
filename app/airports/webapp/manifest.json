@@ -9,6 +9,19 @@
         },
         "title": "{{appTitle}}",
         "description": "{{appDescription}}",
+        "crossNavigation": {
+            "inbounds": {
+                "Airport-manage": {
+                    "semanticObject": "Airport",
+                    "action": "manage",
+                    "title": "{{appTitle}}",
+                    "signature": {
+                        "parameters": {},
+                        "additionalParameters": "allowed"
+                    }
+                }
+            }
+        },
         "dataSources": {
             "mainService": {
                 "uri": "/odata/v4/master/",

@@ -4,6 +4,97 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Airport Master Data</title>
+    <script>
+        window["sap-ushell-config"] = {
+            defaultRenderer: "fiori2",
+            bootstrapPlugins: {
+                RuntimeAuthoringPlugin: {
+                    component: "sap.ushell.plugins.rta",
+                    config: { validateAppVersion: false }
+                }
+            },
+            renderers: {
+                fiori2: {
+                    componentData: {
+                        config: {
+                            enableSearch: false,
+                            rootIntent: "Airport-manage"
+                        }
+                    }
+                }
+            },
+            services: {
+                LaunchPage: {
+                    adapter: {
+                        config: {
+                            groups: [{
+                                id: "masterdata",
+                                title: "Master Data",
+                                isPreset: true,
+                                isVisible: true,
+                                isGroupLocked: false,
+                                tiles: [{
+                                    id: "airports-tile",
+                                    tileType: "sap.ushell.ui.tile.StaticTile",
+                                    properties: {
+                                        title: "Airport Master Data",
+                                        subtitle: "Manage Airports",
+                                        icon: "sap-icon://flight",
+                                        targetURL: "#Airport-manage"
+                                    }
+                                }]
+                            }]
+                        }
+                    }
+                },
+                NavTargetResolution: {
+                    config: {
+                        enableClientSideTargetResolution: true
+                    }
+                },
+                ClientSideTargetResolution: {
+                    adapter: {
+                        config: {
+                            inbounds: {
+                                "Airport-manage": {
+                                    semanticObject: "Airport",
+                                    action: "manage",
+                                    title: "Airport Master Data",
+                                    signature: {
+                                        parameters: {},
+                                        additionalParameters: "allowed"
+                                    },
+                                    resolutionResult: {
+                                        applicationType: "SAPUI5",
+                                        additionalInformation: "SAPUI5.Component=fuelsphere.airports",
+                                        url: "./"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script
+        id="sap-ui-bootstrap"
+        src="https://sapui5.hana.ondemand.com/1.120.0/resources/sap-ui-core.js"
+        data-sap-ui-theme="sap_horizon"
+        data-sap-ui-compatVersion="edge"
+        data-sap-ui-async="true"
+        data-sap-ui-frameOptions="allow"
+        data-sap-ui-resourceroots='{
+            "fuelsphere.airports": "./"
+        }'
+    ></script>
+    <script>
+        sap.ui.require(["sap/ushell/Container"], function(Container) {
+            Container.createRenderer("fiori2").then(function(content) {
+                content.placeAt("content");
+            });
+        });
+    </script>
     <style>
         html, body, #content {
             height: 100%;
@@ -11,26 +102,6 @@
             padding: 0;
         }
     </style>
-    <script
-        id="sap-ui-bootstrap"
-        src="https://sapui5.hana.ondemand.com/1.120.0/resources/sap-ui-core.js"
-        data-sap-ui-theme="sap_horizon"
-        data-sap-ui-compatVersion="edge"
-        data-sap-ui-async="true"
-        data-sap-ui-resourceroots='{
-            "fuelsphere.airports": "./"
-        }'
-        data-sap-ui-oninit="module:sap/ui/core/ComponentSupport"
-    ></script>
 </head>
-<body class="sapUiBody sapUiSizeCompact" id="content">
-    <div
-        data-sap-ui-component
-        data-name="fuelsphere.airports"
-        data-id="container"
-        data-settings='{"id": "airports"}'
-        data-handle-validation="true"
-        style="height: 100%"
-    ></div>
-</body>
+<body class="sapUiBody" id="content"></body>
 </html>
