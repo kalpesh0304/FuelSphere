@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "FuelSphere - Airports Master Data",
   "scripts": {
-    "build": "ui5 build preload --clean-dest --dest dist && cd dist && npx bestzip ../fuelsphereairports.zip *"
+    "build": "npx bestzip fuelsphereairports.zip Component.js manifest.json index.html i18n/*"
   },
   "devDependencies": {
-    "@ui5/cli": "^3",
     "bestzip": "^2.2.1"
   }
 }
