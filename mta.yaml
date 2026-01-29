@@ -10,11 +10,7 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
-<<<<<<< HEAD
         - npm ci
-=======
-        - npm install --production --ignore-scripts
->>>>>>> main/claude/fix-country-details-blank-5KfTE
         - npx cds build --production
 
 modules:
