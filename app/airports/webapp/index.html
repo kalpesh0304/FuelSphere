@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Airport Master Data</title>
     <style>
-        html, body, #container {
+        html, body, #content {
             height: 100%;
             margin: 0;
             padding: 0;
@@ -16,30 +15,22 @@
         id="sap-ui-bootstrap"
         src="https://sapui5.hana.ondemand.com/1.120.0/resources/sap-ui-core.js"
         data-sap-ui-theme="sap_horizon"
+        data-sap-ui-compatVersion="edge"
+        data-sap-ui-async="true"
         data-sap-ui-resourceroots='{
             "fuelsphere.airports": "./"
         }'
-        data-sap-ui-compatVersion="edge"
-        data-sap-ui-async="true"
-        data-sap-ui-frameOptions="allow"
-        data-sap-ui-preload="async"
+        data-sap-ui-oninit="module:sap/ui/core/ComponentSupport"
     ></script>
-    <script>
-        sap.ui.require([
-            "sap/ui/core/ComponentContainer"
-        ], function(ComponentContainer) {
-            new ComponentContainer({
-                name: "fuelsphere.airports",
-                settings: {
-                    id: "airports"
-                },
-                async: true,
-                height: "100%"
-            }).placeAt("container");
-        });
-    </script>
 </head>
-<body class="sapUiBody" id="content">
-    <div id="container"></div>
+<body class="sapUiBody sapUiSizeCompact" id="content">
+    <div
+        data-sap-ui-component
+        data-name="fuelsphere.airports"
+        data-id="container"
+        data-settings='{"id": "airports"}'
+        data-handle-validation="true"
+        style="height: 100%"
+    ></div>
 </body>
 </html>
