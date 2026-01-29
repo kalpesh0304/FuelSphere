@@ -10,6 +10,7 @@ builder:
     excludes:
       - "/test/**"
       - "/localService/**"
+<<<<<<< HEAD
   customTasks:
     - name: ui5-task-zipper
       afterTask: generateCachebusterInfo
@@ -17,3 +18,5 @@ builder:
         archiveName: fuelsphere-airports
         additionalFiles:
           - xs-app.json
+=======
+>>>>>>> main/claude/fix-html5-app-deployment-3rJx2
