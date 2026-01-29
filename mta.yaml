@@ -78,7 +78,7 @@ modules:
       requires:
         - name: fuelsphere-welcome-app
           artifacts:
-            - fuelsphere-welcome.zip
+            - fuelspherecome.zip
           target-path: resources/
 
   # ==================== WELCOME APP MODULE ====================
@@ -86,7 +86,7 @@ modules:
     type: html5
     path: app/welcome
     build-parameters:
-      build-result: dist
+      build-result: .
       builder: custom
       commands:
         - npm install
