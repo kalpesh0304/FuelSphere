@@ -1,6 +1,6 @@
 specVersion: "3.0"
 metadata:
-  name: fuelsphere-welcome
+  name: fuelsphere.airports
 type: application
 framework:
   name: SAPUI5
@@ -8,9 +8,7 @@ framework:
   libraries:
     - name: sap.m
     - name: sap.ui.core
-    - name: sap.f
-builder:
-  customTasks: []
+    - name: sap.fe.templates
 resources:
   configuration:
     paths:

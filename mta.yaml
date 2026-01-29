@@ -76,15 +76,15 @@ modules:
     build-parameters:
       build-result: resources
       requires:
-        - name: fuelsphere-welcome-app
+        - name: fuelsphere-airports-app
           artifacts:
-            - fuelspherecome.zip
+            - fuelsphereairports.zip
           target-path: resources/
 
-  # ==================== WELCOME APP MODULE ====================
-  - name: fuelsphere-welcome-app
+  # ==================== AIRPORTS APP MODULE ====================
+  - name: fuelsphere-airports-app
     type: html5
-    path: app/welcome
+    path: app/airports
     build-parameters:
       build-result: .
       builder: custom
