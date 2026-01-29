@@ -20,8 +20,8 @@ modules:
     path: app
     parameters:
       buildpack: nodejs_buildpack
-      memory: 256M
-      disk-quota: 512M
+      memory: 1024M
+      disk-quota: 2064M
     build-parameters:
       builder: custom
       commands:
@@ -41,8 +41,8 @@ modules:
     path: gen/srv
     parameters:
       buildpack: nodejs_buildpack
-      memory: 512M
-      disk-quota: 1024M
+      memory: 1024M
+      disk-quota: 2064M
     build-parameters:
       builder: custom
       commands:
