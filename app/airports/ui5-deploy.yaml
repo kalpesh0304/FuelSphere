@@ -2,18 +2,40 @@ specVersion: "3.0"
 metadata:
   name: fuelsphere.airports
 type: application
+<<<<<<< HEAD
 resources:
   configuration:
     propertiesFileSourceEncoding: UTF-8
+=======
+framework:
+  name: SAPUI5
+  version: "1.120.0"
+  libraries:
+    - name: sap.m
+    - name: sap.ui.core
+    - name: sap.fe.templates
+>>>>>>> main/claude/fix-html5-app-deployment-3rJx2
 builder:
   resources:
     excludes:
       - "/test/**"
       - "/localService/**"
   customTasks:
+<<<<<<< HEAD
     - name: ui5-task-zipper
       afterTask: generateCachebusterInfo
       configuration:
         archiveName: fuelsphere-airports
+=======
+    - name: webide-extension-task-updateManifestJson
+      afterTask: generateManifestBundle
+      configuration:
+        appFolder: webapp
+        destDir: dist
+    - name: ui5-task-zipper
+      afterTask: generateCachebusterInfo
+      configuration:
+        archiveName: fuelsphereairports
+>>>>>>> main/claude/fix-html5-app-deployment-3rJx2
         additionalFiles:
           - xs-app.json
