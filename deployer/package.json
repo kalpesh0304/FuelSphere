@@ -1,0 +1,13 @@
+{
+  "name": "fuelsphere-ui-deployer",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@sap/html5-app-deployer": "^5"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/html5-app-deployer/index.js"
+  }
+}
