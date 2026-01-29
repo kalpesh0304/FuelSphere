@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "FuelSphere - Airports Master Data",
   "scripts": {
-    "build": "npx bestzip fuelsphereairports.zip Component.js manifest.json index.html i18n/*"
+    "build": "ui5 build preload --clean-dest --config ui5-deploy.yaml --include-task=generateManifestBundle generateCachebusterInfo"
   },
   "devDependencies": {
-    "bestzip": "^2.2.1"
+    "@ui5/cli": "^3",
+    "@sap/ux-ui5-tooling": "^1"
   }
 }

@@ -1,0 +1,11 @@
+specVersion: "3.0"
+metadata:
+  name: fuelsphere.airports
+type: application
+framework:
+  name: SAPUI5
+  version: "1.120.0"
+  libraries:
+    - name: sap.m
+    - name: sap.ui.core
+    - name: sap.fe.templates

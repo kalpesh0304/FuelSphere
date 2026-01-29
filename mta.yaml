@@ -86,7 +86,7 @@ modules:
     type: html5
     path: app/airports
     build-parameters:
-      build-result: .
+      build-result: dist
       builder: custom
       commands:
         - npm install
