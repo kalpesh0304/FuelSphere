@@ -44,7 +44,7 @@
         }
     },
     "sap.ui5": {
-        "flexEnabled": false,
+        "flexEnabled": true,
         "dependencies": {
             "minUI5Version": "1.120.0",
             "libs": {
@@ -97,7 +97,7 @@
                     "options": {
                         "settings": {
                             "contextPath": "/Airports",
-                            "variantManagement": "None",
+                            "variantManagement": "Page",
                             "navigation": {
                                 "Airports": {
                                     "detail": {
@@ -134,5 +134,9 @@
     "sap.fiori": {
         "registrationIds": [],
         "archeType": "transactional"
+    },
+    "sap.cloud": {
+        "public": true,
+        "service": "fuelsphere"
     }
 }

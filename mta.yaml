@@ -5,6 +5,7 @@ description: "FuelSphere - CAPM Backend for Airline Fuel Lifecycle Management"
 
 parameters:
   enable-parallel-deployments: true
+  deploy_mode: html5-repo
 
 build-parameters:
   before-all:
@@ -14,6 +15,34 @@ build-parameters:
         - npx cds build --production
 
 modules:
+  # ==================== UI APPLICATIONS ====================
+  - name: fuelsphere-airports
+    type: html5
+    path: app/airports
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npm run build
+      supported-platforms: []
+
+  # ==================== UI DEPLOYER ====================
+  - name: fuelsphere-ui-deployer
+    type: com.sap.application.content
+    path: .
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: fuelsphere-airports
+          artifacts:
+            - dist/fuelsphere-airports.zip
+          target-path: resources/
+
   # ==================== APPLICATION ROUTER ====================
   - name: fuelsphere-approuter
     type: approuter.nodejs
@@ -34,6 +63,7 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       - name: fuelsphere-auth
+      - name: fuelsphere-html5-repo-runtime
 
   # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
@@ -91,6 +121,19 @@ resources:
         oauth2-configuration:
           redirect-uris:
             - https://*.${default-domain}/**
+
+  # ==================== HTML5 APP REPOSITORY ====================
+  - name: fuelsphere-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+
+  - name: fuelsphere-html5-repo-runtime
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
 
   # ==================== DESTINATION SERVICE ====================
   - name: fuelsphere-destination
