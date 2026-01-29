@@ -80,7 +80,9 @@ modules:
           command: npm start
           memory: 256M
     build-parameters:
-      builder: npm
+      builder: custom
+      commands:
+        - npm install --production
       requires:
         - name: fuelsphere-airports-app
           artifacts:
