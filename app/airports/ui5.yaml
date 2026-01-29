@@ -8,6 +8,7 @@ framework:
   libraries:
     - name: sap.m
     - name: sap.ui.core
+<<<<<<< HEAD
     - name: sap.ushell
     - name: sap.fe.templates
     - name: themelib_sap_horizon
@@ -47,3 +48,10 @@ builder:
       afterTask: generateVersionInfo
       configuration:
         archiveName: fuelsphere-airports
+=======
+    - name: sap.fe.templates
+resources:
+  configuration:
+    paths:
+      webapp: webapp
+>>>>>>> main/claude/fix-html5-app-deployment-3rJx2
