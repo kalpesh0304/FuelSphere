@@ -53,5 +53,9 @@ builder:
 resources:
   configuration:
     paths:
+<<<<<<< HEAD
       webapp: webapp
+>>>>>>> main/claude/fix-html5-app-deployment-3rJx2
+=======
+      webapp: .
 >>>>>>> main/claude/fix-html5-app-deployment-3rJx2
