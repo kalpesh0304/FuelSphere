@@ -1988,9 +1988,9 @@ entity ALLOCATION_RULES : cuid, ActiveStatus, AuditTrail {
 
         // Settlement Receiver
         settlement_receiver : SettlementReceiverType @mandatory; // COST_CENTER, PROFIT_CENTER, etc.
-        default_cost_center : String(10);                 // Default cost center
-        default_profit_center : String(10);               // Default profit center
-        default_internal_order : String(12);              // Default internal order
+        default_cost_center : String(20);                 // Default cost center
+        default_profit_center : String(20);               // Default profit center
+        default_internal_order : String(20);              // Default internal order
 
         // G/L Account
         gl_account          : String(10) @mandatory;      // G/L Account for posting
