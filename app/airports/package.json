@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "name": "fuelsphere-airports",
     "version": "1.0.0",
     "description": "Airport Master Data - SAP Fiori Elements List Report",
@@ -32,16 +31,4 @@
         ]
     },
     "sapuxLayer": "CUSTOMER_BASE"
-=======
-  "name": "fuelsphere-airports",
-  "version": "1.0.0",
-  "description": "FuelSphere - Airports Master Data",
-  "scripts": {
-    "build": "ui5 build preload --clean-dest --config ui5-deploy.yaml --include-task=generateManifestBundle generateCachebusterInfo"
-  },
-  "devDependencies": {
-    "@ui5/cli": "^3",
-    "@sap/ux-ui5-tooling": "^1"
-  }
->>>>>>> main/claude/fix-html5-app-deployment-3rJx2
 }
