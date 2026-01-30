@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+<<<<<<< HEAD
 const path = require('path');
 const express = require('express');
 
@@ -17,6 +18,14 @@ cds.on('bootstrap', (app) => {
             next();
         }
     });
+=======
+const express = require('express');
+const path = require('path');
+
+cds.on('bootstrap', (app) => {
+    // Serve static files from app folder
+    app.use('/airports', express.static(path.join(__dirname, '..', 'app', 'airports')));
+>>>>>>> main/claude/fix-airports-error-kymL7
 });
 
 module.exports = cds.server;
