@@ -17,7 +17,7 @@ modules:
   # ==================== APPLICATION ROUTER ====================
   - name: fuelsphere-approuter
     type: approuter.nodejs
-    path: app
+    path: app/router
     parameters:
       buildpack: nodejs_buildpack
       memory: 1024M
@@ -34,7 +34,38 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       - name: fuelsphere-auth
+<<<<<<< HEAD
       - name: fuelsphere-html5-repo-runtime
+=======
+      - name: fuelsphere-html5-repo-rt
+
+  # ==================== HTML5 LANDING APP ====================
+  - name: fuelsphere-landing
+    type: html5
+    path: app/landing
+    build-parameters:
+      build-result: webapp
+      builder: custom
+      commands:
+        - npm install --production
+      supported-platforms: []
+
+  # ==================== HTML5 DEPLOYER ====================
+  - name: fuelsphere-ui-deployer
+    type: com.sap.application.content
+    path: app/html5-deployer
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: fuelsphere-landing
+          artifacts:
+            - ./*
+          target-path: resources/fuelsphere-landing
+>>>>>>> main/claude/fix-html-node-btp-Fba55
 
   # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
@@ -119,6 +150,19 @@ resources:
       service-plan: hdi-shared
     properties:
       hdi-service-name: ${service-name}
+
+  # ==================== HTML5 APPS REPOSITORY ====================
+  - name: fuelsphere-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+
+  - name: fuelsphere-html5-repo-rt
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
 
   # ==================== XSUAA ====================
   - name: fuelsphere-auth
