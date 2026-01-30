@@ -34,38 +34,7 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       - name: fuelsphere-auth
-<<<<<<< HEAD
       - name: fuelsphere-html5-repo-runtime
-=======
-      - name: fuelsphere-html5-repo-rt
-
-  # ==================== HTML5 LANDING APP ====================
-  - name: fuelsphere-landing
-    type: html5
-    path: app/landing
-    build-parameters:
-      build-result: webapp
-      builder: custom
-      commands:
-        - npm install --production
-      supported-platforms: []
-
-  # ==================== HTML5 DEPLOYER ====================
-  - name: fuelsphere-ui-deployer
-    type: com.sap.application.content
-    path: app/html5-deployer
-    requires:
-      - name: fuelsphere-html5-repo-host
-        parameters:
-          content-target: true
-    build-parameters:
-      build-result: resources
-      requires:
-        - name: fuelsphere-landing
-          artifacts:
-            - ./*
-          target-path: resources/fuelsphere-landing
->>>>>>> main/claude/fix-html-node-btp-Fba55
 
   # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
