@@ -1,0 +1,16 @@
+{
+  "_version": "1.21.0",
+  "sap.app": {
+    "id": "fuelsphere.landing",
+    "type": "application",
+    "applicationVersion": {
+      "version": "1.0.0"
+    },
+    "title": "FuelSphere",
+    "description": "FuelSphere - Airline Fuel Lifecycle Management"
+  },
+  "sap.cloud": {
+    "public": true,
+    "service": "fuelsphere"
+  }
+}
