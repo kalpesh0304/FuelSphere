@@ -1,5 +1,5 @@
 {
-    "welcomeFile": "/airports/webapp/index.html",
+    "welcomeFile": "/fuelsphere.airports/index.html",
     "authenticationMethod": "route",
     "sessionTimeout": 60,
     "routes": [
@@ -11,9 +11,15 @@
             "csrfProtection": true
         },
         {
+            "source": "^/fuelsphere\\.airports/(.*)$",
+            "target": "/fuelsphere.airports/$1",
+            "service": "html5-apps-repo-rt",
+            "authenticationType": "xsuaa"
+        },
+        {
             "source": "^(.*)$",
             "target": "/$1",
-            "localDir": ".",
+            "service": "html5-apps-repo-rt",
             "authenticationType": "xsuaa"
         }
     ]

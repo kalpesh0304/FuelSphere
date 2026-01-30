@@ -34,6 +34,7 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       - name: fuelsphere-auth
+      - name: fuelsphere-html5-repo-runtime
 
   # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
@@ -68,7 +69,48 @@ modules:
     requires:
       - name: fuelsphere-db
 
+  # ==================== HTML5 APP DEPLOYER ====================
+  - name: fuelsphere-ui-deployer
+    type: com.sap.application.content
+    path: deployer
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: fuelsphere-airports-build
+          artifacts:
+            - fuelsphere-airports.zip
+          target-path: resources/
+
+  # ==================== UI5 APP BUILD ====================
+  - name: fuelsphere-airports-build
+    type: html5
+    path: app/airports
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npx ui5 build preload --clean-dest --config ui5-deploy.yaml --include-task=generateManifestBundle generateCachebusterInfo ui5-task-zipper
+      supported-platforms: []
+
 resources:
+  # ==================== HTML5 APPLICATION REPOSITORY ====================
+  - name: fuelsphere-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+
+  - name: fuelsphere-html5-repo-runtime
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
+
   # ==================== HDI CONTAINER ====================
   - name: fuelsphere-db
     type: com.sap.xs.hdi-container
