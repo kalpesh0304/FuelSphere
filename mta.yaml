@@ -106,6 +106,7 @@ modules:
       commands:
         - npm install
         - npm run build
+        - mkdir -p ../../deployer/resources && cp dist/fuelsphereairports.zip ../../deployer/resources/
       supported-platforms: []
 
 resources:
