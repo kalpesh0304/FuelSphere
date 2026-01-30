@@ -67,29 +67,19 @@ modules:
 
   # ==================== HTML5 APP DEPLOYER ====================
   - name: fuelsphere-ui-deployer
-    type: nodejs
-    path: deployer
-    parameters:
-      buildpack: nodejs_buildpack
-      memory: 256M
-      disk-quota: 512M
-      no-route: true
-      no-start: true
-      tasks:
-        - name: deploy-content
-          command: npm start
-          memory: 256M
+    type: com.sap.application.content
+    path: .
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
     build-parameters:
-      builder: custom
-      commands:
-        - npm install --production
+      build-result: resources
       requires:
         - name: fuelsphere-airports-app
           artifacts:
             - fuelsphereairports.zip
           target-path: resources/
-    requires:
-      - name: fuelsphere-html5-repo-host
 
   # ==================== AIRPORTS APP MODULE ====================
   - name: fuelsphere-airports-app
