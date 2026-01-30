@@ -10,7 +10,7 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
-        - npm install --production
+        - npm install --production --ignore-scripts
         - npx cds build --production
 
 modules:
@@ -23,7 +23,9 @@ modules:
       memory: 256M
       disk-quota: 512M
     build-parameters:
-      builder: npm
+      builder: custom
+      commands:
+        - npm install --production --ignore-scripts --no-audit --no-fund
     requires:
       - name: srv-api
         group: destinations
@@ -42,7 +44,9 @@ modules:
       memory: 512M
       disk-quota: 1024M
     build-parameters:
-      builder: npm
+      builder: custom
+      commands:
+        - npm install --production --ignore-scripts --no-audit --no-fund
     provides:
       - name: srv-api
         properties:
@@ -82,7 +86,7 @@ resources:
       service-plan: application
       path: ./xs-security.json
       config:
-        xsappname: fuelsphere-${org}-${space}
+        xsappname: fuelsphere-${space}
         tenant-mode: dedicated
         oauth2-configuration:
           redirect-uris:

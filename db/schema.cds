@@ -830,7 +830,7 @@ type DemandCalculationMethod : String(20) enum {
  * Key Capability: SAP Analytics Cloud (SAC) writeback for financial planning
  */
 entity PLANNING_VERSION : cuid, AuditTrail {
-        version_id          : String(20) @mandatory;      // PV-{TYPE}-{YEAR}-{SEQ}
+        version_id          : String(50) @mandatory;      // PV-{TYPE}-{YEAR}-{SEQ}
         version_name        : String(100) @mandatory;     // Display name
         version_type        : PlanningVersionType @mandatory; // BUDGET / FORECAST / SCENARIO
         fiscal_year         : String(4) @mandatory;       // Fiscal year (e.g., 2026)
@@ -1520,7 +1520,7 @@ entity COMPLIANCE_CHECKS : cuid {
  * Requires dual approval: Compliance Officer + Legal Counsel (for sanctions)
  */
 entity COMPLIANCE_EXCEPTIONS : cuid, AuditTrail {
-        exception_number    : String(20) @mandatory;      // EXC-{YYYY}-{SEQ}
+        exception_number    : String(50) @mandatory;      // EXC-{YYYY}-{SEQ}
         compliance_check    : Association to COMPLIANCE_CHECKS @mandatory; // Original blocking check
 
         // Request Details
@@ -1988,9 +1988,9 @@ entity ALLOCATION_RULES : cuid, ActiveStatus, AuditTrail {
 
         // Settlement Receiver
         settlement_receiver : SettlementReceiverType @mandatory; // COST_CENTER, PROFIT_CENTER, etc.
-        default_cost_center : String(10);                 // Default cost center
-        default_profit_center : String(10);               // Default profit center
-        default_internal_order : String(12);              // Default internal order
+        default_cost_center : String(20);                 // Default cost center
+        default_profit_center : String(20);               // Default profit center
+        default_internal_order : String(20);              // Default internal order
 
         // G/L Account
         gl_account          : String(10) @mandatory;      // G/L Account for posting
@@ -2011,7 +2011,7 @@ entity ALLOCATION_RULES : cuid, ActiveStatus, AuditTrail {
  * Tracks execution of period-end allocation runs
  */
 entity ALLOCATION_RUNS : cuid, AuditTrail {
-        run_number          : String(20) @mandatory;      // RUN-{PERIOD}-{SEQ}
+        run_number          : String(50) @mandatory;      // RUN-{PERIOD}-{SEQ}
         run_name            : String(100);                // Run description
 
         // Run Scope
@@ -2065,9 +2065,9 @@ entity COST_CENTER_MAPPING : cuid, ActiveStatus, AuditTrail {
         company_code        : String(4) @mandatory;       // SAP Company Code
 
         // Cost Objects
-        cost_center         : String(10) @mandatory;      // S/4HANA Cost Center
+        cost_center         : String(20) @mandatory;      // S/4HANA Cost Center
         cost_center_name    : String(40);                 // Cost center description
-        profit_center       : String(10);                 // S/4HANA Profit Center
+        profit_center       : String(20);                 // S/4HANA Profit Center
         profit_center_name  : String(40);                 // Profit center description
 
         // Validity
@@ -2086,7 +2086,7 @@ entity COST_CENTER_MAPPING : cuid, ActiveStatus, AuditTrail {
  * Tracks accrual entries for uninvoiced deliveries at period-end
  */
 entity ACCRUAL_ENTRIES : cuid, AuditTrail {
-        accrual_number      : String(20) @mandatory;      // ACC-{PERIOD}-{SEQ}
+        accrual_number      : String(50) @mandatory;      // ACC-{PERIOD}-{SEQ}
 
         // Period
         period              : String(7) @mandatory;       // Fiscal period (YYYY-MM)
@@ -3729,7 +3729,7 @@ entity PRICING_CONFIGURATIONS : cuid, ActiveStatus, AuditTrail {
  */
 entity PRICING_FORMULAS : cuid, AuditTrail {
         // Formula Identification
-        formula_id          : String(20) @mandatory;         // FRM-{SEQ}
+        formula_id          : String(50) @mandatory;         // FRM-{SEQ}
         formula_name        : String(100) @mandatory;        // Formula display name
         formula_description : String(500);                   // Detailed description
 
