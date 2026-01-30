@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "_version": "1.59.0",
     "sap.app": {
         "id": "fuelsphere.airports",
@@ -140,34 +139,4 @@
         "public": true,
         "service": "fuelsphere"
     }
-=======
-  "_version": "1.21.0",
-  "sap.app": {
-    "id": "fuelsphere.airports",
-    "type": "application",
-    "applicationVersion": {
-      "version": "1.0.0"
-    },
-    "title": "Airports",
-    "description": "FuelSphere Airports Management"
-  },
-  "sap.cloud": {
-    "public": true,
-    "service": "fuelsphere"
-  },
-  "sap.ui5": {
-    "rootView": {
-      "viewName": "fuelsphere.airports.view.App",
-      "type": "XML",
-      "id": "app"
-    },
-    "dependencies": {
-      "minUI5Version": "1.120.0",
-      "libs": {
-        "sap.m": {},
-        "sap.ui.core": {}
-      }
-    }
-  }
->>>>>>> main/claude/fix-html-node-btp-Fba55
 }

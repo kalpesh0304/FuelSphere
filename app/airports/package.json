@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "name": "fuelsphere-airports",
     "version": "1.0.0",
     "description": "Airport Master Data - SAP Fiori Elements List Report",
@@ -32,16 +31,4 @@
         ]
     },
     "sapuxLayer": "CUSTOMER_BASE"
-=======
-  "name": "fuelsphere-airports",
-  "version": "1.0.0",
-  "description": "FuelSphere Airports Management",
-  "scripts": {
-    "build": "ui5 build preload --clean-dest --dest dist/webapp && cd dist && bestzip fuelsphereairports.zip webapp/*"
-  },
-  "devDependencies": {
-    "@ui5/cli": "^3",
-    "bestzip": "^2.2.1"
-  }
->>>>>>> main/claude/fix-html-node-btp-Fba55
 }

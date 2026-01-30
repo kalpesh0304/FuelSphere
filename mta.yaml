@@ -35,10 +35,7 @@ modules:
       - name: fuelsphere-auth
       - name: fuelsphere-html5-repo-runtime
 
-<<<<<<< HEAD
   # ==================== SERVER MODULE ====================
-=======
->>>>>>> main/claude/fix-html-node-btp-Fba55
   - name: fuelsphere-srv
     type: nodejs
     path: gen/srv
@@ -70,7 +67,6 @@ modules:
     requires:
       - name: fuelsphere-db
 
-<<<<<<< HEAD
   # ==================== HTML5 APP DEPLOYER ====================
   - name: fuelsphere-ui-deployer
     type: nodejs
@@ -100,8 +96,6 @@ modules:
       - name: fuelsphere-html5-repo-host
 
   # ==================== AIRPORTS APP MODULE ====================
-=======
->>>>>>> main/claude/fix-html-node-btp-Fba55
   - name: fuelsphere-airports-app
     type: html5
     path: app/airports
@@ -111,29 +105,9 @@ modules:
       commands:
         - npm install
         - npm run build
-<<<<<<< HEAD
         - mkdir -p ../../deployer/resources && cp dist/fuelsphereairports.zip ../../deployer/resources/
       supported-platforms: []
 
-=======
-      supported-platforms: []
-
-  - name: fuelsphere-ui-deployer
-    type: com.sap.application.content
-    path: deployer
-    requires:
-      - name: fuelsphere-html5-repo-host
-        parameters:
-          content-target: true
-    build-parameters:
-      build-result: resources
-      requires:
-        - name: fuelsphere-airports-app
-          artifacts:
-            - fuelsphereairports.zip
-          target-path: resources/
-
->>>>>>> main/claude/fix-html-node-btp-Fba55
 resources:
   - name: fuelsphere-db
     type: com.sap.xs.hdi-container
@@ -181,14 +155,14 @@ resources:
       service-plan: lite
 
   # ==================== HTML5 APPLICATION REPOSITORY ====================
-  - name: fuelsphere-html5-repo-host
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-host
+  # - name: fuelsphere-html5-repo-host
+  #   type: org.cloudfoundry.managed-service
+  #   parameters:
+  #     service: html5-apps-repo
+  #     service-plan: app-host
 
-  - name: fuelsphere-html5-repo-runtime
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-runtime
+  # - name: fuelsphere-html5-repo-runtime
+  #   type: org.cloudfoundry.managed-service
+  #   parameters:
+  #     service: html5-apps-repo
+  #     service-plan: app-runtime

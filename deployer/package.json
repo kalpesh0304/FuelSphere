@@ -1,19 +1,11 @@
 {
   "name": "fuelsphere-ui-deployer",
   "version": "1.0.0",
-<<<<<<< HEAD
-=======
-  "description": "FuelSphere HTML5 Application Deployer",
->>>>>>> main/claude/fix-html-node-btp-Fba55
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@sap/html5-app-deployer": "^5"
-=======
-    "@sap/html5-app-deployer": "^7"
->>>>>>> main/claude/fix-html-node-btp-Fba55
   },
   "scripts": {
     "start": "node node_modules/@sap/html5-app-deployer/index.js"
