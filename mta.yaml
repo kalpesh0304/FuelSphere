@@ -68,7 +68,7 @@ modules:
   # ==================== HTML5 APP DEPLOYER ====================
   - name: fuelsphere-ui-deployer
     type: com.sap.application.content
-    path: .
+    path: deployer
     requires:
       - name: fuelsphere-html5-repo-host
         parameters:
