@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "welcomeFile": "/airports/webapp/index.html",
     "authenticationMethod": "route",
     "sessionTimeout": 60,
@@ -18,37 +17,4 @@
             "authenticationType": "xsuaa"
         }
     ]
-=======
-  "welcomeFile": "/fuelsphere.airports/index.html",
-  "authenticationMethod": "route",
-  "sessionTimeout": 60,
-  "routes": [
-    {
-      "source": "^/$",
-      "target": "/fuelsphere.airports/index.html",
-      "service": "html5-apps-repo-rt",
-      "authenticationType": "xsuaa"
-    },
-    {
-      "source": "^/odata/v4/(.*)$",
-      "target": "/odata/v4/$1",
-      "destination": "srv-api",
-      "authenticationType": "xsuaa",
-      "csrfProtection": true
-    },
-    {
-      "source": "^/api/(.*)$",
-      "target": "/api/$1",
-      "destination": "srv-api",
-      "authenticationType": "xsuaa",
-      "csrfProtection": true
-    },
-    {
-      "source": "^(.*)$",
-      "target": "$1",
-      "service": "html5-apps-repo-rt",
-      "authenticationType": "xsuaa"
-    }
-  ]
->>>>>>> main/claude/fix-html5-app-deployment-3rJx2
 }
