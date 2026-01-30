@@ -14,7 +14,6 @@ build-parameters:
         - npx cds build --production
 
 modules:
-  # ==================== APPLICATION ROUTER ====================
   - name: fuelsphere-approuter
     type: approuter.nodejs
     path: app/router
@@ -34,36 +33,8 @@ modules:
           url: ~{srv-url}
           forwardAuthToken: true
       - name: fuelsphere-auth
-      - name: fuelsphere-html5-repo-rt
+      - name: fuelsphere-html5-repo-runtime
 
-  # ==================== HTML5 LANDING APP ====================
-  - name: fuelsphere-landing
-    type: html5
-    path: app/landing
-    build-parameters:
-      build-result: webapp
-      builder: custom
-      commands:
-        - npm install --production
-      supported-platforms: []
-
-  # ==================== HTML5 DEPLOYER ====================
-  - name: fuelsphere-ui-deployer
-    type: com.sap.application.content
-    path: app/html5-deployer
-    requires:
-      - name: fuelsphere-html5-repo-host
-        parameters:
-          content-target: true
-    build-parameters:
-      build-result: resources
-      requires:
-        - name: fuelsphere-landing
-          artifacts:
-            - ./*
-          target-path: resources/fuelsphere-landing
-
-  # ==================== SERVER MODULE ====================
   - name: fuelsphere-srv
     type: nodejs
     path: gen/srv
@@ -85,7 +56,6 @@ modules:
       - name: fuelsphere-destination
       - name: fuelsphere-logging
 
-  # ==================== DATABASE MODULE ====================
   - name: fuelsphere-db-deployer
     type: hdb
     path: gen/db
@@ -96,8 +66,33 @@ modules:
     requires:
       - name: fuelsphere-db
 
+  - name: fuelsphere-airports-app
+    type: html5
+    path: app/airports
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npm run build
+      supported-platforms: []
+
+  - name: fuelsphere-ui-deployer
+    type: com.sap.application.content
+    path: deployer
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: fuelsphere-airports-app
+          artifacts:
+            - fuelsphereairports.zip
+          target-path: resources/
+
 resources:
-  # ==================== HDI CONTAINER ====================
   - name: fuelsphere-db
     type: com.sap.xs.hdi-container
     parameters:
@@ -106,20 +101,18 @@ resources:
     properties:
       hdi-service-name: ${service-name}
 
-  # ==================== HTML5 APPS REPOSITORY ====================
   - name: fuelsphere-html5-repo-host
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-host
 
-  - name: fuelsphere-html5-repo-rt
+  - name: fuelsphere-html5-repo-runtime
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-runtime
 
-  # ==================== XSUAA ====================
   - name: fuelsphere-auth
     type: org.cloudfoundry.managed-service
     parameters:
@@ -133,29 +126,12 @@ resources:
           redirect-uris:
             - https://*.${default-domain}/**
 
-  # ==================== DESTINATION SERVICE ====================
   - name: fuelsphere-destination
     type: org.cloudfoundry.managed-service
     parameters:
       service: destination
       service-plan: lite
-      config:
-        init_data:
-          instance:
-            existing_destinations_policy: update
-            destinations:
-              - Name: S4HC_TECHNICAL
-                Type: HTTP
-                ProxyType: Internet
-                Authentication: OAuth2ClientCredentials
-                Description: S/4HANA Cloud Technical User
-              - Name: S4HC_USER
-                Type: HTTP
-                ProxyType: Internet
-                Authentication: OAuth2SAMLBearerAssertion
-                Description: S/4HANA Cloud Principal Propagation
 
-  # ==================== APPLICATION LOGGING ====================
   - name: fuelsphere-logging
     type: org.cloudfoundry.managed-service
     parameters:

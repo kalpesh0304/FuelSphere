@@ -1,0 +1,12 @@
+{
+  "name": "fuelsphere-airports",
+  "version": "1.0.0",
+  "description": "FuelSphere Airports Management",
+  "scripts": {
+    "build": "ui5 build preload --clean-dest --dest dist/webapp && cd dist && bestzip fuelsphereairports.zip webapp/*"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^3",
+    "bestzip": "^2.2.1"
+  }
+}

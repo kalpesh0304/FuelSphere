@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "FuelSphere HTML5 Application Deployer",
   "engines": {
-    "node": "^18 || ^20 || ^22"
+    "node": ">=18"
   },
   "dependencies": {
     "@sap/html5-app-deployer": "^7"
