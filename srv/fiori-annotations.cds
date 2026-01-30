@@ -201,9 +201,9 @@ annotate service.Airports with {
     modified_by     @title: 'Modified By';
 };
 
-// Value Help for Country
+// Value Help for Country and Plant
 annotate service.Airports with {
-    country @(
+    country_code @(
         Common: {
             Text: country.landx,
             TextArrangement: #TextFirst,
@@ -214,6 +214,21 @@ annotate service.Airports with {
                     { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: country_code, ValueListProperty: 'land1' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'landx' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'landgr' }
+                ]
+            }
+        }
+    );
+    s4_plant_code @(
+        Common: {
+            Text: plant.name1,
+            TextArrangement: #TextFirst,
+            ValueList: {
+                Label: 'Plants',
+                CollectionPath: 'Plants',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: s4_plant_code, ValueListProperty: 'werks' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name1' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ort01' }
                 ]
             }
         }
@@ -373,7 +388,7 @@ annotate service.Aircraft with {
 
 // Value Help for Manufacturer
 annotate service.Aircraft with {
-    manufacturer @(
+    manufacturer_code @(
         Common: {
             Text: manufacturer.manufacture_name,
             TextArrangement: #TextFirst,
@@ -569,7 +584,7 @@ annotate service.Routes with {
 
 // Value Help for Origin/Destination
 annotate service.Routes with {
-    origin @(
+    origin_airport @(
         Common: {
             Text: origin.airport_name,
             TextArrangement: #TextFirst,
@@ -585,7 +600,7 @@ annotate service.Routes with {
         }
     );
 
-    destination @(
+    destination_airport @(
         Common: {
             Text: destination.airport_name,
             TextArrangement: #TextFirst,
@@ -1071,7 +1086,7 @@ annotate service.Contracts with {
 
 // Value Help for Contract associations
 annotate service.Contracts with {
-    supplier @(
+    supplier_ID @(
         Common: {
             Text: supplier.supplier_name,
             TextArrangement: #TextFirst,
@@ -1087,7 +1102,7 @@ annotate service.Contracts with {
         }
     );
 
-    currency @(
+    currency_code @(
         Common: {
             Text: currency.currency_name,
             TextArrangement: #TextFirst,
