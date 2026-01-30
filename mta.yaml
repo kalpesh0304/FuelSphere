@@ -84,7 +84,10 @@ modules:
           command: npm start
           memory: 256M
     build-parameters:
-      builder: npm
+      builder: custom
+      commands:
+        - npm install --production
+        - echo "Checking resources folder:" && ls -la resources/
       requires:
         - name: fuelsphere-airports-app
           artifacts:
