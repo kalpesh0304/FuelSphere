@@ -14,7 +14,6 @@ build-parameters:
         - npx cds build --production
 
 modules:
-  # ==================== APPLICATION ROUTER ====================
   - name: fuelsphere-approuter
     type: approuter.nodejs
     path: app/router
@@ -36,7 +35,10 @@ modules:
       - name: fuelsphere-auth
       - name: fuelsphere-html5-repo-runtime
 
+<<<<<<< HEAD
   # ==================== SERVER MODULE ====================
+=======
+>>>>>>> main/claude/fix-html-node-btp-Fba55
   - name: fuelsphere-srv
     type: nodejs
     path: gen/srv
@@ -58,7 +60,6 @@ modules:
       - name: fuelsphere-destination
       - name: fuelsphere-logging
 
-  # ==================== DATABASE MODULE ====================
   - name: fuelsphere-db-deployer
     type: hdb
     path: gen/db
@@ -69,6 +70,7 @@ modules:
     requires:
       - name: fuelsphere-db
 
+<<<<<<< HEAD
   # ==================== HTML5 APP DEPLOYER ====================
   - name: fuelsphere-ui-deployer
     type: nodejs
@@ -98,6 +100,8 @@ modules:
       - name: fuelsphere-html5-repo-host
 
   # ==================== AIRPORTS APP MODULE ====================
+=======
+>>>>>>> main/claude/fix-html-node-btp-Fba55
   - name: fuelsphere-airports-app
     type: html5
     path: app/airports
@@ -107,11 +111,30 @@ modules:
       commands:
         - npm install
         - npm run build
+<<<<<<< HEAD
         - mkdir -p ../../deployer/resources && cp dist/fuelsphereairports.zip ../../deployer/resources/
       supported-platforms: []
 
+=======
+      supported-platforms: []
+
+  - name: fuelsphere-ui-deployer
+    type: com.sap.application.content
+    path: deployer
+    requires:
+      - name: fuelsphere-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: resources
+      requires:
+        - name: fuelsphere-airports-app
+          artifacts:
+            - fuelsphereairports.zip
+          target-path: resources/
+
+>>>>>>> main/claude/fix-html-node-btp-Fba55
 resources:
-  # ==================== HDI CONTAINER ====================
   - name: fuelsphere-db
     type: com.sap.xs.hdi-container
     parameters:
@@ -120,20 +143,18 @@ resources:
     properties:
       hdi-service-name: ${service-name}
 
-  # ==================== HTML5 APPS REPOSITORY ====================
   - name: fuelsphere-html5-repo-host
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-host
 
-  - name: fuelsphere-html5-repo-rt
+  - name: fuelsphere-html5-repo-runtime
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-runtime
 
-  # ==================== XSUAA ====================
   - name: fuelsphere-auth
     type: org.cloudfoundry.managed-service
     parameters:
@@ -147,29 +168,12 @@ resources:
           redirect-uris:
             - https://*.${default-domain}/**
 
-  # ==================== DESTINATION SERVICE ====================
   - name: fuelsphere-destination
     type: org.cloudfoundry.managed-service
     parameters:
       service: destination
       service-plan: lite
-      config:
-        init_data:
-          instance:
-            existing_destinations_policy: update
-            destinations:
-              - Name: S4HC_TECHNICAL
-                Type: HTTP
-                ProxyType: Internet
-                Authentication: OAuth2ClientCredentials
-                Description: S/4HANA Cloud Technical User
-              - Name: S4HC_USER
-                Type: HTTP
-                ProxyType: Internet
-                Authentication: OAuth2SAMLBearerAssertion
-                Description: S/4HANA Cloud Principal Propagation
 
-  # ==================== APPLICATION LOGGING ====================
   - name: fuelsphere-logging
     type: org.cloudfoundry.managed-service
     parameters:

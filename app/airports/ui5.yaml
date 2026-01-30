@@ -1,6 +1,10 @@
 specVersion: "3.0"
 metadata:
+<<<<<<< HEAD
   name: fuelsphere.airports
+=======
+  name: fuelsphereairports
+>>>>>>> main/claude/fix-html-node-btp-Fba55
 type: application
 framework:
   name: SAPUI5
@@ -8,4 +12,7 @@ framework:
   libraries:
     - name: sap.m
     - name: sap.ui.core
+<<<<<<< HEAD
     - name: sap.fe.templates
+=======
+>>>>>>> main/claude/fix-html-node-btp-Fba55
