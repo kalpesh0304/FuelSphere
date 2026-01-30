@@ -83,7 +83,8 @@ modules:
       builder: custom
       commands:
         - npm install --production
-        - echo "Checking resources folder:" && ls -la resources/
+        - rm -f resources/.gitkeep
+        - echo "Resources folder contents:" && ls -la resources/
       requires:
         - name: fuelsphere-airports-app
           artifacts:
