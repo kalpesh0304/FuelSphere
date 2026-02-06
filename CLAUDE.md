@@ -2,44 +2,53 @@
 
 This file contains project-specific patterns, conventions, and context for Claude to reference during development.
 
+## Governance
+
+**Read `/GOVERNANCE.md` at the start of every session.** It enforces mandatory gates (documentation check, user approval, previous phase completion) before any coding work begins. Key rule: always ask before starting coding work.
+
 ## Project Overview
 
 - **Name**: FuelSphere - Airline Fuel Lifecycle Management Solution
 - **Tech Stack**: SAP CAP (Node.js), SAP HANA Cloud, OData V4
 - **Target Platform**: SAP BTP (Business Technology Platform)
-- **Architecture**: CAPM Backend Only (UI in separate FuelSphere-UI project)
-- **Node.js**: Requires Node 18, 20, or 22 (NOT Node 24)
+- **Architecture**: CAPM Backend with embedded App Router (UI primarily in separate FuelSphere-UI project)
+- **Node.js**: Requires Node >= 20 (`.nvmrc` pins to 20; devcontainer uses Node 20)
 - **CDS Version**: @sap/cds ^8
-
-## Project Architecture
-
-FuelSphere follows a decoupled architecture:
-
-```
-FuelSphere/           # CAPM Backend (this project)
-├── db/               # Data model definitions (schema.cds ~185KB)
-│   └── data/         # 75+ CSV seed data files
-├── srv/              # 18 OData service definitions
-├── docs/             # Design specifications & Figma exports
-├── mta.yaml          # BTP deployment descriptor
-└── xs-security.json  # XSUAA security config (17 scopes, 9 roles)
-
-FuelSphere-UI/        # Fiori UI Applications (separate project)
-├── apps/             # Individual UI5 apps
-├── router/           # App Router
-└── mta.yaml          # UI deployment descriptor
-```
 
 ## Project Structure
 
 ```
 FuelSphere/
+├── .cdsrc.json                 # CDS config: dev users, build tasks, OData v4
+├── .devcontainer/              # VS Code devcontainer (Node 20, port 4004)
+│   └── devcontainer.json
+├── .nvmrc                      # Node version pin: 20
+├── CLAUDE.md                   # This file - AI development guide
+├── GOVERNANCE.md               # Project governance gates & approvals
+├── README.md                   # Project readme
+├── LICENSE                     # MIT license
+├── app/                        # App Router + embedded Fiori apps
+│   ├── package.json            # @sap/approuter v16
+│   ├── xs-app.json             # Route config (XSUAA auth, CSRF)
+│   └── airports/               # Fiori Elements List Report for airports
+│       ├── package.json
+│       ├── ui5.yaml / ui5-local.yaml / ui5-deploy.yaml
+│       ├── xs-app.json
+│       └── webapp/
+│           ├── index.html
+│           ├── Component.js
+│           ├── initApp.js
+│           └── i18n/i18n.properties
 ├── db/
 │   ├── schema.cds              # Complete data model (~185KB, 75+ entities)
-│   └── data/                   # 75 CSV mock data files
+│   └── data/                   # 73 CSV seed data files
 ├── srv/
+│   ├── server.js               # CDS bootstrap: static file serving for app/
+│   ├── master-data-service.js  # Handler: activeCriticality virtual element
+│   ├── order-service.js        # Handler: statusCriticality, priorityCriticality
+│   ├── ticket-service.js       # Handler: statusCriticality for tickets
 │   ├── admin-service.cds       # Administration service
-│   ├── allocation-service.cds  # Cost allocation module (FDD-09)
+│   ├── allocation-service.cds  # Cost allocation (FDD-09)
 │   ├── analytics-service.cds   # Reporting & analytics (FDD-12)
 │   ├── authorization.cds       # RBAC annotations for all services
 │   ├── burn-service.cds        # Fuel burn & ROB tracking (FDD-08)
@@ -55,21 +64,21 @@ FuelSphere/
 │   ├── planning-service.cds    # Annual planning (FDD-02)
 │   ├── pricing-service.cds     # Native pricing engine (FDD-10)
 │   ├── pricing-fiori-annotations.cds
-│   └── security-service.cds    # Security management (FDD-13)
+│   ├── security-service.cds    # Security management (FDD-13)
+│   └── ticket-service.cds      # Standalone fuel ticket management
 ├── docs/
-│   ├── original/               # 28 design documents (.docx)
+│   ├── original/               # 40 design documents (.docx, .xlsx)
 │   ├── figma/                  # 86 UI specification JSONs
-│   ├── data/                   # Data documentation
-│   └── design/                 # Design assets
-├── mta.yaml                    # BTP deployment descriptor
+│   ├── data/                   # Sample data (Excel)
+│   └── design/                 # 7 design docs (HLD, RACI, decisions, tracker)
+├── mta.yaml                    # BTP deployment descriptor (3 modules, 4 resources)
 ├── xs-security.json            # XSUAA security (17 scopes, 9 roles)
-├── .cdsrc.json                 # CDS config with dev users
 └── package.json
 ```
 
 ## OData Services
 
-All services use OData V4 protocol.
+All services use OData V4 protocol. 14 services total.
 
 | Service | Path | FDD | Description |
 |---------|------|-----|-------------|
@@ -77,6 +86,7 @@ All services use OData V4 protocol.
 | PlanningService | `/odata/v4/planning` | FDD-02 | Forecasting, budgets, SAC integration |
 | ContractsService | `/odata/v4/contracts` | FDD-03 | Contract management, CPE integration |
 | FuelOrderService | `/odata/v4/orders` | FDD-04/05 | Fuel orders, ePOD, fuel tickets |
+| TicketService | `/odata/v4/tickets` | FDD-05 | Standalone fuel ticket management |
 | InvoiceService | `/odata/v4/invoice` | FDD-06 | Three-way matching, approvals |
 | ComplianceService | `/odata/v4/compliance` | FDD-07 | Embargo/sanction screening |
 | BurnService | `/odata/v4/burn` | FDD-08 | Fuel burn, ROB tracking |
@@ -86,6 +96,19 @@ All services use OData V4 protocol.
 | AnalyticsService | `/odata/v4/analytics` | FDD-12 | Reports, KPIs, dashboards |
 | SecurityService | `/odata/v4/security` | FDD-13 | User management, SOD |
 | AdminService | `/odata/v4/admin` | - | System administration |
+
+## Service Handlers (JavaScript)
+
+Four JS handler files implement virtual element calculations for Fiori UI criticality coloring:
+
+| File | Entities | Logic |
+|------|----------|-------|
+| `server.js` | - | CDS bootstrap: registers Express static middleware for `app/` folder |
+| `master-data-service.js` | Manufacturers, Aircraft, Airports, Routes, Suppliers, Products, Contracts | `activeCriticality`: 3 (green) if active, 0 (red) if inactive |
+| `order-service.js` | FuelOrders, FuelDeliveries | `statusCriticality` by status (Draft=0, Submitted=2, Confirmed=3, etc.); `priorityCriticality` by priority |
+| `ticket-service.js` | FuelTickets | `statusCriticality` by ticket status (Pending=2, Verified=3, Rejected=1) |
+
+All handlers extend `cds.ApplicationService` and use `this.after(['READ'], ...)` pattern.
 
 ## Data Model Entities
 
@@ -162,10 +185,10 @@ All services use OData V4 protocol.
 | FuelPlanner | MasterDataRead, FuelOrderCreate, PlanningAccess, ReportView |
 | StationCoordinator | MasterDataRead, FuelOrderCreate, ePODCapture |
 | ProcurementSpecialist | MasterDataRead, ContractManage, ReportView |
-| FinanceController | MasterDataRead, InvoiceVerify, InvoiceApprove, FinancePost |
-| OperationsManager | FuelOrderApprove, ePODApprove, BurnDataView, BurnDataEdit |
-| IntegrationAdministrator | IntegrationMonitor |
-| SystemAdministrator | AdminAccess (full access) |
+| FinanceController | MasterDataRead, InvoiceVerify, InvoiceApprove, FinancePost, ReportView |
+| OperationsManager | MasterDataRead, BurnDataView, BurnDataEdit, FuelOrderApprove, ePODApprove, ReportView |
+| IntegrationAdministrator | MasterDataRead, IntegrationMonitor, ReportView |
+| SystemAdministrator | All 17 scopes (full access) |
 | Viewer | MasterDataRead, ReportView |
 
 ### Attributes (for row-level security)
@@ -189,12 +212,24 @@ npm run dev
 npm run build
 ```
 
+### npm Scripts
+
+| Script | Command | Purpose |
+|--------|---------|---------|
+| `start` | `cds-serve` | Production start |
+| `watch` | `cds watch` | Dev server with auto-reload |
+| `dev` | `npm rebuild; cds watch --port 4004` | Dev with rebuild on port 4004 |
+| `test` | `cds bind --exec jest --silent` | Run tests (no test files exist yet) |
+| `build` | `cds build --production` | Production build |
+| `build:mta` | `cds build --production && mbt build` | Build MTA archive |
+| `deploy` | `cds deploy` | Deploy to database |
+
 ### Test Users (.cdsrc.json)
 
 | User | Password | Roles | Attributes |
 |------|----------|-------|------------|
-| alice | (any) | FullAdmin | station=*, region=* |
-| kalpesh | (any) | FullAdmin | station=*, region=* |
+| alice | (any) | All 16 scopes (full admin) | station=*, region=* |
+| kalpesh | (any) | All 16 scopes (full admin) | station=*, region=* |
 | planner | (any) | FuelPlanner | - |
 | ops | (any) | OperationsManager, StationCoordinator | station=MNL,CEB, region=APAC |
 | finance | (any) | FinanceManager, FinanceController | - |
@@ -211,6 +246,7 @@ http://localhost:4004
 http://localhost:4004/odata/v4/master/$metadata
 http://localhost:4004/odata/v4/orders/$metadata
 http://localhost:4004/odata/v4/invoice/$metadata
+http://localhost:4004/odata/v4/tickets/$metadata
 
 # Entity data
 http://localhost:4004/odata/v4/master/Airports
@@ -220,7 +256,18 @@ http://localhost:4004/odata/v4/invoice/Invoices
 # Fiori preview
 http://localhost:4004/$fiori-preview/MasterDataService/Airports
 http://localhost:4004/$fiori-preview/FuelOrderService/FuelOrders
+
+# Embedded Fiori app
+http://localhost:4004/airports/webapp/index.html
 ```
+
+### DevContainer
+
+The project includes a `.devcontainer/devcontainer.json` for VS Code / GitHub Codespaces:
+- Node 20 image
+- Extensions: CDS Language Support, SAP Fiori Tools, ESLint
+- Auto-installs dependencies on create
+- Forwards port 4004
 
 ## Build & Deploy
 
@@ -233,9 +280,17 @@ npm install
 # Build for production
 npm run build
 
-# Build MTA archive
-mbt build
+# Build MTA archive (generates gen/db and gen/srv)
+npm run build:mta
 ```
+
+### CDS Build Configuration (.cdsrc.json)
+
+Build tasks reference all three model folders (`db`, `srv`, `app`):
+- `hana` task: builds HANA artifacts from `db/`
+- `node-cf` task: builds Node.js server from `srv/`
+
+Output goes to `gen/` directory (gitignored).
 
 ### Deploy to BTP
 
@@ -247,14 +302,22 @@ cf login -a https://api.cf.<region>.hana.ondemand.com
 cf deploy mta_archives/fuelsphere_1.0.0.mtar
 ```
 
-### BTP Services Required
+### MTA Modules (mta.yaml)
 
-| Service | Plan | Resource Name | Purpose |
-|---------|------|---------------|---------|
-| SAP HANA Cloud | hdi-shared | fuelsphere-db | Database |
-| XSUAA | application | fuelsphere-auth | Authentication |
-| Destination | lite | fuelsphere-destination | S/4HANA connectivity |
-| Application Logging | lite | fuelsphere-logging | Logs |
+| Module | Type | Path | Memory | Purpose |
+|--------|------|------|--------|---------|
+| fuelsphere-approuter | approuter.nodejs | app | 256M | App Router with XSUAA |
+| fuelsphere-srv | nodejs | gen/srv | 512M | CAP backend server |
+| fuelsphere-db-deployer | hdb | gen/db | 256M | HANA HDI deployment |
+
+### BTP Resources
+
+| Resource | Service | Plan | Purpose |
+|----------|---------|------|---------|
+| fuelsphere-db | hana | hdi-shared | HDI container |
+| fuelsphere-auth | xsuaa | application | Authentication (xs-security.json) |
+| fuelsphere-destination | destination | lite | S/4HANA connectivity |
+| fuelsphere-logging | application-logs | lite | Application logging |
 
 ## S/4HANA Integration
 
@@ -350,9 +413,20 @@ cf deploy mta_archives/fuelsphere_1.0.0.mtar
 | FPE-006 | Dual approval for high-value formulas |
 | FPE-007 | Hybrid variance threshold alerts |
 
+## Testing
+
+No automated tests exist yet. The `npm test` script is configured (`cds bind --exec jest --silent`) but no test files have been created. When adding tests:
+- Place test files alongside source or in a `test/` directory
+- Use Jest as the test framework
+- Use `@cap-js/sqlite` (already a devDependency) for in-memory testing
+
+## CI/CD
+
+No CI/CD pipelines are configured. No `.github/workflows/`, Jenkinsfile, or similar exist.
+
 ## Documentation
 
-### Foundation Documents (docs/original/)
+### Foundation Documents (docs/original/ - 40 files)
 
 | Document | Description |
 |----------|-------------|
@@ -363,8 +437,9 @@ cf deploy mta_archives/fuelsphere_1.0.0.mtar
 | FS-INT-001 | S/4HANA Integration Guide |
 | FS-INT-002 | External Systems Integration Guide |
 | FS-INT-003 | Event Messaging Specification |
-| FS-OPS-001 | Configuration Guide |
-| FS-OPS-002 | Deployment Guide |
+| FS-OPS-001 through FS-OPS-003 | Configuration, Deployment, Operations Guides |
+| FS-QA-001 through FS-QA-003 | QA specifications |
+| FS-TECH-001 through FS-TECH-006 | Technical specifications |
 
 ### Functional Design Documents (FDD)
 
@@ -383,6 +458,18 @@ cf deploy mta_archives/fuelsphere_1.0.0.mtar
 | FDD-12 | Analytics | Reporting & Analytics |
 | FDD-13 | Security | Security Management |
 
+### Design Documents (docs/design/ - 7 files)
+
+| File | Description |
+|------|-------------|
+| OVERALL_HLD.md | Overall high-level design |
+| MASTER_DATA_HLD.md | Master data module HLD |
+| DESIGN_DECISIONS.md | Architecture decision records |
+| PERSONA_AUTHORIZATION_MATRIX.md | Role-permission mapping |
+| RACI.md | Responsibility matrix |
+| PROJECT_TRACKER.md | Project progress tracking |
+| SESSION_CONTEXT.md | Session context for continuity |
+
 ### Reading .docx Files
 
 Claude cannot read `.docx` files directly. Extract text using:
@@ -393,22 +480,23 @@ unzip -p <file.docx> word/document.xml | sed -e 's/<[^>]*>//g' | tr -s ' \n'
 
 ### Figma Specifications
 
-86 UI specification JSON files in `docs/figma/` for each screen/dialog.
+86 UI specification JSON files in `docs/figma/` covering all screens and dialogs across all modules.
 
 ## File Naming Conventions
 
 | Type | Convention | Example |
 |------|------------|---------|
-| CDS files | kebab-case.cds | `order-service.cds` |
+| CDS service files | kebab-case.cds | `order-service.cds` |
+| CDS annotation files | kebab-case-fiori-annotations.cds | `pricing-fiori-annotations.cds` |
+| JS service handlers | matching-service-name.js | `order-service.js` |
 | CSV data | namespace-ENTITY_NAME.csv | `fuelsphere-MASTER_AIRPORTS.csv` |
-| JS handlers | entity-name.js | `fuel-orders.js` |
 | FDD docs | FDD-##-HLD_Module_Name_v#_#.docx | `FDD-06-HLD_Invoice_Verification_v1_0.docx` |
 
 ## Common Issues & Solutions
 
 ### Node.js Version
 
-SAP CAP supports Node 18, 20, 22. NOT Node 24.
+Package.json requires `>=20`. DevContainer and `.nvmrc` pin to Node 20.
 
 ```bash
 # Check version
@@ -426,7 +514,7 @@ npm rebuild
 1. Check server is running: `curl http://localhost:4004`
 2. Use VS Code Simple Browser (not external browser in Codespaces)
 3. Clear browser cache
-4. Restart server: `pkill -f "cds watch" && cds watch`
+4. Restart server: `pkill -f "cds watch" && cds watch --port 4004`
 
 ### CSV Data Loading Issues
 
@@ -434,27 +522,28 @@ npm rebuild
 - Check for trailing commas or whitespace
 - Validate date formats: YYYY-MM-DD
 - UUID fields must have valid UUIDs or be empty
+- 73 CSV files total in `db/data/`
 
 ## Key Business Processes
 
 ### Fuel Order Lifecycle
 
 ```
-Draft → Submitted → Confirmed → InProgress → Delivered → Completed
-                                     ↓
-                              Signatures captured (ePOD)
-                                     ↓
-                            S/4HANA PO/GR created
+Draft -> Submitted -> Confirmed -> InProgress -> Delivered -> Completed
+                                       |
+                                Signatures captured (ePOD)
+                                       |
+                              S/4HANA PO/GR created
 ```
 
 ### Invoice Verification Flow
 
 ```
-Draft → Submitted → Three-Way Match → Verified → Approved → Posted
-                           ↓
-                    Exception Queue
-                           ↓
-                   Finance Manager Review
+Draft -> Submitted -> Three-Way Match -> Verified -> Approved -> Posted
+                            |
+                     Exception Queue
+                            |
+                    Finance Manager Review
 ```
 
 ### ROB Calculation
