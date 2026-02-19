@@ -6,13 +6,6 @@ description: "FuelSphere - CAPM Backend for Airline Fuel Lifecycle Management"
 parameters:
   enable-parallel-deployments: true
 
-build-parameters:
-  before-all:
-    - builder: custom
-      commands:
-        - npm install --production --ignore-scripts
-        - npx cds build --production
-
 modules:
   # ==================== APPLICATION ROUTER ====================
   - name: fuelsphere-approuter
@@ -41,8 +34,8 @@ modules:
     path: gen/srv
     parameters:
       buildpack: nodejs_buildpack
-      memory: 512M
-      disk-quota: 1024M
+      memory: 1024M
+      disk-quota: 2048M
     build-parameters:
       builder: custom
       commands:

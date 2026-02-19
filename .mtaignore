@@ -1,0 +1,9 @@
+# Node dependencies (installed during CF staging)
+**/node_modules/**
+
+# CAP local development artifacts
+**/.cds-gen/**
+
+# Local / OS specific files
+**/.env
+**/.DS_Store
