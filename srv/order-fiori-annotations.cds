@@ -1172,3 +1172,269 @@ annotate FuelOrderService.Suppliers with {
     address         @title: 'Address';
     city            @title: 'City';
 };
+
+// ============================================================================
+// FUEL CALCULATIONS - Fuel Log Screen (Flight Dispatch Integration)
+// Screen #2 in Fuel Order lifecycle
+// ============================================================================
+
+annotate FuelOrderService.FuelCalculations with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: false },
+        UpdateRestrictions: { Updatable: false },
+        DeleteRestrictions: { Deletable: false }
+    }
+);
+
+annotate FuelOrderService.FuelCalculations with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Calculation',
+            TypeNamePlural : 'Fuel Calculations',
+            Title          : { Value: calculation_number },
+            Description    : { Value: departure_station }
+        },
+
+        SelectionFields: [
+            calculation_number,
+            departure_station,
+            arrival_station,
+            flight_date,
+            calculation_status,
+            compliance_status
+        ],
+
+        LineItem: [
+            { Value: calculation_number, Label: 'Calculation ID', ![@UI.Importance]: #High },
+            { Value: departure_station, Label: 'From', ![@UI.Importance]: #High },
+            { Value: arrival_station, Label: 'To', ![@UI.Importance]: #High },
+            { Value: aircraft_registration, Label: 'Tail', ![@UI.Importance]: #High },
+            { Value: aircraft_type_name, Label: 'Aircraft Type', ![@UI.Importance]: #Medium },
+            { Value: flight_date, Label: 'Flight Date', ![@UI.Importance]: #High },
+            { Value: total_required, Label: 'Total Required (kg)', ![@UI.Importance]: #High },
+            { Value: rob_departure, Label: 'ROB Departure (kg)', ![@UI.Importance]: #Medium },
+            { Value: uplift_needed, Label: 'Uplift Needed (kg)', ![@UI.Importance]: #High },
+            { Value: calculation_status, Label: 'Status', Criticality: calculationStatusCriticality, ![@UI.Importance]: #High },
+            { Value: compliance_status, Label: 'Compliance', Criticality: complianceStatusCriticality, ![@UI.Importance]: #Medium }
+        ],
+
+        PresentationVariant: {
+            SortOrder: [{ Property: calculation_date, Descending: true }],
+            Visualizations: [ '@UI.LineItem' ]
+        },
+
+        // Object Page Header
+        HeaderFacets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#UpliftNeeded',
+                Label  : 'Uplift Needed'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#TotalRequired',
+                Label  : 'Total Required'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#ROBDeparture',
+                Label  : 'ROB Departure'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#CalcMeta',
+                Label  : 'Calculation Info'
+            }
+        ],
+
+        DataPoint#UpliftNeeded: {
+            Value: uplift_needed,
+            Title: 'Uplift Needed (kg)'
+        },
+
+        DataPoint#TotalRequired: {
+            Value: total_required,
+            Title: 'Total Required (kg)'
+        },
+
+        DataPoint#ROBDeparture: {
+            Value: rob_departure,
+            Title: 'ROB Departure (kg)'
+        },
+
+        FieldGroup#CalcMeta: {
+            Data: [
+                { Value: calculation_source, Label: 'Source' },
+                { Value: calculation_date, Label: 'Calculated' },
+                { Value: performance_time_sec, Label: 'Performance (sec)' }
+            ]
+        },
+
+        // Object Page Facets (5 sections matching Fuel Log TSX)
+        Facets: [
+            // Section 1: Input Data
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'InputData',
+                Label  : 'Input Data',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'ROBInput',
+                        Label  : 'ROB & Route',
+                        Target : '@UI.FieldGroup#ROBInput'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'AircraftAlternate',
+                        Label  : 'Aircraft & Alternate',
+                        Target : '@UI.FieldGroup#AircraftAlternate'
+                    }
+                ]
+            },
+            // Section 2: Fuel Calculation Breakdown
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FuelBreakdown',
+                Label  : 'Fuel Calculation Breakdown',
+                Target : '@UI.FieldGroup#FuelBreakdown'
+            },
+            // Section 3: Flight Details
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightParams',
+                Label  : 'Flight Details',
+                Target : '@UI.FieldGroup#FlightParams'
+            },
+            // Section 4: Weather Snapshot
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'WeatherSnapshot',
+                Label  : 'Weather Snapshot',
+                Target : '@UI.FieldGroup#WeatherSnapshot'
+            },
+            // Section 5: Regulatory Compliance
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'RegulatoryCompliance',
+                Label  : 'Regulatory Compliance',
+                Target : '@UI.FieldGroup#RegulatoryCompliance'
+            }
+        ],
+
+        // FieldGroups for Fuel Calculations
+
+        FieldGroup#ROBInput: {
+            Label: 'ROB & Route',
+            Data: [
+                { Value: rob_departure, Label: 'ROB Departure (kg)' },
+                { Value: rob_source, Label: 'ROB Source' },
+                { Value: departure_station, Label: 'Departure' },
+                { Value: arrival_station, Label: 'Arrival' },
+                { Value: distance_km, Label: 'Distance (km)' }
+            ]
+        },
+
+        FieldGroup#AircraftAlternate: {
+            Label: 'Aircraft & Alternate',
+            Data: [
+                { Value: aircraft_registration, Label: 'Aircraft Registration' },
+                { Value: aircraft_type_name, Label: 'Aircraft Type' },
+                { Value: alternate_airport, Label: 'Alternate Airport' },
+                { Value: alternate_distance_km, Label: 'Alternate Distance (km)' },
+                { Value: alternate_flight_time_mins, Label: 'Alternate Flight Time (min)' }
+            ]
+        },
+
+        FieldGroup#FuelBreakdown: {
+            Label: 'Fuel Calculation Breakdown',
+            Data: [
+                { Value: trip_fuel, Label: 'Trip Fuel (kg)' },
+                { Value: contingency_fuel, Label: 'Contingency Fuel (kg)' },
+                { Value: contingency_percent, Label: 'Contingency %' },
+                { Value: alternate_fuel, Label: 'Alternate Fuel (kg)' },
+                { Value: final_reserve, Label: 'Final Reserve (kg)' },
+                { Value: final_reserve_minutes, Label: 'Final Reserve (min)' },
+                { Value: additional_fuel, Label: 'Additional/Discretionary (kg)' },
+                { Value: total_required, Label: 'Total Required (kg)' },
+                { Value: rob_departure, Label: 'Less: ROB Departure (kg)' },
+                { Value: uplift_needed, Label: 'UPLIFT NEEDED (kg)' }
+            ]
+        },
+
+        FieldGroup#FlightParams: {
+            Label: 'Flight Details',
+            Data: [
+                { Value: distance_km, Label: 'Distance (km)' },
+                { Value: flight_time_mins, Label: 'Flight Time (min)' },
+                { Value: cruise_altitude_ft, Label: 'Cruise Altitude (ft)' },
+                { Value: cruise_speed_kt, Label: 'Cruise Speed (kt)' },
+                { Value: wind_conditions, Label: 'Wind Conditions' },
+                { Value: cruise_temperature_c, Label: 'Temperature at Cruise (°C)' }
+            ]
+        },
+
+        FieldGroup#WeatherSnapshot: {
+            Label: 'Weather Snapshot',
+            Data: [
+                { Value: departure_weather, Label: 'Departure Weather (METAR)' },
+                { Value: arrival_weather, Label: 'Arrival Weather (METAR)' },
+                { Value: weather_last_updated, Label: 'Last Updated' }
+            ]
+        },
+
+        FieldGroup#RegulatoryCompliance: {
+            Label: 'Regulatory Compliance',
+            Data: [
+                { Value: regulatory_standard, Label: 'Regulatory Standard' },
+                { Value: compliance_status, Label: 'Compliance Status' },
+                { Value: contingency_percent, Label: 'Contingency Fuel %' },
+                { Value: final_reserve_minutes, Label: 'Final Reserve (min)' },
+                { Value: alternate_airport, Label: 'Alternate Airport' },
+                { Value: alternate_distance_km, Label: 'Alternate Distance (km)' },
+                { Value: alternate_flight_time_mins, Label: 'Alternate Time (min)' }
+            ]
+        }
+    }
+);
+
+// Field-level annotations for FuelCalculations
+annotate FuelOrderService.FuelCalculations with {
+    calculation_number    @title: 'Calculation ID';
+    flight_date           @title: 'Flight Date';
+    calculation_date      @title: 'Calculated At';
+    calculation_source    @title: 'Source' @Common.FieldControl: #ReadOnly;
+    trip_fuel             @title: 'Trip Fuel (kg)' @Measures.Unit: 'kg';
+    contingency_fuel      @title: 'Contingency Fuel (kg)' @Measures.Unit: 'kg';
+    contingency_percent   @title: 'Contingency %';
+    alternate_fuel        @title: 'Alternate Fuel (kg)' @Measures.Unit: 'kg';
+    final_reserve         @title: 'Final Reserve (kg)' @Measures.Unit: 'kg';
+    final_reserve_minutes @title: 'Final Reserve (min)';
+    additional_fuel       @title: 'Additional Fuel (kg)' @Measures.Unit: 'kg';
+    total_required        @title: 'Total Required (kg)' @Measures.Unit: 'kg';
+    rob_departure         @title: 'ROB Departure (kg)' @Measures.Unit: 'kg';
+    uplift_needed         @title: 'Uplift Needed (kg)' @Measures.Unit: 'kg';
+    departure_station     @title: 'Departure';
+    arrival_station       @title: 'Arrival';
+    aircraft_registration @title: 'Tail Number';
+    aircraft_type_name    @title: 'Aircraft Type';
+    distance_km           @title: 'Distance (km)';
+    flight_time_mins      @title: 'Flight Time (min)';
+    cruise_altitude_ft    @title: 'Cruise Altitude (ft)';
+    cruise_speed_kt       @title: 'Cruise Speed (kt)';
+    wind_conditions       @title: 'Wind Conditions';
+    cruise_temperature_c  @title: 'Temperature (°C)';
+    alternate_airport     @title: 'Alternate Airport';
+    alternate_distance_km @title: 'Alternate Distance (km)';
+    alternate_flight_time_mins @title: 'Alternate Time (min)';
+    departure_weather     @title: 'Departure METAR' @UI.MultiLineText;
+    arrival_weather       @title: 'Arrival METAR' @UI.MultiLineText;
+    weather_last_updated  @title: 'Weather Updated';
+    regulatory_standard   @title: 'Regulatory Standard';
+    compliance_status     @title: 'Compliance Status';
+    calculation_status    @title: 'Calculation Status';
+    warning_message       @title: 'Warning' @UI.MultiLineText;
+    error_message         @title: 'Error' @UI.MultiLineText;
+    performance_time_sec  @title: 'Performance (sec)';
+    rob_source            @title: 'ROB Source';
+};

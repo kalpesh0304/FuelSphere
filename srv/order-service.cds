@@ -44,6 +44,7 @@ service FuelOrderService {
         deliveries  : redirected to FuelDeliveries,
         tickets     : redirected to FuelTickets,
         milestones  : redirected to FuelOrderMilestones,
+        calculation : redirected to FuelCalculations,
         // Virtual elements for UI criticality coloring
         virtual null as statusCriticality   : Integer,
         virtual null as priorityCriticality : Integer,
@@ -238,6 +239,35 @@ service FuelOrderService {
     entity FuelOrderMilestones as projection on db.FUEL_ORDER_MILESTONES {
         *,
         order : redirected to FuelOrders
+    };
+
+    // ========================================================================
+    // FUEL CALCULATIONS (Flight Dispatch System - Fuel Log Screen)
+    // ========================================================================
+
+    /**
+     * FuelCalculations - Automated fuel calculations from Flight Dispatch
+     * Screen #2 in the Fuel Order lifecycle
+     *
+     * Read-write for operations; pilots view via Pilot Approval screen
+     */
+    entity FuelCalculations as projection on db.FUEL_CALCULATIONS {
+        *,
+        flight : redirected to Flights,
+        virtual null as calculationStatusCriticality : Integer,
+        virtual null as complianceStatusCriticality  : Integer
+    } actions {
+        /**
+         * Recalculate fuel requirements
+         * Re-triggers dispatch system calculation with latest data
+         */
+        action recalculate() returns FuelCalculations;
+
+        /**
+         * Send calculation to pilot for approval
+         * Transitions to Pilot Approval screen (Screen #3)
+         */
+        action sendToPilot() returns FuelCalculations;
     };
 
     // ========================================================================

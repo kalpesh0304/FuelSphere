@@ -755,6 +755,26 @@ type EPodStatus : String(20) enum {
 }
 
 /**
+ * Fuel Calculation Status Enumeration
+ * Tracks the status of dispatch fuel calculations
+ */
+type CalculationStatus : String(20) enum {
+    Success    = 'SUCCESS';
+    Warning    = 'WARNING';
+    Error      = 'ERROR';
+    InProgress = 'IN_PROGRESS';
+}
+
+/**
+ * Regulatory Compliance Status
+ */
+type ComplianceStatus : String(20) enum {
+    Compliant    = 'COMPLIANT';
+    NonCompliant = 'NON_COMPLIANT';
+    Pending      = 'PENDING';
+}
+
+/**
  * Delivery Status Enumeration
  */
 type DeliveryStatus : String(20) enum {
@@ -855,6 +875,7 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         final_approved_quantity : Decimal(12,2);        // Total pilot-approved fuel (planned + buffer)
         rob_opening         : Decimal(12,2);            // Remaining On Board at departure station (kg)
         calculation_id      : String(25);               // Dispatch calculation reference (e.g., FD-00001)
+        calculation         : Association to FUEL_CALCULATIONS;  // Link to dispatch fuel calculation
         calculation_timestamp : DateTime;               // When pilot approved/calculated
 
         // Order-level Delivery & ePOD Tracking (from FuelOrderOverview UI)
@@ -1028,6 +1049,87 @@ entity FUEL_ORDER_MILESTONES : cuid, AuditTrail {
         // Additional Details
         notes               : String(500);                   // Milestone notes/comments
         external_reference  : String(50);                    // External ref (e.g., PO number, GR number)
+}
+
+// ============================================================================
+// FUEL CALCULATIONS - Flight Dispatch System Integration (Fuel Log Screen)
+// Automated fuel calculation from Flight Dispatch System
+// Screen #2 in the Fuel Order lifecycle
+// ============================================================================
+
+/**
+ * FUEL_CALCULATIONS - Flight Dispatch Fuel Calculations
+ * Source: Flight Dispatch System via integration
+ * Volume: ~100,000/year (one per flight)
+ *
+ * Records the automated fuel calculation for a specific flight:
+ * - Fuel components: trip, contingency, alternate, final reserve, additional
+ * - Flight parameters: distance, time, altitude, speed, wind, temperature
+ * - Weather data (METAR format) for departure and arrival
+ * - Regulatory compliance (ICAO Annex 6)
+ * - ROB departure and uplift needed
+ *
+ * Formula: upliftNeeded = totalRequired - robDeparture
+ * Where:   totalRequired = tripFuel + contingencyFuel + alternateFuel + finalReserve + additionalFuel
+ */
+entity FUEL_CALCULATIONS : cuid, AuditTrail {
+        // Calculation Identification
+        calculation_number  : String(25) @mandatory;         // e.g., 'FD-00001'
+        flight              : Association to FLIGHT_SCHEDULE; // Associated flight
+        flight_date         : Date @mandatory;               // Flight date
+        calculation_date    : DateTime @mandatory;            // When calculation was performed
+        calculation_source  : String(50);                     // e.g., 'Flight Dispatch System'
+
+        // Fuel Components (all in kg)
+        trip_fuel           : Decimal(12,2);                  // Trip fuel
+        contingency_fuel    : Decimal(12,2);                  // Contingency fuel
+        contingency_percent : Decimal(5,2);                   // Contingency as % of trip (e.g., 5.0)
+        alternate_fuel      : Decimal(12,2);                  // Fuel for alternate airport
+        final_reserve       : Decimal(12,2);                  // Final reserve fuel
+        final_reserve_minutes : Integer;                      // Reserve expressed in minutes (e.g., 30)
+        additional_fuel     : Decimal(12,2);                  // Additional/discretionary fuel
+
+        // Totals (kg)
+        total_required      : Decimal(12,2);                  // Sum of all fuel components
+        rob_departure       : Decimal(12,2);                  // ROB at departure
+        uplift_needed       : Decimal(12,2);                  // = total_required - rob_departure
+
+        // Route Information
+        departure_station   : String(3);                      // IATA code
+        arrival_station     : String(3);                      // IATA code
+        aircraft_registration : String(10);                   // Tail number
+        aircraft_type_name  : String(50);                     // e.g., 'Boeing 777-300ER'
+
+        // Flight Parameters
+        distance_km         : Integer;                        // Distance in km
+        flight_time_mins    : Integer;                        // Flight time in minutes
+        cruise_altitude_ft  : Integer;                        // Cruise altitude in feet
+        cruise_speed_kt     : Integer;                        // Cruise speed in knots
+        wind_conditions     : String(100);                    // e.g., 'Headwind 35 kt'
+        cruise_temperature_c : Decimal(5,1);                  // Cruise temperature in Celsius
+
+        // Alternate Airport
+        alternate_airport   : String(3);                      // IATA code
+        alternate_distance_km : Integer;                      // Distance to alternate in km
+        alternate_flight_time_mins : Integer;                  // Time to alternate in minutes
+
+        // Weather (METAR format)
+        departure_weather   : String(200);                    // Departure METAR
+        arrival_weather     : String(200);                    // Arrival METAR
+        weather_last_updated : DateTime;                      // Weather data timestamp
+
+        // Regulatory Compliance
+        regulatory_standard : String(50);                     // e.g., 'ICAO Annex 6'
+        compliance_status   : ComplianceStatus;               // COMPLIANT, NON_COMPLIANT, PENDING
+
+        // Calculation Status
+        calculation_status  : CalculationStatus default 'IN_PROGRESS';
+        warning_message     : String(500);                    // Warning details
+        error_message       : String(500);                    // Error details
+        performance_time_sec : Decimal(8,1);                  // Calculation time in seconds
+
+        // ROB Source
+        rob_source          : String(20);                     // ACARS, EFB, MANUAL
 }
 
 // ============================================================================

@@ -184,7 +184,14 @@ service BurnService {
     };
 
     @readonly
-    entity FuelOrders as projection on db.FUEL_ORDERS;
+    entity FuelOrders as projection on db.FUEL_ORDERS {
+        *,
+        flight   : redirected to Flights,
+        supplier : redirected to Suppliers
+    };
+
+    @readonly
+    entity Suppliers as projection on db.MASTER_SUPPLIERS;
 
     // ========================================================================
     // SERVICE-LEVEL ACTIONS

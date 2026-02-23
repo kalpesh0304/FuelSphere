@@ -339,3 +339,59 @@ annotate service.FuelBurnExceptions with {
     status              @title: 'Status';
     assigned_to         @title: 'Assigned To';
 };
+
+// =============================================================================
+// FUEL ORDERS (Burn Module View) - Flight Search & Selection (POST-2)
+// List Report: "All Fuel Uplift and ROB Records"
+// Shows fuel orders from post-delivery/burn operations perspective
+// =============================================================================
+
+annotate service.FuelOrders with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: false },
+        UpdateRestrictions: { Updatable: false },
+        DeleteRestrictions: { Deletable: false }
+    }
+);
+
+annotate service.FuelOrders with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Uplift Record',
+            TypeNamePlural : 'All Fuel Uplift and ROB Records',
+            Title          : { Value: order_number },
+            Description    : { Value: station_code }
+        },
+
+        SelectionFields: [
+            order_number,
+            station_code,
+            status,
+            supplier_ID,
+            requested_date
+        ],
+
+        LineItem: [
+            { Value: order_number, Label: 'Fuel Order ID', ![@UI.Importance]: #High },
+            { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: requested_date, Label: 'Date', ![@UI.Importance]: #High },
+            { Value: station_code, Label: 'Station', ![@UI.Importance]: #High },
+            { Value: status, Label: 'Status', ![@UI.Importance]: #High },
+            { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #Medium },
+            { Value: ordered_quantity, Label: 'Uplifted Qty (kg)', ![@UI.Importance]: #High }
+        ],
+
+        PresentationVariant: {
+            SortOrder: [{ Property: requested_date, Descending: true }],
+            Visualizations: [ '@UI.LineItem' ]
+        }
+    }
+);
+
+annotate service.FuelOrders with {
+    order_number      @title: 'Fuel Order ID';
+    station_code      @title: 'Station';
+    status            @title: 'Status';
+    requested_date    @title: 'Date';
+    ordered_quantity  @title: 'Uplifted Qty (kg)';
+};
