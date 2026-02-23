@@ -87,7 +87,10 @@ service MasterDataService {
         origin          : redirected to Airports,
         destination     : redirected to Airports,
         aircraft_matrix : redirected to RouteAircraftMatrix,
-        virtual null as activeCriticality : Integer
+        virtual null as activeCriticality    : Integer,
+        virtual null as aircraft_type_count  : Integer,  // Count of aircraft types on this route
+        virtual null as fuel_req_count       : Integer,  // Count of fuel requirements defined
+        virtual null as fuel_planning_status : String(10) // COMPLETE / PARTIAL / NONE
     };
 
     /**

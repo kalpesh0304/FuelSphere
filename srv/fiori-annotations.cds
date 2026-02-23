@@ -56,6 +56,17 @@ annotate service.Airports with @(
     }
 );
 
+annotate service.Routes with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [
+            { Property: distance_km },
+            { Property: fuel_required },
+            { Property: alternate_count }
+        ]
+    }
+);
+
 // =============================================================================
 // AIRPORTS - List Report (AIRPORT_MASTER_001) + Object Page (AIRPORT_DETAIL_001)
 // =============================================================================
@@ -741,23 +752,24 @@ annotate service.Routes with @(
             ImageUrl       : 'sap-icon://map-2'
         },
 
+        // Filters: Origin, Destination, Status, Fuel Planning Status
         SelectionFields: [
-            route_code,
             origin_airport,
             destination_airport,
             status,
+            fuel_planning_status,
             is_active
         ],
 
+        // List Report columns - matches Figma RouteMasterData.tsx
         LineItem: [
             { Value: route_code, Label: 'Route Code', ![@UI.Importance]: #High },
-            { Value: origin.iata_code, Label: 'Origin', ![@UI.Importance]: #High },
-            { Value: origin.airport_name, Label: 'Origin Airport', ![@UI.Importance]: #Medium },
-            { Value: destination.iata_code, Label: 'Destination', ![@UI.Importance]: #High },
-            { Value: destination.airport_name, Label: 'Dest Airport', ![@UI.Importance]: #Medium },
+            { Value: origin.airport_name, Label: 'Origin', ![@UI.Importance]: #High },
+            { Value: destination.airport_name, Label: 'Destination', ![@UI.Importance]: #High },
             { Value: distance_km, Label: 'Distance (km)', ![@UI.Importance]: #High },
-            { Value: avg_flight_time, Label: 'Flight Time', ![@UI.Importance]: #Medium },
-            { Value: fuel_required, Label: 'Fuel Required (kg)', ![@UI.Importance]: #High },
+            { Value: avg_flight_time, Label: 'Avg Flight Time', ![@UI.Importance]: #Medium },
+            { Value: aircraft_type_count, Label: 'Aircraft Types', ![@UI.Importance]: #Medium },
+            { Value: fuel_req_count, Label: 'Fuel Reqs', ![@UI.Importance]: #Medium },
             { Value: alternate_count, Label: 'Alternates', ![@UI.Importance]: #Medium },
             {
                 Value: is_active,
@@ -793,6 +805,11 @@ annotate service.Routes with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#AircraftTypeCount',
+                Label  : 'Aircraft Types'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.DataPoint#RouteStatus',
                 Label  : 'Status'
             }
@@ -813,13 +830,18 @@ annotate service.Routes with @(
             Title: 'Avg Flight Time'
         },
 
+        DataPoint#AircraftTypeCount: {
+            Value: aircraft_type_count,
+            Title: 'Aircraft Types'
+        },
+
         DataPoint#RouteStatus: {
             Value: status,
             Title: 'Status',
             Criticality: activeCriticality
         },
 
-        // Object Page Sections (5)
+        // Object Page Sections (4)
         Facets: [
             {
                 $Type  : 'UI.CollectionFacet',
@@ -879,6 +901,9 @@ annotate service.Routes with @(
                 { Value: route_code, Label: 'Route Code' },
                 { Value: status, Label: 'Operational Status' },
                 { Value: alternate_count, Label: 'Alternate Airports' },
+                { Value: aircraft_type_count, Label: 'Aircraft Types' },
+                { Value: fuel_req_count, Label: 'Fuel Requirements Defined' },
+                { Value: fuel_planning_status, Label: 'Fuel Planning Status' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -908,7 +933,10 @@ annotate service.Routes with @(
         FieldGroup#FuelData: {
             Label: 'Fuel Data',
             Data: [
-                { Value: fuel_required, Label: 'Standard Fuel Required (kg)' }
+                { Value: fuel_required, Label: 'Standard Fuel Required (kg)' },
+                { Value: aircraft_type_count, Label: 'Aircraft Types Assigned' },
+                { Value: fuel_req_count, Label: 'Fuel Requirements Defined' },
+                { Value: fuel_planning_status, Label: 'Planning Coverage' }
             ]
         },
 
@@ -926,19 +954,22 @@ annotate service.Routes with @(
 
 // Field-level annotations for Routes
 annotate service.Routes with {
-    route_code          @title: 'Route Code';
-    origin_airport      @title: 'Origin';
-    destination_airport @title: 'Destination';
-    distance_km         @title: 'Distance (km)';
-    avg_flight_time     @title: 'Flight Time';
-    fuel_required       @title: 'Fuel Required (kg)';
-    alternate_count     @title: 'Alternate Airports';
-    status              @title: 'Status';
-    is_active           @title: 'Active';
-    created_at          @title: 'Created At';
-    created_by          @title: 'Created By';
-    modified_at         @title: 'Modified At';
-    modified_by         @title: 'Modified By';
+    route_code           @title: 'Route Code';
+    origin_airport       @title: 'Origin';
+    destination_airport  @title: 'Destination';
+    distance_km          @title: 'Distance (km)';
+    avg_flight_time      @title: 'Flight Time';
+    fuel_required        @title: 'Fuel Required (kg)';
+    alternate_count      @title: 'Alternates';
+    status               @title: 'Status';
+    is_active            @title: 'Active';
+    aircraft_type_count  @title: 'Aircraft Types';
+    fuel_req_count       @title: 'Fuel Reqs';
+    fuel_planning_status @title: 'Fuel Planning';
+    created_at           @title: 'Created At';
+    created_by           @title: 'Created By';
+    modified_at          @title: 'Modified At';
+    modified_by          @title: 'Modified By';
 };
 
 // Value Help for Origin/Destination
