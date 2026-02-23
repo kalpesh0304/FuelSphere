@@ -126,6 +126,37 @@ service MasterDataService {
     };
 
     // ========================================================================
+    // FLIGHT MASTER DATA
+    // ========================================================================
+
+    /**
+     * FlightMasters - Flight Definitions with Validity Periods
+     * Access: fuel-planner (Edit), ops-manager (View)
+     */
+    @odata.draft.enabled
+    entity FlightMasters as projection on db.FLIGHT_MASTER {
+        *,
+        route       : redirected to Routes,
+        aircraft    : redirected to Aircraft,
+        origin      : redirected to Airports,
+        destination : redirected to Airports,
+        schedules   : redirected to FlightSchedules,
+        virtual null as activeCriticality : Integer
+    };
+
+    /**
+     * FlightSchedules - Per-date flight instances
+     * Composition child of FlightMasters, also used by FuelOrderService
+     */
+    entity FlightSchedules as projection on db.FLIGHT_SCHEDULE {
+        *,
+        flight_master : redirected to FlightMasters,
+        aircraft      : redirected to Aircraft,
+        origin        : redirected to Airports,
+        destination   : redirected to Airports
+    };
+
+    // ========================================================================
     // BIDIRECTIONAL ENTITIES (S/4HANA Integration)
     // ========================================================================
 

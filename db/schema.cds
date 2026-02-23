@@ -599,15 +599,42 @@ entity CONFIG_APPROVAL_LIMITS : cuid {
 }
 
 // ============================================================================
-// FLIGHT SCHEDULE (For Fuel Order Reference)
+// FLIGHT MASTER & SCHEDULE (For Fuel Order Reference)
 // ============================================================================
 
 /**
- * FLIGHT_SCHEDULE - Flight Schedule Master
- * Source: External flight ops system or manual entry
+ * FLIGHT_MASTER - Flight Definitions with Validity Periods
+ * Source: External flight ops system, SSIM import, or manual entry
+ *
+ * Defines the master record for a flight: standard route, aircraft type,
+ * departure time, operating days, and validity period.
+ * FLIGHT_SCHEDULE instances are generated from these definitions.
+ */
+entity FLIGHT_MASTER : cuid, ActiveStatus, AuditTrail {
+        flight_number       : String(10) @mandatory;    // Flight number (e.g., AA100)
+        route               : Association to ROUTE_MASTER on route.route_code = route_code;
+        route_code          : String(20);               // FK to ROUTE_MASTER.route_code (e.g., JFK-LHR)
+        aircraft            : Association to AIRCRAFT_MASTER on aircraft.type_code = aircraft_type;
+        aircraft_type       : String(10);               // FK to AIRCRAFT_MASTER.type_code (e.g., B77W)
+        origin              : Association to MASTER_AIRPORTS on origin.iata_code = origin_airport;
+        origin_airport      : String(3) @mandatory;     // Departure airport IATA
+        destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
+        destination_airport : String(3) @mandatory;     // Arrival airport IATA
+        std_departure_time  : Time;                     // Standard departure time
+        operating_days      : String(20);               // Operating days (Daily, Mon-Fri, Su,We,Fr)
+        valid_from          : Date @mandatory;           // Validity period start
+        valid_to            : Date @mandatory;           // Validity period end
+        version             : String(5) default '1.0';  // Schedule version
+        schedules           : Composition of many FLIGHT_SCHEDULE on schedules.flight_master = $self;
+}
+
+/**
+ * FLIGHT_SCHEDULE - Flight Schedule Instances (per-date)
+ * Source: External flight ops system or generated from FLIGHT_MASTER
  * Used for linking fuel orders to specific flights
  */
 entity FLIGHT_SCHEDULE : cuid, AuditTrail {
+        flight_master       : Association to FLIGHT_MASTER;
         flight_number       : String(10) @mandatory;    // Flight number (e.g., PR101)
         flight_date         : Date @mandatory;          // Flight date
         aircraft            : Association to AIRCRAFT_MASTER on aircraft.type_code = aircraft_type;

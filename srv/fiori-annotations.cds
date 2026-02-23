@@ -346,6 +346,294 @@ annotate service.Airports with {
 };
 
 // =============================================================================
+// FLIGHT MASTERS - List Report (FLIGHT_MASTER_001)
+// =============================================================================
+
+annotate service.FlightMasters with @(
+    Common.SemanticKey: [flight_number],
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true },
+        FilterRestrictions: {
+            FilterExpressionRestrictions: [
+                { Property: valid_from, AllowedExpressions: 'SingleRange' },
+                { Property: valid_to, AllowedExpressions: 'SingleRange' }
+            ]
+        }
+    }
+);
+
+annotate service.FlightMasters with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Flight Master',
+            TypeNamePlural : 'Flight Masters',
+            Title          : { Value: flight_number },
+            Description    : { Value: route_code },
+            ImageUrl       : 'sap-icon://flight'
+        },
+
+        // Filter Bar
+        SelectionFields: [
+            flight_number,
+            route_code,
+            origin_airport,
+            destination_airport,
+            aircraft_type,
+            is_active
+        ],
+
+        // Table Columns for List Report
+        LineItem: [
+            { Value: flight_number, Label: 'Flight Number', ![@UI.Importance]: #High },
+            { Value: route_code, Label: 'Route', ![@UI.Importance]: #High },
+            { Value: origin_airport, Label: 'Origin', ![@UI.Importance]: #High },
+            { Value: destination_airport, Label: 'Destination', ![@UI.Importance]: #High },
+            { Value: aircraft_type, Label: 'Aircraft Type', ![@UI.Importance]: #High },
+            { Value: std_departure_time, Label: 'Std Departure', ![@UI.Importance]: #Medium },
+            { Value: operating_days, Label: 'Operating Days', ![@UI.Importance]: #Medium },
+            { Value: valid_from, Label: 'Valid From', ![@UI.Importance]: #Medium },
+            { Value: valid_to, Label: 'Valid To', ![@UI.Importance]: #Medium },
+            { Value: version, Label: 'Version', ![@UI.Importance]: #Low },
+            {
+                Value: is_active,
+                Label: 'Status',
+                Criticality: activeCriticality,
+                ![@UI.Importance]: #High
+            }
+        ],
+
+        PresentationVariant: {
+            SortOrder: [
+                { Property: flight_number, Descending: false }
+            ],
+            Visualizations: [ '@UI.LineItem' ]
+        },
+
+        // Object Page Header
+        HeaderFacets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#FlightStatus',
+                Label  : 'Status'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#FlightRoute',
+                Label  : 'Route'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#FlightValidity',
+                Label  : 'Validity'
+            }
+        ],
+
+        FieldGroup#FlightStatus: {
+            Data: [
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: version, Label: 'Version' }
+            ]
+        },
+
+        FieldGroup#FlightRoute: {
+            Data: [
+                { Value: origin_airport, Label: 'Origin' },
+                { Value: destination_airport, Label: 'Destination' },
+                { Value: route_code, Label: 'Route Code' }
+            ]
+        },
+
+        FieldGroup#FlightValidity: {
+            Data: [
+                { Value: valid_from, Label: 'Valid From' },
+                { Value: valid_to, Label: 'Valid To' }
+            ]
+        },
+
+        // Object Page Sections
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightGeneralInfo',
+                Label  : 'General Information',
+                Target : '@UI.FieldGroup#FlightGeneralInfo'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightScheduleInfo',
+                Label  : 'Schedule Details',
+                Target : '@UI.FieldGroup#FlightScheduleInfo'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightSchedules',
+                Label  : 'Flight Instances',
+                Target : 'schedules/@UI.LineItem'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightAdminInfo',
+                Label  : 'Administrative',
+                Target : '@UI.FieldGroup#FlightAdminInfo'
+            }
+        ],
+
+        FieldGroup#FlightGeneralInfo: {
+            Label: 'General Information',
+            Data: [
+                { Value: flight_number, Label: 'Flight Number' },
+                { Value: route_code, Label: 'Route Code' },
+                { Value: origin_airport, Label: 'Origin Airport' },
+                { Value: destination_airport, Label: 'Destination Airport' },
+                { Value: aircraft_type, Label: 'Aircraft Type' }
+            ]
+        },
+
+        FieldGroup#FlightScheduleInfo: {
+            Label: 'Schedule Details',
+            Data: [
+                { Value: std_departure_time, Label: 'Standard Departure Time' },
+                { Value: operating_days, Label: 'Operating Days' },
+                { Value: valid_from, Label: 'Valid From' },
+                { Value: valid_to, Label: 'Valid To' },
+                { Value: version, Label: 'Version' }
+            ]
+        },
+
+        FieldGroup#FlightAdminInfo: {
+            Label: 'Administrative',
+            Data: [
+                { Value: created_at, Label: 'Created At' },
+                { Value: created_by, Label: 'Created By' },
+                { Value: modified_at, Label: 'Modified At' },
+                { Value: modified_by, Label: 'Modified By' }
+            ]
+        }
+    }
+);
+
+// Field-level annotations for FlightMasters
+annotate service.FlightMasters with {
+    ID                  @UI.Hidden;
+    flight_number       @title: 'Flight Number';
+    route_code          @title: 'Route';
+    origin_airport      @title: 'Origin';
+    destination_airport @title: 'Destination';
+    aircraft_type       @title: 'Aircraft Type';
+    std_departure_time  @title: 'Std Departure';
+    operating_days      @title: 'Operating Days';
+    valid_from          @title: 'Valid From';
+    valid_to            @title: 'Valid To';
+    version             @title: 'Version';
+    is_active           @title: 'Status';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Modified At';
+    modified_by         @title: 'Modified By';
+};
+
+// Value Help for FlightMasters
+annotate service.FlightMasters with {
+    origin_airport @(
+        Common: {
+            Text: origin.airport_name,
+            TextArrangement: #TextFirst,
+            ValueList: {
+                Label: 'Airports',
+                CollectionPath: 'Airports',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: origin_airport, ValueListProperty: 'iata_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'city' }
+                ]
+            }
+        }
+    );
+    destination_airport @(
+        Common: {
+            Text: destination.airport_name,
+            TextArrangement: #TextFirst,
+            ValueList: {
+                Label: 'Airports',
+                CollectionPath: 'Airports',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: destination_airport, ValueListProperty: 'iata_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'city' }
+                ]
+            }
+        }
+    );
+    route_code @(
+        Common: {
+            ValueList: {
+                Label: 'Routes',
+                CollectionPath: 'Routes',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: route_code, ValueListProperty: 'route_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' }
+                ]
+            }
+        }
+    );
+    aircraft_type @(
+        Common: {
+            Text: aircraft.aircraft_model,
+            TextArrangement: #TextLast,
+            ValueList: {
+                Label: 'Aircraft',
+                CollectionPath: 'Aircraft',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: aircraft_type, ValueListProperty: 'type_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_model' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'manufacturer_code' }
+                ]
+            }
+        }
+    );
+};
+
+// FlightSchedules inline table annotations (on FlightMaster Object Page)
+annotate service.FlightSchedules with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Flight Schedule',
+            TypeNamePlural : 'Flight Schedules',
+            Title          : { Value: flight_number },
+            Description    : { Value: flight_date }
+        },
+        LineItem: [
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: flight_date, Label: 'Date', ![@UI.Importance]: #High },
+            { Value: origin_airport, Label: 'Origin', ![@UI.Importance]: #High },
+            { Value: destination_airport, Label: 'Dest', ![@UI.Importance]: #High },
+            { Value: aircraft_type, Label: 'Aircraft', ![@UI.Importance]: #Medium },
+            { Value: aircraft_reg, Label: 'Registration', ![@UI.Importance]: #Medium },
+            { Value: scheduled_departure, Label: 'Departure', ![@UI.Importance]: #Medium },
+            { Value: scheduled_arrival, Label: 'Arrival', ![@UI.Importance]: #Medium },
+            { Value: status, Label: 'Status', ![@UI.Importance]: #High }
+        ]
+    }
+);
+
+annotate service.FlightSchedules with {
+    ID                  @UI.Hidden;
+    flight_master       @UI.Hidden;
+    flight_number       @title: 'Flight Number';
+    flight_date         @title: 'Flight Date';
+    aircraft_type       @title: 'Aircraft Type';
+    aircraft_reg        @title: 'Registration';
+    origin_airport      @title: 'Origin';
+    destination_airport @title: 'Destination';
+    scheduled_departure @title: 'Departure';
+    scheduled_arrival   @title: 'Arrival';
+    status              @title: 'Status';
+};
+
+// =============================================================================
 // AIRCRAFT - List Report (AIRCRAFT_MASTER_001) + Object Page (AIRCRAFT_DETAIL_001)
 // =============================================================================
 
