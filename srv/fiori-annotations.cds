@@ -15,6 +15,48 @@
 using MasterDataService as service from './master-data-service';
 
 // =============================================================================
+// AGGREGATION & KPI ANNOTATIONS - Dashboard Support
+// =============================================================================
+
+// Enable OData V4 $apply aggregation on key entities
+annotate service.Suppliers with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [{
+            Property: supplier_code
+        }]
+    }
+);
+
+annotate service.Contracts with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [{
+            Property: contract_number
+        }]
+    }
+);
+
+annotate service.Aircraft with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [
+            { Property: fleet_size },
+            { Property: fuel_capacity_kg }
+        ]
+    }
+);
+
+annotate service.Airports with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [{
+            Property: iata_code
+        }]
+    }
+);
+
+// =============================================================================
 // AIRPORTS - List Report (AIRPORT_MASTER_001) + Object Page (AIRPORT_DETAIL_001)
 // =============================================================================
 

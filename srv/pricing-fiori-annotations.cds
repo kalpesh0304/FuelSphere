@@ -658,3 +658,131 @@ annotate PricingService.MarketIndexValues with {
     is_holiday           @title: 'Is Holiday';
     is_corrected         @title: 'Is Corrected';
 };
+
+// =============================================================================
+// PRICING CONFIGURATIONS - List Report + Object Page
+// =============================================================================
+
+annotate PricingService.PricingConfigurations with @(
+    Capabilities: {
+        InsertRestrictions: { Insertable: true },
+        UpdateRestrictions: { Updatable: true },
+        DeleteRestrictions: { Deletable: true }
+    }
+);
+
+annotate PricingService.PricingConfigurations with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Pricing Configuration',
+            TypeNamePlural : 'Pricing Configurations',
+            Title          : { Value: config_code },
+            Description    : { Value: engine_mode },
+            ImageUrl       : 'sap-icon://settings'
+        },
+
+        SelectionFields: [
+            config_code,
+            engine_mode,
+            company_code,
+            is_active
+        ],
+
+        LineItem: [
+            { Value: config_code, Label: 'Config Code', ![@UI.Importance]: #High },
+            { Value: company_code, Label: 'Company', ![@UI.Importance]: #Medium },
+            { Value: engine_mode, Label: 'Engine Mode', ![@UI.Importance]: #High },
+            { Value: fallback_enabled, Label: 'Fallback', ![@UI.Importance]: #Medium },
+            { Value: variance_threshold, Label: 'Variance %', ![@UI.Importance]: #Medium },
+            { Value: valid_from, Label: 'Valid From', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ],
+
+        HeaderFacets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#EngineMode',
+                Label  : 'Engine Mode'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#VarianceThreshold',
+                Label  : 'Variance Threshold'
+            }
+        ],
+
+        DataPoint#EngineMode: {
+            Value: engine_mode,
+            Title: 'Engine Mode'
+        },
+
+        DataPoint#VarianceThreshold: {
+            Value: variance_threshold,
+            Title: 'Variance Threshold %'
+        },
+
+        // Object Page Sections (3)
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'Configuration',
+                Label  : 'Configuration',
+                Target : '@UI.FieldGroup#PricingConfig'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'EngineSettings',
+                Label  : 'Engine Settings',
+                Target : '@UI.FieldGroup#EngineSettings'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'Administrative',
+                Label  : 'Administrative',
+                Target : '@UI.FieldGroup#PricingConfigAdmin'
+            }
+        ],
+
+        FieldGroup#PricingConfig: {
+            Label: 'Configuration',
+            Data: [
+                { Value: config_code, Label: 'Config Code' },
+                { Value: company_code, Label: 'Company Code' },
+                { Value: engine_mode, Label: 'Engine Mode' },
+                { Value: valid_from, Label: 'Valid From' },
+                { Value: valid_to, Label: 'Valid To' },
+                { Value: is_active, Label: 'Active' }
+            ]
+        },
+
+        FieldGroup#EngineSettings: {
+            Label: 'Engine Settings',
+            Data: [
+                { Value: fallback_enabled, Label: 'Fallback Enabled' },
+                { Value: variance_threshold, Label: 'Variance Threshold %' },
+                { Value: cpe_cache_ttl_mins, Label: 'CPE Cache TTL (min)' },
+                { Value: cpe_endpoint_url, Label: 'CPE Endpoint URL' }
+            ]
+        },
+
+        FieldGroup#PricingConfigAdmin: {
+            Label: 'Administrative',
+            Data: [
+                { Value: created_at, Label: 'Created At' },
+                { Value: created_by, Label: 'Created By' },
+                { Value: modified_at, Label: 'Modified At' },
+                { Value: modified_by, Label: 'Modified By' }
+            ]
+        }
+    }
+);
+
+annotate PricingService.PricingConfigurations with {
+    config_code        @title: 'Config Code';
+    company_code       @title: 'Company Code';
+    engine_mode        @title: 'Engine Mode';
+    fallback_enabled   @title: 'Fallback Enabled';
+    variance_threshold @title: 'Variance Threshold %';
+    cpe_cache_ttl_mins @title: 'Cache TTL (min)';
+    cpe_endpoint_url   @title: 'CPE Endpoint';
+};
