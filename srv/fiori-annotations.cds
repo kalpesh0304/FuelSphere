@@ -240,6 +240,7 @@ annotate service.Airports with {
 // =============================================================================
 
 annotate service.Aircraft with @(
+    Common.SemanticKey: [type_code],
     Capabilities: {
         InsertRestrictions: { Insertable: true },
         UpdateRestrictions: { Updatable: true },
@@ -261,6 +262,8 @@ annotate service.Aircraft with @(
             type_code,
             aircraft_model,
             manufacturer_code,
+            status,
+            fuel_capacity_kg,
             is_active
         ],
 
@@ -269,9 +272,9 @@ annotate service.Aircraft with @(
             { Value: aircraft_model, Label: 'Aircraft Model', ![@UI.Importance]: #High },
             { Value: manufacturer.manufacture_name, Label: 'Manufacturer', ![@UI.Importance]: #Medium },
             { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)', ![@UI.Importance]: #High },
+            { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Medium },
             { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)', ![@UI.Importance]: #Medium },
-            { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Low },
-            { Value: fleet_size, Label: 'Fleet Size', ![@UI.Importance]: #Low },
+            { Value: fleet_size, Label: 'Fleet Size', ![@UI.Importance]: #Medium },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -297,6 +300,16 @@ annotate service.Aircraft with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#FuelCapacity',
                 Label  : 'Fuel Capacity'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#MTOW',
+                Label  : 'MTOW'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#FleetSize',
+                Label  : 'Fleet Size'
             }
         ],
 
@@ -312,6 +325,16 @@ annotate service.Aircraft with @(
                 { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)' },
                 { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)' }
             ]
+        },
+
+        DataPoint#MTOW: {
+            Value: mtow_kg,
+            Title: 'Max Takeoff Weight (kg)'
+        },
+
+        DataPoint#FleetSize: {
+            Value: fleet_size,
+            Title: 'Fleet Size'
         },
 
         Facets: [
