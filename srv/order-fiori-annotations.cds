@@ -127,9 +127,10 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Object Page Facets (Sections) - matches FuelRequestDetail tabs
+        // Object Page Facets - 7-tab layout matching FuelRequestDetailSAP
+        // Tabs: Overview | Items | Milestones | Fuel Ticket | Pricing | Documents | History
         Facets: [
-            // Section 1: Overview (CollectionFacet)
+            // Tab 1: Overview
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'OverviewSection',
@@ -159,10 +160,20 @@ annotate FuelOrderService.FuelOrders with @(
                         $Type  : 'UI.ReferenceFacet',
                         Target : '@UI.FieldGroup#DeliveryWindow',
                         Label  : 'Delivery Window'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DeliveryAssignment',
+                        Label  : 'Delivery Assignment'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DispatchDetails',
+                        Label  : 'Supplier Dispatch'
                     }
                 ]
             },
-            // Section 2: Deliveries & Tickets (Items tab)
+            // Tab 2: Items (Deliveries & Tickets)
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'ItemsSection',
@@ -180,19 +191,31 @@ annotate FuelOrderService.FuelOrders with @(
                     }
                 ]
             },
-            // Section 3: Milestones (Status Timeline)
+            // Tab 3: Milestones (Status Timeline)
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'MilestonesSection',
                 Target : 'milestones/@UI.LineItem',
                 Label  : 'Milestones'
             },
-            // Section 4: S/4HANA Integration
+            // Tab 4: Fuel Ticket (linked ticket details)
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FuelTicketSection',
+                Target : 'tickets/@UI.LineItem',
+                Label  : 'Fuel Ticket'
+            },
+            // Tab 5: Pricing (CPE Pricing Snapshot + Breakdown)
             {
                 $Type  : 'UI.CollectionFacet',
-                ID     : 'IntegrationSection',
-                Label  : 'S/4HANA Integration',
+                ID     : 'PricingSection',
+                Label  : 'Pricing',
                 Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#PricingDetails',
+                        Label  : 'Pricing Details'
+                    },
                     {
                         $Type  : 'UI.ReferenceFacet',
                         Target : '@UI.FieldGroup#S4References',
@@ -202,20 +225,33 @@ annotate FuelOrderService.FuelOrders with @(
                         $Type  : 'UI.ReferenceFacet',
                         Target : '@UI.FieldGroup#S4SyncStatus',
                         Label  : 'Sync Status'
-                    },
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        Target : '@UI.FieldGroup#DispatchDetails',
-                        Label  : 'Supplier Dispatch'
                     }
                 ]
             },
-            // Section 5: History / Administrative
+            // Tab 6: Documents (placeholder)
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'DocumentsSection',
+                Target : '@UI.FieldGroup#Documents',
+                Label  : 'Documents'
+            },
+            // Tab 7: History
+            {
+                $Type  : 'UI.CollectionFacet',
                 ID     : 'HistorySection',
-                Target : '@UI.FieldGroup#Administrative',
-                Label  : 'History'
+                Label  : 'History',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#ApprovalInfo',
+                        Label  : 'Approval'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#Administrative',
+                        Label  : 'Administrative'
+                    }
+                ]
             }
         ],
 
@@ -304,13 +340,58 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
+        // Field Group: Delivery Assignment (from FuelRequestDetailObjectPage - Delivery tab)
+        FieldGroup#DeliveryAssignment: {
+            Label: 'Delivery Assignment',
+            Data: [
+                { Value: truck_assigned, Label: 'Truck / Vehicle ID' },
+                { Value: operator_name, Label: 'Operator / Driver' },
+                { Value: actual_quantity, Label: 'Actual Quantity (kg)' },
+                { Value: completion_percent, Label: 'Completion %' }
+            ]
+        },
+
         // Field Group: Supplier Dispatch Details (from FuelRequestDetailSAP UI)
         FieldGroup#DispatchDetails: {
             Label: 'Supplier Dispatch',
             Data: [
                 { Value: dispatch_method, Label: 'Dispatch Method' },
                 { Value: dispatch_transaction_id, Label: 'Transaction ID' },
-                { Value: dispatch_acknowledgment_id, Label: 'Acknowledgment ID' }
+                { Value: dispatch_acknowledgment_id, Label: 'Acknowledgment ID' },
+                { Value: dispatch_timestamp, Label: 'Dispatched At' },
+                { Value: dispatch_response_code, Label: 'Response Code' }
+            ]
+        },
+
+        // Field Group: Pricing Details (from FuelRequestDetailSAP - Pricing tab)
+        FieldGroup#PricingDetails: {
+            Label: 'Pricing Details',
+            Data: [
+                { Value: unit_price, Label: 'Unit Price' },
+                { Value: total_amount, Label: 'Total Amount' },
+                { Value: currency_code, Label: 'Currency' },
+                { Value: actual_quantity, Label: 'Delivered Quantity (kg)' },
+                { Value: ordered_quantity, Label: 'Ordered Quantity (kg)' }
+            ]
+        },
+
+        // Field Group: Documents (placeholder for future document attachments)
+        FieldGroup#Documents: {
+            Label: 'Documents',
+            Data: [
+                { Value: notes, Label: 'Order Notes' },
+                { Value: override_reason, Label: 'Override Reason' }
+            ]
+        },
+
+        // Field Group: Approval Info (from FuelRequestApprovalQueue / History tab)
+        FieldGroup#ApprovalInfo: {
+            Label: 'Approval',
+            Data: [
+                { Value: approved_by, Label: 'Approved By' },
+                { Value: approved_at, Label: 'Approved At' },
+                { Value: approval_comment, Label: 'Approval Comment' },
+                { Value: rejected_reason, Label: 'Rejection Reason' }
             ]
         },
 
@@ -372,6 +453,14 @@ annotate FuelOrderService.FuelOrders with {
     dispatch_method @title: 'Dispatch Method' @Common.FieldControl: #ReadOnly;
     dispatch_transaction_id @title: 'Transaction ID' @Common.FieldControl: #ReadOnly;
     dispatch_acknowledgment_id @title: 'Acknowledgment ID' @Common.FieldControl: #ReadOnly;
+    dispatch_timestamp @title: 'Dispatched At' @Common.FieldControl: #ReadOnly;
+    dispatch_response_code @title: 'Response Code' @Common.FieldControl: #ReadOnly;
+    truck_assigned  @title: 'Truck / Vehicle ID';
+    operator_name   @title: 'Operator / Driver';
+    approved_by     @title: 'Approved By' @Common.FieldControl: #ReadOnly;
+    approved_at     @title: 'Approved At' @Common.FieldControl: #ReadOnly;
+    approval_comment @title: 'Approval Comment' @UI.MultiLineText @Common.FieldControl: #ReadOnly;
+    rejected_reason @title: 'Rejection Reason' @UI.MultiLineText @Common.FieldControl: #ReadOnly;
     cancelled_reason @title: 'Cancellation Reason' @UI.MultiLineText;
     cancelled_by    @title: 'Cancelled By' @Common.FieldControl: #ReadOnly;
     cancelled_at    @title: 'Cancelled At' @Common.FieldControl: #ReadOnly;

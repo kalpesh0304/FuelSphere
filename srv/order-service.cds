@@ -95,6 +95,38 @@ service FuelOrderService {
         action cancel(reason: String) returns FuelOrders;
 
         /**
+         * Reject order (from Approval Queue)
+         * Transitions: Submitted → Draft (returned for rework)
+         * Requires rejection reason
+         */
+        action reject(reason: String) returns FuelOrders;
+
+        /**
+         * Complete delivery (ePOD received - triggers PO/GR creation)
+         * Transitions: InProgress → Completed
+         * Automatically triggers S/4HANA PO and GR creation
+         */
+        action completeDelivery() returns FuelOrders;
+
+        /**
+         * Validate order after PO/GR creation
+         * Transitions: PO_Created → Validated
+         */
+        action validate() returns FuelOrders;
+
+        /**
+         * Post validated order to S/4HANA Financial Accounting
+         * Transitions: Validated → Posted
+         */
+        action postToS4HANA() returns FuelOrders;
+
+        /**
+         * Close order (final status)
+         * Transitions: Posted → Closed
+         */
+        action closeOrder() returns FuelOrders;
+
+        /**
          * Calculate pricing from CPE
          * Returns unit price based on contract, product, and date
          */
@@ -351,6 +383,24 @@ service FuelOrderService {
      */
     function lookupPlannedFuel(routeId: UUID, aircraftTypeId: UUID) returns PlannedFuelResult;
 
+    /**
+     * Get pending approval queue for the current approver
+     * Returns orders in Submitted status with due-time and allocation variance data
+     */
+    function getApprovalQueue(stationCode: String) returns array of ApprovalQueueItem;
+
+    /**
+     * Bulk approve multiple fuel orders
+     * All orders must be in Submitted status
+     */
+    action bulkApprove(orderIds: array of UUID, comment: String);
+
+    /**
+     * Bulk reject multiple fuel orders
+     * All orders must be in Submitted status; reason is mandatory
+     */
+    action bulkReject(orderIds: array of UUID, reason: String);
+
     // ========================================================================
     // TYPE DEFINITIONS
     // ========================================================================
@@ -410,6 +460,28 @@ service FuelOrderService {
         targetPct       : Decimal(5,2);
         actualPct       : Decimal(5,2);
         variance        : Decimal(5,2);
+    };
+
+    /**
+     * Approval Queue Item (from FuelRequestApprovalQueue UI)
+     * Enriched order data for the approval queue list
+     */
+    type ApprovalQueueItem {
+        orderId           : UUID;
+        orderNumber       : String(25);
+        flightNumber      : String(10);
+        tailNumber        : String(10);
+        stationCode       : String(3);
+        stationName       : String(100);
+        supplierCode      : String(20);
+        supplierName      : String(100);
+        quantityKG        : Decimal(12,2);
+        estimatedAmount   : Decimal(15,2);
+        currency          : String(3);
+        scheduledDeparture : DateTime;
+        dueInHours        : Integer;             // Calculated: hours until departure
+        allocationVariance : Decimal(5,2);       // From SUPPLIER_ALLOCATION_TARGETS
+        priority          : String(10);          // Urgent / High / Normal
     };
 
     type SupplierRecommendation {

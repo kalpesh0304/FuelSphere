@@ -839,6 +839,18 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         dispatch_method     : DispatchMethod;           // API or Email
         dispatch_transaction_id   : String(50);         // External transaction ID from supplier API
         dispatch_acknowledgment_id : String(50);        // Acknowledgment reference from supplier
+        dispatch_timestamp  : DateTime;                 // When dispatch was sent
+        dispatch_response_code : String(10);            // API response code (e.g., 200)
+
+        // Delivery Assignment (from FuelRequestDetailObjectPage UI)
+        truck_assigned      : String(20);               // Assigned delivery vehicle ID (e.g., ST-2101)
+        operator_name       : String(100);              // Assigned operator/driver name
+
+        // Approval (from FuelRequestApprovalQueue UI)
+        approved_by         : String(100);              // User who approved
+        approved_at         : DateTime;                 // Approval timestamp
+        approval_comment    : String(500);              // Optional approval comment
+        rejected_reason     : String(500);              // Rejection reason (if rejected)
 
         // Notes & Comments
         notes               : String(1000);             // Order notes/special instructions
