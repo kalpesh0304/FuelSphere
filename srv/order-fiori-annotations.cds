@@ -31,29 +31,40 @@ annotate FuelOrderService.FuelOrders with @(
             ImageUrl       : 'sap-icon://shipping-status'
         },
 
-        // Selection Fields for Filter Bar
+        // Selection Fields for Filter Bar (from FuelOrderOverview filter fields)
         SelectionFields: [
             station_code,
             supplier_ID,
             status,
+            delivery_status,
+            epod_status,
             priority,
             requested_date,
             product_ID
         ],
 
-        // Line Item columns for List Report table
+        // Line Item columns for List Report table (from FuelOrderOverview columns)
         LineItem: [
-            { Value: order_number, Label: 'Order Number', ![@UI.Importance]: #High },
-            { Value: requested_date, Label: 'Order Date', ![@UI.Importance]: #High },
+            { Value: order_number, Label: 'Fuel Order ID', ![@UI.Importance]: #High },
+            { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: flight.aircraft_reg, Label: 'Tail', ![@UI.Importance]: #Medium },
             { Value: station_code, Label: 'Station', ![@UI.Importance]: #High },
+            { Value: flight.aircraft_type, Label: 'Aircraft', ![@UI.Importance]: #Medium },
+            { Value: requested_date, Label: 'Order Date', ![@UI.Importance]: #High },
+            { Value: pilot_name, Label: 'Pilot', ![@UI.Importance]: #Medium },
             { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
-            { Value: product.product_name, Label: 'Fuel Type', ![@UI.Importance]: #Medium },
-            { Value: ordered_quantity, Label: 'Quantity (kg)', ![@UI.Importance]: #High },
+            { Value: ordered_quantity, Label: 'Uplift Qty (kg)', ![@UI.Importance]: #High },
             {
-                Value: status,
-                Label: 'Status',
-                Criticality: statusCriticality,
+                Value: delivery_status,
+                Label: 'Delivery Status',
+                Criticality: deliveryStatusCriticality,
                 ![@UI.Importance]: #High
+            },
+            {
+                Value: epod_status,
+                Label: 'ePOD Status',
+                Criticality: epodStatusCriticality,
+                ![@UI.Importance]: #Medium
             },
             {
                 $Type: 'UI.DataField',
@@ -62,10 +73,8 @@ annotate FuelOrderService.FuelOrders with @(
                 Criticality: completionCriticality,
                 ![@UI.Importance]: #Medium
             },
-            { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Medium },
-            { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
-            { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Medium },
-            { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low }
+            { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Low },
+            { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Low }
         ],
 
         // Presentation Variant for default sorting
@@ -127,14 +136,55 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Object Page Facets - 7-tab layout matching FuelRequestDetailSAP
-        // Tabs: Overview | Items | Milestones | Fuel Ticket | Pricing | Documents | History
+        // Object Page Facets - 8-section layout matching FuelOrderDetailView
+        // Sections: Flight Info | Pilot Approval | Fuel Order | Pricing | Delivery | ePOD & PO/GR | Timeline | Documents
         Facets: [
-            // Tab 1: Overview
+            // Section 1: Flight & Aircraft Information
             {
                 $Type  : 'UI.CollectionFacet',
-                ID     : 'OverviewSection',
-                Label  : 'Overview',
+                ID     : 'FlightInfoSection',
+                Label  : 'Flight Info',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#FlightDetails',
+                        Label  : 'Flight Details'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#RouteInfo',
+                        Label  : 'Route Information'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#AircraftInfo',
+                        Label  : 'Aircraft Information'
+                    }
+                ]
+            },
+            // Section 2: Pilot Approval & Dispatch Calculation
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'PilotApprovalSection',
+                Label  : 'Pilot Approval',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#PilotInfo',
+                        Label  : 'Pilot Information'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#PilotApproval',
+                        Label  : 'Pilot Buffer & Final Approval'
+                    }
+                ]
+            },
+            // Section 3: Fuel Order Details
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'FuelOrderSection',
+                Label  : 'Fuel Order',
                 Facets : [
                     {
                         $Type  : 'UI.ReferenceFacet',
@@ -158,54 +208,12 @@ annotate FuelOrderService.FuelOrders with @(
                     },
                     {
                         $Type  : 'UI.ReferenceFacet',
-                        Target : '@UI.FieldGroup#DeliveryWindow',
-                        Label  : 'Delivery Window'
-                    },
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        Target : '@UI.FieldGroup#DeliveryAssignment',
-                        Label  : 'Delivery Assignment'
-                    },
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        Target : '@UI.FieldGroup#DispatchDetails',
-                        Label  : 'Supplier Dispatch'
+                        Target : '@UI.FieldGroup#DeliveryLocation',
+                        Label  : 'Delivery Location'
                     }
                 ]
             },
-            // Tab 2: Items (Deliveries & Tickets)
-            {
-                $Type  : 'UI.CollectionFacet',
-                ID     : 'ItemsSection',
-                Label  : 'Items',
-                Facets : [
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        Target : 'deliveries/@UI.LineItem',
-                        Label  : 'Deliveries (ePOD)'
-                    },
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        Target : 'tickets/@UI.LineItem',
-                        Label  : 'Fuel Tickets'
-                    }
-                ]
-            },
-            // Tab 3: Milestones (Status Timeline)
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'MilestonesSection',
-                Target : 'milestones/@UI.LineItem',
-                Label  : 'Milestones'
-            },
-            // Tab 4: Fuel Ticket (linked ticket details)
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FuelTicketSection',
-                Target : 'tickets/@UI.LineItem',
-                Label  : 'Fuel Ticket'
-            },
-            // Tab 5: Pricing (CPE Pricing Snapshot + Breakdown)
+            // Section 4: Pricing (CPE + PO)
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'PricingSection',
@@ -228,19 +236,65 @@ annotate FuelOrderService.FuelOrders with @(
                     }
                 ]
             },
-            // Tab 6: Documents (placeholder)
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'DocumentsSection',
-                Target : '@UI.FieldGroup#Documents',
-                Label  : 'Documents'
-            },
-            // Tab 7: History
+            // Section 5: Delivery
             {
                 $Type  : 'UI.CollectionFacet',
-                ID     : 'HistorySection',
-                Label  : 'History',
+                ID     : 'DeliverySection',
+                Label  : 'Delivery',
                 Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DeliveryAssignment',
+                        Label  : 'Delivery Summary'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DispatchDetails',
+                        Label  : 'Supplier Dispatch'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : 'deliveries/@UI.LineItem',
+                        Label  : 'Delivery Trucks'
+                    }
+                ]
+            },
+            // Section 6: ePOD & PO/GR
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'EPodSection',
+                Label  : 'ePOD & PO/GR',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#EPodInfo',
+                        Label  : 'Electronic Proof of Delivery'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : 'tickets/@UI.LineItem',
+                        Label  : 'Fuel Tickets'
+                    }
+                ]
+            },
+            // Section 7: Timeline (Milestones)
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'TimelineSection',
+                Target : 'milestones/@UI.LineItem',
+                Label  : 'Timeline'
+            },
+            // Section 8: Documents & History
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'DocumentsSection',
+                Label  : 'Documents',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#Documents',
+                        Label  : 'Documents & Attachments'
+                    },
                     {
                         $Type  : 'UI.ReferenceFacet',
                         Target : '@UI.FieldGroup#ApprovalInfo',
@@ -249,20 +303,86 @@ annotate FuelOrderService.FuelOrders with @(
                     {
                         $Type  : 'UI.ReferenceFacet',
                         Target : '@UI.FieldGroup#Administrative',
-                        Label  : 'Administrative'
+                        Label  : 'Audit Log'
                     }
                 ]
             }
         ],
 
+        // ================================================================
+        // Section 1: Flight & Aircraft Information (FuelOrderDetailView)
+        // ================================================================
+
+        // Field Group: Flight Details
+        FieldGroup#FlightDetails: {
+            Label: 'Flight Details',
+            Data: [
+                { Value: flight.flight_number, Label: 'Flight Number' },
+                { Value: flight.aircraft_reg, Label: 'Tail Number' },
+                { Value: flight.flight_date, Label: 'Departure Date' },
+                { Value: flight.scheduled_departure, Label: 'Departure Time' }
+            ]
+        },
+
+        // Field Group: Route Information
+        FieldGroup#RouteInfo: {
+            Label: 'Route Information',
+            Data: [
+                { Value: flight.origin_airport, Label: 'Origin' },
+                { Value: flight.destination_airport, Label: 'Destination' },
+                { Value: station_code, Label: 'Station Code' }
+            ]
+        },
+
+        // Field Group: Aircraft Information
+        FieldGroup#AircraftInfo: {
+            Label: 'Aircraft Information',
+            Data: [
+                { Value: flight.aircraft_type, Label: 'Aircraft Type' },
+                { Value: flight.aircraft_reg, Label: 'Registration' }
+            ]
+        },
+
+        // ================================================================
+        // Section 2: Pilot Approval (FuelOrderDetailView)
+        // ================================================================
+
+        // Field Group: Pilot Information
+        FieldGroup#PilotInfo: {
+            Label: 'Pilot Information',
+            Data: [
+                { Value: pilot_name, Label: 'Pilot Name' },
+                { Value: pilot_id, Label: 'Pilot ID' },
+                { Value: pilot_license, Label: 'License Number' },
+                { Value: calculation_id, Label: 'Calculation ID' },
+                { Value: calculation_timestamp, Label: 'Calculated At' }
+            ]
+        },
+
+        // Field Group: Pilot Buffer & Final Approval
+        FieldGroup#PilotApproval: {
+            Label: 'Pilot Buffer & Final Approval',
+            Data: [
+                { Value: planned_quantity, Label: 'Minimum Required (kg)' },
+                { Value: pilot_buffer, Label: 'Pilot Buffer (kg)' },
+                { Value: pilot_buffer_reason, Label: 'Buffer Reason' },
+                { Value: final_approved_quantity, Label: 'Final Approved (kg)' },
+                { Value: rob_opening, Label: 'ROB Opening (kg)' },
+                { Value: ordered_quantity, Label: 'Uplift Needed (kg)' }
+            ]
+        },
+
+        // ================================================================
+        // Section 3: Fuel Order Details
+        // ================================================================
+
         // Field Group: Order Details
         FieldGroup#OrderDetails: {
             Label: 'Order Details',
             Data: [
-                { Value: order_number, Label: 'Order Number' },
-                { Value: requested_date, Label: 'Requested Date' },
-                { Value: requested_time, Label: 'Requested Time' },
-                { Value: flight_ID, Label: 'Flight' },
+                { Value: order_number, Label: 'Order ID' },
+                { Value: requested_date, Label: 'Order Date' },
+                { Value: requested_time, Label: 'Order Time' },
                 { Value: priority, Label: 'Priority' },
                 { Value: status, Label: 'Status' },
                 { Value: notes, Label: 'Notes' }
@@ -299,10 +419,13 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Field Group: Delivery Window
-        FieldGroup#DeliveryWindow: {
-            Label: 'Delivery Window',
+        // Field Group: Delivery Location (from FuelOrderDetailView)
+        FieldGroup#DeliveryLocation: {
+            Label: 'Delivery Location',
             Data: [
+                { Value: airport.airport_name, Label: 'Airport' },
+                { Value: delivery_stand, Label: 'Stand / Gate' },
+                { Value: delivery_fuel_pit, Label: 'Fuel Pit' },
                 { Value: delivery_window_start, Label: 'Window Start' },
                 { Value: delivery_window_end, Label: 'Window End' }
             ]
@@ -340,13 +463,15 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Field Group: Delivery Assignment (from FuelRequestDetailObjectPage - Delivery tab)
+        // Field Group: Delivery Summary (from FuelOrderDetailView - Delivery section)
         FieldGroup#DeliveryAssignment: {
-            Label: 'Delivery Assignment',
+            Label: 'Delivery Summary',
             Data: [
+                { Value: delivery_status, Label: 'Delivery Status' },
                 { Value: truck_assigned, Label: 'Truck / Vehicle ID' },
                 { Value: operator_name, Label: 'Operator / Driver' },
-                { Value: actual_quantity, Label: 'Actual Quantity (kg)' },
+                { Value: ordered_quantity, Label: 'Ordered Quantity (kg)' },
+                { Value: actual_quantity, Label: 'Delivered Quantity (kg)' },
                 { Value: completion_percent, Label: 'Completion %' }
             ]
         },
@@ -375,9 +500,30 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
+        // ================================================================
+        // Section 6: ePOD & PO/GR (FuelOrderDetailView)
+        // ================================================================
+
+        // Field Group: ePOD Information
+        FieldGroup#EPodInfo: {
+            Label: 'Electronic Proof of Delivery',
+            Data: [
+                { Value: epod_status, Label: 'ePOD Status' },
+                { Value: actual_quantity, Label: 'Delivered Quantity (kg)' },
+                { Value: s4_po_number, Label: 'PO Number (Auto-Created)' },
+                { Value: s4_po_item, Label: 'PO Item' },
+                { Value: s4_pr_number, Label: 'PR Number' },
+                { Value: plant_code, Label: 'Plant Code' }
+            ]
+        },
+
+        // ================================================================
+        // Section 8: Documents & History
+        // ================================================================
+
         // Field Group: Documents (placeholder for future document attachments)
         FieldGroup#Documents: {
-            Label: 'Documents',
+            Label: 'Documents & Attachments',
             Data: [
                 { Value: notes, Label: 'Order Notes' },
                 { Value: override_reason, Label: 'Override Reason' }
@@ -461,6 +607,19 @@ annotate FuelOrderService.FuelOrders with {
     approved_at     @title: 'Approved At' @Common.FieldControl: #ReadOnly;
     approval_comment @title: 'Approval Comment' @UI.MultiLineText @Common.FieldControl: #ReadOnly;
     rejected_reason @title: 'Rejection Reason' @UI.MultiLineText @Common.FieldControl: #ReadOnly;
+    pilot_name      @title: 'Pilot Name';
+    pilot_id        @title: 'Pilot ID' @Common.FieldControl: #ReadOnly;
+    pilot_license   @title: 'License Number' @Common.FieldControl: #ReadOnly;
+    pilot_buffer    @title: 'Pilot Buffer (kg)' @Common.FieldControl: #ReadOnly;
+    pilot_buffer_reason @title: 'Buffer Reason' @Common.FieldControl: #ReadOnly;
+    final_approved_quantity @title: 'Final Approved (kg)' @Common.FieldControl: #ReadOnly;
+    rob_opening     @title: 'ROB Opening (kg)' @Common.FieldControl: #ReadOnly;
+    calculation_id  @title: 'Calculation ID' @Common.FieldControl: #ReadOnly;
+    calculation_timestamp @title: 'Calculated At' @Common.FieldControl: #ReadOnly;
+    delivery_status @title: 'Delivery Status';
+    epod_status     @title: 'ePOD Status' @Common.FieldControl: #ReadOnly;
+    delivery_stand  @title: 'Stand / Gate';
+    delivery_fuel_pit @title: 'Fuel Pit';
     cancelled_reason @title: 'Cancellation Reason' @UI.MultiLineText;
     cancelled_by    @title: 'Cancelled By' @Common.FieldControl: #ReadOnly;
     cancelled_at    @title: 'Cancelled At' @Common.FieldControl: #ReadOnly;

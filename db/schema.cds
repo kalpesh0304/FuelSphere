@@ -732,6 +732,29 @@ type OrderPriority : String(10) enum {
 }
 
 /**
+ * Order-level Delivery Tracking Status (from FuelOrderOverview UI)
+ * Tracks the physical delivery progress at the order level
+ */
+type OrderDeliveryStatus : String(30) enum {
+    Scheduled  = 'Scheduled';
+    InTransit  = 'In Transit';
+    InProgress = 'In Progress';
+    Delivered  = 'Delivered';
+    Delayed    = 'Delayed';
+    Cancelled  = 'Cancelled';
+}
+
+/**
+ * ePOD Validation Status (from FuelOrderOverview UI)
+ * Tracks whether ePOD has been received and validated
+ */
+type EPodStatus : String(20) enum {
+    NotReceived = 'Not Received';
+    Pending     = 'Pending';
+    Validated   = 'Validated';
+}
+
+/**
  * Delivery Status Enumeration
  */
 type DeliveryStatus : String(20) enum {
@@ -822,6 +845,25 @@ entity FUEL_ORDERS : cuid, AuditTrail {
 
         // Supplier Override
         override_reason     : String(500);              // Reason for non-recommended supplier or qty override
+
+        // Pilot Approval (from FuelOrderDetailView / FuelOrderOverview UI)
+        pilot_name          : String(100);              // Captain who approved fuel
+        pilot_id            : String(20);               // Pilot identifier (e.g., P12345)
+        pilot_license       : String(20);               // Pilot ATP license number
+        pilot_buffer        : Decimal(12,2);            // Additional fuel buffer added by pilot (kg)
+        pilot_buffer_reason : String(200);              // Reason for buffer (e.g., "Weather Contingency")
+        final_approved_quantity : Decimal(12,2);        // Total pilot-approved fuel (planned + buffer)
+        rob_opening         : Decimal(12,2);            // Remaining On Board at departure station (kg)
+        calculation_id      : String(25);               // Dispatch calculation reference (e.g., FD-00001)
+        calculation_timestamp : DateTime;               // When pilot approved/calculated
+
+        // Order-level Delivery & ePOD Tracking (from FuelOrderOverview UI)
+        delivery_status     : OrderDeliveryStatus;      // High-level delivery tracking status
+        epod_status         : EPodStatus default 'Not Received'; // ePOD validation status
+
+        // Delivery Location (from FuelOrderDetailView UI)
+        delivery_stand      : String(20);               // Gate/Stand for delivery (e.g., "Gate 7")
+        delivery_fuel_pit   : String(20);               // Fuel hydrant pit ID (e.g., "FP-07-A")
 
         // Actual Quantity (aggregated from deliveries)
         actual_quantity     : Decimal(12,2);            // Total delivered quantity (from ePOD)

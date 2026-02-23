@@ -47,7 +47,9 @@ service FuelOrderService {
         // Virtual elements for UI criticality coloring
         virtual null as statusCriticality   : Integer,
         virtual null as priorityCriticality : Integer,
-        virtual null as completionCriticality : Integer
+        virtual null as completionCriticality : Integer,
+        virtual null as deliveryStatusCriticality : Integer,
+        virtual null as epodStatusCriticality : Integer
     } actions {
         /**
          * Submit order to supplier
