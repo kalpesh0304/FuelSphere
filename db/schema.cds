@@ -258,6 +258,15 @@ entity ROUTE_MASTER : ActiveStatus, AuditTrail {
 // ============================================================================
 
 /**
+ * Supplier Rating (performance classification)
+ */
+type SupplierRating : String(1) enum {
+    A = 'A';    // Top tier
+    B = 'B';    // Standard
+    C = 'C';    // Under review
+}
+
+/**
  * MASTER_SUPPLIERS - Supplier/Vendor Master
  * Source: Bidirectional with S/4HANA API_BUSINESS_PARTNER
  * Sync: Real-time
@@ -268,6 +277,7 @@ entity MASTER_SUPPLIERS : cuid, ActiveStatus, AuditTrail {
         supplier_code   : String(20) @mandatory;  // Supplier code
         supplier_name   : String(100) @mandatory; // Full supplier name
         supplier_type   : String(20) @mandatory;  // EXTERNAL / INTO_PLANE
+        supplier_rating : SupplierRating;          // Performance rating (A/B/C)
         country         : Association to T005_COUNTRY on country.land1 = country_code;
         country_code    : String(3) @mandatory;   // FK to T005_COUNTRY.land1
         payment_terms   : String(20);             // Payment terms
@@ -661,8 +671,10 @@ type OrderStatus : String(20) enum {
     Draft       = 'Draft';
     Submitted   = 'Submitted';
     Confirmed   = 'Confirmed';
+    Approved    = 'Approved';
     InProgress  = 'InProgress';
     Delivered   = 'Delivered';
+    Completed   = 'Completed';
     Cancelled   = 'Cancelled';
 }
 
@@ -747,7 +759,9 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         uom_code            : String(3) default 'KG';   // Default to KG
 
         // Quantity & Pricing
-        ordered_quantity    : Decimal(12,2) @mandatory; // Ordered fuel quantity (kg)
+        planned_quantity    : Decimal(12,2);            // System-calculated from Route-Aircraft Matrix
+        ordered_quantity    : Decimal(12,2) @mandatory; // Actual ordered fuel quantity (kg)
+        is_manual_override  : Boolean default false;    // True if quantity differs from planned
         unit_price          : Decimal(15,4);            // Unit price from CPE
         total_amount        : Decimal(15,2);            // Total order amount
         currency_code       : String(3) default 'USD';  // ISO currency code
@@ -755,10 +769,15 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Timing
         requested_date      : Date @mandatory;          // Requested delivery date
         requested_time      : Time;                     // Requested delivery time
+        delivery_window_start : Time;                   // Delivery window start
+        delivery_window_end   : Time;                   // Delivery window end
 
         // Priority & Status
         priority            : OrderPriority default 'Normal';
         status              : OrderStatus default 'Draft';
+
+        // Supplier Override
+        override_reason     : String(500);              // Reason for non-recommended supplier or qty override
 
         // S/4HANA References (populated after ePOD)
         s4_po_number        : String(10);               // S/4HANA Purchase Order Number

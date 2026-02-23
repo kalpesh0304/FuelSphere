@@ -140,7 +140,13 @@ annotate FuelOrderService.FuelOrders with @(
                 Target : '@UI.FieldGroup#QuantityPricing',
                 Label  : 'Quantity & Pricing'
             },
-            // Section 4: S/4HANA References
+            // Section 4: Delivery Window
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#DeliveryWindow',
+                Label  : 'Delivery Window'
+            },
+            // Section 5: S/4HANA References
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#S4References',
@@ -188,7 +194,9 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: airport.airport_name, Label: 'Airport' },
                 { Value: supplier.supplier_name, Label: 'Supplier' },
                 { Value: supplier.supplier_type, Label: 'Supplier Type' },
-                { Value: contract.contract_number, Label: 'Contract' }
+                { Value: supplier.supplier_rating, Label: 'Supplier Rating' },
+                { Value: contract.contract_number, Label: 'Contract' },
+                { Value: override_reason, Label: 'Override Reason' }
             ]
         },
 
@@ -198,11 +206,22 @@ annotate FuelOrderService.FuelOrders with @(
             Data: [
                 { Value: product.product_name, Label: 'Fuel Product' },
                 { Value: product.specification, Label: 'Specification' },
-                { Value: ordered_quantity, Label: 'Ordered Quantity' },
+                { Value: planned_quantity, Label: 'Planned Quantity (from Matrix)' },
+                { Value: ordered_quantity, Label: 'Requested Quantity' },
+                { Value: is_manual_override, Label: 'Manual Override' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: unit_price, Label: 'Unit Price' },
                 { Value: total_amount, Label: 'Total Amount' },
                 { Value: currency_code, Label: 'Currency' }
+            ]
+        },
+
+        // Field Group: Delivery Window
+        FieldGroup#DeliveryWindow: {
+            Label: 'Delivery Window',
+            Data: [
+                { Value: delivery_window_start, Label: 'Window Start' },
+                { Value: delivery_window_end, Label: 'Window End' }
             ]
         },
 
@@ -259,6 +278,11 @@ annotate FuelOrderService.FuelOrders with {
     notes           @title: 'Notes' @UI.MultiLineText;
     s4_po_number    @title: 'PO Number' @Common.FieldControl: #ReadOnly;
     s4_po_item      @title: 'PO Item' @Common.FieldControl: #ReadOnly;
+    planned_quantity @title: 'Planned Quantity (kg)' @Common.FieldControl: #ReadOnly;
+    is_manual_override @title: 'Manual Override' @Common.FieldControl: #ReadOnly;
+    override_reason @title: 'Override Reason' @UI.MultiLineText;
+    delivery_window_start @title: 'Window Start';
+    delivery_window_end @title: 'Window End';
     cancelled_reason @title: 'Cancellation Reason' @UI.MultiLineText;
     cancelled_by    @title: 'Cancelled By' @Common.FieldControl: #ReadOnly;
     cancelled_at    @title: 'Cancelled At' @Common.FieldControl: #ReadOnly;
@@ -703,4 +727,42 @@ annotate FuelOrderService.SupplierAllocationTargets with {
     period_year         @title: 'Year';
     period_month        @title: 'Month';
     station_code        @title: 'Station';
+};
+
+// ============================================================================
+// ROUTE-AIRCRAFT MATRIX - Fuel Lookup for Create Form
+// ============================================================================
+
+annotate FuelOrderService.RouteAircraftMatrix with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Requirement',
+            TypeNamePlural : 'Fuel Requirements',
+            Title          : { Value: route.route_code },
+            Description    : { Value: aircraft_type.aircraft_type_code }
+        },
+        LineItem: [
+            { Value: route.route_code, Label: 'Route', ![@UI.Importance]: #High },
+            { Value: aircraft_type.aircraft_type_code, Label: 'Aircraft Type', ![@UI.Importance]: #High },
+            { Value: trip_fuel, Label: 'Trip Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: taxi_fuel, Label: 'Taxi Fuel (kg)', ![@UI.Importance]: #Medium },
+            { Value: contingency_fuel, Label: 'Contingency (kg)', ![@UI.Importance]: #Medium },
+            { Value: alternate_fuel, Label: 'Alternate (kg)', ![@UI.Importance]: #Low },
+            { Value: reserve_fuel, Label: 'Reserve (kg)', ![@UI.Importance]: #Low },
+            { Value: total_standard_fuel, Label: 'Total Standard Fuel (kg)', ![@UI.Importance]: #High }
+        ]
+    }
+);
+
+annotate FuelOrderService.RouteAircraftMatrix with {
+    ID                  @UI.Hidden;
+    trip_fuel           @title: 'Trip Fuel (kg)';
+    taxi_fuel           @title: 'Taxi Fuel (kg)';
+    contingency_fuel    @title: 'Contingency (kg)';
+    alternate_fuel      @title: 'Alternate (kg)';
+    reserve_fuel        @title: 'Reserve (kg)';
+    extra_fuel          @title: 'Extra Fuel (kg)';
+    total_standard_fuel @title: 'Total Standard Fuel (kg)';
+    summer_factor       @title: 'Summer Factor';
+    winter_factor       @title: 'Winter Factor';
 };

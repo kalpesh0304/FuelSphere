@@ -181,6 +181,24 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // ROUTE-AIRCRAFT FUEL MATRIX (for planned fuel lookup)
+    // ========================================================================
+
+    /**
+     * RouteAircraftMatrix - Planned fuel by route + aircraft type
+     * Used in Create Fuel Order to auto-populate planned_quantity
+     */
+    @readonly
+    entity RouteAircraftMatrix as projection on db.ROUTE_AIRCRAFT_MATRIX {
+        *,
+        route    : redirected to Routes,
+        aircraft_type : redirected to Aircraft
+    };
+
+    @readonly
+    entity Routes as projection on db.ROUTE_MASTER;
+
+    // ========================================================================
     // FLIGHT SCHEDULE (Read from Master Data)
     // ========================================================================
 
@@ -279,6 +297,18 @@ service FuelOrderService {
      */
     function getDashboardKPIs(stationCode: String, fromDate: Date, toDate: Date) returns DashboardKPIs;
 
+    /**
+     * Get recommended suppliers for a station based on allocation targets
+     * Returns suppliers ranked by allocation gap (most under-allocated first)
+     */
+    function getRecommendedSuppliers(stationCode: String) returns array of SupplierRecommendation;
+
+    /**
+     * Lookup planned fuel quantity from Route-Aircraft Matrix
+     * Returns the total standard fuel for a given route and aircraft type
+     */
+    function lookupPlannedFuel(routeId: UUID, aircraftTypeId: UUID) returns PlannedFuelResult;
+
     // ========================================================================
     // TYPE DEFINITIONS
     // ========================================================================
@@ -338,6 +368,32 @@ service FuelOrderService {
         targetPct       : Decimal(5,2);
         actualPct       : Decimal(5,2);
         variance        : Decimal(5,2);
+    };
+
+    type SupplierRecommendation {
+        supplierId      : UUID;
+        supplierName    : String(100);
+        supplierCode    : String(20);
+        supplierRating  : String(1);
+        contractId      : UUID;
+        contractNumber  : String(20);
+        targetAllocation : Decimal(5,2);
+        currentAllocation : Decimal(5,2);
+        estimatedPrice  : Decimal(15,4);
+        isRecommended   : Boolean;
+        status          : String(20);      // available / unavailable
+    };
+
+    type PlannedFuelResult {
+        tripFuel        : Decimal(12,2);
+        taxiFuel        : Decimal(10,2);
+        contingencyFuel : Decimal(10,2);
+        alternateFuel   : Decimal(10,2);
+        reserveFuel     : Decimal(10,2);
+        extraFuel       : Decimal(10,2);
+        totalStandardFuel : Decimal(12,2);
+        routeCode       : String(20);
+        aircraftType    : String(20);
     };
 
     /**
