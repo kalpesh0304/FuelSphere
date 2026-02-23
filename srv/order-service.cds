@@ -43,9 +43,11 @@ service FuelOrderService {
         uom         : redirected to UnitsOfMeasure,
         deliveries  : redirected to FuelDeliveries,
         tickets     : redirected to FuelTickets,
+        milestones  : redirected to FuelOrderMilestones,
         // Virtual elements for UI criticality coloring
         virtual null as statusCriticality   : Integer,
-        virtual null as priorityCriticality : Integer
+        virtual null as priorityCriticality : Integer,
+        virtual null as completionCriticality : Integer
     } actions {
         /**
          * Submit order to supplier
@@ -61,14 +63,33 @@ service FuelOrderService {
         action confirm() returns FuelOrders;
 
         /**
+         * Approve order (operations manager approval)
+         * Transitions: Confirmed → Approved
+         */
+        action approve() returns FuelOrders;
+
+        /**
+         * Dispatch order to supplier (via API or Email)
+         * Transitions: Approved → Dispatched
+         * Sends order to supplier system and records dispatch method
+         */
+        action dispatch(method: String, transactionId: String) returns FuelOrders;
+
+        /**
+         * Acknowledge order received by supplier
+         * Transitions: Dispatched → Acknowledged
+         */
+        action acknowledge(acknowledgmentId: String) returns FuelOrders;
+
+        /**
          * Mark order as in progress (delivery started)
-         * Transitions: Confirmed → InProgress
+         * Transitions: Acknowledged/Confirmed → InProgress
          */
         action startDelivery() returns FuelOrders;
 
         /**
          * Cancel order
-         * Transitions: Draft/Submitted/Confirmed → Cancelled
+         * Transitions: Draft/Submitted/Confirmed/Approved → Cancelled
          * Requires reason for non-draft orders
          */
         action cancel(reason: String) returns FuelOrders;
@@ -78,6 +99,12 @@ service FuelOrderService {
          * Returns unit price based on contract, product, and date
          */
         function calculatePrice() returns PricingResult;
+
+        /**
+         * Get CPE pricing breakdown for this order
+         * Returns base price, contract premium, airport fees, into-plane service fee
+         */
+        function getPricingBreakdown() returns PricingBreakdown;
     };
 
     // ========================================================================
@@ -162,6 +189,21 @@ service FuelOrderService {
          * Verify ticket
          */
         action verify() returns FuelTickets;
+    };
+
+    // ========================================================================
+    // FUEL ORDER MILESTONES (Status Timeline)
+    // ========================================================================
+
+    /**
+     * FuelOrderMilestones - Status timeline tracking
+     *
+     * Displays as a timeline/process flow in the detail object page.
+     * Each milestone represents a key event in the order lifecycle.
+     */
+    entity FuelOrderMilestones as projection on db.FUEL_ORDER_MILESTONES {
+        *,
+        order : redirected to FuelOrders
     };
 
     // ========================================================================
@@ -427,6 +469,24 @@ service FuelOrderService {
         field       : String(50);
         message     : String(500);
         severity    : String(10);   // ERROR / WARNING
+    };
+
+    /**
+     * CPE Pricing Breakdown (from FuelRequestDetailSAP)
+     * Multi-component fuel pricing structure
+     */
+    type PricingBreakdown {
+        basePrice           : Decimal(15,4);    // Platts-based price
+        contractPremium     : Decimal(15,4);    // Contract premium/discount
+        airportFees         : Decimal(15,4);    // Airport throughput fees
+        intoPlaneServiceFee : Decimal(15,4);    // Into-plane service charge
+        totalUnitPrice      : Decimal(15,4);    // Sum of all components
+        currency            : String(3);        // ISO currency code
+        contractNumber      : String(20);       // Associated contract
+        effectiveDate       : Date;             // Price effective date
+        currentCPE          : Decimal(15,4);    // Current CPE index value
+        previousCPE         : Decimal(15,4);    // Prior period CPE value
+        cpeVariance         : Decimal(5,2);     // CPE change percentage
     };
 
     // ========================================================================

@@ -55,6 +55,13 @@ annotate FuelOrderService.FuelOrders with @(
                 Criticality: statusCriticality,
                 ![@UI.Importance]: #High
             },
+            {
+                $Type: 'UI.DataField',
+                Value: completion_percent,
+                Label: 'Completion',
+                Criticality: completionCriticality,
+                ![@UI.Importance]: #Medium
+            },
             { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Medium },
             { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
             { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Medium },
@@ -120,55 +127,95 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Object Page Facets (Sections)
+        // Object Page Facets (Sections) - matches FuelRequestDetail tabs
         Facets: [
-            // Section 1: Order Details
+            // Section 1: Overview (CollectionFacet)
             {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#OrderDetails',
-                Label  : 'Order Details'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'OverviewSection',
+                Label  : 'Overview',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#OrderDetails',
+                        Label  : 'Order Details'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#StationSupplier',
+                        Label  : 'Station & Supplier'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#SupplierContact',
+                        Label  : 'Supplier Contact'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#QuantityPricing',
+                        Label  : 'Quantity & Pricing'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DeliveryWindow',
+                        Label  : 'Delivery Window'
+                    }
+                ]
             },
-            // Section 2: Station & Supplier
+            // Section 2: Deliveries & Tickets (Items tab)
             {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#StationSupplier',
-                Label  : 'Station & Supplier'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'ItemsSection',
+                Label  : 'Items',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : 'deliveries/@UI.LineItem',
+                        Label  : 'Deliveries (ePOD)'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : 'tickets/@UI.LineItem',
+                        Label  : 'Fuel Tickets'
+                    }
+                ]
             },
-            // Section 3: Quantity & Pricing
+            // Section 3: Milestones (Status Timeline)
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#QuantityPricing',
-                Label  : 'Quantity & Pricing'
+                ID     : 'MilestonesSection',
+                Target : 'milestones/@UI.LineItem',
+                Label  : 'Milestones'
             },
-            // Section 4: Delivery Window
+            // Section 4: S/4HANA Integration
             {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#DeliveryWindow',
-                Label  : 'Delivery Window'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'IntegrationSection',
+                Label  : 'S/4HANA Integration',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#S4References',
+                        Label  : 'S/4HANA References'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#S4SyncStatus',
+                        Label  : 'Sync Status'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        Target : '@UI.FieldGroup#DispatchDetails',
+                        Label  : 'Supplier Dispatch'
+                    }
+                ]
             },
-            // Section 5: S/4HANA References
+            // Section 5: History / Administrative
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#S4References',
-                Label  : 'S/4HANA References'
-            },
-            // Section 5: Fuel Deliveries (ePOD)
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : 'deliveries/@UI.LineItem',
-                Label  : 'Deliveries (ePOD)'
-            },
-            // Section 6: Fuel Tickets
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : 'tickets/@UI.LineItem',
-                Label  : 'Fuel Tickets'
-            },
-            // Section 7: Administrative
-            {
-                $Type  : 'UI.ReferenceFacet',
+                ID     : 'HistorySection',
                 Target : '@UI.FieldGroup#Administrative',
-                Label  : 'Administrative'
+                Label  : 'History'
             }
         ],
 
@@ -225,18 +272,51 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
+        // Field Group: Supplier Contact (from FuelRequestDetail UI)
+        FieldGroup#SupplierContact: {
+            Label: 'Supplier Contact',
+            Data: [
+                { Value: supplier.contact_email, Label: 'Email' },
+                { Value: supplier.contact_phone, Label: 'Phone' },
+                { Value: supplier.address, Label: 'Address' },
+                { Value: supplier.city, Label: 'City' },
+                { Value: supplier.country_code, Label: 'Country' }
+            ]
+        },
+
         // Field Group: S/4HANA References
         FieldGroup#S4References: {
             Label: 'S/4HANA References',
             Data: [
+                { Value: s4_pr_number, Label: 'Purchase Requisition' },
                 { Value: s4_po_number, Label: 'Purchase Order' },
-                { Value: s4_po_item, Label: 'PO Item' }
+                { Value: s4_po_item, Label: 'PO Item' },
+                { Value: plant_code, Label: 'Plant Code' }
             ]
         },
 
-        // Field Group: Administrative
+        // Field Group: S/4 Sync Status (from FuelRequestDetail UI)
+        FieldGroup#S4SyncStatus: {
+            Label: 'Sync Status',
+            Data: [
+                { Value: s4_sync_status, Label: 'Sync Status' },
+                { Value: s4_sync_timestamp, Label: 'Last Sync' }
+            ]
+        },
+
+        // Field Group: Supplier Dispatch Details (from FuelRequestDetailSAP UI)
+        FieldGroup#DispatchDetails: {
+            Label: 'Supplier Dispatch',
+            Data: [
+                { Value: dispatch_method, Label: 'Dispatch Method' },
+                { Value: dispatch_transaction_id, Label: 'Transaction ID' },
+                { Value: dispatch_acknowledgment_id, Label: 'Acknowledgment ID' }
+            ]
+        },
+
+        // Field Group: Administrative / History
         FieldGroup#Administrative: {
-            Label: 'Administrative',
+            Label: 'History',
             Data: [
                 { Value: created_at, Label: 'Created At' },
                 { Value: created_by, Label: 'Created By' },
@@ -283,6 +363,15 @@ annotate FuelOrderService.FuelOrders with {
     override_reason @title: 'Override Reason' @UI.MultiLineText;
     delivery_window_start @title: 'Window Start';
     delivery_window_end @title: 'Window End';
+    actual_quantity @title: 'Actual Quantity (kg)' @Common.FieldControl: #ReadOnly;
+    completion_percent @title: 'Completion %' @Common.FieldControl: #ReadOnly;
+    s4_pr_number    @title: 'Purchase Requisition' @Common.FieldControl: #ReadOnly;
+    plant_code      @title: 'Plant Code' @Common.FieldControl: #ReadOnly;
+    s4_sync_status  @title: 'S/4 Sync Status' @Common.FieldControl: #ReadOnly;
+    s4_sync_timestamp @title: 'Last S/4 Sync' @Common.FieldControl: #ReadOnly;
+    dispatch_method @title: 'Dispatch Method' @Common.FieldControl: #ReadOnly;
+    dispatch_transaction_id @title: 'Transaction ID' @Common.FieldControl: #ReadOnly;
+    dispatch_acknowledgment_id @title: 'Acknowledgment ID' @Common.FieldControl: #ReadOnly;
     cancelled_reason @title: 'Cancellation Reason' @UI.MultiLineText;
     cancelled_by    @title: 'Cancelled By' @Common.FieldControl: #ReadOnly;
     cancelled_at    @title: 'Cancelled At' @Common.FieldControl: #ReadOnly;
@@ -765,4 +854,73 @@ annotate FuelOrderService.RouteAircraftMatrix with {
     total_standard_fuel @title: 'Total Standard Fuel (kg)';
     summer_factor       @title: 'Summer Factor';
     winter_factor       @title: 'Winter Factor';
+};
+
+// ============================================================================
+// FUEL ORDER MILESTONES - Status Timeline (from FuelRequestDetail/SAP UI)
+// ============================================================================
+
+annotate FuelOrderService.FuelOrderMilestones with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Milestone',
+            TypeNamePlural : 'Milestones',
+            Title          : { Value: milestone_type },
+            Description    : { Value: milestone_timestamp }
+        },
+
+        // LineItem for milestones table (timeline view)
+        LineItem: [
+            { Value: milestone_sequence, Label: 'Step', ![@UI.Importance]: #High },
+            { Value: milestone_type, Label: 'Milestone', ![@UI.Importance]: #High },
+            { Value: milestone_timestamp, Label: 'Date/Time', ![@UI.Importance]: #High },
+            { Value: performed_by, Label: 'Performed By', ![@UI.Importance]: #Medium },
+            { Value: is_system_generated, Label: 'System', ![@UI.Importance]: #Low },
+            { Value: notes, Label: 'Notes', ![@UI.Importance]: #Medium },
+            { Value: external_reference, Label: 'Reference', ![@UI.Importance]: #Low }
+        ],
+
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#MilestoneDetails',
+                Label  : 'Milestone Details'
+            }
+        ],
+
+        FieldGroup#MilestoneDetails: {
+            Label: 'Milestone Details',
+            Data: [
+                { Value: milestone_type, Label: 'Type' },
+                { Value: milestone_sequence, Label: 'Sequence' },
+                { Value: milestone_timestamp, Label: 'Timestamp' },
+                { Value: performed_by, Label: 'Performed By' },
+                { Value: is_system_generated, Label: 'System Generated' },
+                { Value: notes, Label: 'Notes' },
+                { Value: external_reference, Label: 'External Reference' }
+            ]
+        }
+    }
+);
+
+annotate FuelOrderService.FuelOrderMilestones with {
+    ID                  @UI.Hidden;
+    milestone_type      @title: 'Milestone';
+    milestone_sequence  @title: 'Step' @Common.FieldControl: #ReadOnly;
+    milestone_timestamp @title: 'Date/Time' @Common.FieldControl: #ReadOnly;
+    performed_by        @title: 'Performed By' @Common.FieldControl: #ReadOnly;
+    is_system_generated @title: 'System Generated' @Common.FieldControl: #ReadOnly;
+    notes               @title: 'Notes' @UI.MultiLineText;
+    external_reference  @title: 'Reference' @Common.FieldControl: #ReadOnly;
+};
+
+// ============================================================================
+// SUPPLIER - Field-level annotations for contact fields
+// ============================================================================
+
+annotate FuelOrderService.Suppliers with {
+    contact_email   @title: 'Contact Email';
+    contact_phone   @title: 'Contact Phone';
+    address         @title: 'Address';
+    city            @title: 'City';
 };

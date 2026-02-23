@@ -282,6 +282,12 @@ entity MASTER_SUPPLIERS : cuid, ActiveStatus, AuditTrail {
         country_code    : String(3) @mandatory;   // FK to T005_COUNTRY.land1
         payment_terms   : String(20);             // Payment terms
         s4_vendor_no    : String(10);             // S/4HANA Vendor Number (LIFNR)
+
+        // Contact Information (from FuelRequestDetail UI)
+        contact_email   : String(255);            // Primary contact email
+        contact_phone   : String(30);             // Primary contact phone
+        address         : String(255);            // Street address
+        city            : String(100);            // City
 }
 
 /**
@@ -665,17 +671,55 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
 
 /**
  * Order Status Enumeration
- * Draft → Submitted → Confirmed → InProgress → Delivered → Cancelled
+ * Full lifecycle: Draft → Submitted → Confirmed → Approved → Dispatched → Acknowledged →
+ *   InProgress → Delivered → Completed → PO_Created → Posted → Validated → Closed
+ * Cancelled can occur from Draft/Submitted/Confirmed/Approved states
  */
 type OrderStatus : String(20) enum {
-    Draft       = 'Draft';
-    Submitted   = 'Submitted';
-    Confirmed   = 'Confirmed';
-    Approved    = 'Approved';
-    InProgress  = 'InProgress';
-    Delivered   = 'Delivered';
-    Completed   = 'Completed';
-    Cancelled   = 'Cancelled';
+    Draft        = 'Draft';
+    Submitted    = 'Submitted';
+    Confirmed    = 'Confirmed';
+    Approved     = 'Approved';
+    Dispatched   = 'Dispatched';
+    Acknowledged = 'Acknowledged';
+    InProgress   = 'InProgress';
+    Delivered    = 'Delivered';
+    Completed    = 'Completed';
+    PO_Created   = 'PO_Created';
+    Posted       = 'Posted';
+    Validated    = 'Validated';
+    Closed       = 'Closed';
+    Cancelled    = 'Cancelled';
+}
+
+/**
+ * Milestone Type Enumeration
+ * Tracks key events in the fuel order lifecycle
+ */
+type MilestoneType : String(20) enum {
+    Created      = 'Created';
+    Submitted    = 'Submitted';
+    Approved     = 'Approved';
+    PRGenerated  = 'PRGenerated';
+    Dispatched   = 'Dispatched';
+    Acknowledged = 'Acknowledged';
+    InProgress   = 'InProgress';
+    Completed    = 'Completed';
+    POCreated    = 'POCreated';
+    GRPosted     = 'GRPosted';
+    Validated    = 'Validated';
+    Posted       = 'Posted';
+    Closed       = 'Closed';
+    Cancelled    = 'Cancelled';
+}
+
+/**
+ * Dispatch Method Enumeration
+ * How the order was dispatched to the supplier
+ */
+type DispatchMethod : String(10) enum {
+    API   = 'API';
+    Email = 'Email';
 }
 
 /**
@@ -779,9 +823,22 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Supplier Override
         override_reason     : String(500);              // Reason for non-recommended supplier or qty override
 
+        // Actual Quantity (aggregated from deliveries)
+        actual_quantity     : Decimal(12,2);            // Total delivered quantity (from ePOD)
+        completion_percent  : Integer default 0;        // Completion percentage (0-100)
+
         // S/4HANA References (populated after ePOD)
+        s4_pr_number        : String(10);               // S/4HANA Purchase Requisition Number
         s4_po_number        : String(10);               // S/4HANA Purchase Order Number
         s4_po_item          : String(5);                // PO Line Item
+        plant_code          : String(4);                // SAP Plant code (from airport)
+        s4_sync_status      : String(20);               // S/4 sync status: Pending/Synced/Error
+        s4_sync_timestamp   : DateTime;                 // Last S/4HANA sync timestamp
+
+        // Supplier Dispatch (from FuelRequestDetailSAP UI)
+        dispatch_method     : DispatchMethod;           // API or Email
+        dispatch_transaction_id   : String(50);         // External transaction ID from supplier API
+        dispatch_acknowledgment_id : String(50);        // Acknowledgment reference from supplier
 
         // Notes & Comments
         notes               : String(1000);             // Order notes/special instructions
@@ -791,9 +848,10 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         cancelled_by        : String(100);              // User who cancelled
         cancelled_at        : DateTime;                 // Cancellation timestamp
 
-        // Composition: One order can have multiple deliveries and tickets
+        // Composition: One order can have multiple deliveries, tickets, and milestones
         deliveries          : Composition of many FUEL_DELIVERIES on deliveries.order = $self;
         tickets             : Composition of many FUEL_TICKETS on tickets.order = $self;
+        milestones          : Composition of many FUEL_ORDER_MILESTONES on milestones.order = $self;
 }
 
 /**
@@ -885,6 +943,37 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // Verification
         verified_by         : String(100);              // User who verified
         verified_at         : DateTime;                 // Verification timestamp
+}
+
+// ============================================================================
+// FUEL ORDER MILESTONES (Status Timeline)
+// ============================================================================
+
+/**
+ * FUEL_ORDER_MILESTONES - Milestone/Status Timeline Tracking
+ * Source: FuelSphere native
+ * Volume: ~2,000,000/year (avg 6-8 milestones per order)
+ *
+ * Tracks the progression of each fuel order through its lifecycle.
+ * Used by the Status Timeline component on the Detail Object Page.
+ *
+ * Milestone flow:
+ * Created → Submitted → Approved → Dispatched → Acknowledged →
+ *   InProgress → Completed → POCreated → GRPosted → Validated → Posted → Closed
+ */
+entity FUEL_ORDER_MILESTONES : cuid, AuditTrail {
+        order               : Association to FUEL_ORDERS @mandatory;
+
+        // Milestone Details
+        milestone_type      : MilestoneType @mandatory;     // Type of milestone event
+        milestone_sequence  : Integer @mandatory;            // Ordering (1, 2, 3...)
+        milestone_timestamp : DateTime @mandatory;           // When the milestone was reached
+        performed_by        : String(100);                   // User or system that triggered
+        is_system_generated : Boolean default false;         // True if auto-generated by system
+
+        // Additional Details
+        notes               : String(500);                   // Milestone notes/comments
+        external_reference  : String(50);                    // External ref (e.g., PO number, GR number)
 }
 
 // ============================================================================
