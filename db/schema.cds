@@ -127,6 +127,9 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
         aircraft_model      : String(50);     // Full aircraft model name
         manufacturer        : Association to MANUFACTURE on manufacturer.manufacture_code = manufacturer_code;
         manufacturer_code   : String(2);      // FK to MANUFACTURE
+        aircraft_category   : String(20);     // NARROWBODY, WIDEBODY, REGIONAL
+        registration_country : Association to T005_COUNTRY on registration_country.land1 = registration_country_code;
+        registration_country_code : String(3); // FK to T005_COUNTRY
         fuel_capacity_kg    : Decimal(15,2);  // Maximum fuel capacity in kg
         mtow_kg             : Decimal(15,2);  // Maximum takeoff weight in kg
         cruise_burn_kgph    : Decimal(10,2);  // Cruise fuel burn rate kg/hour

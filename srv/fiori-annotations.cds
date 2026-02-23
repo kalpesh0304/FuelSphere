@@ -262,6 +262,8 @@ annotate service.Aircraft with @(
             type_code,
             aircraft_model,
             manufacturer_code,
+            aircraft_category,
+            registration_country_code,
             status,
             fuel_capacity_kg,
             is_active
@@ -271,10 +273,12 @@ annotate service.Aircraft with @(
             { Value: type_code, Label: 'Type Code', ![@UI.Importance]: #High },
             { Value: aircraft_model, Label: 'Aircraft Model', ![@UI.Importance]: #High },
             { Value: manufacturer.manufacture_name, Label: 'Manufacturer', ![@UI.Importance]: #Medium },
+            { Value: aircraft_category, Label: 'Category', ![@UI.Importance]: #Medium },
             { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)', ![@UI.Importance]: #High },
             { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Medium },
             { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)', ![@UI.Importance]: #Medium },
             { Value: fleet_size, Label: 'Fleet Size', ![@UI.Importance]: #Medium },
+            { Value: registration_country.landx, Label: 'Reg. Country', ![@UI.Importance]: #Medium },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -365,6 +369,9 @@ annotate service.Aircraft with @(
                 { Value: aircraft_model, Label: 'Aircraft Model' },
                 { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
                 { Value: manufacturer_code, Label: 'Manufacturer Code' },
+                { Value: aircraft_category, Label: 'Category' },
+                { Value: registration_country.landx, Label: 'Registration Country' },
+                { Value: registration_country_code, Label: 'Country Code' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
@@ -397,6 +404,8 @@ annotate service.Aircraft with {
     type_code        @title: 'Type Code';
     aircraft_model   @title: 'Aircraft Model';
     manufacturer_code @title: 'Manufacturer Code';
+    aircraft_category @title: 'Category';
+    registration_country_code @title: 'Reg. Country Code';
     fuel_capacity_kg @title: 'Fuel Capacity (kg)';
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
@@ -421,6 +430,31 @@ annotate service.Aircraft with {
                 Parameters: [
                     { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: manufacturer_code, ValueListProperty: 'manufacture_code' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'manufacture_name' }
+                ]
+            }
+        }
+    );
+};
+
+// Value Help for Aircraft Category (fixed values dropdown)
+annotate service.Aircraft with {
+    aircraft_category @(
+        Common.ValueListWithFixedValues: true
+    );
+};
+
+// Value Help for Registration Country
+annotate service.Aircraft with {
+    registration_country_code @(
+        Common: {
+            Text: registration_country.landx,
+            TextArrangement: #TextFirst,
+            ValueList: {
+                Label: 'Countries',
+                CollectionPath: 'Countries',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: registration_country_code, ValueListProperty: 'land1' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'landx' }
                 ]
             }
         }

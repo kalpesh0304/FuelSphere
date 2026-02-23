@@ -51,6 +51,7 @@ service MasterDataService {
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
         manufacturer : redirected to Manufacturers,
+        registration_country : redirected to Countries,
         virtual null as activeCriticality : Integer
     };
 
