@@ -72,8 +72,19 @@ service MasterDataService {
     @odata.draft.enabled
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
-        country : redirected to Countries,
-        plant   : redirected to Plants,
+        country           : redirected to Countries,
+        plant             : redirected to Plants,
+        storage_locations : redirected to AirportStorageLocations,
+        virtual null as activeCriticality : Integer
+    };
+
+    /**
+     * AirportStorageLocations - Tanks/Hydrants per Airport
+     * Composition child of Airports
+     */
+    entity AirportStorageLocations as projection on db.AIRPORT_STORAGE_LOCATIONS {
+        *,
+        airport : redirected to Airports,
         virtual null as activeCriticality : Integer
     };
 

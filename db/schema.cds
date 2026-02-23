@@ -190,15 +190,36 @@ entity FLEET_REGISTRY : cuid, ActiveStatus, AuditTrail {
  * Fields aligned with HLD Section 3.2
  */
 entity MASTER_AIRPORTS : cuid, ActiveStatus, AuditTrail {
-        iata_code       : String(3) @mandatory;   // IATA airport code (Unique)
-        icao_code       : String(4);              // ICAO airport code
-        airport_name    : String(100) @mandatory; // Full airport name
-        city            : String(50) @mandatory;  // City name
-        country         : Association to T005_COUNTRY on country.land1 = country_code;
-        country_code    : String(3) @mandatory;   // FK to T005_COUNTRY.land1
-        timezone        : String(50);             // Airport timezone
-        plant           : Association to T001W_PLANT on plant.werks = s4_plant_code;
-        s4_plant_code   : String(4);              // FK to T001W_PLANT.werks
+        iata_code        : String(3) @mandatory;   // IATA airport code (Unique)
+        icao_code        : String(4);              // ICAO airport code
+        airport_name     : String(100) @mandatory; // Full airport name
+        city             : String(50) @mandatory;  // City name
+        country          : Association to T005_COUNTRY on country.land1 = country_code;
+        country_code     : String(3) @mandatory;   // FK to T005_COUNTRY.land1
+        region           : String(50);             // Geographic region (Asia Pacific, Europe, etc.)
+        timezone         : String(50);             // Airport timezone
+        coordinates      : String(50);             // GPS coordinates (e.g. "1.3644° N, 103.9915° E")
+        plant            : Association to T001W_PLANT on plant.werks = s4_plant_code;
+        s4_plant_code    : String(4);              // FK to T001W_PLANT.werks
+        valuation_area   : String(4);              // S/4HANA valuation area
+        company_code     : String(4);              // S/4HANA company code
+        tax_jurisdiction : String(15);             // Tax jurisdiction code
+        storage_locations : Composition of many AIRPORT_STORAGE_LOCATIONS on storage_locations.airport = $self;
+}
+
+/**
+ * AIRPORT_STORAGE_LOCATIONS - Storage Locations (Tanks/Hydrants) per Airport
+ * Source: FuelSphere native
+ *
+ * Child entity of MASTER_AIRPORTS for fuel storage infrastructure
+ */
+entity AIRPORT_STORAGE_LOCATIONS : cuid, ActiveStatus, AuditTrail {
+        airport          : Association to MASTER_AIRPORTS;
+        location_id      : String(10) @mandatory;  // Storage location code (e.g. T001, H001)
+        description      : String(100);             // Storage location description
+        storage_type     : String(20) @mandatory;   // Storage | Hydrant
+        capacity         : String(20);              // Capacity (e.g. "500,000L") or N/A
+        capacity_uom     : String(10);              // Unit of measure (L, GAL, etc.)
 }
 
 /**

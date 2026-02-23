@@ -101,6 +101,7 @@ annotate service.Airports with @(
             icao_code,
             city,
             country_code,
+            region,
             timezone,
             is_active
         ],
@@ -112,6 +113,7 @@ annotate service.Airports with @(
             { Value: airport_name, Label: 'Airport Name', ![@UI.Importance]: #High },
             { Value: city, Label: 'City', ![@UI.Importance]: #High },
             { Value: country_code, Label: 'Country', ![@UI.Importance]: #Medium },
+            { Value: region, Label: 'Region', ![@UI.Importance]: #Medium },
             { Value: timezone, Label: 'Timezone', ![@UI.Importance]: #Low },
             { Value: s4_plant_code, Label: 'S/4 Plant', ![@UI.Importance]: #Low },
             {
@@ -165,11 +167,12 @@ annotate service.Airports with @(
         FieldGroup#AirportLocation: {
             Data: [
                 { Value: city, Label: 'City' },
-                { Value: country_code, Label: 'Country' }
+                { Value: country_code, Label: 'Country' },
+                { Value: region, Label: 'Region' }
             ]
         },
 
-        // Object Page Sections
+        // Object Page Sections (aligned with Figma AIRPORT_DETAIL_001 tabs)
         Facets: [
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -182,6 +185,12 @@ annotate service.Airports with @(
                 ID     : 'GeographicInfo',
                 Label  : 'Geographic Details',
                 Target : '@UI.FieldGroup#GeographicInfo'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'StorageLocations',
+                Label  : 'Storage Locations',
+                Target : 'storage_locations/@UI.LineItem'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -213,7 +222,9 @@ annotate service.Airports with @(
                 { Value: city, Label: 'City' },
                 { Value: country_code, Label: 'Country Code' },
                 { Value: country.landx, Label: 'Country Name' },
-                { Value: timezone, Label: 'Timezone' }
+                { Value: region, Label: 'Region' },
+                { Value: timezone, Label: 'Timezone' },
+                { Value: coordinates, Label: 'Coordinates' }
             ]
         },
 
@@ -221,7 +232,10 @@ annotate service.Airports with @(
             Label: 'S/4HANA Integration',
             Data: [
                 { Value: s4_plant_code, Label: 'Plant Code' },
-                { Value: plant.name1, Label: 'Plant Name' }
+                { Value: plant.name1, Label: 'Plant Name' },
+                { Value: valuation_area, Label: 'Valuation Area' },
+                { Value: company_code, Label: 'Company Code' },
+                { Value: tax_jurisdiction, Label: 'Tax Jurisdiction' }
             ]
         },
 
@@ -239,19 +253,62 @@ annotate service.Airports with @(
 
 // Field-level annotations for Airports
 annotate service.Airports with {
-    ID              @UI.Hidden;
-    iata_code       @title: 'IATA Code';
-    icao_code       @title: 'ICAO Code';
-    airport_name    @title: 'Airport Name';
-    city            @title: 'City';
-    country_code    @title: 'Country';
-    timezone        @title: 'Timezone';
-    s4_plant_code   @title: 'S/4 Plant Code';
-    is_active       @title: 'Active';
-    created_at      @title: 'Created At';
-    created_by      @title: 'Created By';
-    modified_at     @title: 'Modified At';
-    modified_by     @title: 'Modified By';
+    ID                @UI.Hidden;
+    iata_code         @title: 'IATA Code';
+    icao_code         @title: 'ICAO Code';
+    airport_name      @title: 'Airport Name';
+    city              @title: 'City';
+    country_code      @title: 'Country';
+    region            @title: 'Region';
+    timezone          @title: 'Timezone';
+    coordinates       @title: 'Coordinates';
+    s4_plant_code     @title: 'S/4 Plant Code';
+    valuation_area    @title: 'Valuation Area';
+    company_code      @title: 'Company Code';
+    tax_jurisdiction  @title: 'Tax Jurisdiction';
+    is_active         @title: 'Active';
+    created_at        @title: 'Created At';
+    created_by        @title: 'Created By';
+    modified_at       @title: 'Modified At';
+    modified_by       @title: 'Modified By';
+};
+
+// =============================================================================
+// AIRPORT STORAGE LOCATIONS - Inline Table on Airport Object Page
+// =============================================================================
+
+annotate service.AirportStorageLocations with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Storage Location',
+            TypeNamePlural : 'Storage Locations',
+            Title          : { Value: location_id },
+            Description    : { Value: description }
+        },
+        LineItem: [
+            { Value: location_id, Label: 'ID', ![@UI.Importance]: #High },
+            { Value: description, Label: 'Description', ![@UI.Importance]: #High },
+            { Value: storage_type, Label: 'Type', ![@UI.Importance]: #High },
+            { Value: capacity, Label: 'Capacity', ![@UI.Importance]: #Medium },
+            {
+                Value: is_active,
+                Label: 'Status',
+                Criticality: activeCriticality,
+                ![@UI.Importance]: #High
+            }
+        ]
+    }
+);
+
+annotate service.AirportStorageLocations with {
+    ID            @UI.Hidden;
+    airport       @UI.Hidden;
+    location_id   @title: 'Location ID';
+    description   @title: 'Description';
+    storage_type  @title: 'Type';
+    capacity      @title: 'Capacity';
+    capacity_uom  @title: 'UoM';
+    is_active     @title: 'Status';
 };
 
 // Value Help for Country and Plant
