@@ -745,16 +745,20 @@ annotate service.Routes with @(
             route_code,
             origin_airport,
             destination_airport,
+            status,
             is_active
         ],
 
         LineItem: [
             { Value: route_code, Label: 'Route Code', ![@UI.Importance]: #High },
             { Value: origin.iata_code, Label: 'Origin', ![@UI.Importance]: #High },
+            { Value: origin.airport_name, Label: 'Origin Airport', ![@UI.Importance]: #Medium },
             { Value: destination.iata_code, Label: 'Destination', ![@UI.Importance]: #High },
-            { Value: distance_km, Label: 'Distance (km)', ![@UI.Importance]: #Medium },
+            { Value: destination.airport_name, Label: 'Dest Airport', ![@UI.Importance]: #Medium },
+            { Value: distance_km, Label: 'Distance (km)', ![@UI.Importance]: #High },
             { Value: avg_flight_time, Label: 'Flight Time', ![@UI.Importance]: #Medium },
             { Value: fuel_required, Label: 'Fuel Required (kg)', ![@UI.Importance]: #High },
+            { Value: alternate_count, Label: 'Alternates', ![@UI.Importance]: #Medium },
             {
                 Value: is_active,
                 Label: 'Status',
@@ -770,62 +774,96 @@ annotate service.Routes with @(
             Visualizations: [ '@UI.LineItem' ]
         },
 
+        // Object Page Header DataPoints
         HeaderFacets: [
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#RouteStatus',
-                Label  : 'Status'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#RouteDistance',
+                Target : '@UI.DataPoint#RouteDistance',
                 Label  : 'Distance'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#RouteFuel',
-                Label  : 'Fuel'
+                Target : '@UI.DataPoint#FuelRequired',
+                Label  : 'Fuel Required'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#FlightTime',
+                Label  : 'Flight Time'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.DataPoint#RouteStatus',
+                Label  : 'Status'
             }
         ],
 
-        FieldGroup#RouteStatus: {
-            Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
-                { Value: status, Label: 'Status' }
-            ]
+        DataPoint#RouteDistance: {
+            Value: distance_km,
+            Title: 'Distance (km)'
         },
 
-        FieldGroup#RouteDistance: {
-            Data: [
-                { Value: distance_km, Label: 'Distance (km)' },
-                { Value: avg_flight_time, Label: 'Flight Time' }
-            ]
+        DataPoint#FuelRequired: {
+            Value: fuel_required,
+            Title: 'Fuel Required (kg)'
         },
 
-        FieldGroup#RouteFuel: {
-            Data: [
-                { Value: fuel_required, Label: 'Required (kg)' }
-            ]
+        DataPoint#FlightTime: {
+            Value: avg_flight_time,
+            Title: 'Avg Flight Time'
         },
 
+        DataPoint#RouteStatus: {
+            Value: status,
+            Title: 'Status',
+            Criticality: activeCriticality
+        },
+
+        // Object Page Sections (5)
         Facets: [
             {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'GeneralInfo',
-                Label  : 'General Information',
-                Target : '@UI.FieldGroup#RouteGeneral'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'RouteIdentification',
+                Label  : 'Route Details',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'GeneralInfo',
+                        Label  : 'Identification',
+                        Target : '@UI.FieldGroup#RouteGeneral'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'Airports',
+                        Label  : 'Origin & Destination',
+                        Target : '@UI.FieldGroup#RouteAirports'
+                    }
+                ]
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'FlightFuelData',
+                Label  : 'Flight & Fuel Data',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FlightData',
+                        Label  : 'Flight Data',
+                        Target : '@UI.FieldGroup#FlightData'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FuelData',
+                        Label  : 'Fuel Data',
+                        Target : '@UI.FieldGroup#FuelData'
+                    }
+                ]
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Airports',
-                Label  : 'Origin & Destination',
-                Target : '@UI.FieldGroup#RouteAirports'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FlightData',
-                Label  : 'Flight Data',
-                Target : '@UI.FieldGroup#FlightData'
+                ID     : 'AircraftMatrix',
+                Label  : 'Aircraft Fuel Matrix',
+                Target : 'aircraft_matrix/@UI.LineItem'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -836,7 +874,7 @@ annotate service.Routes with @(
         ],
 
         FieldGroup#RouteGeneral: {
-            Label: 'General Information',
+            Label: 'Identification',
             Data: [
                 { Value: route_code, Label: 'Route Code' },
                 { Value: status, Label: 'Operational Status' },
@@ -863,8 +901,14 @@ annotate service.Routes with @(
             Label: 'Flight Data',
             Data: [
                 { Value: distance_km, Label: 'Distance (km)' },
-                { Value: avg_flight_time, Label: 'Average Flight Time' },
-                { Value: fuel_required, Label: 'Fuel Required (kg)' }
+                { Value: avg_flight_time, Label: 'Average Flight Time' }
+            ]
+        },
+
+        FieldGroup#FuelData: {
+            Label: 'Fuel Data',
+            Data: [
+                { Value: fuel_required, Label: 'Standard Fuel Required (kg)' }
             ]
         },
 
@@ -930,6 +974,44 @@ annotate service.Routes with {
             }
         }
     );
+};
+
+// RouteAircraftMatrix - Inline table on Route Object Page (composition)
+annotate service.RouteAircraftMatrix with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Aircraft Fuel Requirement',
+            TypeNamePlural : 'Aircraft Fuel Requirements'
+        },
+        LineItem: [
+            { Value: aircraft_type.type_code, Label: 'Aircraft Type', ![@UI.Importance]: #High },
+            { Value: aircraft_type.description, Label: 'Description', ![@UI.Importance]: #Medium },
+            { Value: trip_fuel, Label: 'Trip Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: taxi_fuel, Label: 'Taxi (kg)', ![@UI.Importance]: #Medium },
+            { Value: contingency_fuel, Label: 'Contingency (kg)', ![@UI.Importance]: #Medium },
+            { Value: alternate_fuel, Label: 'Alternate (kg)', ![@UI.Importance]: #Medium },
+            { Value: reserve_fuel, Label: 'Reserve (kg)', ![@UI.Importance]: #Medium },
+            { Value: total_standard_fuel, Label: 'Total Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: effective_from, Label: 'Effective From', ![@UI.Importance]: #Medium },
+            { Value: data_source, Label: 'Source', ![@UI.Importance]: #Medium },
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+        ]
+    }
+);
+
+annotate service.RouteAircraftMatrix with {
+    trip_fuel           @title: 'Trip Fuel (kg)';
+    taxi_fuel           @title: 'Taxi Fuel (kg)';
+    contingency_fuel    @title: 'Contingency (kg)';
+    alternate_fuel      @title: 'Alternate (kg)';
+    reserve_fuel        @title: 'Reserve (kg)';
+    extra_fuel          @title: 'Extra (kg)';
+    total_standard_fuel @title: 'Total Fuel (kg)';
+    effective_from      @title: 'Effective From';
+    effective_to        @title: 'Effective To';
+    data_source         @title: 'Data Source';
+    summer_factor       @title: 'Summer Factor';
+    winter_factor       @title: 'Winter Factor';
 };
 
 // =============================================================================

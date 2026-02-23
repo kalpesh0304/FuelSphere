@@ -84,9 +84,20 @@ service MasterDataService {
     @odata.draft.enabled
     entity Routes as projection on db.ROUTE_MASTER {
         *,
-        origin      : redirected to Airports,
-        destination : redirected to Airports,
+        origin          : redirected to Airports,
+        destination     : redirected to Airports,
+        aircraft_matrix : redirected to RouteAircraftMatrix,
         virtual null as activeCriticality : Integer
+    };
+
+    /**
+     * RouteAircraftMatrix - Standard fuel consumption per route/aircraft
+     * Composition child of Routes for Object Page inline table
+     */
+    entity RouteAircraftMatrix as projection on db.ROUTE_AIRCRAFT_MATRIX {
+        *,
+        route         : redirected to Routes,
+        aircraft_type : redirected to Aircraft
     };
 
     // ========================================================================

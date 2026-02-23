@@ -219,6 +219,9 @@ entity ROUTE_MASTER : ActiveStatus, AuditTrail {
         fuel_required       : Decimal(15,2);          // Standard fuel requirement in kg
         alternate_count     : Integer default 0;      // Number of alternate airports
         status              : String(20) default 'ACTIVE'; // ACTIVE/INACTIVE
+
+        // Composition: Aircraft fuel matrix per route
+        aircraft_matrix     : Composition of many ROUTE_AIRCRAFT_MATRIX on aircraft_matrix.route = $self;
 }
 
 // ============================================================================
