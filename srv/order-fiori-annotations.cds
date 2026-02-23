@@ -621,3 +621,86 @@ annotate FuelOrderService.Flights with {
     scheduled_arrival   @title: 'Arrival';
     status              @title: 'Status';
 };
+
+// ============================================================================
+// FUEL ORDER DASHBOARD - KPI & Analytical Annotations (FO-DASHBOARD)
+// ============================================================================
+
+// Aggregation support for dashboard analytics
+annotate FuelOrderService.FuelOrders with @(
+    Aggregation.ApplySupported: {
+        Transformations: [ 'aggregate', 'groupby', 'filter' ],
+        AggregatableProperties: [
+            { Property: ordered_quantity },
+            { Property: total_amount }
+        ],
+        GroupableProperties: [
+            station_code,
+            status,
+            priority,
+            supplier_ID,
+            product_ID,
+            requested_date
+        ]
+    }
+);
+
+// KPI DataPoint annotations for dashboard tiles
+annotate FuelOrderService.FuelOrders with @(
+    UI.DataPoint#TotalOrders: {
+        Value: order_number,
+        Title: 'Total Orders'
+    },
+    UI.DataPoint#OrderStatus: {
+        Value: status,
+        Title: 'Status',
+        Criticality: statusCriticality
+    },
+    UI.DataPoint#OrderQuantity: {
+        Value: ordered_quantity,
+        Title: 'Ordered Quantity',
+        Description: 'Total fuel ordered (kg)'
+    },
+    UI.DataPoint#OrderAmount: {
+        Value: total_amount,
+        Title: 'Order Amount',
+        Description: 'Total order value'
+    }
+);
+
+// ============================================================================
+// SUPPLIER ALLOCATION TARGETS - Dashboard Donut Chart
+// ============================================================================
+
+annotate FuelOrderService.SupplierAllocationTargets with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Supplier Allocation',
+            TypeNamePlural : 'Supplier Allocations',
+            Title          : { Value: supplier.supplier_name },
+            Description    : { Value: station_code }
+        },
+        LineItem: [
+            { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
+            { Value: station_code, Label: 'Station', ![@UI.Importance]: #Medium },
+            { Value: period_year, Label: 'Year', ![@UI.Importance]: #Medium },
+            { Value: target_percentage, Label: 'Target %', ![@UI.Importance]: #High },
+            { Value: actual_percentage, Label: 'Actual %', ![@UI.Importance]: #High },
+            { Value: variance_percentage, Label: 'Variance %', ![@UI.Importance]: #High },
+            { Value: target_volume_kg, Label: 'Target Volume (kg)', ![@UI.Importance]: #Medium },
+            { Value: actual_volume_kg, Label: 'Actual Volume (kg)', ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+annotate FuelOrderService.SupplierAllocationTargets with {
+    ID                  @UI.Hidden;
+    target_percentage   @title: 'Target %';
+    actual_percentage   @title: 'Actual %';
+    variance_percentage @title: 'Variance %';
+    target_volume_kg    @title: 'Target Volume (kg)';
+    actual_volume_kg    @title: 'Actual Volume (kg)';
+    period_year         @title: 'Year';
+    period_month        @title: 'Month';
+    station_code        @title: 'Station';
+};

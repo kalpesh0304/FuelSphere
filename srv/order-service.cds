@@ -165,6 +165,22 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // SUPPLIER ALLOCATION
+    // ========================================================================
+
+    /**
+     * SupplierAllocationTargets - Target vs Actual allocation percentages
+     * Used by the Fuel Order Dashboard donut chart and variance analysis
+     */
+    @readonly
+    entity SupplierAllocationTargets as projection on db.SUPPLIER_ALLOCATION_TARGETS {
+        *,
+        supplier : redirected to Suppliers,
+        airport  : redirected to Airports,
+        contract : redirected to Contracts
+    };
+
+    // ========================================================================
     // FLIGHT SCHEDULE (Read from Master Data)
     // ========================================================================
 
@@ -257,6 +273,12 @@ service FuelOrderService {
      */
     function getOrdersBySupplier(supplierId: UUID, fromDate: Date, toDate: Date) returns OrderSummary;
 
+    /**
+     * Get dashboard KPIs for the Fuel Order Dashboard
+     * Returns total, pending, in-progress, completed counts and supplier allocation data
+     */
+    function getDashboardKPIs(stationCode: String, fromDate: Date, toDate: Date) returns DashboardKPIs;
+
     // ========================================================================
     // TYPE DEFINITIONS
     // ========================================================================
@@ -297,6 +319,25 @@ service FuelOrderService {
     type PriorityCount {
         priority : String(10);
         count    : Integer;
+    };
+
+    type DashboardKPIs {
+        totalOrders     : Integer;
+        pendingOrders   : Integer;
+        inProgressOrders: Integer;
+        completedOrders : Integer;
+        totalTrend      : Decimal(5,2);   // % change vs prior period
+        pendingTrend    : Decimal(5,2);
+        inProgressTrend : Decimal(5,2);
+        completedTrend  : Decimal(5,2);
+        allocations     : array of AllocationSummary;
+    };
+
+    type AllocationSummary {
+        supplierName    : String(100);
+        targetPct       : Decimal(5,2);
+        actualPct       : Decimal(5,2);
+        variance        : Decimal(5,2);
     };
 
     /**

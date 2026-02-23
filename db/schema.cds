@@ -696,6 +696,27 @@ type TicketStatus : String(20) enum {
 }
 
 /**
+ * SUPPLIER_ALLOCATION_TARGETS - Supplier Volume Allocation Targets
+ * Source: FuelSphere native (set by procurement)
+ *
+ * Tracks target vs actual allocation percentages per supplier per station/period.
+ * Dashboard shows donut chart with variance analysis.
+ */
+entity SUPPLIER_ALLOCATION_TARGETS : cuid, ActiveStatus, AuditTrail {
+        supplier            : Association to MASTER_SUPPLIERS;
+        airport             : Association to MASTER_AIRPORTS;
+        station_code        : String(3);                // IATA code (null = all stations)
+        period_year         : Integer @mandatory;       // Budget year
+        period_month        : Integer;                  // Month (null = annual)
+        target_percentage   : Decimal(5,2) @mandatory;  // Target allocation %
+        actual_percentage   : Decimal(5,2) default 0;   // Actual allocation % (calculated)
+        variance_percentage : Decimal(5,2) default 0;   // Variance (actual - target)
+        target_volume_kg    : Decimal(15,2);            // Target volume in kg
+        actual_volume_kg    : Decimal(15,2) default 0;  // Actual volume in kg
+        contract            : Association to MASTER_CONTRACTS;
+}
+
+/**
  * FUEL_ORDERS - Core Fuel Order Entity
  * Source: FuelSphere native
  * Volume: ~300,000/year
