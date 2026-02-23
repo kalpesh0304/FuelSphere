@@ -87,6 +87,7 @@ service MasterDataService {
         origin          : redirected to Airports,
         destination     : redirected to Airports,
         aircraft_matrix : redirected to RouteAircraftMatrix,
+        alternates      : redirected to RouteAlternates,
         virtual null as activeCriticality    : Integer,
         virtual null as aircraft_type_count  : Integer,  // Count of aircraft types on this route
         virtual null as fuel_req_count       : Integer,  // Count of fuel requirements defined
@@ -101,6 +102,16 @@ service MasterDataService {
         *,
         route         : redirected to Routes,
         aircraft_type : redirected to Aircraft
+    };
+
+    /**
+     * RouteAlternates - Alternate airports per route
+     * Composition child of Routes for Object Page alternates section
+     */
+    entity RouteAlternates as projection on db.ROUTE_ALTERNATES {
+        *,
+        route   : redirected to Routes,
+        airport : redirected to Airports
     };
 
     // ========================================================================

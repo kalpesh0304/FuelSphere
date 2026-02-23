@@ -786,7 +786,7 @@ annotate service.Routes with @(
             Visualizations: [ '@UI.LineItem' ]
         },
 
-        // Object Page Header DataPoints
+        // Object Page Header: 4 metrics matching Figma RouteDetailPage header
         HeaderFacets: [
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -795,23 +795,18 @@ annotate service.Routes with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#FuelRequired',
-                Label  : 'Fuel Required'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.DataPoint#FlightTime',
-                Label  : 'Flight Time'
+                Label  : 'Avg Flight Time'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#AircraftTypeCount',
-                Label  : 'Aircraft Types'
+                Target : '@UI.DataPoint#DailyFlights',
+                Label  : 'Daily Flights'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#RouteStatus',
-                Label  : 'Status'
+                Target : '@UI.DataPoint#FuelPlanningStatus',
+                Label  : 'Fuel Planning'
             }
         ],
 
@@ -820,58 +815,55 @@ annotate service.Routes with @(
             Title: 'Distance (km)'
         },
 
-        DataPoint#FuelRequired: {
-            Value: fuel_required,
-            Title: 'Fuel Required (kg)'
-        },
-
         DataPoint#FlightTime: {
             Value: avg_flight_time,
             Title: 'Avg Flight Time'
         },
 
-        DataPoint#AircraftTypeCount: {
-            Value: aircraft_type_count,
-            Title: 'Aircraft Types'
+        DataPoint#DailyFlights: {
+            Value: daily_flights,
+            Title: 'Daily Flights'
         },
 
-        DataPoint#RouteStatus: {
-            Value: status,
-            Title: 'Status',
+        DataPoint#FuelPlanningStatus: {
+            Value: fuel_planning_status,
+            Title: 'Fuel Planning',
             Criticality: activeCriticality
         },
 
-        // Object Page Sections (4)
+        // Object Page: 6 anchor sections matching Figma RouteDetailPage
         Facets: [
+            // Section 1: General (Route Information) - 2-column layout
             {
                 $Type  : 'UI.CollectionFacet',
-                ID     : 'RouteIdentification',
+                ID     : 'General',
+                Label  : 'General',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'RouteInfoLeft',
+                        Label  : 'Route Information',
+                        Target : '@UI.FieldGroup#RouteInfoLeft'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'RouteInfoRight',
+                        Label  : 'Flight Details',
+                        Target : '@UI.FieldGroup#RouteInfoRight'
+                    }
+                ]
+            },
+            // Section 2: Route Details
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'RouteDetails',
                 Label  : 'Route Details',
                 Facets : [
                     {
                         $Type  : 'UI.ReferenceFacet',
-                        ID     : 'GeneralInfo',
-                        Label  : 'Identification',
-                        Target : '@UI.FieldGroup#RouteGeneral'
-                    },
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        ID     : 'Airports',
+                        ID     : 'OriginDestination',
                         Label  : 'Origin & Destination',
                         Target : '@UI.FieldGroup#RouteAirports'
-                    }
-                ]
-            },
-            {
-                $Type  : 'UI.CollectionFacet',
-                ID     : 'FlightFuelData',
-                Label  : 'Flight & Fuel Data',
-                Facets : [
-                    {
-                        $Type  : 'UI.ReferenceFacet',
-                        ID     : 'FlightData',
-                        Label  : 'Flight Data',
-                        Target : '@UI.FieldGroup#FlightData'
                     },
                     {
                         $Type  : 'UI.ReferenceFacet',
@@ -881,33 +873,63 @@ annotate service.Routes with @(
                     }
                 ]
             },
+            // Section 3: Aircraft-Fuel Requirements (composition table)
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'AircraftMatrix',
-                Label  : 'Aircraft Fuel Matrix',
+                ID     : 'AircraftFuelRequirements',
+                Label  : 'Aircraft-Fuel Requirements',
                 Target : 'aircraft_matrix/@UI.LineItem'
             },
+            // Section 4: Alternates (composition table)
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Administrative',
-                Label  : 'Administrative',
+                ID     : 'Alternates',
+                Label  : 'Alternates',
+                Target : 'alternates/@UI.LineItem'
+            },
+            // Section 5: Weather Data (seasonal factors)
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'WeatherData',
+                Label  : 'Weather Data',
+                Target : '@UI.FieldGroup#WeatherData'
+            },
+            // Section 6: Historical Analysis / Administrative
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'HistoricalAnalysis',
+                Label  : 'Historical Analysis',
                 Target : '@UI.FieldGroup#RouteAdmin'
             }
         ],
 
-        FieldGroup#RouteGeneral: {
-            Label: 'Identification',
+        // Section 1 Left: Route core info (matches Figma left column)
+        FieldGroup#RouteInfoLeft: {
+            Label: 'Route Information',
             Data: [
                 { Value: route_code, Label: 'Route Code' },
-                { Value: status, Label: 'Operational Status' },
-                { Value: alternate_count, Label: 'Alternate Airports' },
-                { Value: aircraft_type_count, Label: 'Aircraft Types' },
-                { Value: fuel_req_count, Label: 'Fuel Requirements Defined' },
-                { Value: fuel_planning_status, Label: 'Fuel Planning Status' },
-                { Value: is_active, Label: 'Active' }
+                { Value: origin.airport_name, Label: 'Origin Airport' },
+                { Value: destination.airport_name, Label: 'Destination Airport' },
+                { Value: distance_km, Label: 'Great Circle Distance (km)' },
+                { Value: avg_air_distance, Label: 'Average Air Distance (km)' },
+                { Value: avg_flight_time, Label: 'Typical Flight Time' }
             ]
         },
 
+        // Section 1 Right: Flight details (matches Figma right column)
+        FieldGroup#RouteInfoRight: {
+            Label: 'Flight Details',
+            Data: [
+                { Value: iata_route, Label: 'IATA Route' },
+                { Value: flight_direction, Label: 'Flight Direction' },
+                { Value: block_time, Label: 'Block Time' },
+                { Value: seasonal_variance, Label: 'Seasonal Variance' },
+                { Value: daily_flights, Label: 'Daily Flights' },
+                { Value: status, Label: 'Status' }
+            ]
+        },
+
+        // Section 2: Origin & Destination details
         FieldGroup#RouteAirports: {
             Label: 'Origin & Destination',
             Data: [
@@ -922,14 +944,7 @@ annotate service.Routes with @(
             ]
         },
 
-        FieldGroup#FlightData: {
-            Label: 'Flight Data',
-            Data: [
-                { Value: distance_km, Label: 'Distance (km)' },
-                { Value: avg_flight_time, Label: 'Average Flight Time' }
-            ]
-        },
-
+        // Section 2: Fuel Data
         FieldGroup#FuelData: {
             Label: 'Fuel Data',
             Data: [
@@ -940,8 +955,18 @@ annotate service.Routes with @(
             ]
         },
 
+        // Section 5: Weather Data (seasonal factors from matrix)
+        FieldGroup#WeatherData: {
+            Label: 'Weather & Seasonal Data',
+            Data: [
+                { Value: seasonal_variance, Label: 'Seasonal Variance' },
+                { Value: alternate_count, Label: 'Alternate Airports' }
+            ]
+        },
+
+        // Section 6: Administrative / Historical
         FieldGroup#RouteAdmin: {
-            Label: 'Administrative',
+            Label: 'Historical Analysis',
             Data: [
                 { Value: created_at, Label: 'Created At' },
                 { Value: created_by, Label: 'Created By' },
@@ -958,9 +983,15 @@ annotate service.Routes with {
     origin_airport       @title: 'Origin';
     destination_airport  @title: 'Destination';
     distance_km          @title: 'Distance (km)';
+    avg_air_distance     @title: 'Avg Air Distance (km)';
     avg_flight_time      @title: 'Flight Time';
+    block_time           @title: 'Block Time';
     fuel_required        @title: 'Fuel Required (kg)';
     alternate_count      @title: 'Alternates';
+    daily_flights        @title: 'Daily Flights';
+    iata_route           @title: 'IATA Route';
+    flight_direction     @title: 'Flight Direction';
+    seasonal_variance    @title: 'Seasonal Variance';
     status               @title: 'Status';
     is_active            @title: 'Active';
     aircraft_type_count  @title: 'Aircraft Types';
@@ -1008,6 +1039,8 @@ annotate service.Routes with {
 };
 
 // RouteAircraftMatrix - Inline table on Route Object Page (composition)
+// Columns match Figma RouteDetailPage Aircraft-Fuel Requirements table:
+// Aircraft Type | Fuel Capacity (kg) | Planned Fuel (kg) | Reserve (kg) | Margin | Validity | Approval
 annotate service.RouteAircraftMatrix with @(
     UI: {
         HeaderInfo: {
@@ -1016,17 +1049,71 @@ annotate service.RouteAircraftMatrix with @(
         },
         LineItem: [
             { Value: aircraft_type.type_code, Label: 'Aircraft Type', ![@UI.Importance]: #High },
-            { Value: aircraft_type.description, Label: 'Description', ![@UI.Importance]: #Medium },
-            { Value: trip_fuel, Label: 'Trip Fuel (kg)', ![@UI.Importance]: #High },
-            { Value: taxi_fuel, Label: 'Taxi (kg)', ![@UI.Importance]: #Medium },
-            { Value: contingency_fuel, Label: 'Contingency (kg)', ![@UI.Importance]: #Medium },
-            { Value: alternate_fuel, Label: 'Alternate (kg)', ![@UI.Importance]: #Medium },
-            { Value: reserve_fuel, Label: 'Reserve (kg)', ![@UI.Importance]: #Medium },
-            { Value: total_standard_fuel, Label: 'Total Fuel (kg)', ![@UI.Importance]: #High },
-            { Value: effective_from, Label: 'Effective From', ![@UI.Importance]: #Medium },
-            { Value: data_source, Label: 'Source', ![@UI.Importance]: #Medium },
-            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
-        ]
+            { Value: aircraft_type.fuel_capacity_kg, Label: 'Fuel Capacity (kg)', ![@UI.Importance]: #High },
+            { Value: total_standard_fuel, Label: 'Planned Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: reserve_fuel, Label: 'Reserve (kg)', ![@UI.Importance]: #High },
+            { Value: extra_fuel, Label: 'Margin (kg)', ![@UI.Importance]: #Medium },
+            { Value: effective_from, Label: 'Validity From', ![@UI.Importance]: #Medium },
+            { Value: effective_to, Label: 'Validity To', ![@UI.Importance]: #Medium },
+            { Value: approval_status, Label: 'Approval', ![@UI.Importance]: #High }
+        ],
+        // Fuel component breakdown available on sub-object page
+        Facets: [
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'FuelComponents',
+                Label  : 'Fuel Components',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FuelBreakdown',
+                        Label  : 'Fuel Breakdown (kg)',
+                        Target : '@UI.FieldGroup#FuelBreakdown'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'SeasonalFactors',
+                        Label  : 'Seasonal Adjustments',
+                        Target : '@UI.FieldGroup#SeasonalFactors'
+                    }
+                ]
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ApprovalInfo',
+                Label  : 'Approval & Source',
+                Target : '@UI.FieldGroup#ApprovalInfo'
+            }
+        ],
+        FieldGroup#FuelBreakdown: {
+            Label: 'Fuel Breakdown (kg)',
+            Data: [
+                { Value: trip_fuel, Label: 'Trip Fuel (kg)' },
+                { Value: taxi_fuel, Label: 'Taxi Fuel (kg)' },
+                { Value: contingency_fuel, Label: 'Contingency (kg)' },
+                { Value: alternate_fuel, Label: 'Alternate (kg)' },
+                { Value: reserve_fuel, Label: 'Reserve (kg)' },
+                { Value: extra_fuel, Label: 'Extra/Margin (kg)' },
+                { Value: total_standard_fuel, Label: 'Total Planned Fuel (kg)' }
+            ]
+        },
+        FieldGroup#SeasonalFactors: {
+            Label: 'Seasonal Adjustments',
+            Data: [
+                { Value: summer_factor, Label: 'Summer Factor' },
+                { Value: winter_factor, Label: 'Winter Factor' }
+            ]
+        },
+        FieldGroup#ApprovalInfo: {
+            Label: 'Approval & Source',
+            Data: [
+                { Value: approval_status, Label: 'Approval Status' },
+                { Value: approved_by, Label: 'Approved By' },
+                { Value: approved_at, Label: 'Approved At' },
+                { Value: data_source, Label: 'Data Source' },
+                { Value: notes, Label: 'Notes' }
+            ]
+        }
     }
 );
 
@@ -1040,9 +1127,40 @@ annotate service.RouteAircraftMatrix with {
     total_standard_fuel @title: 'Total Fuel (kg)';
     effective_from      @title: 'Effective From';
     effective_to        @title: 'Effective To';
+    approval_status     @title: 'Approval';
+    approved_by         @title: 'Approved By';
+    approved_at         @title: 'Approved At';
     data_source         @title: 'Data Source';
     summer_factor       @title: 'Summer Factor';
     winter_factor       @title: 'Winter Factor';
+};
+
+// RouteAlternates - Inline table on Route Object Page (composition)
+// Columns match Figma RouteDetailPage Alternate Airports table:
+// Airport | Code | Distance from Origin | Distance from Dest | Fuel to Alternate (kg) | Status
+annotate service.RouteAlternates with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Alternate Airport',
+            TypeNamePlural : 'Alternate Airports'
+        },
+        LineItem: [
+            { Value: airport.airport_name, Label: 'Airport', ![@UI.Importance]: #High },
+            { Value: airport.iata_code, Label: 'Code', ![@UI.Importance]: #High },
+            { Value: distance_from_origin, Label: 'Distance from Origin (km)', ![@UI.Importance]: #High },
+            { Value: distance_from_dest, Label: 'Distance from Dest (km)', ![@UI.Importance]: #High },
+            { Value: fuel_to_alternate, Label: 'Fuel to Alternate (kg)', ![@UI.Importance]: #High },
+            { Value: alternate_type, Label: 'Status', ![@UI.Importance]: #High }
+        ]
+    }
+);
+
+annotate service.RouteAlternates with {
+    alternate_type       @title: 'Alternate Type';
+    distance_from_origin @title: 'Distance from Origin (km)';
+    distance_from_dest   @title: 'Distance from Dest (km)';
+    fuel_to_alternate    @title: 'Fuel to Alternate (kg)';
+    priority             @title: 'Priority';
 };
 
 // =============================================================================

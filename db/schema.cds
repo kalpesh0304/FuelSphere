@@ -215,13 +215,21 @@ entity ROUTE_MASTER : ActiveStatus, AuditTrail {
         destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
         destination_airport : String(3) @mandatory;   // FK to MASTER_AIRPORTS.iata_code
         distance_km         : Decimal(10,2) @mandatory; // Distance in kilometers
+        avg_air_distance    : Decimal(10,2);          // Average air distance accounting for routing (km)
         avg_flight_time     : String(10);             // Average flight time (HH:MM)
+        block_time          : String(10);             // Block time gate-to-gate (HH:MM)
         fuel_required       : Decimal(15,2);          // Standard fuel requirement in kg
         alternate_count     : Integer default 0;      // Number of alternate airports
+        daily_flights       : Integer default 0;      // Average daily flight frequency
+        iata_route          : String(30);             // IATA route designator
+        flight_direction    : String(20);             // EASTBOUND/WESTBOUND/NORTHBOUND/SOUTHBOUND
+        seasonal_variance   : String(50);             // Seasonal variance description (e.g., ±12% winter)
         status              : String(20) default 'ACTIVE'; // ACTIVE/INACTIVE
 
         // Composition: Aircraft fuel matrix per route
         aircraft_matrix     : Composition of many ROUTE_AIRCRAFT_MATRIX on aircraft_matrix.route = $self;
+        // Composition: Alternate airports for this route
+        alternates          : Composition of many ROUTE_ALTERNATES on alternates.route = $self;
 }
 
 // ============================================================================
@@ -977,9 +985,33 @@ entity ROUTE_AIRCRAFT_MATRIX : cuid, ActiveStatus, AuditTrail {
         effective_from      : Date @mandatory;            // Validity start date
         effective_to        : Date;                       // Validity end date (NULL = open-ended)
 
+        // Approval
+        approval_status     : String(20) default 'PENDING'; // PENDING / APPROVED / REJECTED
+        approved_by         : String(255);                // User who approved
+        approved_at         : DateTime;                   // Approval timestamp
+
         // Source & Notes
         data_source         : String(50);                 // OPERATIONAL / MANUFACTURER / CALCULATED
         notes               : String(500);                // Notes on fuel requirements
+}
+
+/**
+ * ROUTE_ALTERNATES - Alternate Airports per Route
+ * Source: FuelSphere native
+ * Volume: ~3 per route
+ *
+ * Stores alternate airport assignments for each route,
+ * used in fuel planning for diversion fuel calculations.
+ */
+entity ROUTE_ALTERNATES : cuid, ActiveStatus, AuditTrail {
+        route               : Association to ROUTE_MASTER @mandatory;
+        airport             : Association to MASTER_AIRPORTS @mandatory;
+        alternate_type      : String(20) default 'PRIMARY';  // PRIMARY / SECONDARY / ARRIVAL_ALT
+        distance_from_origin: Decimal(10,2);                 // Distance from origin airport (km)
+        distance_from_dest  : Decimal(10,2);                 // Distance from destination airport (km)
+        fuel_to_alternate   : Decimal(12,2);                 // Fuel required to reach alternate (kg)
+        priority            : Integer default 1;             // Selection priority (1 = highest)
+        notes               : String(500);
 }
 
 /**
