@@ -120,7 +120,7 @@ entity MANUFACTURE : ActiveStatus, AuditTrail {
  * AIRCRAFT_MASTER - Aircraft Type Master
  * Source: FuelSphere native
  *
- * Fields aligned with HLD Section 3.2
+ * Fields aligned with HLD Section 3.2 + Figma Aircraft Detail Page
  */
 entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
     key type_code           : String(10);     // Aircraft type code (PK)
@@ -130,11 +130,57 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
         aircraft_category   : String(20);     // NARROWBODY, WIDEBODY, REGIONAL
         registration_country : Association to T005_COUNTRY on registration_country.land1 = registration_country_code;
         registration_country_code : String(3); // FK to T005_COUNTRY
+
+        // Type Designators
+        iata_type_code      : String(4);      // IATA aircraft type designator
+        icao_type_code      : String(4);      // ICAO aircraft type designator (e.g. B738)
+        engine_type         : String(50);     // Engine description (e.g. Twin-engine jet)
+
+        // Weights (all in kg)
         fuel_capacity_kg    : Decimal(15,2);  // Maximum fuel capacity in kg
         mtow_kg             : Decimal(15,2);  // Maximum takeoff weight in kg
+        mlw_kg              : Decimal(15,2);  // Maximum landing weight in kg
+        mzfw_kg             : Decimal(15,2);  // Maximum zero-fuel weight in kg
+        oew_kg              : Decimal(15,2);  // Operating empty weight in kg
+
+        // Performance
         cruise_burn_kgph    : Decimal(10,2);  // Cruise fuel burn rate kg/hour
+        max_range_km        : Decimal(10,2);  // Maximum range in km
+        cruise_speed_mach   : Decimal(5,3);   // Cruise speed in Mach number
+        service_ceiling_ft  : Integer;        // Service ceiling in feet
+        takeoff_distance_m  : Integer;        // Takeoff distance in meters
+
+        // Configuration
+        typical_seating     : Integer;        // Typical seating capacity
+        cargo_capacity_kg   : Decimal(12,2);  // Cargo capacity in kg
+
+        // Production
+        first_flight_date   : Date;           // Date of type first flight
+        production_status   : String(20);     // IN_PRODUCTION, DISCONTINUED, DEVELOPMENT
+
+        // Fleet
         fleet_size          : Integer;        // Number in fleet
         status              : String(20) default 'ACTIVE'; // ACTIVE/INACTIVE/MAINTENANCE
+
+        // Composition: Fleet registry for individual aircraft
+        fleet               : Composition of many FLEET_REGISTRY on fleet.aircraft_type = $self;
+}
+
+/**
+ * FLEET_REGISTRY - Individual Aircraft Registrations
+ * Tracks tail numbers linked to an aircraft type
+ */
+entity FLEET_REGISTRY : cuid, ActiveStatus, AuditTrail {
+        aircraft_type       : Association to AIRCRAFT_MASTER @mandatory;
+        tail_number         : String(10) @mandatory;  // Tail/registration number (e.g. 9V-XXA)
+        registration        : String(20);             // Registration authority reference
+        registration_country : Association to T005_COUNTRY on registration_country.land1 = reg_country_code;
+        reg_country_code    : String(3);              // Registration country code
+        manufacture_date    : Date;                   // Aircraft manufacture date
+        aircraft_age_years  : Decimal(4,1);           // Age in years
+        aircraft_status     : String(20) default 'ACTIVE'; // ACTIVE, MAINTENANCE, STORED, RETIRED
+        last_inspection_date : Date;                  // Last maintenance inspection
+        next_inspection_date : Date;                  // Next scheduled inspection
 }
 
 /**

@@ -52,7 +52,17 @@ service MasterDataService {
         *,
         manufacturer : redirected to Manufacturers,
         registration_country : redirected to Countries,
+        fleet : redirected to FleetRegistry,
         virtual null as activeCriticality : Integer
+    };
+
+    /**
+     * FleetRegistry - Individual Aircraft Registrations
+     * Managed as composition under Aircraft
+     */
+    entity FleetRegistry as projection on db.FLEET_REGISTRY {
+        *,
+        registration_country : redirected to Countries
     };
 
     /**

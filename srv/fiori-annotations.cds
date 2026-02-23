@@ -258,12 +258,17 @@ annotate service.Aircraft with @(
             ImageUrl       : 'sap-icon://flight'
         },
 
+        // =====================================================================
+        // List Report - Selection Fields & Line Item
+        // =====================================================================
+
         SelectionFields: [
             type_code,
             aircraft_model,
             manufacturer_code,
             aircraft_category,
             registration_country_code,
+            icao_type_code,
             status,
             fuel_capacity_kg,
             is_active
@@ -274,6 +279,7 @@ annotate service.Aircraft with @(
             { Value: aircraft_model, Label: 'Aircraft Model', ![@UI.Importance]: #High },
             { Value: manufacturer.manufacture_name, Label: 'Manufacturer', ![@UI.Importance]: #Medium },
             { Value: aircraft_category, Label: 'Category', ![@UI.Importance]: #Medium },
+            { Value: icao_type_code, Label: 'ICAO', ![@UI.Importance]: #Medium },
             { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)', ![@UI.Importance]: #High },
             { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Medium },
             { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)', ![@UI.Importance]: #Medium },
@@ -294,46 +300,41 @@ annotate service.Aircraft with @(
             Visualizations: [ '@UI.LineItem' ]
         },
 
+        // =====================================================================
+        // Object Page - Header KPIs (4 metrics per Figma)
+        // =====================================================================
+
         HeaderFacets: [
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#AircraftStatus',
-                Label  : 'Status'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#FuelCapacity',
+                Target : '@UI.DataPoint#FuelCapacity',
                 Label  : 'Fuel Capacity'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#MTOW',
-                Label  : 'MTOW'
+                Target : '@UI.DataPoint#MaxRange',
+                Label  : 'Max Range'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.DataPoint#FleetSize',
                 Label  : 'Fleet Size'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#AircraftStatus',
+                Label  : 'Status'
             }
         ],
 
-        FieldGroup#AircraftStatus: {
-            Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
-                { Value: status, Label: 'Status' }
-            ]
+        DataPoint#FuelCapacity: {
+            Value: fuel_capacity_kg,
+            Title: 'Fuel Capacity (kg)'
         },
 
-        FieldGroup#FuelCapacity: {
-            Data: [
-                { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)' },
-                { Value: cruise_burn_kgph, Label: 'Burn Rate (kg/hr)' }
-            ]
-        },
-
-        DataPoint#MTOW: {
-            Value: mtow_kg,
-            Title: 'Max Takeoff Weight (kg)'
+        DataPoint#MaxRange: {
+            Value: max_range_km,
+            Title: 'Max Range (km)'
         },
 
         DataPoint#FleetSize: {
@@ -341,51 +342,208 @@ annotate service.Aircraft with @(
             Title: 'Fleet Size'
         },
 
+        FieldGroup#AircraftStatus: {
+            Data: [
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: status, Label: 'Operational Status' }
+            ]
+        },
+
+        // =====================================================================
+        // Object Page - 6 Anchor Navigation Sections (per Figma AIRCRAFT_DETAIL_001)
+        // =====================================================================
+
         Facets: [
+            // SECTION 1: General Information
             {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'GeneralInfo',
-                Label  : 'General Information',
-                Target : '@UI.FieldGroup#AircraftGeneral'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'GeneralSection',
+                Label  : 'General',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'GeneralIdentification',
+                        Label  : 'Identification',
+                        Target : '@UI.FieldGroup#Identification'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'GeneralClassification',
+                        Label  : 'Classification & Configuration',
+                        Target : '@UI.FieldGroup#Classification'
+                    }
+                ]
             },
+
+            // SECTION 2: Fuel Specifications & Consumption
             {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'Performance',
-                Label  : 'Performance & Fleet',
-                Target : '@UI.FieldGroup#Performance'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'FuelSpecsSection',
+                Label  : 'Fuel Specifications',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FuelCapacityInfo',
+                        Label  : 'Fuel Capacity & Burn',
+                        Target : '@UI.FieldGroup#FuelCapacity'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FuelTypeInfo',
+                        Label  : 'Fuel Type Specifications',
+                        Target : '@UI.FieldGroup#FuelTypeSpecs'
+                    }
+                ]
             },
+
+            // SECTION 3: Weight & Performance Specifications
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'PerformanceSection',
+                Label  : 'Performance',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'WeightsInfo',
+                        Label  : 'Weights',
+                        Target : '@UI.FieldGroup#Weights'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'PerformanceInfo',
+                        Label  : 'Performance',
+                        Target : '@UI.FieldGroup#PerformanceData'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FuelEfficiencyInfo',
+                        Label  : 'Fuel Efficiency',
+                        Target : '@UI.FieldGroup#FuelEfficiency'
+                    }
+                ]
+            },
+
+            // SECTION 4: Fleet Registry (composition table)
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Administrative',
+                ID     : 'FleetRegistrySection',
+                Label  : 'Fleet Registry',
+                Target : 'fleet/@UI.LineItem'
+            },
+
+            // SECTION 5: Routes (placeholder - Route-Aircraft matrix not composed here)
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'RoutesSection',
+                Label  : 'Routes',
+                Target : '@UI.FieldGroup#RoutesPlaceholder'
+            },
+
+            // SECTION 6: Administrative
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'AdministrativeSection',
                 Label  : 'Administrative',
                 Target : '@UI.FieldGroup#AircraftAdmin'
             }
         ],
 
-        FieldGroup#AircraftGeneral: {
-            Label: 'General Information',
+        // =====================================================================
+        // SECTION 1: General Information - Field Groups
+        // =====================================================================
+
+        FieldGroup#Identification: {
+            Label: 'Identification',
             Data: [
                 { Value: type_code, Label: 'Type Code' },
+                { Value: iata_type_code, Label: 'IATA Type Code' },
+                { Value: icao_type_code, Label: 'ICAO Type Code' },
                 { Value: aircraft_model, Label: 'Aircraft Model' },
                 { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
                 { Value: manufacturer_code, Label: 'Manufacturer Code' },
+                { Value: registration_country.landx, Label: 'Registration Country' }
+            ]
+        },
+
+        FieldGroup#Classification: {
+            Label: 'Classification & Configuration',
+            Data: [
                 { Value: aircraft_category, Label: 'Category' },
-                { Value: registration_country.landx, Label: 'Registration Country' },
-                { Value: registration_country_code, Label: 'Country Code' },
+                { Value: engine_type, Label: 'Engine Type' },
+                { Value: typical_seating, Label: 'Typical Seating' },
+                { Value: cargo_capacity_kg, Label: 'Cargo Capacity (kg)' },
+                { Value: first_flight_date, Label: 'First Flight' },
+                { Value: production_status, Label: 'Production Status' },
                 { Value: is_active, Label: 'Active' }
             ]
         },
 
-        FieldGroup#Performance: {
-            Label: 'Performance & Fleet',
+        // =====================================================================
+        // SECTION 2: Fuel Specifications - Field Groups
+        // =====================================================================
+
+        FieldGroup#FuelCapacity: {
+            Label: 'Fuel Capacity & Burn Rates',
             Data: [
                 { Value: fuel_capacity_kg, Label: 'Fuel Capacity (kg)' },
-                { Value: cruise_burn_kgph, Label: 'Cruise Burn Rate (kg/hr)' },
-                { Value: mtow_kg, Label: 'Max Takeoff Weight (kg)' },
-                { Value: fleet_size, Label: 'Fleet Size' },
-                { Value: status, Label: 'Operational Status' }
+                { Value: cruise_burn_kgph, Label: 'Cruise Burn Rate (kg/hr)' }
             ]
         },
+
+        FieldGroup#FuelTypeSpecs: {
+            Label: 'Fuel Type Specifications',
+            Data: [
+                { Value: cruise_burn_kgph, Label: 'Cruise Consumption (kg/hr)' }
+            ]
+        },
+
+        // =====================================================================
+        // SECTION 3: Weight & Performance - Field Groups
+        // =====================================================================
+
+        FieldGroup#Weights: {
+            Label: 'Weights (kg)',
+            Data: [
+                { Value: mtow_kg, Label: 'MTOW' },
+                { Value: mlw_kg, Label: 'MLW (Max Landing Weight)' },
+                { Value: mzfw_kg, Label: 'MZFW (Max Zero-Fuel Weight)' },
+                { Value: oew_kg, Label: 'Operating Empty Weight' }
+            ]
+        },
+
+        FieldGroup#PerformanceData: {
+            Label: 'Performance',
+            Data: [
+                { Value: max_range_km, Label: 'Max Range (km)' },
+                { Value: cruise_speed_mach, Label: 'Cruise Speed (Mach)' },
+                { Value: service_ceiling_ft, Label: 'Service Ceiling (ft)' },
+                { Value: takeoff_distance_m, Label: 'Takeoff Distance (m)' }
+            ]
+        },
+
+        FieldGroup#FuelEfficiency: {
+            Label: 'Fuel Efficiency',
+            Data: [
+                { Value: cruise_burn_kgph, Label: 'Fuel per Flight Hour (kg/hr)' },
+                { Value: fleet_size, Label: 'Fleet Size' }
+            ]
+        },
+
+        // =====================================================================
+        // SECTION 5: Routes Placeholder
+        // =====================================================================
+
+        FieldGroup#RoutesPlaceholder: {
+            Label: 'Route-Aircraft Fuel Planning',
+            Data: [
+                { Value: type_code, Label: 'Aircraft Type' },
+                { Value: fleet_size, Label: 'Active Fleet Size' }
+            ]
+        },
+
+        // =====================================================================
+        // SECTION 6: Administrative
+        // =====================================================================
 
         FieldGroup#AircraftAdmin: {
             Label: 'Administrative',
@@ -401,21 +559,35 @@ annotate service.Aircraft with @(
 
 // Field-level annotations for Aircraft
 annotate service.Aircraft with {
-    type_code        @title: 'Type Code';
-    aircraft_model   @title: 'Aircraft Model';
+    type_code         @title: 'Type Code';
+    aircraft_model    @title: 'Aircraft Model';
     manufacturer_code @title: 'Manufacturer Code';
     aircraft_category @title: 'Category';
     registration_country_code @title: 'Reg. Country Code';
-    fuel_capacity_kg @title: 'Fuel Capacity (kg)';
-    mtow_kg          @title: 'MTOW (kg)';
-    cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
-    fleet_size       @title: 'Fleet Size';
-    status           @title: 'Status';
-    is_active        @title: 'Active';
-    created_at       @title: 'Created At';
-    created_by       @title: 'Created By';
-    modified_at      @title: 'Modified At';
-    modified_by      @title: 'Modified By';
+    iata_type_code    @title: 'IATA Type Code';
+    icao_type_code    @title: 'ICAO Type Code';
+    engine_type       @title: 'Engine Type';
+    fuel_capacity_kg  @title: 'Fuel Capacity (kg)';
+    mtow_kg           @title: 'MTOW (kg)';
+    mlw_kg            @title: 'MLW (kg)';
+    mzfw_kg           @title: 'MZFW (kg)';
+    oew_kg            @title: 'OEW (kg)';
+    cruise_burn_kgph  @title: 'Burn Rate (kg/hr)';
+    max_range_km      @title: 'Max Range (km)';
+    cruise_speed_mach @title: 'Cruise Speed (Mach)';
+    service_ceiling_ft @title: 'Service Ceiling (ft)';
+    takeoff_distance_m @title: 'Takeoff Distance (m)';
+    typical_seating   @title: 'Typical Seating';
+    cargo_capacity_kg @title: 'Cargo Capacity (kg)';
+    first_flight_date @title: 'First Flight';
+    production_status @title: 'Production Status';
+    fleet_size        @title: 'Fleet Size';
+    status            @title: 'Status';
+    is_active         @title: 'Active';
+    created_at        @title: 'Created At';
+    created_by        @title: 'Created By';
+    modified_at       @title: 'Modified At';
+    modified_by       @title: 'Modified By';
 };
 
 // Value Help for Manufacturer
@@ -459,6 +631,50 @@ annotate service.Aircraft with {
             }
         }
     );
+};
+
+// Value Help for Production Status (fixed values dropdown)
+annotate service.Aircraft with {
+    production_status @(
+        Common.ValueListWithFixedValues: true
+    );
+};
+
+// =====================================================================
+// Fleet Registry - Line Item annotations for composition table
+// =====================================================================
+
+annotate service.FleetRegistry with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Registered Aircraft',
+            TypeNamePlural : 'Fleet Registry',
+            Title          : { Value: tail_number },
+            Description    : { Value: registration }
+        },
+
+        LineItem: [
+            { Value: tail_number, Label: 'Tail Number', ![@UI.Importance]: #High },
+            { Value: registration, Label: 'Registration', ![@UI.Importance]: #High },
+            { Value: registration_country.landx, Label: 'Country', ![@UI.Importance]: #Medium },
+            { Value: aircraft_age_years, Label: 'Age (years)', ![@UI.Importance]: #Medium },
+            { Value: aircraft_status, Label: 'Status', ![@UI.Importance]: #High },
+            { Value: last_inspection_date, Label: 'Last Inspection', ![@UI.Importance]: #Medium },
+            { Value: next_inspection_date, Label: 'Next Inspection', ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+// Field-level annotations for FleetRegistry
+annotate service.FleetRegistry with {
+    tail_number          @title: 'Tail Number';
+    registration         @title: 'Registration';
+    reg_country_code     @title: 'Country Code';
+    manufacture_date     @title: 'Manufacture Date';
+    aircraft_age_years   @title: 'Age (years)';
+    aircraft_status      @title: 'Status';
+    last_inspection_date @title: 'Last Inspection';
+    next_inspection_date @title: 'Next Inspection';
 };
 
 // =============================================================================
