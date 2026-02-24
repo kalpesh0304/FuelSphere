@@ -181,6 +181,7 @@ entity FLEET_REGISTRY : cuid, ActiveStatus, AuditTrail {
         aircraft_status     : String(20) default 'ACTIVE'; // ACTIVE, MAINTENANCE, STORED, RETIRED
         last_inspection_date : Date;                  // Last maintenance inspection
         next_inspection_date : Date;                  // Next scheduled inspection
+        cost_center         : String(20);             // Default cost center for this tail (from ROBCapture UI)
 }
 
 /**

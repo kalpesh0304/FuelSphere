@@ -608,6 +608,7 @@ annotate service.ROBLedger with @(
             { Value: record_time, Label: 'Time', ![@UI.Importance]: #Medium },
             { Value: entry_type, Label: 'Transaction', ![@UI.Importance]: #High },
             { Value: reference_number, Label: 'Flight/Ref', ![@UI.Importance]: #High },
+            { Value: flightRoute, Label: 'Route', ![@UI.Importance]: #Medium },
             { Value: airport_code, Label: 'Station', ![@UI.Importance]: #High },
             { Value: debit_kg, Label: 'Debit (+)', ![@UI.Importance]: #High },
             { Value: credit_kg, Label: 'Credit (-)', ![@UI.Importance]: #High },
@@ -801,6 +802,7 @@ annotate service.ROBLedger with {
     entry_type       @title: 'Transaction Type';
     airport_code     @title: 'Station';
     reference_number @title: 'Flight/Reference';
+    flightRoute      @title: 'Route';
     opening_rob_kg   @title: 'Opening ROB (kg)' @Measures.Unit: 'kg';
     uplift_kg        @title: 'Uplift (kg)' @Measures.Unit: 'kg';
     burn_kg          @title: 'Burn (kg)' @Measures.Unit: 'kg';

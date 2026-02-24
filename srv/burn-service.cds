@@ -118,7 +118,9 @@ service BurnService {
         virtual null as statusCriticality      : Integer,
         virtual null as continuityColor        : Integer,
         virtual null as debit_kg               : Decimal(12,2),
-        virtual null as credit_kg              : Decimal(12,2)
+        virtual null as credit_kg              : Decimal(12,2),
+        // Computed route from flight origin/destination (e.g., "MNL → CEB")
+        virtual null as flightRoute            : String(20)
     } actions {
         /**
          * Approve adjustment (Ops Manager only)
