@@ -709,6 +709,363 @@ service CostAllocationService {
     function getAllocationVarianceDistribution(fromDate: Date, toDate: Date) returns array of AllocationVarianceDistributionItem;
 
     // ========================================================================
+    // ALLOCATION VS ACTUAL RECONCILIATION TYPES (for AllocationVsActualReconciliation TSX)
+    // ========================================================================
+
+    /**
+     * KPIs for allocation vs actual reconciliation view
+     * Used by: AllocationVsActualReconciliation summary cards
+     */
+    type AllocationReconciliationKPIs {
+        totalFlightLegs     : Integer;          // Total flight legs in period
+        allocatedLegs       : Integer;          // Legs with allocation posted
+        actualLegs          : Integer;          // Legs with actual burn received
+        legsVsLastWeekPct   : Decimal(5,2);     // % change vs last week
+        matchRate           : Decimal(5,2);     // % of legs within tolerance (≤0.1%)
+        matchRateTarget     : Decimal(5,2);     // Target match rate
+        avgAbsVariance      : Decimal(5,2);     // Average absolute variance %
+        avgAllocatedKg      : Decimal(12,2);    // Average allocated qty (kg)
+        avgActualKg         : Decimal(12,2);    // Average actual qty (kg)
+        highVarianceCases   : Integer;          // Cases with >1% variance
+        pendingReview       : Integer;          // High variance pending review
+        approvedVariances   : Integer;          // Approved high variance cases
+    };
+
+    /**
+     * Flight leg reconciliation record comparing allocated vs actual
+     * Used by: AllocationVsActualReconciliation flight leg table
+     */
+    type ReconciliationLegItem {
+        flight              : String(10);       // Flight number
+        leg                 : String(15);       // Route leg (e.g. JFK-LHR)
+        tail                : String(20);       // Aircraft tail number
+        date                : String(10);       // Display date
+        method              : String(20);       // Planned Quantity, Planned Value, Uplift-Based, Block-Time
+        allocated           : Decimal(12,2);    // Allocated quantity (kg)
+        actual              : Decimal(12,2);    // Actual quantity (kg), null if pending
+        variance            : Decimal(5,2);     // Variance percentage
+        varianceKg          : Decimal(12,2);    // Variance in kg
+        status              : String(20);       // reconciled, pendingActual, moderateVariance, highVariance, dataMissing, varianceApproved
+    };
+
+    /**
+     * Financial posting reversal record
+     * Used by: AllocationVsActualReconciliation reversal tracking table
+     */
+    type AllocationReversalItem {
+        batchId             : String(25);       // Allocation batch ID
+        flightLeg           : String(30);       // Flight/Leg display (e.g. AA1234/JFK-LHR)
+        tail                : String(20);       // Aircraft tail
+        allocationPosted    : String(30);       // Allocation posted timestamp
+        fiDocAlloc          : String(10);       // FI document (allocation)
+        amount              : Decimal(15,2);    // Posted amount
+        actualReceived      : String(30);       // Actual received timestamp (null if not yet)
+        reversalStatus      : String(20);       // reversed, pendingReversal, active, failed, approved
+        fiDocRev            : String(10);       // FI document (reversal), null if not reversed
+    };
+
+    /**
+     * Variance analysis by allocation method for bar chart
+     * Used by: AllocationVsActualReconciliation variance by method chart
+     */
+    type VarianceByMethodItem {
+        method              : String(20);       // Allocation method name
+        avgVariance         : Decimal(5,2);     // Average variance %
+        legCount            : Integer;          // Number of legs using this method
+    };
+
+    /**
+     * Variance heatmap cell for route/method or tail/method matrix
+     * Used by: AllocationVsActualReconciliation variance heatmap
+     */
+    type VarianceHeatmapItem {
+        route               : String(15);       // Route code (or tail number if viewType=tail)
+        method              : String(20);       // Allocation method
+        variance            : Decimal(5,2);     // Variance % (null = N/A)
+    };
+
+    // ========================================================================
+    // ALLOCATION VS ACTUAL RECONCILIATION FUNCTIONS & ACTIONS
+    // ========================================================================
+
+    /**
+     * Get reconciliation KPIs for summary cards
+     */
+    function getReconciliationKPIs(fromDate: Date, toDate: Date) returns AllocationReconciliationKPIs;
+
+    /**
+     * Get flight leg reconciliation records
+     */
+    function getReconciliationLegs(
+        fromDate: Date,
+        toDate: Date,
+        tailFilter: String,
+        routeFilter: String,
+        statusFilter: String,
+        varianceFilter: String,
+        methodFilter: String
+    ) returns array of ReconciliationLegItem;
+
+    /**
+     * Get financial posting reversal records
+     */
+    function getAllocationReversals(fromDate: Date, toDate: Date) returns array of AllocationReversalItem;
+
+    /**
+     * Get variance analysis grouped by allocation method
+     */
+    function getVarianceByMethod(days: Integer) returns array of VarianceByMethodItem;
+
+    /**
+     * Get variance heatmap data (by route or tail)
+     */
+    function getVarianceHeatmap(fromDate: Date, toDate: Date, viewType: String) returns array of VarianceHeatmapItem;
+
+    /**
+     * Retry a failed reversal posting
+     */
+    action retryReversal(batchId: String) returns AllocationReversalItem;
+
+    /**
+     * Trigger reversal for a pending batch
+     */
+    action triggerReversal(batchId: String) returns AllocationReversalItem;
+
+    // ========================================================================
+    // ALLOCATION DETAIL REPORT TYPES (for AllocationDetailReport TSX)
+    // ========================================================================
+
+    /**
+     * Batch summary header for allocation detail report
+     * Used by: AllocationDetailReport batch summary card
+     */
+    type AllocationBatchSummary {
+        batchId             : String(25);
+        timestamp           : String(30);       // Display timestamp
+        tail                : String(20);       // Aircraft tail
+        method              : String(20);       // Allocation method
+        totalFlights        : Integer;
+        totalBurn           : Decimal(12,0);    // Total burn (kg)
+        totalAllocated      : Decimal(15,2);    // Total allocated amount
+        variance            : String(10);       // Display variance (e.g. +0.05%)
+        status              : String(20);       // completed, pendingReview, failed
+        executionTime       : String(10);       // e.g. 2.3s
+    };
+
+    /**
+     * Sender cost center in allocation flow
+     * Used by: AllocationDetailReport sender section
+     */
+    type SenderCostCenterItem {
+        costCenter          : String(20);       // Cost center code
+        costCenterName      : String(100);      // Cost center description
+        tail                : String(20);       // Aircraft tail
+        totalAllocated      : Decimal(15,2);    // Total allocated from this sender
+        flightCount         : Integer;          // Number of flights
+    };
+
+    /**
+     * Receiver flight with COPA characteristics
+     * Used by: AllocationDetailReport flight-level burn table
+     */
+    type ReceiverFlightItem {
+        flightNumber        : String(10);
+        flightDate          : String(10);       // YYYY-MM-DD
+        route               : String(20);       // e.g. SIN → HKG
+        tail                : String(20);
+        costCenter          : String(20);
+        internalOrder       : String(30);       // Internal order number
+        copaFlightNumber    : String(10);       // COPA characteristic: flight
+        copaRoute           : String(20);       // COPA characteristic: route
+        copaAircraftType    : String(10);       // COPA characteristic: aircraft type
+        copaCostCenter      : String(20);       // COPA characteristic: cost center
+        actualBurn          : Decimal(12,2);    // Actual burn (kg)
+        allocatedAmount     : Decimal(15,2);    // Allocated cost
+        blockTime           : Decimal(5,1);     // Block time (hours)
+        departure           : String(5);        // HH:MM
+        arrival             : String(5);        // HH:MM
+    };
+
+    /**
+     * Sender-receiver allocation mapping line
+     * Used by: AllocationDetailReport sender-receiver mapping table
+     */
+    type SenderReceiverAllocationItem {
+        sender              : String(20);       // Sender cost center code
+        senderName          : String(100);      // Sender cost center name
+        receiver            : String(200);      // Receiver COPA characteristics string
+        receiverName        : String(50);       // e.g. COPA Characteristics
+        flightNumber        : String(10);
+        route               : String(20);
+        burnKg              : Decimal(12,2);    // Fuel burn (kg)
+        allocatedAmount     : Decimal(15,2);    // Allocated cost
+        percentage          : Decimal(5,2);     // Allocation share %
+    };
+
+    // ========================================================================
+    // ALLOCATION DETAIL REPORT FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get batch summary for allocation detail report
+     */
+    function getAllocationBatchSummary(batchId: String) returns AllocationBatchSummary;
+
+    /**
+     * Get sender cost centers for a batch
+     */
+    function getAllocationSenders(batchId: String) returns array of SenderCostCenterItem;
+
+    /**
+     * Get receiver flights with COPA characteristics
+     */
+    function getAllocationReceivers(batchId: String) returns array of ReceiverFlightItem;
+
+    /**
+     * Get sender-receiver allocation mapping
+     */
+    function getSenderReceiverMapping(batchId: String) returns array of SenderReceiverAllocationItem;
+
+    // ========================================================================
+    // COST ALLOCATION COPA TYPES (for CostAllocationCOPA TSX)
+    // ========================================================================
+
+    /**
+     * Flight with cost allocation and CO-PA segment status
+     * Used by: CostAllocationCOPA flight list table
+     */
+    type COPAFlightItem {
+        flightId            : String(36);       // UUID
+        flightNumber        : String(10);
+        date                : String(10);       // YYYY-MM-DD
+        route               : String(15);       // e.g. SIN-LHR
+        origin              : String(3);        // IATA code
+        destination         : String(3);        // IATA code
+        aircraftType        : String(20);       // e.g. A350-900
+        tailNumber          : String(20);
+        fuelQuantity        : Decimal(12,0);    // Fuel quantity (liters)
+        fuelCost            : Decimal(15,2);    // Fuel cost
+        internalOrder       : String(30);       // Internal order (null if missing)
+        internalOrderSource : String(10);       // Auto, Manual, Missing
+        copaSegment         : String(20);       // CO-PA segment (null if missing)
+        copaSegmentSource   : String(10);       // Auto, Manual, Missing
+        status              : String(10);       // Valid, Missing, Review
+    };
+
+    /**
+     * CO-PA profitability characteristic
+     * Used by: CostAllocationCOPA segment assignment panel
+     */
+    type COPACharacteristicItem {
+        name                : String(50);       // Characteristic name (Customer, Route, etc.)
+        value               : String(100);      // Characteristic value
+        source              : String(20);       // System, Flight Data, Order Data, Mapping
+        status              : String(10);       // Valid, Error
+    };
+
+    /**
+     * KPIs for CO-PA allocation summary
+     * Used by: CostAllocationCOPA summary cards
+     */
+    type COPAAllocationKPIs {
+        totalFlights        : Integer;
+        allocatedFlights    : Integer;
+        pendingFlights      : Integer;
+        failedFlights       : Integer;
+        allocatedPct        : Decimal(5,1);     // Allocated percentage
+    };
+
+    /**
+     * GL entry line for posting preview
+     * Used by: CostAllocationCOPA posting preview section
+     */
+    type PostingPreviewLine {
+        drCr                : String(2);        // Dr or Cr
+        glAccount           : String(50);       // GL account with description
+        amount              : Decimal(15,2);
+        costCenter          : String(50);       // Cost center with name (or dash)
+        internalOrder       : String(30);       // Internal order (or dash)
+        copaSegment         : String(50);       // CO-PA segment (or dash)
+    };
+
+    /**
+     * Full posting preview for a flight
+     * Used by: CostAllocationCOPA posting preview section
+     */
+    type PostingPreviewResult {
+        documentType        : String(30);       // e.g. FI - Fuel Consumption
+        postingDate         : Date;
+        fiscalPeriod        : String(10);       // e.g. 10/2024
+        companyCode         : String(4);
+        currency            : String(3);
+        documentTotal       : Decimal(15,2);
+        lines               : array of PostingPreviewLine;
+        copaSegmentDisplay  : String(50);       // Profitability segment
+        operatingConcern    : String(10);       // e.g. FUEL
+        routeProfitImpact   : Decimal(15,2);    // Negative = cost
+    };
+
+    // ========================================================================
+    // COST ALLOCATION COPA FUNCTIONS & ACTIONS
+    // ========================================================================
+
+    /**
+     * Get flights with CO-PA allocation status
+     */
+    function getCOPAFlights(
+        fromDate: Date,
+        toDate: Date,
+        stationFilter: String,
+        aircraftTypeFilter: String,
+        statusFilter: String
+    ) returns array of COPAFlightItem;
+
+    /**
+     * Get CO-PA characteristics for a flight
+     */
+    function getCOPACharacteristics(flightId: String) returns array of COPACharacteristicItem;
+
+    /**
+     * Get CO-PA allocation KPIs
+     */
+    function getCOPAAllocationKPIs(fromDate: Date, toDate: Date) returns COPAAllocationKPIs;
+
+    /**
+     * Get posting preview for a flight
+     */
+    function getPostingPreview(flightId: String) returns PostingPreviewResult;
+
+    /**
+     * Validate all flights for CO-PA allocation
+     */
+    action validateAllCOPAFlights(fromDate: Date, toDate: Date) returns COPAAllocationKPIs;
+
+    /**
+     * Allocate and post selected flights to S/4HANA CO-PA
+     */
+    action allocateAndPostCOPA(flightIds: array of String) returns BatchPostingResult;
+
+    /**
+     * Validate and save a single flight's allocation
+     */
+    action validateAndSaveCOPAFlight(
+        flightId: String,
+        internalOrder: String,
+        costCenter: String,
+        orderType: String
+    ) returns COPAFlightItem;
+
+    /**
+     * Save draft allocation for a flight
+     */
+    action saveCOPADraft(
+        flightId: String,
+        internalOrder: String,
+        costCenter: String,
+        orderType: String
+    ) returns COPAFlightItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-09)
     // ========================================================================
     // CA401 - Flight not found for cost allocation
