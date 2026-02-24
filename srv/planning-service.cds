@@ -455,6 +455,88 @@ service PlanningService {
     };
 
     // ========================================================================
+    // FLIGHT RECORDS MONITOR TYPES (for FlightRecordsMonitor TSX)
+    // ========================================================================
+
+    /**
+     * KPI tiles for Flight Records Monitor
+     * Shows record counts by validation status
+     */
+    type FlightRecordKPIs {
+        totalRecords            : Integer;          // Total flight records in period
+        validatedRecords        : Integer;          // Status = Validated
+        pendingRecords          : Integer;          // Status = Pending
+        errorRecords            : Integer;          // Status = Error
+        todayReceived           : Integer;          // Records received today
+        validatedPct            : Decimal(5,2);     // Validated percentage
+    };
+
+    /**
+     * Flight record row for the monitor table
+     * Represents an ingested flight record from OPS-ESB or manual upload
+     */
+    type FlightRecordItem {
+        id                      : UUID;
+        flightDate              : Date;             // Flight operating date
+        carrierCode             : String(3);        // IATA carrier code (e.g. "EY")
+        flightNumber            : String(10);       // Flight number (e.g. "EY101")
+        flightSuffix            : String(2);        // Optional suffix
+        departureAirport        : String(3);        // IATA departure airport
+        arrivalAirport          : String(3);        // IATA arrival airport
+        sobt                    : DateTime;         // Scheduled Off-Block Time (UTC)
+        aircraftTypeIATA        : String(4);        // IATA aircraft type code (e.g. "773")
+        tailNumber              : String(10);       // Aircraft registration
+        validationStatus        : String(10);       // Validated, Pending, Error, New, Deleted
+        dataSource              : String(10);       // OPS-ESB (auto), Manual
+        replicationTimestamp    : DateTime;         // When record was received
+    };
+
+    /**
+     * Upload result for manual flight record Excel upload
+     */
+    type FlightRecordUploadResult {
+        success                 : Boolean;
+        fileName                : String(255);
+        recordsProcessed        : Integer;
+        recordsImported         : Integer;
+        recordsSkipped          : Integer;
+        recordsFailed           : Integer;
+        errors                  : array of ImportError;
+        message                 : String(500);
+    };
+
+    function getFlightRecordKPIs(dateRange: String) returns FlightRecordKPIs;
+    function getFlightRecords(
+        dateRange               : String,
+        carrierFilter           : String,
+        flightNumberFilter      : String,
+        statusFilter            : String,
+        sourceFilter            : String,
+        routeFilter             : String,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of FlightRecordItem;
+
+    /**
+     * Upload flight records from Excel file
+     */
+    action uploadFlightRecords(
+        fileContent             : LargeBinary,
+        fileName                : String
+    ) returns FlightRecordUploadResult;
+
+    /**
+     * Export flight records to Excel
+     */
+    action exportFlightRecords(
+        dateRange               : String,
+        carrierFilter           : String,
+        statusFilter            : String,
+        sourceFilter            : String,
+        format                  : String
+    ) returns ExportResult;
+
+    // ========================================================================
     // ERROR CODES (FDD-02)
     // ========================================================================
     // PLN401 - Version not found
