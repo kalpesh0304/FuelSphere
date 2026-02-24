@@ -1461,6 +1461,207 @@ service InvoiceService {
     action escalatePosting(accountingDocId: String, reason: String) returns AccountingDocumentItem;
 
     // ========================================================================
+    // VARIANCE ANALYSIS & EXCEPTION HANDLING TYPES (for VarianceAnalysisExceptionHandling TSX)
+    // ========================================================================
+
+    /**
+     * Variance summary KPIs for dashboard cards
+     * Used by: VarianceAnalysisExceptionHandling summary metrics
+     */
+    type VarianceSummaryKPIs {
+        totalWithVariance       : Integer;          // Total invoices with variance
+        percentOfTotal          : Decimal(5,2);     // % of all invoices
+        priceVariances          : Integer;          // Price variance count
+        pricePercent            : Decimal(5,2);     // Price variance % of total
+        qtyVariances            : Integer;          // Quantity variance count
+        qtyPercent              : Decimal(5,2);     // Qty variance % of total
+        taxVariances            : Integer;          // Tax variance count
+        taxPercent              : Decimal(5,2);     // Tax variance % of total
+        totalVarianceAmount     : Decimal(15,2);    // Total variance amount
+        variancePercentOfValue  : Decimal(5,2);     // % of total invoice value
+        avgResolutionTime       : Decimal(5,1);     // Average resolution time (hours)
+        resolutionTrend         : Decimal(5,1);     // % change vs last week (negative = improving)
+        withinSLA               : Decimal(5,2);     // % of exceptions within SLA
+        slaTarget               : Decimal(5,2);     // SLA target %
+    };
+
+    /**
+     * Variance exception queue item
+     * Used by: VarianceAnalysisExceptionHandling exception table
+     */
+    type VarianceExceptionItem {
+        id                      : String(36);       // Exception ID
+        priority                : String(10);       // CRITICAL, HIGH, MEDIUM, LOW
+        invoiceID               : String(20);       // Invoice number
+        supplier                : String(100);      // Supplier name
+        invoiceAmount           : Decimal(15,2);    // Invoice amount
+        currency                : String(3);        // Currency code
+        varianceType            : String(10);       // PRICE, QTY, TAX, MULTIPLE
+        varianceAmount          : Decimal(15,2);    // Variance amount
+        variancePercent         : Decimal(5,2);     // Variance %
+        rootCause               : String(100);      // Root cause description
+        assignedTo              : String(100);      // Assigned user (null if unassigned)
+        ageHours                : Integer;          // Age in hours
+        slaHoursLeft            : Integer;          // Hours until SLA breach
+        slaBreached             : Boolean;          // Whether SLA is breached
+    };
+
+    /**
+     * Variance trend data point for line chart (30-day)
+     * Used by: VarianceAnalysisExceptionHandling trend chart
+     */
+    type VarianceTrendItem {
+        day                     : Integer;          // Day number (1-30)
+        price                   : Integer;          // Price variance count
+        qty                     : Integer;          // Quantity variance count
+        tax                     : Integer;          // Tax variance count
+    };
+
+    /**
+     * Top supplier by variance frequency
+     * Used by: VarianceAnalysisExceptionHandling analytics - top suppliers chart
+     */
+    type TopSupplierVarianceItem {
+        name                    : String(100);      // Supplier name
+        count                   : Integer;          // Total variance count
+        critical                : Integer;          // Critical priority count
+        high                    : Integer;          // High priority count
+        medium                  : Integer;          // Medium priority count
+    };
+
+    /**
+     * Variance breakdown by station
+     * Used by: VarianceAnalysisExceptionHandling analytics - by station chart
+     */
+    type VarianceByStationItem {
+        station                 : String(3);        // Station IATA code
+        price                   : Integer;          // Price variances
+        qty                     : Integer;          // Quantity variances
+        tax                     : Integer;          // Tax variances
+    };
+
+    /**
+     * Approval rate by variance type
+     * Used by: VarianceAnalysisExceptionHandling analytics - approval rate chart
+     */
+    type ApprovalRateByTypeItem {
+        varianceType            : String(10);       // Price, Qty, Tax
+        approved                : Integer;          // Approved % (0-100)
+        rejected                : Integer;          // Rejected % (0-100)
+    };
+
+    /**
+     * Similar historical case for comparison
+     * Used by: VarianceAnalysisExceptionHandling detail panel - similar cases
+     */
+    type SimilarCaseItem {
+        date                    : String(10);       // Display date
+        variancePercent         : Decimal(5,2);     // Variance %
+        status                  : String(20);       // Approved, Rejected, etc.
+    };
+
+    /**
+     * Root cause analysis result
+     * Used by: VarianceAnalysisExceptionHandling detail panel - root cause
+     */
+    type RootCauseAnalysisResult {
+        rootCause               : String(100);      // Root cause description
+        confidence              : Decimal(5,2);     // Confidence % (0-100)
+        evidence                : String(500);      // Supporting evidence text
+    };
+
+    // ========================================================================
+    // VARIANCE ANALYSIS FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get variance summary KPIs
+     */
+    function getVarianceSummaryKPIs(fromDate: Date, toDate: Date) returns VarianceSummaryKPIs;
+
+    /**
+     * Get variance exception queue with filters
+     */
+    function getVarianceExceptions(
+        varianceTypeFilter: String,
+        severityFilter: String,
+        statusFilter: String,
+        assignedToFilter: String,
+        ageFilter: String,
+        supplierFilter: String,
+        stationFilter: String
+    ) returns array of VarianceExceptionItem;
+
+    /**
+     * Get 30-day variance trend
+     */
+    function getVarianceTrend(days: Integer) returns array of VarianceTrendItem;
+
+    /**
+     * Get top suppliers by variance frequency
+     */
+    function getTopSuppliersVariance(limit: Integer) returns array of TopSupplierVarianceItem;
+
+    /**
+     * Get variance breakdown by station
+     */
+    function getVarianceByStation() returns array of VarianceByStationItem;
+
+    /**
+     * Get approval rate by variance type
+     */
+    function getApprovalRateByType() returns array of ApprovalRateByTypeItem;
+
+    /**
+     * Get similar historical cases for an exception
+     */
+    function getSimilarCases(exceptionId: String) returns array of SimilarCaseItem;
+
+    /**
+     * Get root cause analysis for an exception
+     */
+    function getRootCauseAnalysis(exceptionId: String) returns RootCauseAnalysisResult;
+
+    // ========================================================================
+    // VARIANCE ANALYSIS ACTIONS
+    // ========================================================================
+
+    /**
+     * Approve a variance exception
+     */
+    action approveVariance(exceptionId: String, comment: String) returns VarianceExceptionItem;
+
+    /**
+     * Reject a variance exception
+     */
+    action rejectVariance(exceptionId: String, reason: String) returns VarianceExceptionItem;
+
+    /**
+     * Assign exception to a user
+     */
+    action assignVariance(exceptionId: String, userId: String) returns VarianceExceptionItem;
+
+    /**
+     * Escalate an exception
+     */
+    action escalateVariance(exceptionId: String, reason: String) returns VarianceExceptionItem;
+
+    /**
+     * Bulk approve selected exceptions
+     */
+    action bulkApproveVariances(exceptionIds: array of String, comment: String) returns BatchActionResult;
+
+    /**
+     * Bulk reject selected exceptions
+     */
+    action bulkRejectVariances(exceptionIds: array of String, reason: String) returns BatchActionResult;
+
+    /**
+     * Request clarification from supplier
+     */
+    action requestClarification(exceptionId: String, message: String) returns VarianceExceptionItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-06)
     // ========================================================================
     // INV401 - PO not found for matching
