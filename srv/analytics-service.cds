@@ -695,6 +695,171 @@ service AnalyticsService {
     };
 
     // ========================================================================
+    // FINANCIAL RECONCILIATION TYPES (for FinancialReconciliationDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Financial reconciliation KPIs
+     * Used by: FinancialReconciliationDashboard executive summary tiles
+     */
+    type FinancialReconciliationKPIs {
+        mtdActual           : Decimal(18,2);    // Month-to-date actual fuel expense
+        mtdBudget           : Decimal(18,2);    // Month-to-date budget
+        variance            : Decimal(18,2);    // Variance amount
+        variancePercent     : Decimal(5,2);     // Variance %
+        ytdActual           : Decimal(18,2);    // Year-to-date actual
+        ytdBudget           : Decimal(18,2);    // Year-to-date budget
+        costPerFlightHour   : Decimal(15,2);    // Cost per flight hour
+        costPerFlightHourTarget : Decimal(15,2); // Target cost per flight hour
+        costPerFlightHourVariance : Decimal(5,2); // Variance % vs target
+        costPerASK          : Decimal(8,5);     // Cost per Available Seat Kilometer
+        costPerASKTarget    : Decimal(8,5);     // Target cost per ASK
+        costPerASKVariance  : Decimal(5,2);     // ASK variance %
+        currency            : String(3);
+    };
+
+    /**
+     * Budget waterfall chart item
+     * Used by: FinancialReconciliationDashboard waterfall chart
+     */
+    type BudgetWaterfallItem {
+        category            : String(30);       // Budget, Price Variance, Volume Variance, Mix Variance, Actual
+        value               : Decimal(18,2);    // Amount
+        itemType            : String(15);       // budget, unfavorable, favorable, actual
+        displayValue        : String(30);       // Formatted display value
+        cumulative          : Decimal(18,2);    // Cumulative running total
+    };
+
+    /**
+     * Top station by fuel cost
+     * Used by: FinancialReconciliationDashboard station bar chart
+     */
+    type TopStationCostItem {
+        stationCode         : String(3);        // IATA airport code
+        stationName         : String(100);      // Airport name
+        amount              : Decimal(18,2);    // Fuel cost
+        flights             : Integer;          // Number of flights
+        liters              : Decimal(15,0);    // Fuel volume in liters
+        currency            : String(3);
+    };
+
+    /**
+     * Top supplier by spend
+     * Used by: FinancialReconciliationDashboard supplier donut chart
+     */
+    type TopSupplierSpendItem {
+        supplierName        : String(100);
+        amount              : Decimal(18,2);    // Total spend
+        percentage          : Decimal(5,2);     // Share of total %
+        invoices            : Integer;          // Invoice count
+        currency            : String(3);
+    };
+
+    /**
+     * Top route by fuel consumption
+     * Used by: FinancialReconciliationDashboard route chart
+     */
+    type TopRouteFuelItem {
+        route               : String(20);       // e.g. SIN-LHR
+        liters              : Decimal(15,0);    // Fuel volume in liters
+        costPerLiter        : Decimal(8,4);     // Cost per liter
+        amount              : Decimal(18,2);    // Total cost
+        currency            : String(3);
+    };
+
+    /**
+     * Aircraft type fuel efficiency
+     * Used by: FinancialReconciliationDashboard aircraft efficiency chart
+     */
+    type AircraftEfficiencyItem {
+        aircraftType        : String(20);       // e.g. A350-900, B787-10
+        fuelPerHour         : Decimal(10,0);    // Liters per flight hour
+        costPerHour         : Decimal(15,2);    // Cost per flight hour
+        isEfficient         : Boolean;          // Below target indicator
+    };
+
+    /**
+     * Reconciliation exception item
+     * Used by: FinancialReconciliationDashboard exception table
+     */
+    type ReconciliationExceptionItem {
+        exceptionId         : String(50);
+        exceptionType       : String(30);       // Unmatched Invoice, Outstanding ePOD, Accrual Pending, Price Discrepancy
+        count               : Integer;          // Number of items
+        amount              : Decimal(18,2);    // Financial impact
+        currency            : String(3);
+        aging               : String(20);       // e.g. "3-5 days"
+        impact              : String(10);       // High, Medium, Low
+        actionRequired      : String(200);      // Recommended action
+        owner               : String(255);      // Responsible person/team
+    };
+
+    /**
+     * Cost trend sparkline data
+     * Used by: FinancialReconciliationDashboard KPI sparklines
+     */
+    type CostTrendItem {
+        period              : String(10);       // Month label or day index
+        value               : Decimal(18,2);    // Metric value
+    };
+
+    // ========================================================================
+    // FINANCIAL RECONCILIATION FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get financial reconciliation KPIs
+     */
+    function getFinancialReconciliationKPIs(period: String, companyCode: String) returns FinancialReconciliationKPIs;
+
+    /**
+     * Get budget vs actual waterfall data
+     */
+    function getBudgetWaterfall(period: String, companyCode: String) returns array of BudgetWaterfallItem;
+
+    /**
+     * Get top stations by fuel cost
+     */
+    function getTopStationsByCost(period: String, companyCode: String, limit: Integer) returns array of TopStationCostItem;
+
+    /**
+     * Get top suppliers by spend
+     */
+    function getTopSuppliersBySpend(period: String, companyCode: String, limit: Integer) returns array of TopSupplierSpendItem;
+
+    /**
+     * Get top routes by fuel consumption
+     */
+    function getTopRoutesByFuel(period: String, companyCode: String, limit: Integer) returns array of TopRouteFuelItem;
+
+    /**
+     * Get aircraft type fuel efficiency
+     */
+    function getAircraftEfficiency(period: String, companyCode: String) returns array of AircraftEfficiencyItem;
+
+    /**
+     * Get reconciliation exceptions
+     */
+    function getReconciliationExceptions(period: String, companyCode: String) returns array of ReconciliationExceptionItem;
+
+    /**
+     * Get cost trend sparkline data
+     */
+    function getCostTrend(metric: String, months: Integer) returns array of CostTrendItem;
+
+    /**
+     * Resolve all exceptions in a period
+     */
+    action resolveAllExceptions(period: String, companyCode: String) returns ReconciliationResolveResult;
+
+    type ReconciliationResolveResult {
+        success             : Boolean;
+        resolvedCount       : Integer;
+        remainingCount      : Integer;
+        message             : String(500);
+    };
+
+    // ========================================================================
     // ERROR CODES (FDD-12)
     // ========================================================================
     // RA501 - Report definition not found

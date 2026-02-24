@@ -1001,6 +1001,200 @@ service BurnService {
     };
 
     // ========================================================================
+    // BURN RECONCILIATION TYPES (for ReconciliationSummary POST-4 TSX)
+    // ========================================================================
+
+    /**
+     * Full reconciliation detail for a flight
+     * Used by: ReconciliationSummary object page
+     */
+    type BurnReconciliationDetail {
+        reconciliationId    : String(25);       // e.g. JFK-2025-010
+        flightNumber        : String(10);
+        routeFrom           : String(3);        // IATA origin
+        routeTo             : String(3);        // IATA destination
+        routeFromName       : String(100);      // Full origin name
+        routeToName         : String(100);      // Full destination name
+        flightDate          : Date;
+        tail                : String(20);       // Aircraft registration
+        aircraftType        : String(30);       // Aircraft type description
+        status              : String(20);       // Validated, Requires Review, Requires Approval, Approved, Rejected, Posted
+        fuelOrder           : BurnReconciliationFuelOrder;
+        epod                : BurnReconciliationEPOD;
+        reportedBurn        : BurnReconciliationReportedBurn;
+        reconciliation      : BurnReconciliationResult;
+        continuity          : BurnROBContinuity;
+        statistics          : BurnRouteStatistics;
+    };
+
+    /**
+     * Fuel order (planned) data for reconciliation
+     */
+    type BurnReconciliationFuelOrder {
+        orderId             : String(25);
+        quantity            : Decimal(12,0);    // Ordered quantity (kg)
+        status              : String(20);
+        orderDate           : DateTime;
+        station             : String(50);       // Station display name
+        supplier            : String(100);      // Supplier name
+    };
+
+    /**
+     * ePOD (delivered) data for reconciliation
+     */
+    type BurnReconciliationEPOD {
+        ticketId            : String(30);
+        quantity            : Decimal(12,0);    // Delivered quantity (kg)
+        status              : String(20);
+        deliveryDate        : DateTime;
+        density             : String(30);       // e.g. "0.802 kg/L @ 15°C"
+        temperature         : String(10);       // e.g. "18°C"
+    };
+
+    /**
+     * Reported burn (actual) data for reconciliation
+     */
+    type BurnReconciliationReportedBurn {
+        quantity            : Decimal(12,0);    // Reported burn (kg)
+        robDeparture        : Decimal(12,0);    // ROB at departure (kg)
+        robArrival          : Decimal(12,0);    // ROB at arrival (kg)
+        uplift              : Decimal(12,0);    // Uplift amount (kg)
+        dataSource          : String(30);       // ACARS (Automatic), Manual Entry, etc.
+        submittedAt         : DateTime;
+        submittedBy         : String(255);      // Pilot/submitter name
+    };
+
+    /**
+     * Reconciliation calculation result
+     */
+    type BurnReconciliationResult {
+        reconciledBurn      : Decimal(12,0);    // Calculated burn (kg)
+        variance            : Decimal(12,0);    // Variance (kg)
+        variancePercent     : Decimal(5,2);     // Variance %
+        varianceType        : String(20);       // Under-reported, Over-reported, Match
+        toleranceLevel      : Decimal(12,0);    // Tolerance threshold (kg)
+        varianceStatus      : String(20);       // Within Tolerance, Review Required, High Variance
+    };
+
+    /**
+     * ROB continuity validation
+     */
+    type BurnROBContinuity {
+        previousFlightNumber : String(10);
+        previousRoute       : String(20);       // e.g. LHR → JFK
+        previousDate        : Date;
+        previousROBArrival  : Decimal(12,0);    // Previous leg ROB arrival (kg)
+        isValid             : Boolean;          // Continuity check result
+        expectedROBDeparture : Decimal(12,0);   // Expected from previous leg
+        actualROBDeparture  : Decimal(12,0);    // Actual reported
+        difference          : Decimal(12,0);    // Discrepancy (kg)
+        justification       : String(500);      // Pilot justification if mismatch
+    };
+
+    /**
+     * Historical flight data for comparison
+     * Used by: ReconciliationSummary historical table
+     */
+    type BurnHistoricalItem {
+        flightNumber        : String(10);
+        flightDate          : Date;
+        tail                : String(20);
+        planned             : Decimal(12,0);    // Planned fuel (kg)
+        actual              : Decimal(12,0);    // Actual fuel (kg)
+        variance            : Decimal(12,0);    // Variance (kg)
+        variancePercent     : Decimal(5,2);     // Variance %
+        status              : String(20);       // Validated, Approved, etc.
+    };
+
+    /**
+     * Route-level burn statistics
+     * Used by: ReconciliationSummary statistics section
+     */
+    type BurnRouteStatistics {
+        averageBurn         : Decimal(12,0);    // 30-day average (kg)
+        minBurn             : Decimal(12,0);    // 30-day minimum (kg)
+        maxBurn             : Decimal(12,0);    // 30-day maximum (kg)
+        stdDeviation        : Decimal(12,0);    // Standard deviation (kg)
+        currentVsAverage    : Decimal(12,0);    // Current vs average (kg)
+        currentVsAveragePercent : Decimal(5,2); // Current vs average %
+    };
+
+    /**
+     * Comment entry in reconciliation thread
+     * Used by: ReconciliationSummary comments section
+     */
+    type BurnReconciliationComment {
+        commentId           : String(20);
+        author              : String(255);
+        role                : String(50);       // Pilot, Operations Supervisor, Finance Controller
+        timestamp           : DateTime;
+        text                : String(500);
+    };
+
+    /**
+     * Reconciliation workflow status
+     * Used by: ReconciliationSummary approval workflow
+     */
+    type BurnReconciliationWorkflow {
+        currentStep         : String(20);       // submitted, ops-review, finance-review, approved
+        steps               : array of BurnReconciliationWorkflowStep;
+        requiresFinanceApproval : Boolean;
+    };
+
+    type BurnReconciliationWorkflowStep {
+        stepId              : String(20);
+        label               : String(50);
+        status              : String(15);       // completed, pending, not-started
+        person              : String(255);      // Approver name (null if not started)
+        role                : String(50);       // Role name
+        timestamp           : DateTime;         // Completion timestamp (null if not done)
+    };
+
+    // ========================================================================
+    // BURN RECONCILIATION FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get full reconciliation detail for a flight record
+     */
+    function getBurnReconciliationDetail(recordId: String) returns BurnReconciliationDetail;
+
+    /**
+     * Get historical burn data for a route/flight
+     */
+    function getBurnHistoricalData(flightNumber: String, routeFrom: String, routeTo: String, days: Integer) returns array of BurnHistoricalItem;
+
+    /**
+     * Get route-level burn statistics
+     */
+    function getBurnRouteStatistics(routeFrom: String, routeTo: String, days: Integer) returns BurnRouteStatistics;
+
+    /**
+     * Get reconciliation comments thread
+     */
+    function getBurnReconciliationComments(recordId: String) returns array of BurnReconciliationComment;
+
+    /**
+     * Get reconciliation approval workflow status
+     */
+    function getBurnReconciliationWorkflow(recordId: String) returns BurnReconciliationWorkflow;
+
+    /**
+     * Approve a burn reconciliation record
+     */
+    action approveBurnReconciliation(recordId: String, comment: String) returns BurnReconciliationDetail;
+
+    /**
+     * Reject a burn reconciliation record
+     */
+    action rejectBurnReconciliation(recordId: String, reason: String, comment: String) returns BurnReconciliationDetail;
+
+    /**
+     * Add comment to reconciliation thread
+     */
+    action addBurnReconciliationComment(recordId: String, text: String) returns BurnReconciliationComment;
+
+    // ========================================================================
     // ERROR CODES (FDD-08)
     // ========================================================================
     // FB401 - actualBurnKg must be greater than 0

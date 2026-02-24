@@ -608,6 +608,107 @@ service CostAllocationService {
     };
 
     // ========================================================================
+    // FUEL RECONCILIATION DASHBOARD TYPES (for FuelReconciliationDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Allocation run item for reconciliation dashboard table
+     * Used by: FuelReconciliationDashboard allocation runs table
+     */
+    type AllocationRunItem {
+        batchId             : String(25);       // ALO-{YYYYMMDD}-{SEQ}
+        timestamp           : String(30);       // Display timestamp
+        tail                : String(20);       // Aircraft tail number
+        method              : String(20);       // Planned Quantity, Planned Value, Uplift-Based, Block-Time
+        flights             : Integer;          // Number of flights in batch
+        totalBurn           : Decimal(12,0);    // Total fuel burn (kg)
+        variance            : Decimal(5,2);     // Variance % (positive = over, negative = under)
+        status              : String(20);       // completed, pendingReview, highVariance, failed, reversed, inProgress
+    };
+
+    /**
+     * Posting audit trail record
+     * Used by: FuelReconciliationDashboard posting audit table
+     */
+    type PostingAuditItem {
+        fiDocument          : String(10);       // S/4HANA FI document number
+        batchId             : String(25);       // Allocation batch ID
+        postingDate         : String(30);       // Display posting date
+        tail                : String(20);       // Aircraft tail
+        glAccount           : String(10);       // G/L account
+        amount              : Decimal(15,2);    // Posted amount
+        currency            : String(3);
+        reversalStatus      : String(20);       // notReversed, reversed, pendingReversal, failed
+        reversalDoc         : String(10);       // Reversal document number (if reversed)
+    };
+
+    /**
+     * Variance trend data for area chart
+     * Used by: FuelReconciliationDashboard variance trend chart
+     */
+    type AllocationVarianceTrendItem {
+        date                : String(10);       // Display date label
+        avgVariance         : Decimal(5,2);     // Average variance %
+        maxVariance         : Decimal(5,2);     // Maximum variance %
+        minVariance         : Decimal(5,2);     // Minimum variance %
+    };
+
+    /**
+     * Allocation method breakdown for pie chart
+     * Used by: FuelReconciliationDashboard method breakdown
+     */
+    type AllocationMethodBreakdownItem {
+        method              : String(20);       // Planned Quantity, Planned Value, Uplift-Based, Block-Time
+        runs                : Integer;          // Number of runs using this method
+        percentage          : Decimal(5,2);     // Share of total %
+    };
+
+    /**
+     * Variance distribution for summary
+     * Used by: FuelReconciliationDashboard variance distribution
+     */
+    type AllocationVarianceDistributionItem {
+        category            : String(30);       // Within (<0.1%), Moderate (0.1-1%), High (>1%)
+        count               : Integer;
+        percentage          : Decimal(5,2);
+    };
+
+    // ========================================================================
+    // FUEL RECONCILIATION DASHBOARD FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get allocation run items for dashboard table
+     */
+    function getAllocationRunItems(
+        fromDate: Date,
+        toDate: Date,
+        statusFilter: String,
+        methodFilter: String,
+        tailFilter: String
+    ) returns array of AllocationRunItem;
+
+    /**
+     * Get posting audit trail
+     */
+    function getPostingAuditTrail(fromDate: Date, toDate: Date) returns array of PostingAuditItem;
+
+    /**
+     * Get allocation variance trend for chart
+     */
+    function getAllocationVarianceTrend(days: Integer) returns array of AllocationVarianceTrendItem;
+
+    /**
+     * Get allocation method breakdown
+     */
+    function getAllocationMethodBreakdown(fromDate: Date, toDate: Date) returns array of AllocationMethodBreakdownItem;
+
+    /**
+     * Get allocation variance distribution
+     */
+    function getAllocationVarianceDistribution(fromDate: Date, toDate: Date) returns array of AllocationVarianceDistributionItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-09)
     // ========================================================================
     // CA401 - Flight not found for cost allocation
