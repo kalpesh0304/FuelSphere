@@ -221,6 +221,7 @@ service BurnService {
         virtual null as capturedBy             : String(100),
         virtual null as capturedAt             : DateTime,
         virtual null as hasException           : Boolean,
+        virtual null as isMyFlight             : Boolean,
         virtual null as statusCriticality      : Integer
     };
 
@@ -774,9 +775,11 @@ service BurnService {
         upliftQuantity       : Decimal(12,2);   // Fuel uplifted (kg)
         capturedBy           : String(100);     // Who captured the data
         capturedAt           : DateTime;        // When data was captured
+        previousArrivalCapturedAt : DateTime;   // When previous arrival ROB was captured
         varianceStatus       : String(20);      // within-tolerance/warning/exceeded
         variancePercent      : Decimal(5,2);    // Variance percentage
         pilotName            : String(100);     // Captain name
+        isMyFlight           : Boolean;         // True if current user's assigned flight
         hasException         : Boolean;         // True if exception exists
     };
 

@@ -2145,6 +2145,29 @@ type ROBValidationStatus : String(20) enum {
 }
 
 /**
+ * ROB Capture Data Source Reason (from ROBCapture TSX)
+ * Manual entry reason dropdown when ACARS/EFB unavailable
+ */
+type ROBCaptureDataSourceReason : String(30) enum {
+    ACARSUnavailable = 'ACARS_UNAVAILABLE';   // ACARS system not available at station
+    ACARSInvalid     = 'ACARS_INVALID';       // ACARS data received but invalid
+    EFBNotWorking    = 'EFB_NOT_WORKING';     // EFB device malfunction
+    GaugeReading     = 'GAUGE_READING';       // Direct fuel gauge reading
+    Other            = 'OTHER';               // Other reason (specify in comments)
+}
+
+/**
+ * ROB Capture Flight Status (from ROBCapture TSX)
+ * Status of a flight in the ROB capture workflow
+ */
+type ROBCaptureFlightStatus : String(20) enum {
+    Confirmed    = 'confirmed';       // ROB confirmed and validated
+    Pending      = 'pending';         // Awaiting manual ROB entry
+    Failed       = 'failed';          // ROB capture/validation failed
+    AcarsPending = 'acars-pending';   // Awaiting ACARS data
+}
+
+/**
  * Variance Status based on thresholds
  * 0-5%: Normal, 5-10%: Warning, 10-20%: Exception, >20%: Critical
  */
@@ -2215,6 +2238,8 @@ entity FUEL_BURNS : cuid, AuditTrail {
         acars_status        : ACARSConnectionStatus;      // ACARS connection state during capture
         acars_last_update   : DateTime;                   // Last ACARS data timestamp
         validation_status   : ROBValidationStatus;        // ROB capture validation result
+        data_source_reason  : ROBCaptureDataSourceReason; // Why manual/fallback source used
+        capture_comments    : String(500);                // Operator comments during ROB capture
 
         // Manual Entry Justification (from BurnEntryForm UI)
         justification       : String(500);                // Why manual entry is required (20-500 chars)
