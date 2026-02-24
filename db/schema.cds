@@ -2089,11 +2089,59 @@ type BurnExceptionType : String(30) enum {
  * ROB Ledger Entry Type
  */
 type ROBEntryType : String(20) enum {
-    Flight      = 'FLIGHT';      // Post-flight ROB update
-    Uplift      = 'UPLIFT';      // Fuel uplift from ePOD
-    Adjustment  = 'ADJUSTMENT';  // Manual adjustment
-    Initial     = 'INITIAL';     // Initial load/setup
-    Transfer    = 'TRANSFER';    // Inter-tank transfer (if applicable)
+    Flight         = 'FLIGHT';          // Post-flight ROB update
+    Uplift         = 'UPLIFT';          // Fuel uplift from ePOD
+    Adjustment     = 'ADJUSTMENT';      // Manual adjustment
+    Initial        = 'INITIAL';         // Initial load/setup
+    Transfer       = 'TRANSFER';        // Inter-tank transfer (if applicable)
+    OpeningBalance = 'OPENING_BALANCE'; // Opening balance for period (ROBLedger UI)
+    Departure      = 'DEPARTURE';       // Departure ROB snapshot (ROBLedger UI)
+    Arrival        = 'ARRIVAL';         // Arrival ROB snapshot (ROBLedger UI)
+    ClosingBalance = 'CLOSING_BALANCE'; // Closing balance for period (ROBLedger UI)
+}
+
+/**
+ * ROB Ledger Status (from ROBLedger TSX)
+ * Tracks the validation state of each ledger entry
+ */
+type ROBLedgerStatus : String(20) enum {
+    Validated  = 'VALIDATED';   // Confirmed and locked
+    Info       = 'INFO';        // Informational entry
+    Review     = 'REVIEW';      // Under review
+    Error      = 'ERROR';       // Data error detected
+    Processing = 'PROCESSING';  // Being processed
+    Draft      = 'DRAFT';       // Draft entry
+}
+
+/**
+ * Continuity Check Status (from ROBLedgerDetail TSX)
+ * ROB Arrival (Leg N) = ROB Departure (Leg N+1)
+ */
+type ContinuityCheckStatus : String(10) enum {
+    Pass    = 'PASS';           // Continuity validated
+    Warning = 'WARNING';        // Minor discrepancy
+    Fail    = 'FAIL';           // Continuity break detected
+}
+
+/**
+ * ACARS Connection Status (from ROBCapture TSX)
+ * Tracks satellite data link status for automated ROB capture
+ */
+type ACARSConnectionStatus : String(20) enum {
+    Connected   = 'CONNECTED';   // ACARS link active, data flowing
+    Pending     = 'PENDING';     // Awaiting ACARS connection
+    Failed      = 'FAILED';     // ACARS link failed
+    Unavailable = 'UNAVAILABLE'; // ACARS not available at station
+}
+
+/**
+ * ROB Validation Status (from ROBCapture TSX)
+ * Result of ROB capture validation checks
+ */
+type ROBValidationStatus : String(20) enum {
+    Validated = 'VALIDATED';    // All checks passed
+    Pending   = 'PENDING';     // Awaiting validation
+    Failed    = 'FAILED';      // Validation failed
 }
 
 /**
@@ -2159,6 +2207,14 @@ entity FUEL_BURNS : cuid, AuditTrail {
         data_source         : FuelBurnDataSource @mandatory; // ACARS, EFB, MANUAL_PILOT, etc.
         source_message_id   : String(50);                 // External message ID (ACARS/EFB)
         status              : FuelBurnStatus default 'PENDING';
+
+        // ROB Capture Fields (from ROBCapture UI)
+        @assert.range: [0.775, 0.840]  // Jet fuel density range
+        rob_density         : Decimal(8,4);               // Fuel density at 15°C (kg/L)
+        rob_volume_liters   : Decimal(12,2);              // Calculated volume (ROB / density) in liters
+        acars_status        : ACARSConnectionStatus;      // ACARS connection state during capture
+        acars_last_update   : DateTime;                   // Last ACARS data timestamp
+        validation_status   : ROBValidationStatus;        // ROB capture validation result
 
         // Manual Entry Justification (from BurnEntryForm UI)
         justification       : String(500);                // Why manual entry is required (20-500 chars)
@@ -2238,6 +2294,14 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // Data Quality
         data_source         : String(20);                 // Source of ROB data
         is_estimated        : Boolean default false;      // True if ROB is estimated
+
+        // Status & Continuity (from ROBLedger/ROBLedgerDetail UI)
+        status              : ROBLedgerStatus;            // VALIDATED, INFO, REVIEW, ERROR, PROCESSING, DRAFT
+        continuity_check    : ContinuityCheckStatus;      // PASS, WARNING, FAIL (ROB Arrival Leg N = ROB Departure Leg N+1)
+        reference_number    : String(50);                 // Flight number or adjustment reference
+
+        // Supplier Reference (for uplift entries - from ROBLedger UI)
+        supplier            : Association to MASTER_SUPPLIERS;
 }
 
 /**

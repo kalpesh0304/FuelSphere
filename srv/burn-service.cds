@@ -112,7 +112,13 @@ service BurnService {
         airport         : redirected to Airports,
         flight          : redirected to Flights,
         fuel_burn       : redirected to FuelBurns,
-        fuel_delivery   : redirected to FuelDeliveries
+        fuel_delivery   : redirected to FuelDeliveries,
+        supplier        : redirected to Suppliers,
+        // Virtual elements for ROBLedger UI (debit/credit accounting view)
+        virtual null as statusCriticality      : Integer,
+        virtual null as continuityColor        : Integer,
+        virtual null as debit_kg               : Decimal(12,2),
+        virtual null as credit_kg              : Decimal(12,2)
     } actions {
         /**
          * Approve adjustment (Ops Manager only)
@@ -205,7 +211,17 @@ service BurnService {
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
         flight   : redirected to Flights,
-        supplier : redirected to Suppliers
+        supplier : redirected to Suppliers,
+        // Virtual elements for ROBSummaryView (combined uplift/ROB data)
+        virtual null as robDeparture           : Decimal(12,2),
+        virtual null as robArrival             : Decimal(12,2),
+        virtual null as upliftQuantity         : Decimal(12,2),
+        virtual null as varianceStatus         : String(20),
+        virtual null as variancePercent        : Decimal(5,2),
+        virtual null as capturedBy             : String(100),
+        virtual null as capturedAt             : DateTime,
+        virtual null as hasException           : Boolean,
+        virtual null as statusCriticality      : Integer
     };
 
     @readonly
@@ -378,6 +394,77 @@ service BurnService {
         routeCode: String,
         aircraftType: String
     ) returns BurnEstimate;
+
+    // ========================================================================
+    // ROBSummaryView Functions (All Fuel Uplift and ROB Records)
+    // ========================================================================
+
+    /**
+     * Get combined fuel uplift and ROB records for ROBSummaryView
+     * Joins FUEL_ORDERS + FUEL_BURNS + FUEL_DELIVERIES data
+     * Supports filter chips: Today, My Flights, Exceptions
+     */
+    function getROBSummaryRecords(
+        fromDate: Date,
+        toDate: Date,
+        stationCode: String,
+        status: String,
+        myFlightsOnly: Boolean,
+        exceptionsOnly: Boolean
+    ) returns array of ROBSummaryRecord;
+
+    // ========================================================================
+    // ROBLedgerDetail Functions (FB_UI_005)
+    // ========================================================================
+
+    /**
+     * Get ROB trend analysis chart data for a specific aircraft
+     * Used by ROBLedgerDetail trend chart (7/14/30/90 day periods)
+     */
+    function getROBTrendAnalysis(
+        tailNumber: String,
+        periodDays: Integer
+    ) returns array of ROBTrendDataPoint;
+
+    /**
+     * Get flight leg sequence for multi-leg visualization
+     * Shows ROB continuity across consecutive flights for an aircraft
+     * Continuity Formula: ROB Arrival (Leg N) = ROB Departure (Leg N+1)
+     */
+    function getFlightLegSequence(
+        tailNumber: String,
+        fromDate: Date,
+        toDate: Date
+    ) returns array of FlightLegEntry;
+
+    // ========================================================================
+    // ROBCapture Functions & Actions
+    // ========================================================================
+
+    /**
+     * Get flights ready for ROB capture at a station
+     * Returns flights with ACARS status, previous ROB, and tolerance data
+     * Split-screen: Left panel (flight cards) + Right panel (capture form)
+     */
+    function getFlightsForROBCapture(
+        stationCode: String,
+        fromDate: Date,
+        toDate: Date
+    ) returns array of FlightForROBCapture;
+
+    /**
+     * Capture ROB reading for a flight
+     * Supports 3 data source modes: ACARS (automated), EFB (pilot), MANUAL (fallback)
+     * Validates: capacity check, continuity check, density range (0.775-0.840 kg/L)
+     */
+    action captureROB(
+        flightId: UUID,
+        robDepartureKg: Decimal,
+        robDensity: Decimal,
+        dataSource: String,
+        dataSourceReason: String,
+        comments: String
+    ) returns ROBCaptureResult;
 
     // ========================================================================
     // TYPE DEFINITIONS
@@ -664,6 +751,118 @@ service BurnService {
     };
 
     // ========================================================================
+    // ROBSummaryView Types
+    // ========================================================================
+
+    // Combined fuel uplift/ROB record for ROBSummaryView list report
+    type ROBSummaryRecord {
+        id                   : UUID;
+        fuelOrderId          : String(25);      // FUEL_ORDERS.order_number
+        flightNumber         : String(10);
+        flightDate           : Date;
+        departureStation     : String(3);       // Origin IATA code
+        arrivalStation       : String(3);       // Destination IATA code
+        stationName          : String(100);     // Airport full name
+        scheduledDeparture   : Time;
+        scheduledArrival     : Time;
+        aircraftRegistration : String(10);      // Tail number
+        aircraftType         : String(50);      // Aircraft model
+        status               : String(20);      // validated/acknowledged/pending/exception/failed
+        dataSource           : String(20);      // ACARS, EFB, MANUAL, etc.
+        robDeparture         : Decimal(12,2);   // ROB at departure (kg)
+        robArrival           : Decimal(12,2);   // ROB at arrival (kg)
+        upliftQuantity       : Decimal(12,2);   // Fuel uplifted (kg)
+        capturedBy           : String(100);     // Who captured the data
+        capturedAt           : DateTime;        // When data was captured
+        varianceStatus       : String(20);      // within-tolerance/warning/exceeded
+        variancePercent      : Decimal(5,2);    // Variance percentage
+        pilotName            : String(100);     // Captain name
+        hasException         : Boolean;         // True if exception exists
+    };
+
+    // ========================================================================
+    // ROBLedgerDetail Types (FB_UI_005)
+    // ========================================================================
+
+    // ROB trend chart data point for ROBLedgerDetail
+    type ROBTrendDataPoint {
+        trendDate            : Date;
+        robKg                : Decimal(12,2);   // ROB level at this point
+        maxCapacityKg        : Decimal(12,2);   // Aircraft max fuel capacity
+        robPercentage        : Decimal(5,2);    // ROB as % of capacity
+        station              : String(3);       // Airport at this point
+        entryType            : String(20);      // Entry type for context
+    };
+
+    // Flight leg entry for multi-leg sequence table in ROBLedgerDetail
+    type FlightLegEntry {
+        legNumber            : Integer;         // Sequence number
+        flightNumber         : String(10);
+        route                : String(20);      // e.g., 'MNL → CEB'
+        flightDate           : Date;
+        robDeparture         : Decimal(12,2);   // ROB at departure (kg)
+        uplift               : Decimal(12,2);   // Fuel uplifted (kg)
+        robArrival           : Decimal(12,2);   // ROB at arrival (kg)
+        burn                 : Decimal(12,2);   // Fuel burned (kg)
+        variancePercent      : Decimal(5,2);    // Variance %
+        status               : String(20);      // Validated/Pending/Exception/Posted
+        continuityCheck      : String(10);      // Pass/Warning/Fail
+    };
+
+    // ========================================================================
+    // ROBCapture Types
+    // ========================================================================
+
+    // Flight data for ROB capture split-screen (left panel flight cards)
+    type FlightForROBCapture {
+        id                   : UUID;            // Flight schedule ID
+        flightNumber         : String(10);
+        departureStation     : String(3);
+        arrivalStation       : String(3);
+        stationName          : String(100);     // Full airport name
+        scheduledDeparture   : Time;
+        scheduledArrival     : Time;
+        aircraftRegistration : String(10);      // Tail number
+        aircraftType         : String(50);      // Aircraft model
+        fuelCapacity         : Decimal(15,2);   // Max fuel capacity (kg)
+        tailCostCenter       : String(20);      // Cost center for tail
+        // ACARS connection status
+        acarsStatus          : String(20);      // CONNECTED/PENDING/FAILED/UNAVAILABLE
+        acarsLastUpdate      : DateTime;        // Last ACARS message time
+        acarsMessageId       : String(50);      // Last ACARS message ID
+        // Current ROB data (may be from ACARS, EFB, or empty for manual)
+        robDeparture         : Decimal(12,2);   // Current ROB reading (kg)
+        robDensity           : Decimal(8,4);    // Density at 15°C (kg/L)
+        robVolume            : Decimal(12,2);   // Volume in liters
+        dataSource           : String(20);      // ACARS/EFB/MANUAL
+        validationStatus     : String(20);      // VALIDATED/PENDING/FAILED
+        status               : String(20);      // confirmed/pending/failed/acars-pending
+        // Previous flight ROB for continuity check
+        previousFlightNumber : String(10);
+        previousRobArrival   : Decimal(12,2);   // Previous leg ROB arrival (kg)
+        previousArrivalTime  : DateTime;
+        // Tolerance validation
+        maxVariancePercent   : Decimal(5,2);    // Max allowed variance (default ±10%)
+        currentVariancePercent : Decimal(5,2);  // Current variance from previous ROB
+        withinTolerance      : Boolean;         // True if within tolerance
+    };
+
+    // Result from captureROB action
+    type ROBCaptureResult {
+        success              : Boolean;
+        ledgerId             : UUID;            // Created ROB_LEDGER entry ID
+        burnId               : UUID;            // Created/updated FUEL_BURNS entry ID
+        flightNumber         : String(10);
+        tailNumber           : String(10);
+        robDepartureKg       : Decimal(12,2);
+        robDensity           : Decimal(8,4);
+        robVolumeLiters      : Decimal(12,2);
+        validationStatus     : String(20);      // VALIDATED/PENDING/FAILED
+        continuityCheck      : String(10);      // PASS/WARNING/FAIL
+        message              : String(500);
+    };
+
+    // ========================================================================
     // ERROR CODES (FDD-08)
     // ========================================================================
     // FB401 - actualBurnKg must be greater than 0
@@ -676,4 +875,7 @@ service BurnService {
     // FB408 - Flight not found
     // FB409 - Adjustment requires approval
     // FB410 - Jefferson load failed
+    // FB411 - ROB density out of specification (0.775-0.840 kg/L)
+    // FB412 - ROB continuity check failed
+    // FB413 - ACARS data unavailable for station
 }
