@@ -1662,6 +1662,85 @@ service InvoiceService {
     action requestClarification(exceptionId: String, message: String) returns VarianceExceptionItem;
 
     // ========================================================================
+    // FINANCE CONTROLLER HOME DASHBOARD TYPES (for FinanceControllerHomeDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Hero KPIs for the Finance Controller home dashboard
+     * Shows high-level invoice volume and pending action metrics
+     */
+    type FinanceControllerDashboardKPIs {
+        monthlyInvoiceVolume    : Decimal(18,2);    // Total invoice amount this month
+        monthlyInvoiceCurrency  : String(3);
+        monthlyVolumeTrendPct   : Decimal(5,2);     // % change vs last month
+        pendingActionCount      : Integer;          // Invoices requiring attention
+        pendingActionTrendPct   : Decimal(5,2);     // % change vs yesterday
+        autoMatchRate           : Decimal(5,2);     // Auto-match success rate %
+        autoMatchTrendPct       : Decimal(5,2);     // Auto-match rate change this month
+        pendingApprovalCount    : Integer;          // Awaiting approval
+        exceptionQueueCount     : Integer;          // In exception queue
+        postedTodayCount        : Integer;          // Posted to S/4HANA today
+    };
+
+    /**
+     * Invoice processing volume trend data point for area chart
+     * Tracks processed vs exception counts over time
+     */
+    type InvoiceProcessingVolumeTrendItem {
+        date                    : Date;             // Data point date
+        dateLabel               : String(10);       // Display label e.g. "Mar 1"
+        processedCount          : Integer;          // Invoices processed
+        exceptionCount          : Integer;          // Invoices in exception
+    };
+
+    /**
+     * Monthly financial summary data point for bar chart
+     * Shows total invoice amounts by month
+     */
+    type MonthlyInvoiceAmountItem {
+        month                   : String(10);       // Month label e.g. "Mar"
+        year                    : Integer;
+        totalAmount             : Decimal(18,2);
+        currency                : String(3);
+    };
+
+    /**
+     * Pending invoice summary for Finance Controller home table
+     * Simplified view of invoices requiring attention
+     */
+    type PendingInvoiceSummaryItem {
+        invoiceId               : UUID;
+        invoiceNumber           : String(30);       // e.g. "INV-2025-SH-001234"
+        supplierName            : String(100);
+        amount                  : Decimal(18,2);
+        currency                : String(3);
+        dueDate                 : Date;
+        status                  : String(25);       // pending_approval, exception, pending_verification
+        priority                : String(10);       // high, normal, low
+        daysToSLA               : Integer;          // Days until SLA breach
+    };
+
+    /**
+     * Get Finance Controller dashboard KPIs
+     */
+    function getFinanceControllerKPIs(companyCode: String) returns FinanceControllerDashboardKPIs;
+
+    /**
+     * Get invoice processing volume trend for area chart
+     */
+    function getInvoiceProcessingVolumeTrend(days: Integer) returns array of InvoiceProcessingVolumeTrendItem;
+
+    /**
+     * Get monthly invoice amount summary for bar chart
+     */
+    function getMonthlyInvoiceAmounts(months: Integer) returns array of MonthlyInvoiceAmountItem;
+
+    /**
+     * Get pending invoices requiring Finance Controller attention
+     */
+    function getPendingInvoiceSummary(top: Integer, priority: String) returns array of PendingInvoiceSummaryItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-06)
     // ========================================================================
     // INV401 - PO not found for matching

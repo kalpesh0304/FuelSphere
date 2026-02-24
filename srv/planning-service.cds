@@ -639,6 +639,100 @@ service PlanningService {
     action deleteFlightRecord(recordId: UUID) returns Boolean;
 
     // ========================================================================
+    // FUEL PLANNER WORKSPACE TYPES (for FuelPlannerHomeDashboard / FuelPlannerWorkspace TSX)
+    // ========================================================================
+
+    /**
+     * Current planning version summary for workspace hero card
+     * Shows version name, status, overall completion progress
+     */
+    type PlanningVersionSummary {
+        versionId               : UUID;
+        versionName             : String(100);      // e.g. "FY2025 Q2 Budget - Final"
+        versionCode             : String(30);       // e.g. "V2025-Q2-Final"
+        status                  : String(20);       // Active, Draft, Approved, Closed
+        overallProgress         : Integer;          // 0-100 completion %
+        createdDate             : Date;
+        lastModifiedDate        : DateTime;
+    };
+
+    /**
+     * Planning milestone progress item for workspace status card
+     * Tracks: Flights Loaded → Routes Validated → Demand Calculated → Pricing Applied → Budget Posted
+     */
+    type PlanningMilestoneItem {
+        label                   : String(30);       // Flights Loaded, Routes Validated, etc.
+        count                   : String(20);       // "12,450" or "98%" or "65%"
+        status                  : String(15);       // complete, in-progress, pending
+        progress                : Integer;          // 0-100 progress %
+        stepOrder               : Integer;          // Ordering (1-5)
+    };
+
+    /**
+     * Recent activity timeline item for planner workspace
+     * Shows actions performed by the current user
+     */
+    type PlanningActivityItem {
+        activityId              : UUID;
+        title                   : String(200);      // e.g. "Created Version 3 - Final"
+        activityType            : String(20);       // created, calculated, uploaded, cloned, approved, modified
+        timestamp               : DateTime;
+        relativeTime            : String(30);       // e.g. "2 days ago", "1 week ago"
+    };
+
+    /**
+     * Team activity item for workspace sidebar
+     * Shows recent actions by other team members
+     */
+    type PlanningTeamActivityItem {
+        userId                  : String(50);
+        userName                : String(100);      // e.g. "Sarah M."
+        initials                : String(3);        // e.g. "SM"
+        action                  : String(200);      // e.g. "Updated Version 2"
+        timestamp               : DateTime;
+        relativeTime            : String(30);       // e.g. "2 hrs ago"
+    };
+
+    /**
+     * Workspace alert/notification for the fuel planner
+     * Banner alerts about pending actions
+     */
+    type PlanningWorkspaceAlert {
+        alertId                 : UUID;
+        message                 : String(500);      // e.g. "145 flights pending validation"
+        alertType               : String(20);       // validation, review, deadline, info
+        severity                : String(10);       // warning, error, info
+        actionLabel             : String(30);       // e.g. "Review Now"
+        actionTarget            : String(100);      // Navigation target
+        count                   : Integer;          // Related item count
+    };
+
+    /**
+     * Get current working version summary for workspace hero
+     */
+    function getPlannerWorkspaceVersion() returns PlanningVersionSummary;
+
+    /**
+     * Get planning milestones for the current active version
+     */
+    function getPlanningMilestones(versionId: UUID) returns array of PlanningMilestoneItem;
+
+    /**
+     * Get recent activities for the current user
+     */
+    function getPlanningActivities(top: Integer) returns array of PlanningActivityItem;
+
+    /**
+     * Get team activity feed for workspace sidebar
+     */
+    function getPlanningTeamActivities(top: Integer) returns array of PlanningTeamActivityItem;
+
+    /**
+     * Get active workspace alerts for the planner
+     */
+    function getPlanningWorkspaceAlerts() returns array of PlanningWorkspaceAlert;
+
+    // ========================================================================
     // ANNUAL PLANNING DASHBOARD TYPES (for AnnualPlanningDashboard TSX)
     // ========================================================================
 
