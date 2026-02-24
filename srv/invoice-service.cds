@@ -449,6 +449,15 @@ service InvoiceService {
         variancePct         : Decimal(5,2);
         daysOpen            : Integer;
         priority            : String(10);
+        // Extended fields for InvoiceExceptionManagement TSX
+        exceptionId         : String(25);       // IEXC-{YYYY}-{SEQ}
+        category            : String(30);       // Pricing, Quantity, Documentation, Tax, Contract, Supplier, Data Quality
+        severity            : String(10);       // HIGH, MEDIUM, LOW
+        description         : String(500);      // Exception description
+        financialImpact     : Decimal(15,2);    // Financial impact amount
+        status              : String(20);       // open, in_progress, resolved, escalated
+        assignedTo          : String(255);      // Assigned resolver
+        detectedAt          : DateTime;         // When exception was detected
     };
 
     type ApprovalQueueItem {
@@ -463,6 +472,16 @@ service InvoiceService {
         firstApprover       : String(255);
         submittedDate       : DateTime;
         withinMyLimit       : Boolean;
+        // Extended fields for InvoiceApprovalWorkflow TSX
+        approvalLevel       : Integer;          // 1, 2, 3
+        approverRole        : String(50);       // AP Manager, Finance Manager, CFO
+        approverName        : String(255);      // Approver display name
+        approvalLimit       : Decimal(15,2);    // Approver's value limit
+        status              : String(20);       // pending, approved, rejected, escalated
+        slaHours            : Integer;          // SLA target in hours
+        hoursRemaining      : Integer;          // Computed hours until SLA breach
+        priority            : String(10);       // high, normal, low
+        matchScore          : Decimal(5,2);     // Match confidence score %
     };
 
     type OpenGRIRItem {
@@ -693,6 +712,369 @@ service InvoiceService {
      * Get invoice status distribution for cockpit donut chart
      */
     function getStatusDistribution(companyCode: String) returns array of StatusDistributionItem;
+
+    // ========================================================================
+    // APPROVAL WORKFLOW TYPES (for InvoiceApprovalWorkflow TSX)
+    // ========================================================================
+
+    /**
+     * Approval Workflow KPIs
+     * Used by: InvoiceApprovalWorkflow KPI tiles
+     */
+    type ApprovalWorkflowKPIs {
+        pendingCount        : Integer;          // Pending approval count
+        criticalSLACount    : Integer;          // Approvals with SLA < 6 hours
+        approvedToday       : Integer;          // Approved today count
+        avgApprovalHours    : Decimal(5,2);     // Average approval time in hours
+    };
+
+    /**
+     * Current approver's info and limits
+     * Used by: InvoiceApprovalWorkflow "My Approval Limits" card
+     */
+    type ApproverInfo {
+        userId              : String(255);
+        displayName         : String(255);
+        role                : String(50);       // AP Manager, Finance Manager, CFO
+        level               : Integer;          // 1, 2, 3
+        singleApprovalLimit : Decimal(15,2);    // Max single invoice limit
+        monthlyLimit        : Decimal(18,2);    // Monthly cumulative limit
+        monthlyUsed         : Decimal(18,2);    // Amount used this month
+    };
+
+    /**
+     * Approval Matrix entry
+     * Used by: InvoiceApprovalWorkflow "Approval Matrix" card
+     */
+    type ApprovalMatrixItem {
+        level               : Integer;
+        roleName            : String(50);
+        lowerLimit          : Decimal(15,2);
+        upperLimit          : Decimal(15,2);
+        currency            : String(3);
+    };
+
+    // ========================================================================
+    // EXCEPTION MANAGEMENT TYPES (for InvoiceExceptionManagement TSX)
+    // ========================================================================
+
+    /**
+     * Exception Management KPIs
+     * Used by: InvoiceExceptionManagement KPI tiles
+     */
+    type ExceptionManagementKPIs {
+        openCount           : Integer;          // Open exceptions
+        inProgressCount     : Integer;          // In-progress exceptions
+        resolvedToday       : Integer;          // Resolved today
+        totalFinancialImpact : Decimal(18,2);   // Total financial impact
+        currency            : String(3);
+        avgResolutionHours  : Decimal(5,2);     // Average resolution time
+        resolutionRate      : Decimal(5,2);     // Resolution rate %
+    };
+
+    /**
+     * Exception type distribution for pie chart
+     * Used by: InvoiceExceptionManagement distribution chart
+     */
+    type ExceptionTypeDistributionItem {
+        exceptionType       : String(50);       // Price Variance, Quantity Variance, Missing ePOD, etc.
+        count               : Integer;
+        percentage          : Decimal(5,2);
+    };
+
+    // ========================================================================
+    // SMART QUEUE TYPES (for SmartInvoiceQueue TSX)
+    // ========================================================================
+
+    /**
+     * Smart Queue KPIs
+     * Used by: SmartInvoiceQueue dashboard cards
+     */
+    type SmartQueueKPIs {
+        totalQueue          : Integer;          // Total invoices in queue
+        totalValue          : Decimal(18,2);    // Total value in queue
+        currency            : String(3);
+        readyCount          : Integer;          // Ready to process
+        waitingCount        : Integer;          // Waiting for data
+        blockedCount        : Integer;          // Blocked/stuck
+        autoMatchReady      : Integer;          // Auto-match ready count
+        avgConfidence       : Decimal(5,2);     // Average match confidence %
+        processingGoal      : Integer;          // Daily processing target
+        processedToday      : Integer;          // Processed today
+        remaining           : Integer;          // Remaining to process
+        progressPercent     : Decimal(5,2);     // Progress toward goal %
+    };
+
+    /**
+     * Queue invoice item with AI scoring
+     * Used by: SmartInvoiceQueue table
+     */
+    type QueueInvoiceItem {
+        invoiceId           : UUID;
+        invoiceNumber       : String(20);
+        supplierName        : String(100);
+        grossAmount         : Decimal(15,2);
+        currency            : String(3);
+        dueDate             : Date;
+        age                 : Integer;          // Days since received
+        aiScore             : Integer;          // AI priority score (0-100)
+        matchConfidence     : Decimal(5,2);     // Match confidence %
+        queueStatus         : String(20);       // ready, auto_match, manual_review, blocked, approved
+        exceptionCount      : Integer;          // Number of exceptions
+        isAutoMatch         : Boolean;          // Eligible for auto-matching
+    };
+
+    /**
+     * Processing velocity data for line chart
+     * Used by: SmartInvoiceQueue velocity chart
+     */
+    type ProcessingVelocityItem {
+        timeSlot            : String(10);       // e.g. "8 AM", "9 AM"
+        actual              : Integer;          // Actual processed count
+        target              : Integer;          // Target count
+    };
+
+    /**
+     * Queue composition for pie chart
+     * Used by: SmartInvoiceQueue composition chart
+     */
+    type QueueCompositionItem {
+        category            : String(30);       // Auto-Match Ready, Manual Review, Exception Queue, Blocked
+        count               : Integer;
+        percentage          : Decimal(5,2);
+    };
+
+    /**
+     * Queue health summary
+     * Used by: SmartInvoiceQueue health indicator
+     */
+    type QueueHealthInfo {
+        healthStatus        : String(20);       // Good, Warning, Critical
+        overdueCount        : Integer;
+        overduePercent      : Decimal(5,2);
+        withinSLACount      : Integer;
+        withinSLAPercent    : Decimal(5,2);
+        avgAgeDays          : Decimal(5,2);
+        backlogTrend        : String(20);       // Increasing, Decreasing, Stable
+    };
+
+    // ========================================================================
+    // VALIDATION WIZARD TYPES (for InvoiceValidationWizard TSX)
+    // ========================================================================
+
+    /**
+     * Validation wizard context/summary
+     * Used by: InvoiceValidationWizard variance summary card
+     */
+    type ValidationWizardContext {
+        invoiceId           : UUID;
+        invoiceNumber       : String(20);
+        supplierName        : String(100);
+        grossAmount         : Decimal(15,2);
+        currency            : String(3);
+        totalLineItems      : Integer;
+        matchedPerfectly    : Integer;
+        withVariances       : Integer;
+        blocked             : Integer;
+        totalVariance       : Decimal(15,2);
+        toleranceLevel      : Decimal(5,2);     // % tolerance threshold
+        actualVariancePct   : Decimal(5,2);     // Actual variance %
+        withinTolerance     : Boolean;
+        requiresApproval    : Boolean;
+        currentStep         : Integer;          // 1-5 wizard step
+        stepTitle           : String(50);
+    };
+
+    /**
+     * Wizard variance line item with three-way comparison
+     * Used by: InvoiceValidationWizard variance detail cards
+     */
+    type WizardVarianceItem {
+        lineItemNumber      : Integer;
+        lineItemLabel       : String(20);       // e.g. "Item 2"
+        flight              : String(50);       // e.g. "SQ001 | SIN → JFK"
+        ticketNumber        : String(30);
+        varianceType        : String(10);       // PRICE, QUANTITY
+        severity            : String(10);       // HIGH, MEDIUM, LOW
+        // Fuel Request (PO) data
+        frId                : String(30);
+        frQuantity          : Decimal(12,3);
+        frUnitPrice         : Decimal(15,4);
+        frAmount            : Decimal(15,2);
+        // ePOD data
+        epodId              : String(30);
+        epodQuantity        : Decimal(12,3);
+        epodDensity         : Decimal(8,4);
+        epodStatus          : String(20);
+        // Invoice data
+        invQuantity         : Decimal(12,3);
+        invUnitPrice        : Decimal(15,4);
+        invAmount           : Decimal(15,2);
+        // Computed variances
+        qtyVariance         : Decimal(12,3);
+        qtyVariancePct      : Decimal(5,2);
+        priceVariance       : Decimal(15,4);
+        priceVariancePct    : Decimal(5,2);
+        amountVariance      : Decimal(15,2);
+        amountVariancePct   : Decimal(5,2);
+    };
+
+    /**
+     * AI root cause analysis for variance
+     * Used by: InvoiceValidationWizard AI analysis panel (SAP Joule)
+     */
+    type AIRootCauseAnalysis {
+        lineItemNumber      : Integer;
+        possibleReasons     : array of AIReasonItem;
+        historicalContext    : String(1000);
+    };
+
+    type AIReasonItem {
+        reason              : String(500);
+        confidence          : Decimal(5,2);     // 0-100%
+    };
+
+    /**
+     * Variance resolution action
+     * Used by: InvoiceValidationWizard resolution actions
+     */
+    type VarianceResolutionResult {
+        success             : Boolean;
+        lineItemNumber      : Integer;
+        resolution          : String(30);       // accept, request-correction, escalate, reject
+        requiresApproval    : Boolean;
+        nextStep            : String(50);
+        message             : String(500);
+    };
+
+    // ========================================================================
+    // APPROVAL WORKFLOW FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get approval workflow KPIs
+     */
+    function getApprovalWorkflowKPIs() returns ApprovalWorkflowKPIs;
+
+    /**
+     * Get current user's approver info and limits
+     */
+    function getApproverInfo() returns ApproverInfo;
+
+    /**
+     * Get approval matrix configuration
+     */
+    function getApprovalMatrix() returns array of ApprovalMatrixItem;
+
+    // ========================================================================
+    // EXCEPTION MANAGEMENT FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get exception management KPIs
+     */
+    function getExceptionKPIs(companyCode: String) returns ExceptionManagementKPIs;
+
+    /**
+     * Get exception type distribution for chart
+     */
+    function getExceptionTypeDistribution(companyCode: String) returns array of ExceptionTypeDistributionItem;
+
+    // ========================================================================
+    // SMART QUEUE FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get smart queue KPIs
+     */
+    function getSmartQueueKPIs(companyCode: String) returns SmartQueueKPIs;
+
+    /**
+     * Get AI-prioritized invoice queue
+     */
+    function getSmartQueue(companyCode: String, limit: Integer) returns array of QueueInvoiceItem;
+
+    /**
+     * Get today's processing velocity for chart
+     */
+    function getProcessingVelocity(companyCode: String) returns array of ProcessingVelocityItem;
+
+    /**
+     * Get queue composition for pie chart
+     */
+    function getQueueComposition(companyCode: String) returns array of QueueCompositionItem;
+
+    /**
+     * Get queue health summary
+     */
+    function getQueueHealth(companyCode: String) returns QueueHealthInfo;
+
+    // ========================================================================
+    // VALIDATION WIZARD FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get validation wizard context for an invoice
+     */
+    function getValidationWizardContext(invoiceId: UUID) returns ValidationWizardContext;
+
+    /**
+     * Get variance items for wizard review step
+     */
+    function getWizardVarianceItems(invoiceId: UUID) returns array of WizardVarianceItem;
+
+    /**
+     * Get AI root cause analysis for a variance item
+     */
+    function getAIRootCauseAnalysis(invoiceId: UUID, lineItemNumber: Integer) returns AIRootCauseAnalysis;
+
+    // ========================================================================
+    // BATCH ACTIONS (Approval & Exception Workflows)
+    // ========================================================================
+
+    /**
+     * Batch approve selected invoices
+     * SOX Control INV-001: Creator cannot approve same invoice
+     */
+    action batchApprove(invoiceIds: array of UUID, comments: String) returns BatchActionResult;
+
+    /**
+     * Batch reject selected invoices
+     */
+    action batchReject(invoiceIds: array of UUID, reason: String) returns BatchActionResult;
+
+    /**
+     * Batch escalate selected invoices
+     */
+    action batchEscalate(invoiceIds: array of UUID, reason: String) returns BatchActionResult;
+
+    /**
+     * Batch resolve invoice exceptions
+     */
+    action batchResolveExceptions(exceptionIds: array of String, resolution: String) returns BatchActionResult;
+
+    /**
+     * Batch escalate invoice exceptions
+     */
+    action batchEscalateExceptions(exceptionIds: array of String, reason: String) returns BatchActionResult;
+
+    /**
+     * Assign exception to user
+     */
+    action assignException(exceptionId: String, userId: String) returns ExceptionQueueItem;
+
+    /**
+     * Resolve variance in validation wizard
+     */
+    action resolveVariance(invoiceId: UUID, lineItemNumber: Integer, resolution: String, justification: String) returns VarianceResolutionResult;
+
+    type BatchActionResult {
+        success             : Boolean;
+        totalProcessed      : Integer;
+        successCount        : Integer;
+        failureCount        : Integer;
+        message             : String(500);
+    };
 
     // ========================================================================
     // ERROR CODES (FDD-06)
