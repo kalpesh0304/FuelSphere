@@ -740,6 +740,65 @@ service FuelOrderService {
     action addExceptionComment(exceptionId: String, text: String) returns ExceptionComment;
 
     // ========================================================================
+    // FUEL LOG TYPES (for FuelLog / FuelLogMobile TSX)
+    // ========================================================================
+
+    /**
+     * Fuel log entry combining flight schedule + fuel calculation data
+     * Used by both desktop (FuelLog) and mobile (FuelLogMobile) views
+     */
+    type FuelLogEntry {
+        calculationId           : String(25);       // e.g. "FD-00001"
+        flightId                : UUID;
+        flightNumber            : String(10);       // e.g. "BA109"
+        flightDate              : Date;
+        departureStation        : String(3);        // IATA departure code
+        arrivalStation          : String(3);        // IATA arrival code
+        stationName             : String(100);      // Full departure station name
+        aircraftRegistration    : String(10);       // e.g. "G-XLEA"
+        aircraftType            : String(50);       // e.g. "Boeing 777-300ER"
+        robDeparture            : Decimal(12,2);    // Remaining on Board at departure (kg)
+        minimumRequired         : Decimal(12,2);    // Minimum fuel required by dispatch (kg)
+        totalRequired           : Decimal(12,2);    // Total fuel required (kg)
+        upliftNeeded            : Decimal(12,2);    // Uplift needed = total - ROB (kg)
+        calculationStatus       : String(10);       // SUCCESS, PENDING, FAILED, WARNING
+        calculationDate         : DateTime;         // When calculation was performed
+        performanceTime         : Decimal(5,2);     // Calculation time in seconds
+        warningMessage          : String(500);      // Warning message if status = WARNING
+        pilotName               : String(100);      // Assigned pilot name
+        pilotId                 : String(20);       // Pilot ID
+        robSource               : String(20);       // ACARS, EFB, MANUAL
+        calculationSource       : String(50);       // e.g. "Flight Dispatch System"
+    };
+
+    /**
+     * Fuel log KPIs for the KPI tiles
+     */
+    type FuelLogKPIs {
+        totalFlights            : Integer;          // Total flights in period
+        calculatedFlights       : Integer;          // Successfully calculated
+        warningFlights          : Integer;          // Calculated with warnings
+        pendingFlights          : Integer;          // Pending calculation
+        failedFlights           : Integer;          // Failed calculation
+        totalTrend              : Decimal(5,2);     // Total trend vs prior period
+        calculatedTrend         : Decimal(5,2);     // Calculated trend
+        pendingTrend            : Decimal(5,2);     // Pending trend
+    };
+
+    function getFuelLogKPIs(stationCode: String) returns FuelLogKPIs;
+    function getFuelLogEntries(
+        stationCodes            : String,
+        statusFilter            : String,
+        fromDate                : Date,
+        toDate                  : Date,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of FuelLogEntry;
+
+    action bulkSendForPilotApproval(calculationIds: array of String) returns Integer;
+    action sendForPilotApproval(calculationId: String) returns FuelLogEntry;
+
+    // ========================================================================
     // ERROR CODES (FDD-05 Section 7.6.5)
     // ========================================================================
     // EPD401 - Delivered quantity exceeds tolerance (>5% variance)

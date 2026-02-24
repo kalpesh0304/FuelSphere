@@ -860,6 +860,124 @@ service AnalyticsService {
     };
 
     // ========================================================================
+    // FUEL COST FORECAST TYPES (for FuelCostForecast TSX)
+    // ========================================================================
+
+    /**
+     * KPIs for the fuel cost forecast model header
+     * Includes forecasted cost, accuracy, price trend, and model confidence
+     */
+    type FuelCostForecastKPIs {
+        forecastedCost          : Decimal(18,2);    // Total forecasted cost (next 12M)
+        forecastedCostTrend     : Decimal(5,2);     // % vs budget
+        forecastAccuracy        : Decimal(5,2);     // Model accuracy percentage (last 12M)
+        forecastAccuracyTrend   : Decimal(5,2);     // % change vs last quarter
+        priceTrendIndex         : Decimal(5,2);     // Price trend index value
+        priceTrendLabel         : String(50);       // e.g. "Moderate Increase"
+        modelConfidence         : Integer;          // Model confidence percentage (0-100)
+        modelConfidenceLabel    : String(50);       // e.g. "High Confidence"
+        currency                : String(3);
+    };
+
+    /**
+     * Forecast data point for the time series chart
+     * Covers both historical (actual) and forecasted data
+     */
+    type ForecastDataPoint {
+        period                  : String(10);       // e.g. "Jan 24", "Feb 25"
+        periodDate              : Date;             // Actual date
+        cost                    : Decimal(18,2);    // Cost amount
+        dataType                : String(10);       // actual, forecast
+        lowerBound              : Decimal(18,2);    // Lower confidence interval
+        upperBound              : Decimal(18,2);    // Upper confidence interval
+        confidence              : Integer;          // Confidence percentage
+        budget                  : Decimal(18,2);    // Budget target
+    };
+
+    /**
+     * Cost driver for the forecast cost breakdown donut chart
+     */
+    type ForecastCostDriver {
+        category                : String(50);       // CPE Pricing, Volume Change, FX Impact, Other
+        amount                  : Decimal(18,2);    // Amount
+        percentage              : Decimal(5,2);     // Percentage of total
+    };
+
+    /**
+     * Variance analysis item (quarterly or monthly)
+     */
+    type ForecastBudgetVarianceItem {
+        period                  : String(10);       // e.g. "Q1 '25"
+        forecast                : Decimal(18,2);    // Forecasted amount
+        budget                  : Decimal(18,2);    // Budget amount
+        variance                : Decimal(5,2);     // Variance percentage
+        status                  : String(15);       // moderate, high, onTarget
+    };
+
+    /**
+     * Detailed forecast table row with confidence intervals
+     */
+    type ForecastTableRow {
+        period                  : String(15);       // e.g. "Jan 2025"
+        periodDate              : Date;
+        forecast                : Decimal(18,2);    // Forecasted cost
+        lowerBound              : Decimal(18,2);    // Lower bound (95% CI)
+        upperBound              : Decimal(18,2);    // Upper bound (95% CI)
+        budget                  : Decimal(18,2);    // Budget amount
+        variance                : Decimal(5,2);     // Variance percentage
+        status                  : String(20);       // onTarget, moderateVariance, highVariance
+        confidence              : Integer;          // Confidence percentage
+    };
+
+    /**
+     * Forecast accuracy metric (MAE, RMSE, MAPE, R-squared)
+     */
+    type ForecastAccuracyMetric {
+        label                   : String(100);      // Metric name
+        value                   : String(20);       // Formatted value (e.g. "$124K", "6.2%")
+        progress                : Decimal(5,2);     // Progress bar value (0-100)
+    };
+
+    /**
+     * Training data quality metric
+     */
+    type TrainingDataQualityMetric {
+        label                   : String(100);      // Metric name
+        value                   : String(50);       // Metric value
+        detail                  : String(200);      // Additional detail text
+        progress                : Decimal(5,2);     // Progress bar value (0-100)
+    };
+
+    /**
+     * Model configuration key-value pair
+     */
+    type ModelConfigItem {
+        label                   : String(100);      // Config name
+        value                   : String(500);      // Config value
+        badge                   : String(30);       // Optional badge (e.g. "Latest")
+    };
+
+    function getFuelCostForecastKPIs(timeRange: String) returns FuelCostForecastKPIs;
+    function getForecastDataPoints(timeRange: String, confidenceLevel: Integer) returns array of ForecastDataPoint;
+    function getForecastCostDrivers(period: String) returns array of ForecastCostDriver;
+    function getForecastBudgetVariance(varianceView: String) returns array of ForecastBudgetVarianceItem;
+    function getForecastTableData(timeRange: String) returns array of ForecastTableRow;
+    function getForecastAccuracyMetrics() returns array of ForecastAccuracyMetric;
+    function getTrainingDataQuality() returns array of TrainingDataQualityMetric;
+    function getModelConfiguration() returns array of ModelConfigItem;
+
+    action retrainForecastModel() returns ForecastModelResult;
+    action exportForecastReport(timeRange: String, outputFormat: String) returns ReportGenerationResult;
+
+    type ForecastModelResult {
+        success                 : Boolean;
+        modelVersion            : String(20);
+        trainedAt               : DateTime;
+        accuracy                : Decimal(5,2);
+        message                 : String(500);
+    };
+
+    // ========================================================================
     // ERROR CODES (FDD-12)
     // ========================================================================
     // RA501 - Report definition not found
