@@ -145,7 +145,18 @@ service BurnService {
     entity FuelBurnExceptions as projection on db.FUEL_BURN_EXCEPTIONS {
         *,
         fuel_burn   : redirected to FuelBurns,
-        aircraft    : redirected to Aircraft
+        aircraft    : redirected to Aircraft,
+
+        // Virtual fields for ExceptionQueue TSX (POST-5)
+        virtual null as priorityCriticality : Integer,  // SAP Criticality for priority
+        virtual null as statusCriticality   : Integer,  // SAP Criticality for status
+        virtual null as originAirport       : String(3),  // Route origin IATA code
+        virtual null as destinationAirport  : String(3),  // Route destination IATA code
+        virtual null as flightNumber        : String(10), // Flight number from burn record
+        virtual null as ageHours            : Decimal(8,2), // Age in hours since creation
+        virtual null as slaStatus           : String(20),   // Normal, Approaching, Overdue
+        virtual null as slaRemaining        : String(20),   // e.g., '6h', '-2h 30m'
+        virtual null as overdue             : Boolean       // True if SLA breached
     } actions {
         /**
          * Assign for investigation
@@ -716,6 +727,18 @@ service BurnService {
         status              : String(20);
         assignedTo          : String(100);
         daysOpen            : Integer;
+        // Extended fields for ExceptionQueue TSX (POST-5)
+        priority            : String(10);       // Critical, High, Medium, Low
+        exceptionType       : String(30);       // HIGH_VARIANCE, ROB_CONTINUITY_BREAK, etc.
+        originAirport       : String(3);        // Route from
+        destinationAirport  : String(3);        // Route to
+        varianceDisplay     : String(30);       // e.g., '+8.57%', '+6,500 kg'
+        age                 : String(20);       // e.g., '18h 15m'
+        ageHours            : Decimal(8,2);     // Computed age in hours
+        assignedRole        : String(50);       // e.g., 'Ops Supervisor'
+        slaStatus           : String(20);       // Normal, Approaching, Overdue
+        slaRemaining        : String(20);       // e.g., '6h', '-2h 30m'
+        overdue             : Boolean;
     };
 
     type PendingConfirmation {
@@ -868,6 +891,113 @@ service BurnService {
         validationStatus     : String(20);      // VALIDATED/PENDING/FAILED
         continuityCheck      : String(10);      // PASS/WARNING/FAIL
         message              : String(500);
+    };
+
+    // ========================================================================
+    // EXCEPTION QUEUE TYPES (for ExceptionQueue TSX POST-5)
+    // ========================================================================
+
+    /**
+     * Exception activity log entry for side panel timeline
+     */
+    type ExceptionActivityLogEntry {
+        timestamp           : DateTime;
+        action              : String(100);      // Exception created, Assigned to ..., Status changed, etc.
+        user                : String(100);
+        details             : String(500);
+    };
+
+    /**
+     * Exception analytics (30-day overview)
+     * Used by: ExceptionQueue analytics modal
+     */
+    type BurnExceptionAnalytics {
+        totalExceptions     : Integer;
+        resolvedCount       : Integer;
+        resolvedPercent     : Decimal(5,2);
+        avgResolutionHours  : Decimal(8,2);
+        slaCompliancePct    : Decimal(5,2);
+        // Exception type breakdown
+        highVarianceCount   : Integer;
+        highVariancePct     : Decimal(5,2);
+        robContinuityCount  : Integer;
+        robContinuityPct    : Decimal(5,2);
+        acarsDataCount      : Integer;
+        acarsDataPct        : Decimal(5,2);
+        manualEntryCount    : Integer;
+        manualEntryPct      : Decimal(5,2);
+        // Priority breakdown
+        criticalCount       : Integer;
+        highCount           : Integer;
+        mediumCount         : Integer;
+        lowCount            : Integer;
+        overdueCount        : Integer;
+    };
+
+    /**
+     * Notification preference for exception subscriptions
+     */
+    type ExceptionNotificationPreference {
+        prefId              : String(50);
+        label               : String(200);
+        enabled             : Boolean;
+        channel             : String(20);       // in_app, email, sms
+    };
+
+    // ========================================================================
+    // EXCEPTION QUEUE FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get exception activity log for side panel
+     */
+    function getExceptionActivityLog(exceptionId: UUID) returns array of ExceptionActivityLogEntry;
+
+    /**
+     * Get exception analytics (30-day overview)
+     */
+    function getExceptionAnalytics() returns BurnExceptionAnalytics;
+
+    /**
+     * Get notification preferences for current user
+     */
+    function getExceptionNotificationPreferences() returns array of ExceptionNotificationPreference;
+
+    // ========================================================================
+    // EXCEPTION BATCH ACTIONS
+    // ========================================================================
+
+    /**
+     * Batch assign exceptions to a user
+     */
+    action batchAssignExceptions(exceptionIds: array of UUID, assignee: String) returns BurnBatchResult;
+
+    /**
+     * Batch resolve exceptions
+     */
+    action batchResolveExceptions(exceptionIds: array of UUID, rootCause: String) returns BurnBatchResult;
+
+    /**
+     * Batch escalate exceptions
+     */
+    action batchEscalateExceptions(exceptionIds: array of UUID, reason: String) returns BurnBatchResult;
+
+    /**
+     * Batch change exception priority
+     */
+    action batchChangePriority(exceptionIds: array of UUID, priority: String) returns BurnBatchResult;
+
+    /**
+     * Save notification preferences
+     */
+    action saveExceptionNotificationPreferences(preferences: array of ExceptionNotificationPreference) returns Boolean;
+
+    type BurnBatchResult {
+        success             : Boolean;
+        totalProcessed      : Integer;
+        successCount        : Integer;
+        failureCount        : Integer;
+        message             : String(500);
     };
 
     // ========================================================================

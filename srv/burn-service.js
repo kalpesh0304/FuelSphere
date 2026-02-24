@@ -347,6 +347,116 @@ module.exports = class BurnService extends cds.ApplicationService {
             }
         });
 
+        // ====================================================================
+        // FuelBurnExceptions - Virtual Fields
+        // ====================================================================
+        const { FuelBurnExceptions } = this.entities;
+
+        this.after(['READ'], FuelBurnExceptions, async (data) => {
+            const items = Array.isArray(data) ? data : [data];
+            const now = Date.now();
+
+            // Collect burn IDs for route lookup
+            const burnIds = items
+                .filter(item => item && item.fuel_burn_ID)
+                .map(item => item.fuel_burn_ID);
+
+            let burnMap = {};
+            if (burnIds.length > 0) {
+                const { FUEL_BURNS } = cds.entities('fuelsphere');
+                const burns = await SELECT.from(FUEL_BURNS)
+                    .columns('ID', 'flight_number', 'origin_airport_ID', 'destination_airport_ID')
+                    .where({ ID: { in: burnIds } });
+                for (const b of burns) {
+                    burnMap[b.ID] = b;
+                }
+            }
+
+            // SLA hours by severity
+            const slaHoursBySeverity = {
+                HIGH: 24,
+                MEDIUM: 48,
+                LOW: 72
+            };
+
+            items.forEach(item => {
+                if (!item) return;
+
+                // priorityCriticality - maps severity to SAP criticality
+                switch (item.severity) {
+                    case 'HIGH':
+                        item.priorityCriticality = 1; // Negative/red
+                        break;
+                    case 'MEDIUM':
+                        item.priorityCriticality = 2; // Warning/amber
+                        break;
+                    case 'LOW':
+                        item.priorityCriticality = 3; // Positive/green
+                        break;
+                    default:
+                        item.priorityCriticality = 0;
+                }
+
+                // statusCriticality
+                const status = (item.status || '').toUpperCase();
+                switch (status) {
+                    case 'NEW':
+                    case 'OPEN':
+                        item.statusCriticality = 2; // Warning
+                        break;
+                    case 'INVESTIGATING':
+                    case 'PENDING_INFO':
+                    case 'IN_REVIEW':
+                        item.statusCriticality = 2; // Warning
+                        break;
+                    case 'RESOLVED':
+                    case 'CLOSED':
+                        item.statusCriticality = 3; // Positive
+                        break;
+                    case 'ESCALATED':
+                        item.statusCriticality = 1; // Negative
+                        break;
+                    default:
+                        item.statusCriticality = 0;
+                }
+
+                // Route and flight from burn record
+                const burn = burnMap[item.fuel_burn_ID];
+                if (burn) {
+                    item.flightNumber = burn.flight_number || null;
+                    item.originAirport = burn.origin_airport_ID || null;
+                    item.destinationAirport = burn.destination_airport_ID || null;
+                }
+
+                // ageHours - computed from created_at
+                item.ageHours = null;
+                item.slaStatus = 'Normal';
+                item.slaRemaining = null;
+                item.overdue = false;
+
+                if (item.created_at) {
+                    const createdMs = new Date(item.created_at).getTime();
+                    const ageMs = now - createdMs;
+                    item.ageHours = Math.round((ageMs / (1000 * 60 * 60)) * 100) / 100;
+
+                    // SLA computation
+                    const slaHours = slaHoursBySeverity[item.severity] || 48;
+                    const remainingHours = slaHours - item.ageHours;
+                    if (remainingHours <= 0) {
+                        item.slaStatus = 'Overdue';
+                        item.overdue = true;
+                        item.slaRemaining = `${Math.abs(Math.round(remainingHours))}h overdue`;
+                    } else if (remainingHours <= slaHours * 0.25) {
+                        item.slaStatus = 'Approaching';
+                        item.slaRemaining = `${Math.round(remainingHours)}h`;
+                    } else {
+                        item.slaStatus = 'Normal';
+                        item.slaRemaining = `${Math.round(remainingHours)}h`;
+                    }
+                }
+            });
+        });
+
         await super.init();
     }
 };

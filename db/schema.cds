@@ -2082,11 +2082,28 @@ type ExceptionSeverity : String(10) enum {
  * Exception Type for Burn Exceptions
  */
 type BurnExceptionType : String(30) enum {
-    HighVariance  = 'HIGH_VARIANCE';
-    MissingData   = 'MISSING_DATA';
-    DataQuality   = 'DATA_QUALITY';
-    Duplicate     = 'DUPLICATE';
-    SystemError   = 'SYSTEM_ERROR';
+    HighVariance        = 'HIGH_VARIANCE';
+    MissingData         = 'MISSING_DATA';
+    DataQuality         = 'DATA_QUALITY';
+    Duplicate           = 'DUPLICATE';
+    SystemError         = 'SYSTEM_ERROR';
+    ROBContinuityBreak  = 'ROB_CONTINUITY_BREAK';
+    ACARSMissing        = 'ACARS_MISSING';
+    ManualEntryPending  = 'MANUAL_ENTRY_PENDING';
+    ApprovalTimeout     = 'APPROVAL_TIMEOUT';
+}
+
+/**
+ * Burn Exception Status Enumeration
+ */
+type BurnExceptionStatus : String(20) enum {
+    New             = 'NEW';
+    Investigating   = 'INVESTIGATING';
+    PendingInfo     = 'PENDING_INFO';
+    InReview        = 'IN_REVIEW';
+    Resolved        = 'RESOLVED';
+    Escalated       = 'ESCALATED';
+    Closed          = 'CLOSED';
 }
 
 /**

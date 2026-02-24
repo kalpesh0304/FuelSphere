@@ -1077,6 +1077,189 @@ service InvoiceService {
     };
 
     // ========================================================================
+    // AP ANALYTICS & PERFORMANCE TYPES (for APAnalyticsDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Overall AP performance score with breakdown
+     * Used by: APAnalyticsDashboard hero section
+     */
+    type APPerformanceScore {
+        overallScore        : Decimal(5,2);     // 0-100
+        speedScore          : Decimal(5,2);
+        accuracyScore       : Decimal(5,2);
+        qualityScore        : Decimal(5,2);
+        volumeScore         : Decimal(5,2);
+        scoreTrend          : Decimal(5,2);     // +/- vs last period
+        teamRank            : Integer;
+        teamSize            : Integer;
+        totalPoints         : Integer;
+        processingPoints    : Integer;
+        accuracyPoints      : Integer;
+        qualityPoints       : Integer;
+    };
+
+    /**
+     * Core AP performance KPIs
+     * Used by: APAnalyticsDashboard metrics cards
+     */
+    type APPerformanceKPIs {
+        invoicesProcessed   : Integer;
+        processingTarget    : Integer;
+        progressPercent     : Decimal(5,2);
+        daysRemaining       : Integer;
+        projectedTotal      : Integer;
+        avgProcessingMinutes : Decimal(8,2);
+        processingTarget_min : Decimal(8,2);
+        personalBestMinutes : Decimal(8,2);
+        teamAvgMinutes      : Decimal(8,2);
+        speedVsTeamPct      : Decimal(5,2);     // % faster/slower than team
+        accuracyRate        : Decimal(5,2);
+        errorsThisMonth     : Integer;
+        teamAvgAccuracy     : Decimal(5,2);
+        errorFreeDays       : Integer;
+        autoMatchRate       : Decimal(5,2);
+        autoMatchCount      : Integer;
+        timeSavedHours      : Decimal(8,2);
+        teamAutoMatchRate   : Decimal(5,2);
+        exceptionsHandled   : Integer;
+        exceptionsResolved  : Integer;
+        avgResolutionHours  : Decimal(5,2);
+        resolutionTarget    : Decimal(5,2);
+        totalValueProcessed : Decimal(18,2);
+        currency            : String(3);
+        avgValuePerInvoice  : Decimal(15,2);
+        largestInvoice      : Decimal(15,2);
+        teamTotalValue      : Decimal(18,2);
+        valueSharePct       : Decimal(5,2);
+    };
+
+    /**
+     * Team comparison row
+     * Used by: APAnalyticsDashboard comparison table
+     */
+    type TeamComparisonItem {
+        metric              : String(50);
+        yourValue           : String(30);
+        teamAvg             : String(30);
+        teamLeader          : String(50);       // "value (name)"
+        yourRank            : String(20);       // "#2 of 12"
+    };
+
+    /**
+     * Leaderboard entry
+     * Used by: APAnalyticsDashboard team leaderboard
+     */
+    type LeaderboardEntry {
+        rank                : Integer;
+        displayName         : String(100);
+        totalPoints         : Integer;
+        invoicesProcessed   : Integer;
+        accuracyRate        : Decimal(5,2);
+        isCurrentUser       : Boolean;
+    };
+
+    /**
+     * Achievement/badge item
+     * Used by: APAnalyticsDashboard achievements grid
+     */
+    type AchievementItem {
+        achievementId       : String(20);
+        title               : String(100);
+        description         : String(200);
+        status              : String(20);       // unlocked, in-progress, locked
+        icon                : String(10);       // Emoji icon
+        earnedDate          : String(30);       // Display date string
+        rarity              : String(50);       // e.g., "Rare (5% have this)"
+        progress            : Integer;          // 0-100 percentage
+        total               : Integer;          // Target number
+        current             : String(30);       // Display current progress
+        gap                 : String(50);       // e.g., "3.5 min away"
+        tip                 : String(200);      // Unlock tip
+        eta                 : String(30);       // e.g., "2 weeks"
+    };
+
+    /**
+     * AI-powered insight for AP clerk
+     * Used by: APAnalyticsDashboard AI insights panel
+     */
+    type APInsightItem {
+        icon                : String(10);       // Emoji
+        title               : String(100);
+        description         : String(500);
+    };
+
+    /**
+     * Personal goal tracking
+     * Used by: APAnalyticsDashboard goals section
+     */
+    type APGoalItem {
+        goalId              : String(20);
+        title               : String(100);
+        status              : String(20);       // on_track, exceeding, at_risk, behind
+        currentValue        : Decimal(15,2);
+        targetValue         : Decimal(15,2);
+        progressPercent     : Decimal(5,2);
+        remaining           : String(50);       // "13" or "0.8%"
+        daysLeft            : Integer;
+        dailyNeeded         : String(50);       // e.g., "0.9 invoices/day"
+    };
+
+    /**
+     * Performance trend data point
+     * Used by: APAnalyticsDashboard charts (volume, accuracy, processing time)
+     */
+    type PerformanceTrendDataPoint {
+        date                : Date;
+        value               : Decimal(15,2);
+        target              : Decimal(15,2);
+    };
+
+    // ========================================================================
+    // AP ANALYTICS FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get current user's overall performance score
+     */
+    function getAPPerformanceScore(period: String) returns APPerformanceScore;
+
+    /**
+     * Get current user's detailed performance KPIs
+     */
+    function getAPPerformanceKPIs(period: String) returns APPerformanceKPIs;
+
+    /**
+     * Get team comparison data
+     */
+    function getTeamComparison(period: String) returns array of TeamComparisonItem;
+
+    /**
+     * Get team leaderboard
+     */
+    function getLeaderboard(period: String, limit: Integer) returns array of LeaderboardEntry;
+
+    /**
+     * Get current user's achievements
+     */
+    function getAchievements() returns array of AchievementItem;
+
+    /**
+     * Get AI-powered performance insights
+     */
+    function getAPInsights() returns array of APInsightItem;
+
+    /**
+     * Get current user's goals
+     */
+    function getAPGoals(period: String) returns array of APGoalItem;
+
+    /**
+     * Get performance trend data for a metric
+     */
+    function getPerformanceTrend(metric: String, days: Integer) returns array of PerformanceTrendDataPoint;
+
+    // ========================================================================
     // ERROR CODES (FDD-06)
     // ========================================================================
     // INV401 - PO not found for matching

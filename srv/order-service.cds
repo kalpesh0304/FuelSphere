@@ -594,6 +594,152 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // OPERATIONAL EXCEPTION TYPES (for ExceptionManagement TSX)
+    // ========================================================================
+
+    /**
+     * Station operational exception record
+     * Used by: ExceptionManagement TSX - active exception queue
+     */
+    type OperationalException {
+        exceptionId         : String(25);       // EXC-{STATION}-{YYYY}-{SEQ}
+        exceptionType       : String(30);       // DELIVERY_DELAY, FUEL_SHORTAGE, QUALITY_ISSUE, DOCUMENTATION
+        severity            : String(10);       // critical, high, medium, low
+        status              : String(20);       // open, in-progress, resolved
+        age                 : String(30);       // e.g., '45 minutes', '1 hour 15 min'
+        title               : String(200);
+        description         : String(1000);
+        details             : LargeString;      // JSON key-value pairs for flexible display
+        impact              : String(200);      // e.g., 'Flight delay risk'
+        assignedTo          : String(255);
+        reportedBy          : String(100);
+        reportedAt          : DateTime;
+        priorityScore       : Integer;          // 0-100 AI priority score
+        slaRemaining        : String(30);       // e.g., '15 min'
+        stationCode         : String(3);        // IATA airport code
+    };
+
+    /**
+     * Exception workflow step
+     * Used by: ExceptionManagement TSX - resolution workflow sidebar
+     */
+    type ExceptionWorkflowStep {
+        step                : Integer;
+        title               : String(100);
+        status              : String(20);       // completed, current, pending
+        completedBy         : String(100);
+        completedAt         : String(20);       // Time string
+    };
+
+    /**
+     * Exception comment for team collaboration
+     * Used by: ExceptionManagement TSX - team collaboration panel
+     */
+    type ExceptionComment {
+        commentId           : UUID;
+        author              : String(100);
+        authorInitials      : String(5);
+        timestamp           : DateTime;
+        text                : String(1000);
+        likes               : Integer;
+    };
+
+    /**
+     * Operational exception KPIs
+     * Used by: ExceptionManagement TSX - summary cards
+     */
+    type OperationalExceptionKPIs {
+        totalExceptions     : Integer;
+        openCount           : Integer;
+        resolvedCount       : Integer;
+        requireAttention    : Integer;
+        criticalCount       : Integer;
+        avgResolutionMinutes : Integer;
+        targetResolutionMin : Integer;
+        resolutionTrend     : Decimal(5,2);     // % faster/slower vs prior period
+        weeklyTotal         : Integer;
+        weeklyTrend         : Integer;          // +/- vs last week
+    };
+
+    /**
+     * Exception type distribution for analytics chart
+     * Used by: ExceptionManagement TSX - "Exceptions by Type" chart
+     */
+    type OpsExceptionTypeDistribution {
+        exceptionType       : String(30);       // Delivery Delay, Equipment Failure, Quality Issue, etc.
+        count               : Integer;
+    };
+
+    /**
+     * Resolution time trend data point
+     * Used by: ExceptionManagement TSX - "Resolution Time Trend" chart
+     */
+    type ResolutionTimeTrendItem {
+        date                : Date;
+        resolutionMinutes   : Integer;
+    };
+
+    // ========================================================================
+    // OPERATIONAL EXCEPTION FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get operational exceptions for a station
+     */
+    function getOperationalExceptions(stationCode: String, status: String) returns array of OperationalException;
+
+    /**
+     * Get operational exception KPIs for a station
+     */
+    function getOperationalExceptionKPIs(stationCode: String) returns OperationalExceptionKPIs;
+
+    /**
+     * Get exception workflow steps
+     */
+    function getExceptionWorkflow(exceptionId: String) returns array of ExceptionWorkflowStep;
+
+    /**
+     * Get exception comments/collaboration
+     */
+    function getExceptionComments(exceptionId: String) returns array of ExceptionComment;
+
+    /**
+     * Get exception type distribution for analytics
+     */
+    function getOpsExceptionDistribution(stationCode: String, days: Integer) returns array of OpsExceptionTypeDistribution;
+
+    /**
+     * Get resolution time trend data
+     */
+    function getResolutionTimeTrend(stationCode: String, days: Integer) returns array of ResolutionTimeTrendItem;
+
+    /**
+     * Create a new operational exception
+     */
+    action createOperationalException(
+        stationCode: String,
+        exceptionType: String,
+        severity: String,
+        title: String,
+        description: String
+    ) returns OperationalException;
+
+    /**
+     * Update exception status
+     */
+    action updateExceptionStatus(exceptionId: String, status: String) returns OperationalException;
+
+    /**
+     * Escalate exception
+     */
+    action escalateException(exceptionId: String, escalateTo: String) returns OperationalException;
+
+    /**
+     * Add comment to exception
+     */
+    action addExceptionComment(exceptionId: String, text: String) returns ExceptionComment;
+
+    // ========================================================================
     // ERROR CODES (FDD-05 Section 7.6.5)
     // ========================================================================
     // EPD401 - Delivered quantity exceeds tolerance (>5% variance)
