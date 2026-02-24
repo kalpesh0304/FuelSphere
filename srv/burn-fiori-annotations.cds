@@ -2,14 +2,17 @@
  * FuelSphere - Burn Service Fiori Annotations (FDD-08)
  *
  * Screens:
- * - FUEL_BURN_001: Fuel Burns (List Report + Object Page)
+ * - FB_UI_002: Fuel Burn Register (List Report) — FuelBurnRegister TSX
+ * - FB_UI_003: Fuel Burn Detail (Object Page) — FuelBurnDetail TSX
  * - FUEL_BURN_EXCEPTION_001: Burn Exceptions (List Report + Object Page)
+ * - POST-2: Flight Search & Selection (FuelOrders List Report)
  */
 
 using BurnService as service from './burn-service';
 
 // =============================================================================
-// FUEL BURNS - List Report + Object Page
+// FUEL BURNS - List Report (FB_UI_002: Fuel Burn Register)
+// Columns: Flight No, Tail No, Route, Date, ROB Dep, Uplift, ROB Arr, Burn, Var%, Source, Status, Doc
 // =============================================================================
 
 annotate service.FuelBurns with @(
@@ -24,31 +27,36 @@ annotate service.FuelBurns with @(
     UI: {
         HeaderInfo: {
             TypeName       : 'Fuel Burn Record',
-            TypeNamePlural : 'Fuel Burn Records',
-            Title          : { Value: tail_number },
-            Description    : { Value: burn_date },
+            TypeNamePlural : 'Fuel Burn Register',
+            Title          : { Value: burn_record_number },
+            Description    : { Value: tail_number },
             ImageUrl       : 'sap-icon://heating-cooling'
         },
 
+        // Filters matching FuelBurnRegister TSX
         SelectionFields: [
+            burn_record_number,
             tail_number,
             burn_date,
             data_source,
-            variance_status,
             status,
-            requires_review
+            variance_status
         ],
 
+        // LineItem matching FuelBurnRegister table columns
         LineItem: [
-            { Value: tail_number, Label: 'Tail Number', ![@UI.Importance]: #High },
-            { Value: burn_date, Label: 'Burn Date', ![@UI.Importance]: #High },
-            { Value: actual_burn_kg, Label: 'Actual Burn (kg)', ![@UI.Importance]: #High },
-            { Value: planned_burn_kg, Label: 'Planned Burn (kg)', ![@UI.Importance]: #High },
-            { Value: variance_kg, Label: 'Variance (kg)', ![@UI.Importance]: #Medium },
-            { Value: variance_pct, Label: 'Variance %', ![@UI.Importance]: #Medium },
-            { Value: variance_status, Label: 'Var. Status', ![@UI.Importance]: #High },
+            { Value: flight.flight_number, Label: 'Flight No', ![@UI.Importance]: #High },
+            { Value: tail_number, Label: 'Tail No', ![@UI.Importance]: #High },
+            { Value: origin_airport.iata_code, Label: 'Route', ![@UI.Importance]: #High },
+            { Value: burn_date, Label: 'Date', ![@UI.Importance]: #High },
+            { Value: rob_departure_kg, Label: 'ROB Dep (kg)', ![@UI.Importance]: #Medium },
+            { Value: uplift_kg, Label: 'Uplift (kg)', ![@UI.Importance]: #Medium },
+            { Value: rob_arrival_kg, Label: 'ROB Arr (kg)', ![@UI.Importance]: #Medium },
+            { Value: actual_burn_kg, Label: 'Burn (kg)', ![@UI.Importance]: #High },
+            { Value: variance_pct, Label: 'Var %', Criticality: varianceCriticality, ![@UI.Importance]: #High },
             { Value: data_source, Label: 'Source', ![@UI.Importance]: #Medium },
-            { Value: status, Label: 'Status', ![@UI.Importance]: #High }
+            { Value: status, Label: 'Status', Criticality: statusCriticality, ![@UI.Importance]: #High },
+            { Value: posted_doc_number, Label: 'Doc', ![@UI.Importance]: #Low }
         ],
 
         PresentationVariant: {
@@ -56,22 +64,25 @@ annotate service.FuelBurns with @(
             Visualizations: [ '@UI.LineItem' ]
         },
 
-        // Object Page Header
+        // =================================================================
+        // Object Page Header (FB_UI_003: Fuel Burn Detail)
+        // Title: "Flight {flightNumber} | {tailNumber}"
+        // =================================================================
         HeaderFacets: [
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#ActualBurn',
-                Label  : 'Actual Burn'
+                Target : '@UI.DataPoint#ROBDeparture',
+                Label  : 'ROB Departure'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#PlannedBurn',
-                Label  : 'Planned Burn'
+                Target : '@UI.DataPoint#UpliftQty',
+                Label  : 'Uplift Qty'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.DataPoint#VariancePct',
-                Label  : 'Variance'
+                Target : '@UI.DataPoint#ROBArrival',
+                Label  : 'ROB Arrival'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -80,76 +91,111 @@ annotate service.FuelBurns with @(
             }
         ],
 
-        DataPoint#ActualBurn: {
-            Value: actual_burn_kg,
-            Title: 'Actual Burn (kg)'
+        DataPoint#ROBDeparture: {
+            Value: rob_departure_kg,
+            Title: 'ROB Departure (kg)'
         },
 
-        DataPoint#PlannedBurn: {
-            Value: planned_burn_kg,
-            Title: 'Planned Burn (kg)'
+        DataPoint#UpliftQty: {
+            Value: uplift_kg,
+            Title: 'Uplift Qty (kg)'
         },
 
-        DataPoint#VariancePct: {
-            Value: variance_pct,
-            Title: 'Variance %'
+        DataPoint#ROBArrival: {
+            Value: rob_arrival_kg,
+            Title: 'ROB Arrival (kg)'
         },
 
         FieldGroup#BurnStatus: {
             Data: [
                 { Value: status, Label: 'Status' },
-                { Value: data_source, Label: 'Data Source' }
+                { Value: data_source, Label: 'Source' },
+                { Value: posted_doc_number, Label: 'Posted Doc' }
             ]
         },
 
-        // Object Page Sections (6)
+        // =================================================================
+        // Object Page Sections (5 tabs matching FuelBurnDetail TSX)
+        // 1. Burn Data — ROB reconciliation with formula
+        // 2. Variance Analysis — Gauge visualization + comparisons
+        // 3. Timeline — Data Received → Validated → Approved → Posted → Archived
+        // 4. Documents — ePOD, Fuel Ticket, S/4 Doc, ACARS Message
+        // 5. Audit Trail — Timestamp, User, Action, Details
+        // =================================================================
         Facets: [
+            // Section 1: Burn Data (Reconciliation)
             {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'BurnDetails',
-                Label  : 'Burn Details',
-                Target : '@UI.FieldGroup#BurnDetails'
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'BurnData',
+                Label  : 'Burn Data',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'ROBReconciliation',
+                        Label  : 'ROB Reconciliation',
+                        Target : '@UI.FieldGroup#ROBReconciliation'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'BurnFormula',
+                        Label  : 'Reconciliation Formula',
+                        Target : '@UI.FieldGroup#BurnFormula'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'FlightInfo',
+                        Label  : 'Flight Information',
+                        Target : '@UI.FieldGroup#FlightInfo'
+                    }
+                ]
             },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FlightInfo',
-                Label  : 'Flight Information',
-                Target : '@UI.FieldGroup#FlightInfo'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FuelQuantities',
-                Label  : 'Fuel Quantities',
-                Target : '@UI.FieldGroup#FuelQuantities'
-            },
+            // Section 2: Variance Analysis
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'VarianceAnalysis',
                 Label  : 'Variance Analysis',
                 Target : '@UI.FieldGroup#VarianceAnalysis'
             },
+            // Section 3: Timeline (Process milestones)
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'FinancePosting',
-                Label  : 'Finance Posting',
-                Target : '@UI.FieldGroup#FinancePosting'
+                ID     : 'Timeline',
+                Label  : 'Timeline',
+                Target : '@UI.FieldGroup#BurnTimeline'
             },
+            // Section 4: Documents
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'Administrative',
-                Label  : 'Administrative',
-                Target : '@UI.FieldGroup#BurnAdmin'
+                ID     : 'Documents',
+                Label  : 'Documents',
+                Target : '@UI.FieldGroup#BurnDocuments'
+            },
+            // Section 5: Audit Trail
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'AuditTrail',
+                Label  : 'Audit Trail',
+                Target : '@UI.FieldGroup#BurnAudit'
             }
         ],
 
-        FieldGroup#BurnDetails: {
-            Label: 'Burn Details',
+        // -- Burn Data FieldGroups --
+
+        FieldGroup#ROBReconciliation: {
+            Label: 'ROB Reconciliation',
             Data: [
-                { Value: burn_date, Label: 'Burn Date' },
-                { Value: burn_time, Label: 'Burn Time' },
-                { Value: data_source, Label: 'Data Source' },
-                { Value: source_message_id, Label: 'Source Message ID' },
-                { Value: status, Label: 'Status' }
+                { Value: rob_departure_kg, Label: 'ROB Departure (kg)' },
+                { Value: uplift_kg, Label: 'Uplift Qty (kg)' },
+                { Value: rob_arrival_kg, Label: 'ROB Arrival (kg)' }
+            ]
+        },
+
+        FieldGroup#BurnFormula: {
+            Label: 'Reconciliation Formula: Burn = (ROB Departure + Uplift) - ROB Arrival',
+            Data: [
+                { Value: reported_burn_kg, Label: 'Reported Burn (kg)' },
+                { Value: reconciled_burn_kg, Label: 'Reconciled Burn (kg)' },
+                { Value: variance_pct, Label: 'Variance %' }
             ]
         },
 
@@ -166,16 +212,7 @@ annotate service.FuelBurns with @(
             ]
         },
 
-        FieldGroup#FuelQuantities: {
-            Label: 'Fuel Quantities (kg)',
-            Data: [
-                { Value: planned_burn_kg, Label: 'Planned Burn' },
-                { Value: actual_burn_kg, Label: 'Actual Burn' },
-                { Value: taxi_out_kg, Label: 'Taxi Out' },
-                { Value: taxi_in_kg, Label: 'Taxi In' },
-                { Value: trip_fuel_kg, Label: 'Trip Fuel' }
-            ]
-        },
+        // -- Variance Analysis FieldGroup --
 
         FieldGroup#VarianceAnalysis: {
             Label: 'Variance Analysis',
@@ -183,6 +220,8 @@ annotate service.FuelBurns with @(
                 { Value: variance_kg, Label: 'Variance (kg)' },
                 { Value: variance_pct, Label: 'Variance %' },
                 { Value: variance_status, Label: 'Variance Status' },
+                { Value: planned_burn_kg, Label: 'Planned Burn (kg)' },
+                { Value: actual_burn_kg, Label: 'Actual Burn (kg)' },
                 { Value: requires_review, Label: 'Requires Review' },
                 { Value: review_notes, Label: 'Review Notes' },
                 { Value: reviewed_by, Label: 'Reviewed By' },
@@ -190,41 +229,66 @@ annotate service.FuelBurns with @(
             ]
         },
 
-        FieldGroup#FinancePosting: {
-            Label: 'Finance Posting',
+        // -- Timeline FieldGroup --
+
+        FieldGroup#BurnTimeline: {
+            Label: 'Process Timeline',
             Data: [
-                { Value: confirmed_by, Label: 'Confirmed By' },
-                { Value: confirmed_at, Label: 'Confirmed At' },
-                { Value: finance_posted, Label: 'Posted to Finance' },
-                { Value: finance_post_date, Label: 'Post Date' }
+                { Value: burn_date, Label: 'Data Received' },
+                { Value: confirmed_at, Label: 'Validated At' },
+                { Value: confirmed_by, Label: 'Validated By' },
+                { Value: finance_post_date, Label: 'Posted At' },
+                { Value: posted_doc_number, Label: 'Posted Document' }
             ]
         },
 
-        FieldGroup#BurnAdmin: {
-            Label: 'Administrative',
+        // -- Documents FieldGroup --
+
+        FieldGroup#BurnDocuments: {
+            Label: 'Related Documents',
+            Data: [
+                { Value: source_message_id, Label: 'ACARS/EFB Message ID' },
+                { Value: posted_doc_number, Label: 'S/4 Posting Document' },
+                { Value: data_source, Label: 'Data Source' }
+            ]
+        },
+
+        // -- Audit Trail FieldGroup --
+
+        FieldGroup#BurnAudit: {
+            Label: 'Audit Trail',
             Data: [
                 { Value: created_at, Label: 'Created At' },
                 { Value: created_by, Label: 'Created By' },
                 { Value: modified_at, Label: 'Modified At' },
-                { Value: modified_by, Label: 'Modified By' }
+                { Value: modified_by, Label: 'Modified By' },
+                { Value: status, Label: 'Current Status' },
+                { Value: finance_posted, Label: 'Posted to Finance' }
             ]
         }
     }
 );
 
-// Field-level annotations
+// Field-level annotations for FuelBurns
 annotate service.FuelBurns with {
-    tail_number       @title: 'Tail Number';
-    burn_date         @title: 'Burn Date';
-    burn_time         @title: 'Burn Time';
-    actual_burn_kg    @title: 'Actual Burn (kg)';
-    planned_burn_kg   @title: 'Planned Burn (kg)';
-    variance_kg       @title: 'Variance (kg)';
-    variance_pct      @title: 'Variance %';
-    variance_status   @title: 'Variance Status';
-    data_source       @title: 'Data Source';
-    status            @title: 'Status';
-    requires_review   @title: 'Requires Review';
+    burn_record_number  @title: 'Record ID';
+    tail_number         @title: 'Tail Number';
+    burn_date           @title: 'Burn Date';
+    burn_time           @title: 'Burn Time';
+    rob_departure_kg    @title: 'ROB Departure (kg)' @Measures.Unit: 'kg';
+    uplift_kg           @title: 'Uplift (kg)' @Measures.Unit: 'kg';
+    rob_arrival_kg      @title: 'ROB Arrival (kg)' @Measures.Unit: 'kg';
+    reported_burn_kg    @title: 'Reported Burn (kg)' @Measures.Unit: 'kg';
+    reconciled_burn_kg  @title: 'Reconciled Burn (kg)' @Measures.Unit: 'kg';
+    actual_burn_kg      @title: 'Actual Burn (kg)' @Measures.Unit: 'kg';
+    planned_burn_kg     @title: 'Planned Burn (kg)' @Measures.Unit: 'kg';
+    variance_kg         @title: 'Variance (kg)' @Measures.Unit: 'kg';
+    variance_pct        @title: 'Variance %';
+    variance_status     @title: 'Variance Status';
+    data_source         @title: 'Data Source';
+    status              @title: 'Status';
+    requires_review     @title: 'Requires Review';
+    posted_doc_number   @title: 'Posted Document';
 };
 
 // =============================================================================
@@ -320,10 +384,9 @@ annotate service.FuelBurnExceptions with @(
         FieldGroup#Resolution: {
             Label: 'Resolution',
             Data: [
-                { Value: resolution_action, Label: 'Resolution Action' },
+                { Value: corrective_action, Label: 'Corrective Action' },
                 { Value: resolved_by, Label: 'Resolved By' },
-                { Value: resolved_at, Label: 'Resolved At' },
-                { Value: corrective_action, Label: 'Corrective Action' }
+                { Value: resolved_at, Label: 'Resolved At' }
             ]
         }
     }
@@ -338,6 +401,7 @@ annotate service.FuelBurnExceptions with {
     variance_percentage @title: 'Variance %';
     status              @title: 'Status';
     assigned_to         @title: 'Assigned To';
+    investigation_notes @title: 'Investigation Notes';
 };
 
 // =============================================================================

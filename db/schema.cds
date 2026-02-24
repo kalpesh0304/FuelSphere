@@ -2038,12 +2038,36 @@ type FuelBurnDataSource : String(20) enum {
 
 /**
  * Fuel Burn Status Enumeration
+ * Full lifecycle: Pending → Validated → Posted (or Exception/Processing)
  */
 type FuelBurnStatus : String(20) enum {
-    Preliminary = 'PRELIMINARY'; // Pending confirmation
-    Confirmed   = 'CONFIRMED';   // Confirmed and accounted
-    Adjusted    = 'ADJUSTED';    // Manually adjusted
-    Rejected    = 'REJECTED';    // Rejected/invalid
+    Pending     = 'PENDING';       // Awaiting validation
+    Processing  = 'PROCESSING';    // Being processed by system
+    Validated   = 'VALIDATED';     // Data validated and confirmed
+    Exception   = 'EXCEPTION';     // Sent to exception queue
+    Posted      = 'POSTED';        // Posted to S/4HANA Finance
+    Adjusted    = 'ADJUSTED';      // Manually adjusted
+    Rejected    = 'REJECTED';      // Rejected/invalid
+}
+
+/**
+ * Exception Severity for Burn Exceptions
+ */
+type ExceptionSeverity : String(10) enum {
+    High   = 'HIGH';
+    Medium = 'MEDIUM';
+    Low    = 'LOW';
+}
+
+/**
+ * Exception Type for Burn Exceptions
+ */
+type BurnExceptionType : String(30) enum {
+    HighVariance  = 'HIGH_VARIANCE';
+    MissingData   = 'MISSING_DATA';
+    DataQuality   = 'DATA_QUALITY';
+    Duplicate     = 'DUPLICATE';
+    SystemError   = 'SYSTEM_ERROR';
 }
 
 /**
@@ -2077,6 +2101,9 @@ type VarianceStatus : String(20) enum {
  * Integrates with external systems: ACARS, EFB, Jefferson
  */
 entity FUEL_BURNS : cuid, AuditTrail {
+        // Burn Record Identification
+        burn_record_number  : String(25);                 // Display ID (e.g., 'BR-001')
+
         // Flight & Aircraft Reference
         flight              : Association to FLIGHT_SCHEDULE;  // Associated flight
         aircraft            : Association to AIRCRAFT_MASTER @mandatory;
@@ -2093,7 +2120,15 @@ entity FUEL_BURNS : cuid, AuditTrail {
         origin_airport      : Association to MASTER_AIRPORTS;
         destination_airport : Association to MASTER_AIRPORTS;
 
-        // Fuel Quantities (all in kg)
+        // ROB Reconciliation (from FuelBurnRegister/FuelBurnDetail UI)
+        // Formula: Burn = (ROB Departure + Uplift) - ROB Arrival
+        rob_departure_kg    : Decimal(12,2);              // ROB at departure (tank level reading)
+        uplift_kg           : Decimal(12,2);              // Fuel uplift received (from fuel ticket)
+        rob_arrival_kg      : Decimal(12,2);              // ROB at arrival (tank level reading)
+        reported_burn_kg    : Decimal(12,2);              // Burn reported by system/pilot
+        reconciled_burn_kg  : Decimal(12,2);              // Burn after reconciliation formula
+
+        // Fuel Quantities (all in kg) - Legacy/detailed breakdown
         planned_burn_kg     : Decimal(12,2);              // Planned fuel burn from Jefferson
         actual_burn_kg      : Decimal(12,2) @mandatory;   // Actual fuel burn
         taxi_out_kg         : Decimal(10,2);              // Taxi-out fuel
@@ -2108,7 +2143,7 @@ entity FUEL_BURNS : cuid, AuditTrail {
         // Data Source & Status
         data_source         : FuelBurnDataSource @mandatory; // ACARS, JEFFERSON, EFB, MANUAL
         source_message_id   : String(50);                 // External message ID (ACARS/EFB)
-        status              : FuelBurnStatus default 'PRELIMINARY';
+        status              : FuelBurnStatus default 'PENDING';
 
         // Confirmation
         confirmed_by        : String(100);                // User who confirmed
@@ -2123,6 +2158,7 @@ entity FUEL_BURNS : cuid, AuditTrail {
         // Finance Integration (FDD-10)
         finance_posted      : Boolean default false;      // True if posted to Finance
         finance_post_date   : DateTime;                   // Finance posting timestamp
+        posted_doc_number   : String(20);                 // S/4HANA posting document number
 }
 
 /**
@@ -2191,13 +2227,20 @@ entity FUEL_BURN_EXCEPTIONS : cuid, AuditTrail {
         aircraft            : Association to AIRCRAFT_MASTER @mandatory;
         tail_number         : String(10) @mandatory;
 
+        // Exception Classification (referenced by burn-fiori-annotations)
+        exception_type      : BurnExceptionType;         // HIGH_VARIANCE, MISSING_DATA, etc.
+        severity            : ExceptionSeverity;         // HIGH, MEDIUM, LOW
+
         // Exception Details
         exception_date      : Date @mandatory;
+        variance_amount_kg  : Decimal(12,2);             // Alias for annotation compatibility
         variance_kg         : Decimal(12,2) @mandatory;
         variance_pct        : Decimal(5,2) @mandatory;
+        variance_percentage : Decimal(5,2);              // Alias for annotation compatibility
         variance_status     : VarianceStatus @mandatory;
 
         // Investigation
+        investigation_notes : String(1000);              // Investigation notes
         status              : String(20) default 'OPEN'; // OPEN, INVESTIGATING, RESOLVED, CLOSED
         assigned_to         : String(100);               // Investigator
         assigned_at         : DateTime;

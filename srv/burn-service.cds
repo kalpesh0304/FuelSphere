@@ -38,12 +38,15 @@ service BurnService {
         flight              : redirected to Flights,
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
-        destination_airport : redirected to Airports
+        destination_airport : redirected to Airports,
+        // Virtual elements for UI criticality coloring
+        virtual null as statusCriticality   : Integer,
+        virtual null as varianceCriticality : Integer
     } actions {
         /**
-         * Confirm burn record
-         * Transitions: Preliminary → Confirmed
-         * Triggers ROB ledger update and Finance posting event
+         * Confirm/validate burn record
+         * Transitions: Pending → Validated
+         * Triggers ROB ledger update
          */
         action confirm() returns FuelBurns;
 
@@ -52,6 +55,20 @@ service BurnService {
          * Used when data is invalid or duplicate
          */
         action reject(reason: String) returns FuelBurns;
+
+        /**
+         * Send to exception queue
+         * Transitions: Validated/Posted → Exception
+         * Creates a FUEL_BURN_EXCEPTIONS record
+         */
+        action sendToException(reason: String) returns FuelBurns;
+
+        /**
+         * Trigger S/4HANA posting
+         * Transitions: Validated → Posted
+         * Triggers consumption accounting event (FDD-10)
+         */
+        action triggerPosting() returns FuelBurns;
 
         /**
          * Recalculate variance
@@ -72,7 +89,7 @@ service BurnService {
         action completeReview(notes: String) returns FuelBurns;
 
         /**
-         * Post to Finance
+         * Post to Finance (legacy - use triggerPosting)
          * Triggers consumption accounting event (FDD-10)
          */
         action postToFinance() returns FuelBurns;
@@ -283,8 +300,24 @@ service BurnService {
 
     /**
      * Get burn variance dashboard KPIs
+     * Provides all 4 KPI tiles: Total Flights, ACARS Success, Pending Exceptions, Posted to S/4
      */
     function getDashboardKPIs(fromDate: Date, toDate: Date) returns BurnDashboardKPIs;
+
+    /**
+     * Get recent burn activity feed for dashboard
+     * Returns latest burn records with variance and status for the activity feed
+     */
+    function getRecentActivity(limit: Integer) returns array of RecentActivityItem;
+
+    /**
+     * Get burn variance trend data for line chart
+     * Returns daily actual vs expected burn averages over a date range
+     */
+    function getBurnVarianceTrend(
+        fromDate: Date,
+        toDate: Date
+    ) returns array of BurnVarianceTrendEntry;
 
     /**
      * Get variance analysis by aircraft
@@ -466,6 +499,7 @@ service BurnService {
     };
 
     type BurnDashboardKPIs {
+        // Core metrics
         totalFlights        : Integer;
         totalBurnKg         : Decimal(15,2);
         avgBurnPerFlight    : Decimal(12,2);
@@ -478,6 +512,39 @@ service BurnService {
         criticalCount       : Integer;
         pendingConfirmation : Integer;
         openExceptions      : Integer;
+        // KPI 1 - Total Flights Today (with trend)
+        flightsTrend            : String(20);   // e.g., '+5%'
+        flightsTrendDirection   : String(10);   // 'up' or 'down'
+        // KPI 2 - ACARS Success Rate
+        acarsSuccessRate        : Decimal(5,2); // e.g., 97.5
+        acarsSuccessRateTrend   : String(20);   // e.g., '+0.8%'
+        // KPI 3 - Exception Breakdown by severity
+        exceptionsHighCount     : Integer;      // High severity (>10%)
+        exceptionsMediumCount   : Integer;      // Medium severity (5-10%)
+        exceptionsLowCount      : Integer;      // Low severity (missing data, etc.)
+        exceptionsTrend         : String(20);   // e.g., '-3'
+        // KPI 4 - Posted to S/4HANA
+        postedToS4Count         : Integer;      // Number of records posted
+        postingSuccessRate      : String(50);   // e.g., '100% posting success'
+    };
+
+    // Dashboard Activity Feed (FuelBurnROBDashboard)
+    type RecentActivityItem {
+        flightNumber        : String(10);
+        route               : String(20);       // e.g., 'JFK→LHR'
+        tailNumber          : String(10);
+        burnKg              : Decimal(12,2);
+        variancePct         : Decimal(5,2);
+        varianceStatus      : String(20);       // success, warning, error
+        status              : String(20);       // validated, exception
+        timestamp           : DateTime;
+    };
+
+    // Burn Variance Trend Chart Data (FuelBurnROBDashboard)
+    type BurnVarianceTrendEntry {
+        trendDate           : Date;
+        actualAvgBurn       : Decimal(12,2);    // Actual average burn (kg)
+        expectedAvgBurn     : Decimal(12,2);    // Expected average burn (kg)
     };
 
     type AircraftVarianceAnalysis {
