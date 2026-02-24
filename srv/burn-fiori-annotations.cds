@@ -4,6 +4,7 @@
  * Screens:
  * - FB_UI_002: Fuel Burn Register (List Report) — FuelBurnRegister TSX
  * - FB_UI_003: Fuel Burn Detail (Object Page) — FuelBurnDetail TSX
+ * - POST-3: Burn Entry & ROB Input Form (Object Page Create) — BurnEntryForm TSX
  * - FUEL_BURN_EXCEPTION_001: Burn Exceptions (List Report + Object Page)
  * - POST-2: Flight Search & Selection (FuelOrders List Report)
  */
@@ -109,18 +110,21 @@ annotate service.FuelBurns with @(
         FieldGroup#BurnStatus: {
             Data: [
                 { Value: status, Label: 'Status' },
+                { Value: reconciliation_status, Label: 'Reconciliation' },
                 { Value: data_source, Label: 'Source' },
                 { Value: posted_doc_number, Label: 'Posted Doc' }
             ]
         },
 
         // =================================================================
-        // Object Page Sections (5 tabs matching FuelBurnDetail TSX)
+        // Object Page Sections (7 tabs: FuelBurnDetail + BurnEntryForm)
         // 1. Burn Data — ROB reconciliation with formula
-        // 2. Variance Analysis — Gauge visualization + comparisons
-        // 3. Timeline — Data Received → Validated → Approved → Posted → Archived
-        // 4. Documents — ePOD, Fuel Ticket, S/4 Doc, ACARS Message
-        // 5. Audit Trail — Timestamp, User, Action, Details
+        // 2. Data Source & Justification — Manual entry reason (POST-3)
+        // 3. Reconciliation Preview — Burn variance & approval routing (POST-3)
+        // 4. Variance Analysis — Gauge visualization + comparisons
+        // 5. Timeline — Submitted → Validated → Approved → Posted → Archived
+        // 6. Documents — ePOD, Fuel Ticket, S/4 Doc, ACARS Message
+        // 7. Audit Trail — Timestamp, User, Action, Details
         // =================================================================
         Facets: [
             // Section 1: Burn Data (Reconciliation)
@@ -149,28 +153,55 @@ annotate service.FuelBurns with @(
                     }
                 ]
             },
-            // Section 2: Variance Analysis
+            // Section 2: Data Source & Justification (from BurnEntryForm POST-3)
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'DataSourceJustification',
+                Label  : 'Data Source & Justification',
+                Facets : [
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'DataSourceInfo',
+                        Label  : 'Data Source',
+                        Target : '@UI.FieldGroup#DataSourceInfo'
+                    },
+                    {
+                        $Type  : 'UI.ReferenceFacet',
+                        ID     : 'JustificationInfo',
+                        Label  : 'Justification',
+                        Target : '@UI.FieldGroup#JustificationInfo'
+                    }
+                ]
+            },
+            // Section 3: Reconciliation Preview (from BurnEntryForm POST-3)
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ReconciliationPreview',
+                Label  : 'Reconciliation',
+                Target : '@UI.FieldGroup#ReconciliationPreview'
+            },
+            // Section 4: Variance Analysis
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'VarianceAnalysis',
                 Label  : 'Variance Analysis',
                 Target : '@UI.FieldGroup#VarianceAnalysis'
             },
-            // Section 3: Timeline (Process milestones)
+            // Section 5: Timeline (Process milestones)
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'Timeline',
                 Label  : 'Timeline',
                 Target : '@UI.FieldGroup#BurnTimeline'
             },
-            // Section 4: Documents
+            // Section 6: Documents
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'Documents',
                 Label  : 'Documents',
                 Target : '@UI.FieldGroup#BurnDocuments'
             },
-            // Section 5: Audit Trail
+            // Section 7: Audit Trail
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'AuditTrail',
@@ -212,6 +243,38 @@ annotate service.FuelBurns with @(
             ]
         },
 
+        // -- Data Source & Justification FieldGroups (BurnEntryForm POST-3) --
+
+        FieldGroup#DataSourceInfo: {
+            Label: 'Data Source',
+            Data: [
+                { Value: data_source, Label: 'Data Source' },
+                { Value: source_message_id, Label: 'Source Message ID' }
+            ]
+        },
+
+        FieldGroup#JustificationInfo: {
+            Label: 'Justification for Manual Entry',
+            Data: [
+                { Value: justification, Label: 'Justification' }
+            ]
+        },
+
+        // -- Reconciliation Preview FieldGroup (BurnEntryForm POST-3) --
+        // Formula: Burn = ROB Departure - ROB Arrival
+        // Thresholds: ≤2% Auto-Approved, 2-5% Supervisor, >5% Finance Controller
+
+        FieldGroup#ReconciliationPreview: {
+            Label: 'Reconciliation',
+            Data: [
+                { Value: reported_burn_kg, Label: 'Reported Burn (kg)' },
+                { Value: reconciled_burn_kg, Label: 'Reconciled Burn (kg)' },
+                { Value: variance_kg, Label: 'Variance (kg)' },
+                { Value: variance_pct, Label: 'Variance %', Criticality: varianceCriticality },
+                { Value: reconciliation_status, Label: 'Approval Routing', Criticality: reconciliationCriticality }
+            ]
+        },
+
         // -- Variance Analysis FieldGroup --
 
         FieldGroup#VarianceAnalysis: {
@@ -235,6 +298,8 @@ annotate service.FuelBurns with @(
             Label: 'Process Timeline',
             Data: [
                 { Value: burn_date, Label: 'Data Received' },
+                { Value: submitted_by, Label: 'Submitted By' },
+                { Value: submitted_at, Label: 'Submitted At' },
                 { Value: confirmed_at, Label: 'Validated At' },
                 { Value: confirmed_by, Label: 'Validated By' },
                 { Value: finance_post_date, Label: 'Posted At' },
@@ -287,8 +352,12 @@ annotate service.FuelBurns with {
     variance_status     @title: 'Variance Status';
     data_source         @title: 'Data Source';
     status              @title: 'Status';
-    requires_review     @title: 'Requires Review';
-    posted_doc_number   @title: 'Posted Document';
+    requires_review        @title: 'Requires Review';
+    posted_doc_number      @title: 'Posted Document';
+    justification          @title: 'Justification' @UI.MultiLineText;
+    reconciliation_status  @title: 'Reconciliation Status';
+    submitted_by           @title: 'Submitted By';
+    submitted_at           @title: 'Submitted At';
 };
 
 // =============================================================================

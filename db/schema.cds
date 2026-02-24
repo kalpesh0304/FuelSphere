@@ -2028,12 +2028,27 @@ entity COMPLIANCE_AUDIT_LOGS : cuid {
 /**
  * Fuel Burn Data Source Enumeration
  * Priority: ACARS > JEFFERSON > EFB > MANUAL
+ * Extended with granular manual/override types from BurnEntryForm UI
  */
 type FuelBurnDataSource : String(20) enum {
-    ACARS       = 'ACARS';       // Aircraft Communications Addressing and Reporting System
-    Jefferson   = 'JEFFERSON';   // Jefferson fuel calculation system
-    EFB         = 'EFB';         // Electronic Flight Bag
-    Manual      = 'MANUAL';      // Manual entry
+    ACARS           = 'ACARS';              // Aircraft Communications Addressing and Reporting System
+    AcarsOverride   = 'ACARS_OVERRIDE';     // ACARS data received but overridden by pilot
+    Jefferson       = 'JEFFERSON';          // Jefferson fuel calculation system
+    EFB             = 'EFB';                // Electronic Flight Bag
+    Manual          = 'MANUAL';             // Generic manual entry (legacy)
+    ManualPilot     = 'MANUAL_PILOT';       // Manual Pilot Entry (fuel gauge reading)
+    ManualGround    = 'MANUAL_GROUND';      // Manual Ground Operations (station manager)
+    SystemEstimated = 'SYSTEM_ESTIMATED';   // System calculated estimate (requires approval)
+}
+
+/**
+ * Reconciliation Approval Status (from BurnEntryForm variance thresholds)
+ * ≤2% → Auto-Approved, 2-5% → Supervisor, >5% → Finance Controller
+ */
+type ReconciliationApprovalStatus : String(30) enum {
+    AutoApproved       = 'AUTO_APPROVED';        // Variance ≤2%, auto-validated
+    SupervisorApproval = 'SUPERVISOR_APPROVAL';  // Variance 2-5%, requires Ops Supervisor
+    FinanceApproval    = 'FINANCE_APPROVAL';     // Variance >5%, requires Finance Controller
 }
 
 /**
@@ -2141,9 +2156,19 @@ entity FUEL_BURNS : cuid, AuditTrail {
         variance_status     : VarianceStatus;             // NORMAL, WARNING, EXCEPTION, CRITICAL
 
         // Data Source & Status
-        data_source         : FuelBurnDataSource @mandatory; // ACARS, JEFFERSON, EFB, MANUAL
+        data_source         : FuelBurnDataSource @mandatory; // ACARS, EFB, MANUAL_PILOT, etc.
         source_message_id   : String(50);                 // External message ID (ACARS/EFB)
         status              : FuelBurnStatus default 'PENDING';
+
+        // Manual Entry Justification (from BurnEntryForm UI)
+        justification       : String(500);                // Why manual entry is required (20-500 chars)
+
+        // Submission Tracking
+        submitted_by        : String(100);                // User who submitted the entry
+        submitted_at        : DateTime;                   // Submission timestamp
+
+        // Reconciliation Approval Routing (from BurnEntryForm variance thresholds)
+        reconciliation_status : ReconciliationApprovalStatus; // AUTO_APPROVED, SUPERVISOR_APPROVAL, FINANCE_APPROVAL
 
         // Confirmation
         confirmed_by        : String(100);                // User who confirmed

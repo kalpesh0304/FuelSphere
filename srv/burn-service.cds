@@ -40,8 +40,9 @@ service BurnService {
         origin_airport      : redirected to Airports,
         destination_airport : redirected to Airports,
         // Virtual elements for UI criticality coloring
-        virtual null as statusCriticality   : Integer,
-        virtual null as varianceCriticality : Integer
+        virtual null as statusCriticality          : Integer,
+        virtual null as varianceCriticality        : Integer,
+        virtual null as reconciliationCriticality  : Integer
     } actions {
         /**
          * Confirm/validate burn record
@@ -320,6 +321,16 @@ service BurnService {
     ) returns array of BurnVarianceTrendEntry;
 
     /**
+     * Search flights for burn entry form selection dropdown
+     * Returns recent flights with previous leg ROB and uplift data
+     */
+    function searchFlightsForBurnEntry(
+        query: String,
+        fromDate: Date,
+        toDate: Date
+    ) returns array of FlightForBurnEntry;
+
+    /**
      * Get variance analysis by aircraft
      */
     function getVarianceByAircraft(
@@ -545,6 +556,37 @@ service BurnService {
         trendDate           : Date;
         actualAvgBurn       : Decimal(12,2);    // Actual average burn (kg)
         expectedAvgBurn     : Decimal(12,2);    // Expected average burn (kg)
+    };
+
+    // Flight search result for BurnEntryForm flight selection dropdown
+    type FlightForBurnEntry {
+        flightNumber        : String(10);
+        flightDate          : Date;
+        tailNumber          : String(10);
+        originCode          : String(3);
+        originName          : String(100);
+        destinationCode     : String(3);
+        destinationName     : String(100);
+        aircraftType        : String(50);
+        maxCapacityKg       : Decimal(12,2);
+        // Previous leg data for ROB continuity check
+        previousFlightNumber : String(10);
+        previousRobArrivalKg : Decimal(12,2);
+        // Uplift data from fuel ticket/ePOD
+        upliftQuantityKg    : Decimal(12,2);
+        upliftDate          : Date;
+        upliftSupplier      : String(100);
+        upliftTicketId      : String(30);
+        upliftEpdStatus     : String(20);
+        // Dispatch calculation reference
+        dispatchMinRequired : Decimal(12,2);
+        dispatchPilotBuffer : Decimal(12,2);
+        dispatchFinalApproved : Decimal(12,2);
+        dispatchTripFuel    : Decimal(12,2);
+        dispatchContingency : Decimal(12,2);
+        dispatchAlternate   : Decimal(12,2);
+        dispatchFinalReserve : Decimal(12,2);
+        dispatchAdditional  : Decimal(12,2);
     };
 
     type AircraftVarianceAnalysis {
