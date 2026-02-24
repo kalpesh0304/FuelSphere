@@ -562,6 +562,8 @@ annotate service.FuelOrders with {
     variancePercent   @title: 'Variance %';
     capturedBy        @title: 'Captured By';
     capturedAt        @title: 'Captured At';
+    previousArrivalCapturedAt @title: 'Prev. Arrival Captured';
+    dataSource        @title: 'Data Source';
     hasException      @title: 'Has Exception';
 };
 

@@ -222,6 +222,8 @@ service BurnService {
         virtual null as variancePercent        : Decimal(5,2),
         virtual null as capturedBy             : String(100),
         virtual null as capturedAt             : DateTime,
+        virtual null as previousArrivalCapturedAt : DateTime,   // When previous arrival ROB was captured
+        virtual null as dataSource             : String(20),    // ACARS, EFB, MANUAL (from related burn)
         virtual null as hasException           : Boolean,
         virtual null as isMyFlight             : Boolean,
         virtual null as statusCriticality      : Integer
@@ -793,6 +795,7 @@ service BurnService {
     type ROBTrendDataPoint {
         trendDate            : Date;
         robKg                : Decimal(12,2);   // ROB level at this point
+        upliftKg             : Decimal(12,2);   // Uplift amount for chart line (ROBLedgerDetail trend)
         maxCapacityKg        : Decimal(12,2);   // Aircraft max fuel capacity
         robPercentage        : Decimal(5,2);    // ROB as % of capacity
         station              : String(3);       // Airport at this point
