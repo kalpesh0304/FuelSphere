@@ -677,6 +677,243 @@ service IntegrationService {
     function getHealthReport() returns array of IntegrationCardItem;
 
     // ========================================================================
+    // INTEGRATION MONITOR DASHBOARD TYPES (for IntegrationDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Extended dashboard KPIs for the integration monitoring view
+     * Includes overall health score, API metrics, and data quality
+     */
+    type IntegrationMonitorDashboardKPIs {
+        overallHealth           : Decimal(5,2);     // Overall health score (0-100)
+        apiSuccessRate          : Decimal(5,2);     // API success rate percentage
+        avgResponseTime         : Decimal(10,2);    // Average response time in seconds
+        activeIntegrations      : Integer;          // Currently active integrations
+        totalIntegrations       : Integer;          // Total configured integrations
+        failedJobsToday         : Integer;          // Failed jobs in last 24h
+        pendingRetries          : Integer;          // Items pending retry
+        dataQualityScore        : Decimal(5,2);     // Overall data quality score
+    };
+
+    /**
+     * Performance trend data point (24h line chart)
+     */
+    type DashboardPerformanceTrendItem {
+        hour                    : String(5);        // Time label (e.g. "08:00")
+        successRate             : Decimal(5,2);     // Success rate at this hour
+        latency                 : Decimal(10,2);    // Average latency in seconds
+    };
+
+    /**
+     * Error distribution item for donut chart
+     */
+    type DashboardErrorDistributionItem {
+        name                    : String(50);       // Severity/category name
+        count                   : Integer;          // Number of errors
+        color                   : String(20);       // Display color
+    };
+
+    /**
+     * Data sync status item for bar chart
+     */
+    type DashboardDataSyncItem {
+        name                    : String(100);      // Object/entity name
+        syncPercent             : Decimal(5,2);     // Sync completion percentage
+        status                  : String(20);       // success, warning, error
+    };
+
+    /**
+     * Alert item for alert summary list
+     */
+    type IntegrationAlertItem {
+        severity                : String(20);       // critical, high, medium, low
+        message                 : String(500);      // Alert message text
+        timestamp               : DateTime;         // When alert was triggered
+    };
+
+    function getIntegrationMonitorDashboardKPIs() returns IntegrationMonitorDashboardKPIs;
+    function getDashboardPerformanceTrend() returns array of DashboardPerformanceTrendItem;
+    function getDashboardErrorDistribution() returns array of DashboardErrorDistributionItem;
+    function getDashboardDataSyncStatus() returns array of DashboardDataSyncItem;
+    function getIntegrationAlerts() returns array of IntegrationAlertItem;
+
+    // ========================================================================
+    // INTEGRATION COCKPIT TYPES (for IntegrationCockpit TSX)
+    // ========================================================================
+
+    /**
+     * KPI summary for a specific integration cockpit view
+     * Shows API call volume, latency, success rate, and failures
+     */
+    type CockpitKPIs {
+        apiCalls                : Integer;          // Total API calls in period
+        avgLatency              : Decimal(10,2);    // Average latency in seconds
+        successRate             : Decimal(5,2);     // Success rate percentage
+        failedCalls             : Integer;          // Number of failed calls
+    };
+
+    /**
+     * Performance data point for cockpit charts (2h intervals over 24h)
+     */
+    type CockpitPerformanceItem {
+        time                    : String(5);        // Time label (e.g. "08:00")
+        calls                   : Integer;          // Number of API calls
+        latency                 : Decimal(10,2);    // Average latency in seconds
+        errors                  : Integer;          // Number of errors
+    };
+
+    /**
+     * API configuration detail for cockpit display
+     */
+    type APIConfigDetail {
+        serviceName             : String(100);      // e.g. "Airport Plant Master Sync"
+        endpoint                : String(500);      // e.g. "/API_PLANT_SRV/ZC_Plant"
+        method                  : String(10);       // GET, POST, PUT, DELETE
+        protocol                : String(20);       // OData V2, OData V4, REST, SOAP
+        syncFrequency           : String(50);       // e.g. "Every 30 minutes"
+        authentication          : String(50);       // e.g. "OAuth 2.0"
+        timeout                 : Integer;          // Timeout in seconds
+        retryPolicy             : String(100);      // e.g. "3 attempts, exponential backoff"
+        status                  : String(20);       // Active, Inactive
+    };
+
+    /**
+     * System health indicator for cockpit health panel
+     */
+    type SystemHealthIndicator {
+        componentName           : String(100);      // e.g. "S/4HANA Connection"
+        status                  : String(20);       // Healthy, Degraded, Down
+    };
+
+    function getCockpitKPIs(integrationId: String) returns CockpitKPIs;
+    function getCockpitPerformanceData(integrationId: String) returns array of CockpitPerformanceItem;
+    function getAPIConfigDetail(integrationId: String) returns APIConfigDetail;
+    function getSystemHealthIndicators() returns array of SystemHealthIndicator;
+
+    action editAPIConfiguration(integrationId: String, config: APIConfigDetail) returns APIConfigDetail;
+    action triggerSyncNow(integrationId: String) returns DataSyncResult;
+
+    // ========================================================================
+    // INTEGRATION CONFIGURATION MANAGER TYPES (for IntegrationConfigurationManager TSX)
+    // ========================================================================
+
+    /**
+     * Configuration status panel data (right sidebar)
+     * Shows metadata, run statistics, and health metrics
+     */
+    type ConfigStatusPanel {
+        lastModified            : DateTime;         // Last config modification time
+        lastModifiedBy          : String(100);      // Who modified it
+        lastTestTime            : DateTime;         // Last connection test time
+        lastTestResult          : String(20);       // Success, Failed
+        activeSince             : Date;             // When integration was activated
+        totalRuns               : Integer;          // Total execution count
+        successRate             : Decimal(5,2);     // Overall success rate
+        avgResponseTimeMs       : Integer;          // Average response time in ms
+        lastError               : String(500);      // Last error message or "None"
+    };
+
+    /**
+     * Recent activity log entry for configuration panel
+     */
+    type ConfigActivityItem {
+        time                    : String(50);       // Human-readable time (e.g. "10 mins ago")
+        text                    : String(200);      // Activity description
+        icon                    : String(20);       // success, warning, edit
+    };
+
+    /**
+     * Result of testing the full integration flow end-to-end
+     */
+    type TestFullFlowResult {
+        success                 : Boolean;
+        steps                   : array of FlowStepResult;
+        totalDurationMs         : Integer;
+        message                 : String(500);
+    };
+
+    /**
+     * Individual step result within a full flow test
+     */
+    type FlowStepResult {
+        step                    : String(100);      // Step name
+        status                  : String(20);       // Success, Failed, Skipped
+        durationMs              : Integer;          // Step duration
+        message                 : String(500);      // Step result message
+    };
+
+    function getConfigStatusPanel(integrationId: String) returns ConfigStatusPanel;
+    function getConfigActivityLog(integrationId: String) returns array of ConfigActivityItem;
+
+    action testFullFlow(integrationId: String) returns TestFullFlowResult;
+    action cloneConfiguration(integrationId: String, newName: String) returns IntegrationConfigs;
+    action saveConfiguration(integrationId: String, config: LargeString) returns IntegrationConfigs;
+
+    // ========================================================================
+    // MASTER DATA SYNC MONITOR TYPES (for MasterDataSyncMonitor TSX)
+    // ========================================================================
+
+    /**
+     * Master data sync record for the sync monitor table
+     * Represents a single synchronized object with quality metrics
+     */
+    type MasterDataSyncRecord {
+        id                      : UUID;
+        objectID                : String(20);       // e.g. "MAT000024"
+        objectType              : String(30);       // Material, Supplier, Plant, Tax Code, CPE Formula, UoM
+        description             : String(200);      // Object description
+        source                  : String(30);       // e.g. "S/4HANA"
+        status                  : String(20);       // success, warning, error, pending
+        lastSync                : String(50);       // Human-readable last sync time
+        qualityPercent          : Decimal(5,2);     // Data quality score 0-100
+        apiEndpoint             : String(100);      // API endpoint used for sync
+    };
+
+    /**
+     * Summary KPIs for the master data sync monitor
+     */
+    type MasterDataSyncSummary {
+        totalRecords            : Integer;          // Total synced records
+        syncSuccessRate         : Decimal(5,2);     // Overall sync success rate
+        lastFullSync            : String(50);       // Human-readable time since last full sync
+        failedRecords           : Integer;          // Count of failed records
+        pendingValidation       : Integer;          // Count of pending validation records
+    };
+
+    /**
+     * Object type with count for tab badges
+     */
+    type ObjectTypeCount {
+        objectType              : String(30);       // Object type name
+        count                   : Integer;          // Number of records
+    };
+
+    function getMasterDataSyncSummary() returns MasterDataSyncSummary;
+    function getMasterDataSyncRecords(
+        objectType              : String,
+        syncStatus              : String,
+        qualityMin              : Decimal,
+        plant                   : String,
+        supplier                : String,
+        dateFrom                : Date,
+        dateTo                  : Date,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of MasterDataSyncRecord;
+    function getObjectTypeCounts() returns array of ObjectTypeCount;
+
+    action retryFailedSyncRecords(objectType: String) returns BatchRetryResult;
+    action scheduleSyncJob(entityType: String, frequency: String, startDateTime: DateTime) returns DataSyncResult;
+    action exportSyncReport(objectType: String, syncStatus: String) returns ExportResult;
+
+    type ExportResult {
+        success                 : Boolean;
+        fileUrl                 : String(500);
+        recordCount             : Integer;
+        message                 : String(500);
+    };
+
+    // ========================================================================
     // ERROR CODES (FDD-11)
     // ========================================================================
     // INT401 - Connection timeout to external system

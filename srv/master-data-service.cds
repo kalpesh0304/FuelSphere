@@ -211,4 +211,52 @@ service MasterDataService {
         errors      : array of String;
         syncTime    : DateTime;
     }
+
+    // ========================================================================
+    // MASTER DATA DASHBOARD TYPES (for MasterDataDashboard TSX)
+    // ========================================================================
+
+    /**
+     * KPI tiles for the master data integration dashboard
+     * Shows entity counts, sync status, and success rate
+     */
+    type MasterDataDashboardKPIs {
+        totalSuppliersSynced    : Integer;          // Total synced suppliers
+        activeContracts         : Integer;          // Active contract count
+        aircraftFleet           : Integer;          // Aircraft fleet size
+        airportMasterData       : Integer;          // Airport records count
+        lastSyncStatus          : String(20);       // Success, Warning, Error
+        syncSuccessRate         : Decimal(5,2);     // Sync success rate percentage
+    };
+
+    /**
+     * Supplier row for the master data supplier table
+     */
+    type MasterDataSupplierItem {
+        id                      : UUID;
+        supplierId              : String(20);       // e.g. "SUP-1001"
+        name                    : String(200);      // Supplier name
+        location                : String(100);      // City/location
+        country                 : String(3);        // Country code
+        activeContracts         : Integer;          // Number of active contracts
+        lastSync                : String(50);       // Human-readable sync time
+        status                  : String(20);       // success, warning, error
+    };
+
+    /**
+     * Sync success rate trend data point for chart
+     */
+    type SyncSuccessRateItem {
+        day                     : String(10);       // Day label (e.g. "Mon")
+        successRate             : Decimal(5,2);     // Success rate percentage
+    };
+
+    function getMasterDataDashboardKPIs() returns MasterDataDashboardKPIs;
+    function getMasterDataSuppliers(
+        entityType              : String,
+        syncStatus              : String,
+        dateRange               : String,
+        systemSource            : String
+    ) returns array of MasterDataSupplierItem;
+    function getSyncSuccessRateTrend(days: Integer) returns array of SyncSuccessRateItem;
 }
