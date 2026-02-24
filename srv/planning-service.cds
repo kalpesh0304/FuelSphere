@@ -493,16 +493,29 @@ service PlanningService {
 
     /**
      * Upload result for manual flight record Excel upload
+     * Returned after upload completes with batch tracking
      */
     type FlightRecordUploadResult {
         success                 : Boolean;
+        batchId                 : String(25);       // e.g. "UPL-2025112800001"
         fileName                : String(255);
-        recordsProcessed        : Integer;
-        recordsImported         : Integer;
-        recordsSkipped          : Integer;
-        recordsFailed           : Integer;
+        totalRecords            : Integer;          // Total records in file
+        successRecords          : Integer;          // Successfully imported
+        warningRecords          : Integer;          // Imported with warnings
+        errorRecords            : Integer;          // Failed validation (skipped)
         errors                  : array of ImportError;
         message                 : String(500);
+    };
+
+    /**
+     * Pre-upload validation summary
+     * Returned after file selection before upload confirmation
+     */
+    type FlightRecordValidationSummary {
+        readyRecords            : Integer;          // Records ready to upload
+        warnings                : Integer;          // Records with warnings
+        errors                  : Integer;          // Records with errors
+        errorDetails            : String(500);      // Summary of error details
     };
 
     function getFlightRecordKPIs(dateRange: String) returns FlightRecordKPIs;
@@ -522,8 +535,18 @@ service PlanningService {
      */
     action uploadFlightRecords(
         fileContent             : LargeBinary,
-        fileName                : String
+        fileName                : String,
+        skipErrors              : Boolean
     ) returns FlightRecordUploadResult;
+
+    /**
+     * Validate uploaded file before committing
+     * Returns pre-upload validation summary
+     */
+    action validateFlightRecordFile(
+        fileContent             : LargeBinary,
+        fileName                : String
+    ) returns FlightRecordValidationSummary;
 
     /**
      * Export flight records to Excel
@@ -535,6 +558,85 @@ service PlanningService {
         sourceFilter            : String,
         format                  : String
     ) returns ExportResult;
+
+    // ========================================================================
+    // FLIGHT RECORD DETAIL TYPES (for FlightRecordDetails TSX)
+    // ========================================================================
+
+    /**
+     * Full flight record detail for the Object Page view
+     * Extends FlightRecordItem with route, schedule, aircraft, and capacity data
+     */
+    type FlightRecordDetail {
+        // Flight Identifiers
+        id                      : UUID;
+        uniqueFlightId          : String(30);       // Unique flight identifier
+        serviceType             : String(5);        // J=Scheduled, G=Charter, etc.
+        carrierCode             : String(3);        // IATA carrier code
+        flightNumber            : String(10);       // Flight number
+        flightSuffix            : String(2);        // Optional suffix
+        flightDate              : Date;             // Flight operating date
+        // Route Details
+        departureAirport        : String(3);        // IATA departure code
+        departureName           : String(100);      // Full departure airport name
+        arrivalAirport          : String(3);        // IATA arrival code
+        arrivalName             : String(100);      // Full arrival airport name
+        viaAirport              : String(3);        // Via/stopover airport code
+        flightDistance           : Integer;          // Distance in nautical miles
+        // Schedule & Times (UTC)
+        sobt                    : DateTime;         // Scheduled Off-Block Time
+        sibt                    : DateTime;         // Scheduled In-Block Time
+        blockHours              : Decimal(5,2);     // Block time in hours
+        // Aircraft
+        aircraftTypeIATA        : String(4);        // IATA aircraft type (e.g. "773")
+        aircraftTypeICAO        : String(4);        // ICAO aircraft type (e.g. "B773")
+        tailNumber              : String(10);       // Aircraft registration
+        totalSeats              : Integer;          // Total seat capacity
+        // Status & Source
+        validationStatus        : String(10);       // Validated, Pending, Error, New, Deleted
+        dataSource              : String(10);       // OPS-ESB, Manual
+        replicationTimestamp    : DateTime;         // When record was received
+    };
+
+    /**
+     * Flight record validation error
+     * Displayed in the Validation tab when status = Error
+     */
+    type FlightRecordValidationError {
+        errorCode               : String(10);       // e.g. "FR004"
+        errorMessage            : String(500);      // e.g. "Master data not found: Airport - BOM"
+        fieldName               : String(50);       // Field that failed validation
+        fieldValue              : String(100);      // Value that caused the error
+        severity                : String(10);       // Error, Warning
+    };
+
+    /**
+     * Flight record change log entry for audit trail
+     * Displayed in the Change Log tab
+     */
+    type FlightRecordChangeLogEntry {
+        timestamp               : DateTime;         // When the change occurred
+        changedBy               : String(100);      // User or system that made change
+        changeType              : String(20);       // Create, Update, Delete
+        fieldChanged            : String(50);       // Field that was changed
+        oldValue                : String(200);      // Previous value
+        newValue                : String(200);      // New value
+        changeSource            : String(20);       // OPS-ESB, Manual, Validation, System
+    };
+
+    function getFlightRecordDetail(recordId: UUID) returns FlightRecordDetail;
+    function getFlightRecordValidationErrors(recordId: UUID) returns array of FlightRecordValidationError;
+    function getFlightRecordChangeLog(recordId: UUID) returns array of FlightRecordChangeLogEntry;
+
+    /**
+     * Retry validation on a flight record
+     */
+    action retryFlightRecordValidation(recordId: UUID) returns FlightRecordDetail;
+
+    /**
+     * Delete a flight record
+     */
+    action deleteFlightRecord(recordId: UUID) returns Boolean;
 
     // ========================================================================
     // ERROR CODES (FDD-02)
