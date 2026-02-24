@@ -799,6 +799,135 @@ service FuelOrderService {
     action sendForPilotApproval(calculationId: String) returns FuelLogEntry;
 
     // ========================================================================
+    // STATION OPERATIONS CONTROL CENTER TYPES (for StationOperationsControlCenter TSX)
+    // ========================================================================
+
+    /**
+     * Hero KPIs for the Station Operations Control Center
+     * Real-time summary of today's fuel operations at a station
+     */
+    type StationOpsHeroKPIs {
+        flightsScheduled        : Integer;          // Total flights today
+        requestsCreated         : Integer;          // Fuel requests created
+        requestsCoveragePct     : Decimal(5,2);     // % flights with requests
+        completedCount          : Integer;          // Fueling completed
+        completedPct            : Decimal(5,2);     // % complete
+        inProgressCount         : Integer;          // Active fueling operations
+        pendingCount            : Integer;          // Awaiting start
+        fuelUpliftedLiters      : Decimal(15,2);    // Total liters uplifted today
+        fuelUpliftTrend         : String(20);       // e.g. "↑ vs yesterday"
+    };
+
+    /**
+     * Live activity feed item for station operations
+     * Real-time fueling activity updates
+     */
+    type StationActivityItem {
+        activityId              : String(20);
+        activityType            : String(15);       // completed, in-progress, alert, info
+        time                    : String(10);       // HH:MM format
+        timeAgo                 : String(30);       // e.g. "15 min ago"
+        title                   : String(200);      // e.g. "Flight SQ001 - Fueling completed"
+        details                 : String(200);      // e.g. "95,450L | TRK-101 | Gate D38"
+        progress                : Integer;          // Fueling progress % (for in-progress)
+        actionLabel             : String(20);       // e.g. "View ePOD", "Monitor"
+    };
+
+    /**
+     * Flight fueling card for the operations timeline
+     * Shows real-time fueling status per flight
+     */
+    type StationFlightCard {
+        flightId                : UUID;
+        flightNumber            : String(10);
+        route                   : String(20);       // e.g. "SIN → JFK"
+        gate                    : String(10);
+        departure               : String(10);       // HH:MM
+        status                  : String(15);       // completed, in-progress, delayed, scheduled
+        fuelRequestedLiters     : Decimal(12,2);
+        fuelDeliveredLiters     : Decimal(12,2);
+        progressPct             : Integer;          // 0-100
+        operatorTruck           : String(20);       // e.g. "TRK-103"
+        issue                   : String(200);      // Issue description (for delayed)
+    };
+
+    /**
+     * Station resource status card
+     * Real-time availability of trucks, operators, fuel inventory
+     */
+    type StationResourceStatus {
+        resourceType            : String(20);       // trucks, operators, fuel_inventory
+        label                   : String(50);       // Display label
+        available               : Integer;          // Available count
+        total                   : Integer;          // Total count
+        displayValue            : String(20);       // e.g. "5 / 7" or "245K L"
+        statusText              : String(50);       // e.g. "2 in use, 5 ready"
+        progressPct             : Integer;          // For fuel inventory
+    };
+
+    /**
+     * Station alert for operations
+     * Active warnings and issues at the station
+     */
+    type StationAlertItem {
+        alertId                 : UUID;
+        severity                : String(10);       // high, medium, info
+        title                   : String(200);
+        details                 : String(200);
+        time                    : String(30);       // e.g. "Updated 5 min ago"
+        actionLabel             : String(20);       // e.g. "View Details", "Schedule"
+    };
+
+    /**
+     * Shift information for station operations banner
+     * Shows current and next shift details
+     */
+    type StationShiftInfo {
+        currentShiftName        : String(30);       // e.g. "Day Shift"
+        currentShiftHours       : String(20);       // e.g. "06:00 - 14:00"
+        currentCoordinator      : String(100);
+        nextShiftName           : String(30);
+        nextShiftHours          : String(20);
+        nextCoordinator         : String(100);
+        handoverMinutes         : Integer;          // Minutes until handover
+    };
+
+    /**
+     * Get station operations hero KPIs for today
+     */
+    function getStationOpsHeroKPIs(stationCode: String) returns StationOpsHeroKPIs;
+
+    /**
+     * Get live activity feed for station
+     */
+    function getStationActivityFeed(stationCode: String, top: Integer) returns array of StationActivityItem;
+
+    /**
+     * Get flight fueling timeline for station
+     */
+    function getStationFlightTimeline(stationCode: String, timeRange: String) returns array of StationFlightCard;
+
+    /**
+     * Get station resource status
+     */
+    function getStationResourceStatus(stationCode: String) returns array of StationResourceStatus;
+
+    /**
+     * Get active station alerts
+     */
+    function getStationAlerts(stationCode: String) returns array of StationAlertItem;
+
+    /**
+     * Get current shift information
+     */
+    function getStationShiftInfo(stationCode: String) returns StationShiftInfo;
+
+    /**
+     * Prepare handover report for shift change
+     */
+    action prepareHandoverReport(stationCode: String) returns StationShiftInfo;
+
+    // ========================================================================
     // ERROR CODES (FDD-05 Section 7.6.5)
     // ========================================================================
     // EPD401 - Delivered quantity exceeds tolerance (>5% variance)
