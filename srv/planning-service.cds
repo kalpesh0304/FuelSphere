@@ -639,6 +639,241 @@ service PlanningService {
     action deleteFlightRecord(recordId: UUID) returns Boolean;
 
     // ========================================================================
+    // ANNUAL PLANNING DASHBOARD TYPES (for AnnualPlanningDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Consolidated KPIs for the Annual Planning Dashboard hero tiles
+     */
+    type AnnualPlanningDashboardKPIs {
+        flightsLoaded           : Integer;          // Total flights imported from SSIM
+        flightsLoadedTrend      : String(50);       // e.g. "+450 this week"
+        routesValidatedPct      : Decimal(5,2);     // % routes with complete matrix data
+        demandCalculatedTons    : Decimal(18,2);    // Total demand in metric tons
+        demandTrendPct          : Decimal(5,2);     // % change vs prior calculation
+        pricesPlannedAmount     : Decimal(18,2);    // Total planned cost
+        pricesPlannedCurrency   : String(3);        // ISO currency
+        budgetStatus            : String(20);       // Complete, In Progress, Pending
+        budgetPostedDate        : Date;             // When budget was posted to SAC
+    };
+
+    /**
+     * Fuel quantity by aircraft type for bar chart
+     */
+    type FuelQuantityByAircraftItem {
+        aircraftType            : String(20);       // e.g. "Boeing 777"
+        quantityTons            : Decimal(12,2);    // Quantity in thousands of tons
+    };
+
+    /**
+     * Monthly planned fuel cost for line chart
+     */
+    type PlannedFuelCostMonthlyItem {
+        month                   : String(3);        // e.g. "Jan"
+        budgetCost              : Decimal(12,2);    // Budget cost ($M)
+        plannedCost             : Decimal(12,2);    // Planned cost ($M)
+        variance                : Decimal(10,2);    // Variance ($M)
+    };
+
+    function getAnnualPlanningDashboardKPIs(
+        fiscalYear              : String,
+        versionId               : String
+    ) returns AnnualPlanningDashboardKPIs;
+
+    function getFuelQuantityByAircraft(
+        fiscalYear              : String,
+        versionId               : String
+    ) returns array of FuelQuantityByAircraftItem;
+
+    function getPlannedFuelCostMonthly(
+        fiscalYear              : String,
+        versionId               : String
+    ) returns array of PlannedFuelCostMonthlyItem;
+
+    // ========================================================================
+    // DEMAND CALCULATION RESULTS TYPES (for DemandCalculationResults TSX)
+    // ========================================================================
+
+    /**
+     * Calculation summary banner for the results page
+     */
+    type DemandCalcResultSummary {
+        calculationId           : String(25);       // e.g. "CALC-2025-03-15-001"
+        status                  : String(20);       // Completed Successfully, Failed, In Progress
+        completedAt             : DateTime;         // When calculation finished
+        processingTime          : String(20);       // e.g. "4 min 32 sec"
+        flightsCalculated       : Integer;          // Total flights processed
+        flightsCoveredPct       : Decimal(5,2);     // % of scheduled flights calculated
+        totalDemandTons         : Decimal(18,2);    // Total demand in metric tons
+        demandChangeTons        : Decimal(12,2);    // Change vs previous calculation
+        demandChangePct         : Decimal(5,2);     // % change
+        calculationMethod       : String(30);       // e.g. "ML Advanced V2"
+        confidenceScore         : Decimal(5,2);     // Overall confidence %
+        outliersDetected        : Integer;          // Flights flagged as outliers
+        outliersPct             : Decimal(5,2);     // % of total flights
+    };
+
+    /**
+     * Quick stat cards below the summary banner
+     */
+    type DemandCalcQuickStats {
+        avgConfidence           : Decimal(5,2);     // Average confidence score
+        highConfidenceCount     : Integer;          // Flights with confidence >= 90%
+        highConfidencePct       : Decimal(5,2);     // % of flights with high confidence
+        acceptedFlights         : Integer;          // Flights accepted so far
+        totalFlights            : Integer;          // Total flights
+        avgVariancePct          : Decimal(5,2);     // Average variance from planned
+        varianceStatus          : String(20);       // Within tolerance, Over tolerance
+        flightsNeedingApproval  : Integer;          // Flights requiring manual review
+    };
+
+    /**
+     * Aircraft type group header row
+     */
+    type DemandCalcAircraftGroup {
+        aircraftType            : String(20);       // e.g. "B787-9"
+        flightCount             : Integer;          // Flights in this group
+        totalDemandTons         : Decimal(12,2);    // Total demand for aircraft type
+        avgPerFlightKg          : Decimal(12,2);    // Average fuel per flight
+        confidence              : Decimal(5,2);     // Group confidence %
+    };
+
+    /**
+     * Individual flight calculation result row
+     */
+    type DemandCalcFlightResult {
+        id                      : UUID;
+        flightNo                : String(10);       // e.g. "SQ001"
+        route                   : String(20);       // e.g. "SIN → JFK"
+        depDate                 : String(10);       // e.g. "Apr 15"
+        plannedKg               : Decimal(12,2);    // Planned fuel (kg)
+        calculatedKg            : Decimal(12,2);    // Calculated fuel (kg)
+        varianceKg              : Decimal(12,2);    // Variance (kg)
+        variancePct             : Decimal(5,2);     // Variance %
+        confidence              : Decimal(5,2);     // Confidence score
+        isOutlier               : Boolean;          // Flagged as outlier
+    };
+
+    /**
+     * Outlier detail with contributing factors and recommendation
+     */
+    type DemandCalcOutlierDetail {
+        flightNo                : String(10);
+        route                   : String(20);
+        depDate                 : String(10);
+        plannedKg               : Decimal(12,2);
+        calculatedKg            : Decimal(12,2);
+        variancePct             : Decimal(5,2);
+        factors                 : array of String;  // Contributing factors
+        recommendation          : String(500);      // AI recommendation
+    };
+
+    /**
+     * Previous vs current calculation comparison item
+     */
+    type DemandCalcComparisonItem {
+        aircraftType            : String(20);
+        previousDemandTons      : Decimal(12,2);
+        currentDemandTons       : Decimal(12,2);
+        variancePct             : Decimal(5,2);
+    };
+
+    function getDemandCalcResultSummary(calculationId: String) returns DemandCalcResultSummary;
+    function getDemandCalcQuickStats(calculationId: String) returns DemandCalcQuickStats;
+    function getDemandCalcAircraftGroups(calculationId: String) returns array of DemandCalcAircraftGroup;
+    function getDemandCalcFlightResults(
+        calculationId           : String,
+        aircraftType            : String,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of DemandCalcFlightResult;
+    function getDemandCalcOutliers(calculationId: String) returns array of DemandCalcOutlierDetail;
+    function getDemandCalcComparison(calculationId: String) returns array of DemandCalcComparisonItem;
+
+    action acceptAllDemandResults(calculationId: String) returns Boolean;
+    action acceptHighConfidenceResults(calculationId: String, minConfidence: Decimal) returns Integer;
+    action acceptDemandResult(calculationId: String, flightId: UUID) returns DemandCalcFlightResult;
+    action overrideDemandResult(calculationId: String, flightId: UUID, overrideValueKg: Decimal) returns DemandCalcFlightResult;
+    action recalculateSelectedFlights(calculationId: String, flightIds: array of UUID) returns DemandCalcResultSummary;
+    action exportDemandCalcResults(calculationId: String, format: String) returns ExportResult;
+    action submitDemandCalcForApproval(calculationId: String, approverId: String, comments: String) returns Boolean;
+
+    // ========================================================================
+    // SCENARIO COMPARISON WORKBENCH TYPES (for ScenarioComparisonWorkbench TSX)
+    // ========================================================================
+
+    /**
+     * Metric row in the scenario comparison table
+     */
+    type ScenarioComparisonMetricRow {
+        metric                  : String(50);       // e.g. "Total Cost", "Budget Variance"
+        baseValue               : String(50);       // Base scenario value (formatted)
+        optimisticValue         : String(50);       // Optimistic scenario value
+        pessimisticValue        : String(50);       // Pessimistic scenario value
+        variance                : String(50);       // Variance range description
+    };
+
+    /**
+     * Key difference highlight card
+     */
+    type ScenarioDifferenceCard {
+        title                   : String(100);      // e.g. "Total Cost Impact"
+        description             : String(500);      // Detail text
+        riskLevel               : String(10);       // high, medium, low
+        recommendation          : String(500);      // Recommended action
+    };
+
+    /**
+     * What-if scenario slider input values
+     */
+    type WhatIfScenarioInput {
+        priceAdjustmentPct      : Decimal(5,2);     // Fuel price adjustment %
+        demandGrowthPct         : Decimal(5,2);     // Demand growth %
+        loadFactorPct           : Decimal(5,2);     // Load factor %
+        fuelEfficiencyPct       : Decimal(5,2);     // Fuel efficiency improvement %
+        fxRateChangePct         : Decimal(5,2);     // FX rate change %
+    };
+
+    /**
+     * Real-time what-if impact calculation result
+     */
+    type WhatIfImpactResult {
+        adjustedTotalCost       : Decimal(18,2);    // Adjusted total cost ($M)
+        varianceFromBase        : Decimal(18,2);    // Variance from base ($M)
+        variancePct             : Decimal(5,2);     // Variance %
+        currency                : String(3);
+    };
+
+    /**
+     * Cost comparison bar chart data point
+     */
+    type ScenarioCostComparisonItem {
+        scenarioName            : String(50);       // e.g. "Base Case"
+        cost                    : Decimal(18,2);    // Total cost ($M)
+        budget                  : Decimal(18,2);    // Budget reference line
+    };
+
+    /**
+     * Monthly cost trend per scenario for line chart
+     */
+    type ScenarioMonthlyTrendItem {
+        month                   : String(3);        // e.g. "Jan"
+        baseCost                : Decimal(12,2);    // Base case cost ($M)
+        optimisticCost          : Decimal(12,2);    // Optimistic cost ($M)
+        pessimisticCost         : Decimal(12,2);    // Pessimistic cost ($M)
+    };
+
+    function getScenarioComparisonMetrics(versionIds: array of UUID) returns array of ScenarioComparisonMetricRow;
+    function getScenarioDifferences(versionIds: array of UUID) returns array of ScenarioDifferenceCard;
+    function calculateWhatIfImpact(input: WhatIfScenarioInput, baseVersionId: UUID) returns WhatIfImpactResult;
+    function getScenarioCostComparison(versionIds: array of UUID) returns array of ScenarioCostComparisonItem;
+    function getScenarioMonthlyTrend(versionIds: array of UUID) returns array of ScenarioMonthlyTrendItem;
+
+    action saveAsNewScenario(input: WhatIfScenarioInput, scenarioName: String, baseVersionId: UUID) returns UUID;
+    action saveScenarioComparison(versionIds: array of UUID, comparisonName: String) returns UUID;
+    action exportScenarioReport(versionIds: array of UUID, format: String) returns ExportResult;
+
+    // ========================================================================
     // ERROR CODES (FDD-02)
     // ========================================================================
     // PLN401 - Version not found
