@@ -914,6 +914,197 @@ service IntegrationService {
     };
 
     // ========================================================================
+    // DATA QUALITY DASHBOARD TYPES (for DataQualityDashboard TSX)
+    // ========================================================================
+
+    /**
+     * KPIs for the data quality dashboard hero section
+     * Overall score with severity breakdown and resolution stats
+     */
+    type DataQualityDashboardKPIs {
+        overallScore            : Decimal(5,2);     // Overall DQ score (0-100)
+        trend                   : Decimal(5,2);     // Change vs last month (can be negative)
+        totalRecords            : Integer;          // Total master data records
+        totalIssues             : Integer;          // Total open DQ issues
+        highSeverity            : Integer;          // High severity issue count
+        mediumSeverity          : Integer;          // Medium severity issue count
+        lowSeverity             : Integer;          // Low severity issue count
+        resolvedToday           : Integer;          // Issues resolved today
+    };
+
+    /**
+     * Quality score breakdown by object type (bar chart)
+     */
+    type QualityScoreByObjectItem {
+        objectType              : String(30);       // e.g. "Supplier", "Material", "Plant"
+        score                   : Decimal(5,2);     // Quality score percentage
+        issues                  : Integer;          // Number of issues
+        records                 : Integer;          // Total records of this type
+    };
+
+    /**
+     * Issue count by issue type category
+     */
+    type IssuesByTypeItem {
+        issueType               : String(30);       // MISSING_MANDATORY, INVALID_FORMAT, DUPLICATE_ENTRY, etc.
+        count                   : Integer;          // Number of occurrences
+        percentage              : Decimal(5,2);     // Percentage of total issues
+    };
+
+    /**
+     * Individual data quality issue record for the issues table
+     */
+    type DataQualityIssueItem {
+        id                      : UUID;
+        issueType               : String(30);       // MISSING_MANDATORY, INVALID_FORMAT, etc.
+        objectType              : String(30);       // SUPPLIER, MATERIAL, PLANT, TAX_CODE, CONTRACT
+        objectID                : String(20);       // e.g. "SUP-0234"
+        fieldName               : String(100);      // Field with the issue
+        currentValue            : String(500);      // Current (bad) value
+        expectedValue           : String(500);      // Expected correct value
+        severity                : String(10);       // HIGH, MEDIUM, LOW
+        detectedDate            : DateTime;         // When issue was detected
+        status                  : String(15);       // OPEN, IN_PROGRESS, RESOLVED
+        assignedTo              : String(100);      // Assigned resolver email
+    };
+
+    function getDataQualityDashboardKPIs() returns DataQualityDashboardKPIs;
+    function getQualityScoreByObjectType() returns array of QualityScoreByObjectItem;
+    function getIssuesByType() returns array of IssuesByTypeItem;
+    function getDataQualityIssues(
+        objectType              : String,
+        issueType               : String,
+        searchTerm              : String,
+        severity                : String,
+        status                  : String,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of DataQualityIssueItem;
+
+    action runDQCheck() returns DataQualityResult;
+    action exportDQReport(objectType: String, issueType: String) returns ExportResult;
+    action fixDQIssue(issueId: UUID) returns DataQualityIssueItem;
+    action assignDQIssue(issueId: UUID, assignee: String) returns DataQualityIssueItem;
+
+    // ========================================================================
+    // ERROR MANAGEMENT CONSOLE TYPES (for ErrorManagementConsole TSX)
+    // ========================================================================
+
+    /**
+     * Error queue statistics for the summary dashboard tiles
+     */
+    type ErrorQueueStatistics {
+        total                   : Integer;          // Total open errors
+        critical                : Integer;          // Critical severity count
+        high                    : Integer;          // High severity count
+        medium                  : Integer;          // Medium severity count
+        low                     : Integer;          // Low severity count
+        autoResolved            : Integer;          // Auto-resolved count
+    };
+
+    /**
+     * Error category with count for category filter tiles
+     */
+    type ErrorCategoryCount {
+        categoryId              : String(30);       // API_TIMEOUT, VALIDATION, AUTH, BUSINESS_LOGIC, MASTER_DATA, SYSTEM
+        name                    : String(50);       // Display name
+        count                   : Integer;          // Number of errors in category
+    };
+
+    /**
+     * Error queue item for the main error table
+     * Comprehensive error record with SLA tracking
+     */
+    type ErrorQueueItem {
+        id                      : UUID;
+        errorID                 : String(30);       // e.g. "ERR-2025-11-04-001"
+        integrationName         : String(100);      // e.g. "Business Partner API"
+        severity                : String(10);       // CRITICAL, HIGH, MEDIUM, LOW
+        category                : String(20);       // API_TIMEOUT, VALIDATION, AUTH, etc.
+        errorMessage            : String(1000);     // Full error message
+        occurrenceTime          : DateTime;         // When error occurred
+        status                  : String(20);       // NEW, IN_PROGRESS, RETRY_SCHEDULED, RESOLVED, FAILED
+        retryCount              : Integer;          // Number of retries attempted
+        assignedTo              : String(100);      // Assigned user name
+        slaDeadline             : DateTime;         // SLA deadline timestamp
+        slaBreach               : Boolean;          // Whether SLA has been breached
+    };
+
+    /**
+     * Error severity trend data point for 30-day line chart
+     */
+    type ErrorSeverityTrendItem {
+        day                     : Integer;          // Day number (1-30)
+        critical                : Integer;          // Critical errors on this day
+        high                    : Integer;          // High errors on this day
+        medium                  : Integer;          // Medium errors on this day
+        low                     : Integer;          // Low errors on this day
+    };
+
+    function getErrorQueueStatistics() returns ErrorQueueStatistics;
+    function getErrorCategoryCounts() returns array of ErrorCategoryCount;
+    function getErrorQueueItems(
+        severity                : String,
+        category                : String,
+        integrationName         : String,
+        status                  : String,
+        assignment              : String,
+        dateRange               : String,
+        searchTerm              : String,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of ErrorQueueItem;
+    function getErrorSeverityTrend(days: Integer) returns array of ErrorSeverityTrendItem;
+
+    action bulkRetryErrors(errorIds: array of UUID) returns BatchRetryResult;
+    action bulkAssignErrors(errorIds: array of UUID, assignee: String) returns Integer;
+    action bulkResolveErrors(errorIds: array of UUID, resolutionNotes: String) returns Integer;
+    action bulkDeleteErrors(errorIds: array of UUID) returns Integer;
+    action triggerAutoRemediation() returns BatchRetryResult;
+    action exportErrorReport(severity: String, category: String, dateRange: String) returns ExportResult;
+
+    // ========================================================================
+    // ERROR LOG VIEWER TYPES (for ErrorLogViewer TSX)
+    // ========================================================================
+
+    /**
+     * Integration error log entry for the error log timeline table
+     * Airport-specific sync error with master data error codes (MD4xx)
+     */
+    type IntegrationErrorLogItem {
+        id                      : UUID;
+        timestamp               : DateTime;         // When error occurred
+        airportIATA             : String(3);        // Airport IATA code
+        airportName             : String(200);      // Airport full name
+        errorCode               : String(10);       // e.g. MD401, MD404, MD422, MD503
+        errorType               : String(10);       // Critical, Warning, Resolved
+        message                 : String(200);      // Short error message
+        details                 : String(500);      // Detailed error description
+        status                  : String(15);       // Unresolved, In Progress, Resolved
+    };
+
+    /**
+     * Summary counts for the error log viewer header cards
+     */
+    type IntegrationErrorLogSummary {
+        criticalCount           : Integer;          // Number of critical errors
+        warningCount            : Integer;          // Number of warnings
+        resolvedCount           : Integer;          // Number of resolved errors
+    };
+
+    function getIntegrationErrorLogSummary() returns IntegrationErrorLogSummary;
+    function getIntegrationErrorLogs(
+        objectType              : String,
+        errorCode               : String,
+        status                  : String,
+        skip                    : Integer,
+        top                     : Integer
+    ) returns array of IntegrationErrorLogItem;
+
+    action retryErrorLog(errorLogId: UUID) returns IntegrationErrorLogItem;
+    action exportErrorLog(objectType: String, errorCode: String, status: String) returns ExportResult;
+
+    // ========================================================================
     // ERROR CODES (FDD-11)
     // ========================================================================
     // INT401 - Connection timeout to external system
