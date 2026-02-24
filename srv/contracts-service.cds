@@ -424,4 +424,223 @@ service ContractsService {
         validFrom           : Date;
         validTo             : Date;
     }
+
+    // ========================================================================
+    // CONTRACTS CPE DASHBOARD TYPES (for ContractsCPEDashboard TSX)
+    // ========================================================================
+
+    /**
+     * KPIs for contracts & CPE dashboard
+     * Used by: ContractsCPEDashboard KPI tiles
+     */
+    type ContractsDashboardKPIs {
+        activeContracts         : Integer;          // Active contract count
+        totalContractValue      : Decimal(15,2);    // Total portfolio value
+        cpeFormulaCoverage      : Decimal(5,2);     // CPE formula coverage %
+        priceSyncSuccess        : Decimal(5,2);     // Price sync success rate %
+        priceSyncTrend          : Decimal(5,2);     // % change vs prior period
+        expiringSoon            : Integer;          // Contracts expiring within 90 days
+        lastPriceUpdateMins     : Integer;          // Minutes since last price update
+        systemsOperational      : Boolean;          // All systems operational flag
+    };
+
+    /**
+     * Contract share by supplier for donut chart
+     * Used by: ContractsCPEDashboard contracts by supplier chart
+     */
+    type ContractsBySupplierItem {
+        name                    : String(100);      // Supplier name
+        value                   : Integer;          // Share % (0-100)
+        count                   : Integer;          // Number of contracts
+    };
+
+    /**
+     * Supplier exposure by contract value
+     * Used by: ContractsCPEDashboard supplier exposure bar chart
+     */
+    type SupplierExposureItem {
+        supplier                : String(100);      // Supplier name
+        value                   : Decimal(15,2);    // Contract value (millions)
+    };
+
+    /**
+     * Price variance trend point
+     * Used by: ContractsCPEDashboard price variance trend line chart
+     */
+    type PriceVarianceTrendItem {
+        day                     : String(10);       // Day label
+        variance                : Decimal(5,2);     // Variance % (+/-)
+    };
+
+    /**
+     * Expiring contract record
+     * Used by: ContractsCPEDashboard + ContractManagerHomeDashboard expiring contracts table
+     */
+    type ExpiringContractItem {
+        id                      : String(20);       // Contract ID
+        supplier                : String(100);      // Supplier name
+        expiryDate              : String(20);       // Display date
+        daysRemaining           : Integer;          // Days until expiry
+        severity                : String(10);       // high, medium, low
+        action                  : String(10);       // Renew, Review, Extend
+    };
+
+    // ========================================================================
+    // CONTRACTS CPE DASHBOARD FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get contracts dashboard KPIs
+     */
+    function getContractsDashboardKPIs() returns ContractsDashboardKPIs;
+
+    /**
+     * Get contracts breakdown by supplier (donut chart)
+     */
+    function getContractsBySupplier() returns array of ContractsBySupplierItem;
+
+    /**
+     * Get supplier exposure by value (bar chart)
+     */
+    function getSupplierExposure() returns array of SupplierExposureItem;
+
+    /**
+     * Get price variance trend (line chart)
+     */
+    function getPriceVarianceTrend(days: Integer) returns array of PriceVarianceTrendItem;
+
+    /**
+     * Get contracts expiring soon
+     */
+    function getExpiringContracts(withinDays: Integer) returns array of ExpiringContractItem;
+
+    /**
+     * Renew an expiring contract
+     */
+    action renewContract(contractId: String) returns ContractSummary;
+
+    // ========================================================================
+    // CONTRACT MANAGER HOME DASHBOARD TYPES (for ContractManagerHomeDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Portfolio health scorecard
+     * Used by: ContractManagerHomeDashboard portfolio health section
+     */
+    type PortfolioHealthKPIs {
+        activeContracts         : Integer;
+        supplierCount           : Integer;
+        airportCount            : Integer;
+        totalPortfolioValue     : Decimal(15,2);    // Total value
+        portfolioValueChange    : Decimal(15,2);    // Change amount
+        portfolioValueChangePct : Decimal(5,2);     // Change %
+        avgValuePerContract     : Decimal(15,2);
+        avgUtilization          : Decimal(5,2);     // Utilization %
+        utilizationTarget       : String(10);       // e.g. 75-85%
+        complianceScore         : Decimal(5,2);     // Compliance score %
+        costSavingsYTD          : Decimal(15,2);    // Cost savings
+        belowBudgetPct          : Decimal(5,2);     // % below budget
+    };
+
+    /**
+     * Price variance alert for monitoring
+     * Used by: ContractManagerHomeDashboard price variance section
+     */
+    type PriceVarianceAlertItem {
+        supplier                : String(100);      // Supplier with station
+        issue                   : String(100);      // Alert description
+        details                 : String(100);      // Price details
+        threshold               : String(100);      // Threshold info
+        status                  : String(10);       // warning, error
+    };
+
+    /**
+     * User task item
+     * Used by: ContractManagerHomeDashboard my tasks section
+     */
+    type ContractTaskItem {
+        title                   : String(200);      // Task description
+        due                     : String(20);       // Due display (e.g. "2 days", "In progress")
+        priority                : String(10);       // high, medium, low
+        progress                : Integer;          // Progress % (null = no progress bar)
+    };
+
+    /**
+     * Top supplier performance card
+     * Used by: ContractManagerHomeDashboard supplier performance section
+     */
+    type TopSupplierItem {
+        name                    : String(100);      // Supplier name
+        score                   : Decimal(5,1);     // Performance score (0-100)
+        trend                   : String(10);       // up, down, neutral
+        trendValue              : Decimal(5,1);     // Trend delta
+        delivery                : Decimal(5,1);     // Delivery rate %
+        quality                 : Decimal(5,1);     // Quality rate %
+        ytdSpend                : Decimal(15,2);    // YTD spend
+        alert                   : Boolean;          // Review needed flag
+    };
+
+    /**
+     * Team activity feed item
+     * Used by: ContractManagerHomeDashboard team activity section
+     */
+    type TeamActivityItem {
+        user                    : String(100);      // User name
+        action                  : String(200);      // Action description
+        time                    : String(20);       // Relative time (e.g. "2 hrs ago")
+    };
+
+    /**
+     * Critical alerts summary
+     * Used by: ContractManagerHomeDashboard alert banner
+     */
+    type CriticalAlertsSummary {
+        expiringContracts       : Integer;          // Contracts expiring within 90 days
+        priceVariances          : Integer;          // Price variances detected
+        complianceIssues        : Integer;          // Compliance issues
+    };
+
+    // ========================================================================
+    // CONTRACT MANAGER HOME DASHBOARD FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get portfolio health scorecard
+     */
+    function getPortfolioHealthKPIs() returns PortfolioHealthKPIs;
+
+    /**
+     * Get price variance alerts
+     */
+    function getPriceVarianceAlerts() returns array of PriceVarianceAlertItem;
+
+    /**
+     * Get user's active tasks
+     */
+    function getContractTasks(userId: String) returns array of ContractTaskItem;
+
+    /**
+     * Get top supplier performance cards
+     */
+    function getTopSuppliers(limit: Integer) returns array of TopSupplierItem;
+
+    /**
+     * Get team activity feed
+     */
+    function getTeamActivity(limit: Integer) returns array of TeamActivityItem;
+
+    /**
+     * Get critical alerts summary
+     */
+    function getCriticalAlertsSummary() returns CriticalAlertsSummary;
+
+    /**
+     * Acknowledge a price variance alert
+     */
+    action acknowledgePriceVariance(supplier: String) returns PriceVarianceAlertItem;
+
+    /**
+     * Start contract renewal process
+     */
+    action startRenewalProcess(contractIds: array of String) returns String;
 }

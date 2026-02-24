@@ -1195,6 +1195,118 @@ service BurnService {
     action addBurnReconciliationComment(recordId: String, text: String) returns BurnReconciliationComment;
 
     // ========================================================================
+    // HISTORICAL FUEL ANALYSIS TYPES (for HistoricalFuelAnalysis TSX)
+    // ========================================================================
+
+    /**
+     * KPIs for historical fuel consumption analysis
+     * Used by: HistoricalFuelAnalysis KPI tiles
+     */
+    type HistoricalFuelKPIs {
+        avgVariance             : Decimal(5,2);     // Average variance %
+        totalFlightsAnalyzed    : Integer;          // Total flights in period
+        totalFuelConsumed       : Decimal(15,0);    // Total fuel consumed (kg)
+        efficiencyImprovement   : Decimal(5,2);     // % improvement vs prior period
+        anomaliesDetected       : Integer;          // Number of anomalies
+        costSavings             : Decimal(15,2);    // Cost savings vs forecast
+    };
+
+    /**
+     * Flight-level fuel consumption analysis record
+     * Used by: HistoricalFuelAnalysis detailed flight table
+     */
+    type FlightFuelAnalysisItem {
+        flightNo                : String(10);       // Flight number (e.g. SQ 001)
+        date                    : String(10);       // Display date
+        route                   : String(15);       // Route (e.g. LHR-JFK)
+        aircraft                : String(10);       // Aircraft type (e.g. B738)
+        planned                 : Decimal(12,0);    // Planned fuel (kg)
+        actual                  : Decimal(12,0);    // Actual fuel (kg)
+        variance                : Decimal(12,0);    // Variance (kg, positive = over)
+        variancePercent         : Decimal(5,1);     // Variance %
+        weather                 : String(20);       // Weather condition (Normal, Headwind, Tailwind, Storm)
+        isAnomaly               : Boolean;          // Whether flagged as anomaly
+    };
+
+    /**
+     * Anomaly details for expanded row
+     * Used by: HistoricalFuelAnalysis expanded anomaly row
+     */
+    type FuelAnomalyDetail {
+        flightNo                : String(10);
+        rootCause               : String(200);      // Root cause description
+        weatherConditions       : String(200);      // Detailed weather info
+        fuelRecalculation       : String(200);      // Fuel recalculation details
+        comments                : String(500);      // Crew/analyst comments
+        followUpAction          : String(200);      // Recommended follow-up
+    };
+
+    /**
+     * Variance distribution histogram bucket
+     * Used by: HistoricalFuelAnalysis variance distribution bar chart
+     */
+    type VarianceDistributionItem {
+        range                   : String(10);       // Bucket label (e.g. -10%, -8%, 0%, +2%)
+        count                   : Integer;          // Number of flights in bucket
+    };
+
+    /**
+     * Variance trend over time
+     * Used by: HistoricalFuelAnalysis variance trend line chart
+     */
+    type FuelVarianceTrendItem {
+        day                     : String(10);       // Day label
+        planned                 : Decimal(5,2);     // Target (always 0)
+        actual                  : Decimal(5,2);     // Actual variance %
+    };
+
+    // ========================================================================
+    // HISTORICAL FUEL ANALYSIS FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get historical fuel analysis KPIs
+     */
+    function getHistoricalFuelKPIs(
+        fromDate: Date,
+        toDate: Date,
+        routeFilter: String,
+        aircraftFilter: String
+    ) returns HistoricalFuelKPIs;
+
+    /**
+     * Get flight-level fuel analysis records
+     */
+    function getFlightFuelAnalysis(
+        fromDate: Date,
+        toDate: Date,
+        routeFilter: String,
+        aircraftFilter: String,
+        varianceThreshold: Decimal,
+        anomaliesOnly: Boolean
+    ) returns array of FlightFuelAnalysisItem;
+
+    /**
+     * Get anomaly details for a specific flight
+     */
+    function getFuelAnomalyDetail(flightNo: String, date: String) returns FuelAnomalyDetail;
+
+    /**
+     * Get variance distribution histogram
+     */
+    function getVarianceDistribution(
+        fromDate: Date,
+        toDate: Date,
+        routeFilter: String,
+        aircraftFilter: String
+    ) returns array of VarianceDistributionItem;
+
+    /**
+     * Get fuel variance trend over time
+     */
+    function getFuelVarianceTrend(days: Integer) returns array of FuelVarianceTrendItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-08)
     // ========================================================================
     // FB401 - actualBurnKg must be greater than 0
