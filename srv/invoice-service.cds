@@ -1260,6 +1260,207 @@ service InvoiceService {
     function getPerformanceTrend(metric: String, days: Integer) returns array of PerformanceTrendDataPoint;
 
     // ========================================================================
+    // AP TEAM PERFORMANCE TYPES (for APTeamPerformanceDashboard TSX)
+    // ========================================================================
+
+    /**
+     * Team-level performance KPIs
+     * Used by: APTeamPerformanceDashboard KPI tiles
+     */
+    type TeamPerformanceKPIs {
+        teamSize            : Integer;          // Number of AP clerks
+        totalProcessed      : Integer;          // Total invoices processed by team
+        avgAccuracy         : Decimal(5,2);     // Team average accuracy %
+        avgProcessingTime   : Decimal(8,2);     // Team average processing time (minutes)
+    };
+
+    /**
+     * Individual clerk performance row
+     * Used by: APTeamPerformanceDashboard performance table
+     */
+    type ClerkPerformanceItem {
+        id                  : String(50);       // Unique clerk ID
+        userId              : String(255);      // User login ID
+        userName            : String(255);      // Display name
+        invoicesProcessed   : Integer;          // Total processed
+        autoMatched         : Integer;          // Auto-matched count
+        manualReview        : Integer;          // Manual review count
+        approved            : Integer;          // Approved count
+        rejected            : Integer;          // Rejected count
+        exceptionsHandled   : Integer;          // Exceptions handled
+        exceptionsResolved  : Integer;          // Exceptions resolved
+        avgProcessingTime   : Decimal(8,2);     // Avg time per invoice (minutes)
+        accuracyRate        : Decimal(5,2);     // Accuracy %
+        qualityScore        : Decimal(5,2);     // Quality score (0-100)
+        productivityScore   : Decimal(5,2);     // Productivity score (0-100)
+        overallScore        : Decimal(5,2);     // Overall score (0-100)
+        teamRank            : Integer;          // Rank within team
+        badges              : array of String;  // Achievement badge IDs
+    };
+
+    /**
+     * Weekly team performance trend data
+     * Used by: APTeamPerformanceDashboard weekly line chart
+     */
+    type WeeklyTeamTrendItem {
+        week                : String(20);       // e.g. "Week 1", "Week 2"
+        processed           : Integer;          // Invoices processed
+        accuracy            : Decimal(5,2);     // Accuracy %
+    };
+
+    /**
+     * Radar chart metric for top performer comparison
+     * Used by: APTeamPerformanceDashboard radar chart
+     */
+    type TeamPerformanceRadarItem {
+        metric              : String(30);       // Speed, Accuracy, Quality, Productivity, Exceptions
+        value               : Decimal(5,2);     // Normalized value (0-100)
+    };
+
+    // ========================================================================
+    // AP TEAM PERFORMANCE FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get team-level performance KPIs
+     */
+    function getTeamPerformanceKPIs(period: String, team: String) returns TeamPerformanceKPIs;
+
+    /**
+     * Get clerk performance data for team table
+     */
+    function getClerkPerformance(period: String, team: String, sortBy: String) returns array of ClerkPerformanceItem;
+
+    /**
+     * Get weekly team performance trend
+     */
+    function getWeeklyTeamTrend(period: String, team: String) returns array of WeeklyTeamTrendItem;
+
+    /**
+     * Get radar chart data for a specific clerk (top performer)
+     */
+    function getTopPerformerRadar(clerkId: String) returns array of TeamPerformanceRadarItem;
+
+    // ========================================================================
+    // ACCOUNTING POSTING MONITOR TYPES (for AccountingPostingMonitor TSX)
+    // ========================================================================
+
+    /**
+     * Accounting document item for posting monitor
+     * Used by: AccountingPostingMonitor pending/failed/posted tables
+     */
+    type AccountingDocumentItem {
+        accountingDocId     : String(50);       // Unique doc ID
+        invoiceId           : String(20);       // Invoice reference
+        s4DocumentNumber    : String(10);       // S/4HANA document number (when posted)
+        s4DocumentType      : String(2);        // RE (Invoice), WE (GR), etc.
+        companyCode         : String(4);        // Company code
+        fiscalYear          : String(4);        // Fiscal year
+        fiscalPeriod        : String(2);        // Fiscal period (01-12)
+        postingDate         : Date;             // Posting date
+        documentDate        : Date;             // Document date
+        documentCurrency    : String(3);        // Currency
+        documentAmount      : Decimal(15,2);    // Amount
+        postingType         : String(30);       // FI_Only, MM_GR_101, MM_Transfer_311, MM_Consumption_261
+        ownershipModel      : String(30);       // Operator_Managed, Airline_Owned
+        glAccountInventory  : String(10);       // Inventory G/L account
+        glAccountGRIR       : String(10);       // GR/IR clearing G/L account
+        vendorAccount       : String(10);       // Vendor account
+        postingStatus       : String(15);       // Pending, Posted, Failed, Retrying, Cancelled
+        postingAttempts     : Integer;          // Number of posting attempts
+        firstAttemptAt      : DateTime;         // First attempt timestamp
+        lastAttemptAt       : DateTime;         // Last attempt timestamp
+        postedAt            : DateTime;         // Posted timestamp
+        postedBy            : String(255);      // Posted by user/service
+        postingError        : String(500);      // Error message if failed
+        errorCode           : String(20);       // Error code (HTTP_500, AUTH_401, VALID_422)
+        canRetry            : Boolean;          // Whether retry is possible
+        supplierName        : String(100);      // Supplier display name
+        flightNumber        : String(20);       // Flight reference
+        aircraftRegistration : String(20);      // Aircraft registration
+        route               : String(20);       // Route (e.g. SIN-LHR)
+        costCenter          : String(10);       // Cost center
+        internalOrder       : String(20);       // Internal order
+    };
+
+    /**
+     * Posting monitor KPIs
+     * Used by: AccountingPostingMonitor KPI tiles
+     */
+    type PostingMonitorKPIs {
+        successRate         : Decimal(5,2);     // Posting success rate %
+        successTrend        : Decimal(5,2);     // % change vs yesterday
+        avgPostingTime      : Decimal(8,2);     // Average posting time (seconds)
+        timeTrend           : Decimal(8,2);     // Time change vs yesterday (seconds)
+        failedCount         : Integer;          // Failed postings count
+        pendingCount        : Integer;          // Pending in queue
+        s4Health            : String(20);       // Operational, Degraded, Down
+    };
+
+    /**
+     * Sparkline data point for KPI trend mini-charts
+     * Used by: AccountingPostingMonitor KPI sparklines
+     */
+    type PostingSparklineItem {
+        day                 : Integer;          // Day index (1-7)
+        value               : Decimal(8,2);     // Metric value
+    };
+
+    // ========================================================================
+    // ACCOUNTING POSTING MONITOR FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get posting monitor KPIs
+     */
+    function getPostingMonitorKPIs(companyCode: String) returns PostingMonitorKPIs;
+
+    /**
+     * Get pending posting queue
+     */
+    function getPendingPostingQueue(companyCode: String) returns array of AccountingDocumentItem;
+
+    /**
+     * Get failed posting queue
+     */
+    function getFailedPostingQueue(companyCode: String) returns array of AccountingDocumentItem;
+
+    /**
+     * Get posted documents for today
+     */
+    function getPostedDocuments(companyCode: String, fromDate: Date, toDate: Date) returns array of AccountingDocumentItem;
+
+    /**
+     * Get posting success rate sparkline data
+     */
+    function getPostingSuccessRateTrend(days: Integer) returns array of PostingSparklineItem;
+
+    /**
+     * Get posting time sparkline data
+     */
+    function getPostingTimeTrend(days: Integer) returns array of PostingSparklineItem;
+
+    /**
+     * Post all pending documents immediately
+     */
+    action postAllPending(companyCode: String) returns BatchActionResult;
+
+    /**
+     * Retry a specific failed posting
+     */
+    action retryFailedPosting(accountingDocId: String) returns AccountingDocumentItem;
+
+    /**
+     * Retry all failed postings
+     */
+    action retryAllFailed(companyCode: String) returns BatchActionResult;
+
+    /**
+     * Escalate a failed posting for manual intervention
+     */
+    action escalatePosting(accountingDocId: String, reason: String) returns AccountingDocumentItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-06)
     // ========================================================================
     // INV401 - PO not found for matching

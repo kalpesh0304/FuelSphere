@@ -634,6 +634,49 @@ service IntegrationService {
     };
 
     // ========================================================================
+    // API PERFORMANCE MONITOR TYPES (for APIPerformanceMonitor TSX)
+    // ========================================================================
+
+    /**
+     * Integration card item for API performance monitor
+     * Used by: APIPerformanceMonitor integration cards grid
+     */
+    type IntegrationCardItem {
+        id                  : String(50);       // Unique integration ID
+        name                : String(100);      // Display name (e.g. "Business Partner API")
+        integrationType     : String(20);       // S4HANA, CPI, EXTERNAL, INTERNAL
+        status              : String(15);       // active, degraded, down
+        uptime              : Decimal(5,2);     // Uptime percentage (e.g. 99.8)
+        avgLatency          : Decimal(8,2);     // Average latency in seconds
+        lastCall            : String(50);       // Human-readable last call time (e.g. "2 mins ago")
+        callsToday          : Integer;          // Total API calls today
+    };
+
+    // ========================================================================
+    // API PERFORMANCE MONITOR FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get all integration cards for API monitor
+     */
+    function getIntegrationCards(filterStatus: String, filterType: String) returns array of IntegrationCardItem;
+
+    /**
+     * Test all integration connections
+     */
+    action testAllConnections() returns HealthCheckResult;
+
+    /**
+     * Test a specific integration connection
+     */
+    action testConnection(integrationId: String) returns ComponentHealthResult;
+
+    /**
+     * Export health report for all integrations
+     */
+    function getHealthReport() returns array of IntegrationCardItem;
+
+    // ========================================================================
     // ERROR CODES (FDD-11)
     // ========================================================================
     // INT401 - Connection timeout to external system
