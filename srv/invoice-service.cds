@@ -42,7 +42,13 @@ service InvoiceService {
         duplicate_of    : redirected to Invoices,
         items           : redirected to InvoiceItems,
         matches         : redirected to InvoiceMatches,
-        approvals       : redirected to InvoiceApprovals
+        approvals       : redirected to InvoiceApprovals,
+
+        // Virtual fields for UI criticality and computed values
+        virtual null as statusCriticality   : Integer,  // SAP Criticality for status field
+        virtual null as approvalCriticality : Integer,  // SAP Criticality for approval_status
+        virtual null as matchingCriticality : Integer,  // SAP Criticality for match_status
+        virtual null as daysUntilDue        : Integer   // Computed days until due_date
     } actions {
         /**
          * Check for duplicate invoice
@@ -417,6 +423,18 @@ service InvoiceService {
         currency            : String(3);
         avgProcessingDays   : Decimal(5,2);
         matchRate           : Decimal(5,2);
+        // Extended KPIs for dashboard/cockpit TSX views
+        receivedToday       : Integer;          // Invoices received today
+        receivedTrend       : Decimal(5,2);     // % change from prior period
+        autoMatchedCount    : Integer;          // Auto-matched invoices count
+        autoMatchedRate     : Decimal(5,2);     // Auto-match success rate %
+        postedRate          : Decimal(5,2);     // Posting success rate %
+        exceptionRate       : Decimal(5,2);     // Exception rate %
+        processingTrend     : Decimal(5,2);     // Processing time trend %
+        financialHealthScore : Decimal(5,2);    // Overall financial health score (0-100)
+        totalAmountReceived : Decimal(18,2);    // Total amount received this period
+        totalAmountApproved : Decimal(18,2);    // Total amount approved this period
+        rejectedCount       : Integer;          // Rejected invoices count
     };
 
     type ExceptionQueueItem {
@@ -511,6 +529,170 @@ service InvoiceService {
         currency            : String(3);
         message             : String(500);
     };
+
+    // ========================================================================
+    // DASHBOARD CHART/PANEL TYPES (for TSX dashboard views)
+    // ========================================================================
+
+    /**
+     * Processing Funnel - tracks invoice flow through stages
+     * Used by: InvoiceVerificationDashboard processing funnel chart
+     */
+    type ProcessingFunnelItem {
+        stage               : String(30);       // Received, Validated, Matched, Approved, Posted
+        count               : Integer;
+        percentage          : Decimal(5,2);
+    };
+
+    /**
+     * Variance Distribution - donut/pie chart data
+     * Used by: InvoiceVerificationDashboard variance chart
+     */
+    type VarianceDistributionItem {
+        category            : String(30);       // Within Tolerance, Price Variance, Qty Variance, Multiple
+        count               : Integer;
+        percentage          : Decimal(5,2);
+        amount              : Decimal(18,2);
+        currency            : String(3);
+    };
+
+    /**
+     * Processing Time Trend - line chart data over time
+     * Used by: InvoiceVerificationDashboard processing time trend
+     */
+    type ProcessingTimeTrendItem {
+        date                : Date;
+        avgDays             : Decimal(5,2);     // Average processing days
+        volume              : Integer;          // Invoice count for the period
+    };
+
+    /**
+     * Critical Alert - dashboard alert panel items
+     * Used by: InvoiceVerificationDashboard critical alerts
+     */
+    type CriticalAlertItem {
+        alertId             : String(50);
+        severity            : String(20);       // critical, warning, info
+        title               : String(200);
+        description         : String(500);
+        timestamp           : DateTime;
+        invoiceId           : UUID;
+        invoiceNumber       : String(20);
+        actionRequired      : Boolean;
+    };
+
+    /**
+     * Financial Summary - summary cards
+     * Used by: InvoiceVerificationDashboard financial summary
+     */
+    type FinancialSummaryItem {
+        category            : String(30);       // received, approved, posted, pending
+        amount              : Decimal(18,2);
+        currency            : String(3);
+        count               : Integer;
+        trend               : Decimal(5,2);     // % change from prior period
+    };
+
+    /**
+     * Top Supplier Exception Rate - bar chart data
+     * Used by: InvoiceVerificationDashboard top suppliers chart
+     */
+    type TopSupplierExceptionItem {
+        supplierCode        : String(20);
+        supplierName        : String(100);
+        totalInvoices       : Integer;
+        exceptionCount      : Integer;
+        exceptionRate       : Decimal(5,2);
+        totalVarianceAmount : Decimal(18,2);
+        currency            : String(3);
+    };
+
+    /**
+     * Activity Timeline - recent activity feed
+     * Used by: InvoiceVerificationDashboard activity timeline
+     */
+    type ActivityTimelineItem {
+        activityId          : String(50);
+        activityType        : String(30);       // received, matched, approved, posted, exception, rejected
+        title               : String(200);
+        description         : String(500);
+        timestamp           : DateTime;
+        user                : String(255);
+        invoiceId           : UUID;
+        invoiceNumber       : String(20);
+        amount              : Decimal(15,2);
+        currency            : String(3);
+    };
+
+    /**
+     * Daily Processing Volume - bar chart data
+     * Used by: InvoiceVerificationCockpit daily volume chart
+     */
+    type DailyVolumeItem {
+        date                : Date;
+        received            : Integer;
+        processed           : Integer;
+        posted              : Integer;
+    };
+
+    /**
+     * Invoice Status Distribution - donut chart data
+     * Used by: InvoiceVerificationCockpit status distribution chart
+     */
+    type StatusDistributionItem {
+        status              : String(20);
+        count               : Integer;
+        percentage          : Decimal(5,2);
+    };
+
+    // ========================================================================
+    // DASHBOARD FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Get processing funnel data for dashboard
+     */
+    function getProcessingFunnel(companyCode: String, fromDate: Date, toDate: Date) returns array of ProcessingFunnelItem;
+
+    /**
+     * Get variance distribution for dashboard chart
+     */
+    function getVarianceDistribution(companyCode: String, fromDate: Date, toDate: Date) returns array of VarianceDistributionItem;
+
+    /**
+     * Get processing time trend for dashboard line chart
+     */
+    function getProcessingTimeTrend(companyCode: String, days: Integer) returns array of ProcessingTimeTrendItem;
+
+    /**
+     * Get critical alerts for dashboard panel
+     */
+    function getCriticalAlerts(companyCode: String) returns array of CriticalAlertItem;
+
+    /**
+     * Get financial summary for dashboard cards
+     */
+    function getFinancialSummary(companyCode: String, fromDate: Date, toDate: Date) returns array of FinancialSummaryItem;
+
+    /**
+     * Get top suppliers by exception rate for dashboard chart
+     */
+    function getTopSupplierExceptions(companyCode: String, limit: Integer) returns array of TopSupplierExceptionItem;
+
+    /**
+     * Get recent activity timeline for dashboard
+     */
+    function getActivityTimeline(companyCode: String, limit: Integer) returns array of ActivityTimelineItem;
+
+    /**
+     * Get daily processing volume for cockpit bar chart
+     */
+    function getDailyVolume(companyCode: String, days: Integer) returns array of DailyVolumeItem;
+
+    /**
+     * Get invoice status distribution for cockpit donut chart
+     */
+    function getStatusDistribution(companyCode: String) returns array of StatusDistributionItem;
 
     // ========================================================================
     // ERROR CODES (FDD-06)

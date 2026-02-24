@@ -1484,6 +1484,7 @@ type InvoiceMatchStatus : String(20) enum {
     PriceVariance   = 'PRICE_VARIANCE';
     QuantityVariance = 'QTY_VARIANCE';
     Exception       = 'EXCEPTION';
+    MultipleErrors  = 'MULTIPLE_ERRORS';
 }
 
 /**
@@ -1494,6 +1495,8 @@ type InvoiceApprovalStatus : String(20) enum {
     Approved    = 'APPROVED';
     Rejected    = 'REJECTED';
     Escalated   = 'ESCALATED';
+    Blocked     = 'BLOCKED';
+    UnderReview = 'UNDER_REVIEW';
 }
 
 /**

@@ -284,6 +284,11 @@ annotate InvoiceService.Invoices with {
     created_by           @title: 'Created By' @Common.FieldControl: #ReadOnly;
     modified_at          @title: 'Modified At' @Common.FieldControl: #ReadOnly;
     modified_by          @title: 'Modified By' @Common.FieldControl: #ReadOnly;
+    // Virtual fields
+    statusCriticality    @title: 'Status Criticality' @UI.Hidden;
+    approvalCriticality  @title: 'Approval Criticality' @UI.Hidden;
+    matchingCriticality  @title: 'Matching Criticality' @UI.Hidden;
+    daysUntilDue         @title: 'Days Until Due';
 };
 
 // =============================================================================
