@@ -1105,6 +1105,96 @@ service IntegrationService {
     action exportErrorLog(objectType: String, errorCode: String, status: String) returns ExportResult;
 
     // ========================================================================
+    // SYSTEM HEALTH MONITOR TYPES (for SystemHealthMonitor TSX)
+    // ========================================================================
+
+    /**
+     * Overall system status banner for the health monitor hero section
+     * Includes uptime, incident count, and maintenance schedule
+     */
+    type SystemStatusSummary {
+        overall                 : String(20);       // OPERATIONAL, DEGRADED, OUTAGE
+        activeIncidents         : Integer;          // Number of active incidents
+        uptime                  : Decimal(5,2);     // Uptime percentage
+        uptimeTrend             : String(10);       // up, down, stable
+        maintenanceScheduled    : Boolean;          // Whether maintenance is scheduled
+        maintenanceDate         : String(100);      // e.g. "Nov 10, 02:00-04:00 AM"
+    };
+
+    /**
+     * Component health card for the 4x2 health grid
+     * Real-time metrics per BTP landscape component
+     */
+    type ComponentHealthCard {
+        id                      : String(50);       // Unique component ID
+        name                    : String(100);      // e.g. "BTP Cloud Foundry", "HANA Cloud Database"
+        status                  : String(10);       // HEALTHY, DEGRADED, CRITICAL
+        uptime                  : Decimal(5,2);     // Uptime percentage
+        responseTime            : Integer;          // Response time in milliseconds
+        requestsPerMin          : Integer;          // Requests per minute
+        errorRate               : Decimal(5,2);     // Error rate percentage
+        cpuUsage                : Integer;          // CPU usage percentage (0-100)
+        memoryUsage             : Integer;          // Memory usage percentage (0-100)
+    };
+
+    /**
+     * System alert for the alerts panel
+     * Includes severity, component, and acknowledgement status
+     */
+    type SystemHealthAlert {
+        id                      : UUID;
+        severity                : String(10);       // CRITICAL, HIGH, MEDIUM, LOW
+        message                 : String(500);      // Alert message
+        component               : String(100);      // Affected component name
+        timestamp               : DateTime;         // When alert was triggered
+        acknowledged            : Boolean;          // Whether alert has been acknowledged
+    };
+
+    /**
+     * Performance data point for 24h area/line charts
+     * Covers response time, request volume, errors, and CPU
+     */
+    type SystemPerformanceDataPoint {
+        hour                    : String(5);        // Time label (e.g. "0:00")
+        responseTime            : Integer;          // Average response time in ms
+        requests                : Integer;          // Request count
+        errors                  : Integer;          // Error count
+        cpu                     : Integer;          // CPU usage percentage
+    };
+
+    /**
+     * Resource utilization gauges (donut charts)
+     */
+    type ResourceUtilization {
+        cpu                     : Integer;          // CPU usage percentage
+        memory                  : Integer;          // Memory usage percentage
+        disk                    : Integer;          // Disk usage percentage
+        network                 : Integer;          // Network usage percentage
+    };
+
+    /**
+     * SLA compliance metrics for the SLA panel
+     */
+    type SLAComplianceMetrics {
+        availability            : Decimal(5,2);     // Availability SLA percentage
+        performance             : Decimal(5,2);     // Performance SLA percentage
+        responseTime            : Decimal(5,2);     // Response time SLA percentage
+        overall                 : Decimal(5,2);     // Overall SLA compliance
+    };
+
+    function getSystemStatusSummary() returns SystemStatusSummary;
+    function getComponentHealthCards() returns array of ComponentHealthCard;
+    function getSystemHealthAlerts() returns array of SystemHealthAlert;
+    function getSystemPerformanceData(hours: Integer) returns array of SystemPerformanceDataPoint;
+    function getResourceUtilization() returns ResourceUtilization;
+    function getSLAComplianceMetrics() returns SLAComplianceMetrics;
+
+    action acknowledgeSystemAlert(alertId: UUID) returns SystemHealthAlert;
+    action restartComponent(componentId: String) returns ComponentHealthResult;
+    action refreshAllComponents() returns HealthCheckResult;
+    action exportSystemHealthReport() returns ExportResult;
+
+    // ========================================================================
     // ERROR CODES (FDD-11)
     // ========================================================================
     // INT401 - Connection timeout to external system
