@@ -7,6 +7,8 @@
   "private": true,
   "dependencies": {
     "@cap-js/hana": "^1",
+    "@sap-cloud-sdk/http-client": "^4.4.0",
+    "@sap-cloud-sdk/resilience": "^4.4.0",
     "@sap/audit-logging": "^6",
     "@sap/cds": "^8",
     "@sap/xsenv": "^5",
@@ -30,7 +32,36 @@
   "cds": {
     "requires": {
       "db": {
-        "kind": "sql"
+        "kind": "sqlite",
+        "credentials": {
+          "url": "db.sqlite"
+        }
+      },
+      "auth": "dummy",
+      "connectivity": true,
+      "destinations": true,
+      "odata_api": {
+        "kind": "odata-v2",
+        "csrf": true,
+        "csrfInBatch": true,
+        "credentials": {
+          "destination": "S2A",
+          "forwardAuthToken": true
+        }
+      },
+      "[hybrid]": {
+        "auth": {
+          "kind": "dummy"
+        },
+        "S2A": {
+          "kind": "odata-v2",
+          "credentials": {
+            "destination": "S2A"
+          },
+          "options": {
+            "timeout": 60000
+          }
+        }
       },
       "[production]": {
         "db": {
@@ -38,6 +69,15 @@
         },
         "auth": {
           "kind": "xsuaa"
+        },
+        "odata_api": {
+          "kind": "odata-v2",
+          "csrf": true,
+          "csrfInBatch": true,
+          "credentials": {
+            "destination": "S2A",
+            "forwardAuthToken": true
+          }
         }
       }
     },

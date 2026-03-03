@@ -50,7 +50,7 @@ entity T005_COUNTRY : ActiveStatus {
     key land1       : String(3);      // SAP Country key (PK)
         landx       : String(50);     // Country name
         landx50     : String(100);    // Full country name
-        natio       : String(3);      // Nationality code
+        natio       : String(15);      // Nationality name
         landgr      : String(3);      // Country group/region
         currcode    : String(3);      // Currency code (FK to CURRENCY_MASTER)
         spras       : String(2);      // Language key
@@ -94,7 +94,7 @@ entity UNIT_OF_MEASURE : ActiveStatus {
  */
 entity T001W_PLANT : ActiveStatus {
     key werks       : String(4);      // Plant code (PK)
-        name1       : String(50);     // Plant name
+        name1       : String(30);     // Plant name
         stras       : String(100);    // Street address
         ort01       : String(50);     // City
         land1       : Association to T005_COUNTRY;  // FK to Country
@@ -621,6 +621,7 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         ordered_quantity    : Decimal(12,2) @mandatory; // Ordered fuel quantity (kg)
         unit_price          : Decimal(15,4);            // Unit price from CPE
         total_amount        : Decimal(15,2);            // Total order amount
+        currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
         currency_code       : String(3) default 'USD';  // ISO currency code
 
         // Timing

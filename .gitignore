@@ -42,3 +42,6 @@ temp/
 # SQLite database (for local development)
 *.db
 sqlite.db
+
+# added by cds
+.cdsrc-private.json

@@ -49,6 +49,7 @@ modules:
       - name: fuelsphere-auth
       - name: fuelsphere-destination
       - name: fuelsphere-logging
+      - name: fuelsphere-connectivity   # S2A backend connectivity
 
   # ==================== DATABASE MODULE ====================
   - name: fuelsphere-db-deployer
@@ -112,4 +113,11 @@ resources:
     type: org.cloudfoundry.managed-service
     parameters:
       service: application-logs
+      service-plan: lite
+  
+  # ==================CONNECTIVITY SERVICE ==================
+  - name: fuelsphere-connectivity
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
       service-plan: lite

@@ -1231,7 +1231,20 @@ annotate service.Countries with @(
             { Value: landgr, Label: 'Region', ![@UI.Importance]: #Medium },
             { Value: currcode, Label: 'Currency', ![@UI.Importance]: #Medium },
             { Value: is_active, Label: 'Active', ![@UI.Importance]: #High },
-            { Value: is_embargoed, Label: 'Embargoed', ![@UI.Importance]: #High }
+            { Value: is_embargoed, Label: 'Embargoed', ![@UI.Importance]: #High },
+            // ----------------------------------------------------------------
+            // S4 SYNC TOOLBAR ACTION BUTTON
+            // DataFieldForAction places the button in the table toolbar
+            // Inline: false = toolbar position (not inline per row)
+            // ----------------------------------------------------------------
+            // {
+            //     $Type             : 'UI.DataFieldForAction',
+            //     Action            : 'MasterDataService.S4_SyncCountries',
+            //     Label             : 'S4 Sync',
+            //     IconUrl           : 'sap-icon://synchronize',
+            //     ![@UI.Importance] : #High,
+            //     Inline            : false
+            // }
         ],
         Facets: [
             {
@@ -1287,6 +1300,19 @@ annotate service.Countries with {
     sanction_programs       @title: 'Sanction Programs';
     risk_level              @title: 'Risk Level';
 };
+
+// ============================================================================
+// ACTION — S4_SyncCountries
+// Annotate the action itself for UI behaviour
+// ============================================================================    
+    annotate service.S4_SyncCountries with @(
+        Common.IsActionCritical: true,
+        Common.SideEffects: {
+            $Type          : 'Common.SideEffectsType',
+            // This auto-refreshes the Countries table after sync without a manual F5
+            TargetEntities : ['Countries']   //['/MasterDataService/Countries']
+        }
+    );
 
 annotate service.Currencies with @(
     Capabilities: {
@@ -1362,7 +1388,17 @@ annotate service.Plants with @(
             { Value: name1, Label: 'Plant Name', ![@UI.Importance]: #High },
             { Value: ort01, Label: 'City', ![@UI.Importance]: #Medium },
             { Value: land1_land1, Label: 'Country', ![@UI.Importance]: #Medium },
-            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High }
+            { Value: is_active, Label: 'Active', ![@UI.Importance]: #High },
+            // {
+            //     $Type : 'UI.DataFieldForAction',
+            //     Label : 'S4 Sync',
+            //     Action : 'MasterDataService.EntityContainer/S4_SyncPlants',
+            //     IconUrl: 'sap-icon://synchronize',
+            //     Inline : false,
+            //     Criticality : #Positive,
+            //     CriticalityRepresentation : #WithIcon,
+            //     @UI.Importance : #High
+            // }
         ],
         Facets: [
             {
@@ -1410,6 +1446,14 @@ annotate service.Plants with {
     spras       @title: 'Language';
     is_active   @title: 'Active';
 };
+
+annotate service.S4_SyncPlants with @(
+    Common.IsActionCritical: true,
+    Common.SideEffects: {
+        $Type          : 'Common.SideEffectsType',
+        TargetEntities : ['Plants']
+    }
+);
 
 annotate service.UnitsOfMeasure with @(
     Capabilities: {

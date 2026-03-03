@@ -232,6 +232,30 @@ service FuelOrderService {
     entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
 
     // ========================================================================
+    // SERVICE-LEVEL VIEWS
+    // ========================================================================
+    @readonly
+    view StationLookup as select from db.CONTRACT_LOCATIONS as Loc
+    left join db.MASTER_AIRPORTS as Air on Loc.airport.ID = Air.ID
+    left join db.MASTER_CONTRACTS as Con on Loc.contract.ID = Con.ID
+    left join db.MASTER_SUPPLIERS as Sup on Con.supplier.ID = Sup.ID
+    left join db.CONTRACT_PRODUCTS as ConProd on ConProd.contract.ID = Con.ID
+    left join db.MASTER_PRODUCTS as Prod on ConProd.product.ID = Prod.ID
+    {
+        key Air.iata_code as station_code, // User picks this
+        key Prod.ID       as product_ID  @UI.Hidden,
+        key Con.ID        as contract_ID @UI.Hidden,  // Pushes to FuelOrders.contract_ID
+        Air.ID            as airport_ID  @UI.Hidden,   // Pushes to FuelOrders.airport_ID
+        Sup.ID            as supplier_ID @UI.Hidden,  // Pushes to FuelOrders.supplier_ID       
+        Air.airport_name     @(title: 'Airport'),
+        Sup.supplier_name   @(title: 'Supplier'),
+        Sup.supplier_type,
+        Con.contract_number @(title: 'Contract'),
+        Prod.product_name   @(title: 'Product'),
+        Prod.specification 
+    };
+
+    // ========================================================================
     // SERVICE-LEVEL ACTIONS
     // ========================================================================
 

@@ -25,9 +25,9 @@ service MasterDataService {
 
     @readonly
     entity Plants as projection on db.T001W_PLANT {
-        *,
-        land1 : redirected to Countries
-    };
+            *,
+            land1 : redirected to Countries
+        };
 
     // ========================================================================
     // FUELSPHERE NATIVE ENTITIES
@@ -50,7 +50,7 @@ service MasterDataService {
     @odata.draft.enabled
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
-        manufacturer : redirected to Manufacturers,
+        manufacturer                      : redirected to Manufacturers,
         virtual null as activeCriticality : Integer
     };
 
@@ -61,8 +61,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
-        country : redirected to Countries,
-        plant   : redirected to Plants,
+        country                           : redirected to Countries,
+        plant                             : redirected to Plants,
         virtual null as activeCriticality : Integer
     };
 
@@ -73,8 +73,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Routes as projection on db.ROUTE_MASTER {
         *,
-        origin      : redirected to Airports,
-        destination : redirected to Airports,
+        origin                            : redirected to Airports,
+        destination                       : redirected to Airports,
         virtual null as activeCriticality : Integer
     };
 
@@ -89,7 +89,7 @@ service MasterDataService {
     @odata.draft.enabled
     entity Suppliers as projection on db.MASTER_SUPPLIERS {
         *,
-        country : redirected to Countries,
+        country                           : redirected to Countries,
         virtual null as activeCriticality : Integer
     };
 
@@ -100,7 +100,7 @@ service MasterDataService {
     @odata.draft.enabled
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
-        uom : redirected to UnitsOfMeasure,
+        uom                               : redirected to UnitsOfMeasure,
         virtual null as activeCriticality : Integer
     };
 
@@ -111,8 +111,8 @@ service MasterDataService {
     @odata.draft.enabled
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
-        supplier : redirected to Suppliers,
-        currency : redirected to Currencies,
+        supplier                          : redirected to Suppliers,
+        currency                          : redirected to Currencies,
         virtual null as activeCriticality : Integer
     };
 
@@ -130,7 +130,19 @@ service MasterDataService {
     type SyncResult {
         success     : Boolean;
         recordsSync : Integer;
-        errors      : array of String;
+        errors      : array of String(5000);
         syncTime    : DateTime;
-    }
+    };
+    // ========================================================================
+    // S4 SYNC ACTION - Unbound action, toolbar button (no row selection needed)
+    // ========================================================================
+
+    /**
+     * Triggers a full sync from S/4HANA API_COUNTRY_SRV.
+     * Deletes all existing records and re-inserts from S4.
+     * Returns a summary of the sync operation.
+     */
+    action S4_SyncCountries() returns SyncResult;
+    action S4_SyncPlants() returns SyncResult;
+    action S4_SyncSuppliers() returns SyncResult;
 }

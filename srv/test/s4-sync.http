@@ -1,0 +1,18 @@
+### ------------------------------------------------------
+### S4 Sync – Countries
+### CAPM local test (hybrid profile)
+### ------------------------------------------------------
+@user=alice
+@password=alice
+@url=http://localhost:4004
+
+POST {{url}}/odata/v4/master/Countries/S4_SyncCountries
+# ?$filter=RuleId eq 'D001' &$top=100&$skip=200
+Authorization: Basic {{user}}:{{password}}
+Content-Type: application/json
+
+{}
+
+# POST http://localhost:4004/odata/v4/master/Countries/S4_SyncCountries
+# Authorization: Basic alice:
+# Content-Type: application/json
