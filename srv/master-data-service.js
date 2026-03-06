@@ -23,13 +23,28 @@ module.exports = class MasterDataService extends cds.ApplicationService {
         };
 
         // Add virtual element calculation for all entities with is_active field
-        this.after(['READ'], Manufacturers, setActiveCriticality);
-        this.after(['READ'], Aircraft, setActiveCriticality);
-        this.after(['READ'], Airports, setActiveCriticality);
-        this.after(['READ'], Routes, setActiveCriticality);
-        this.after(['READ'], Suppliers, setActiveCriticality);
-        this.after(['READ'], Products, setActiveCriticality);
-        this.after(['READ'], Contracts, setActiveCriticality);
+        const draftEnabledEntities = [Manufacturers, Aircraft, Airports, Routes, Suppliers, Products, Contracts];
+        for (const entity of draftEnabledEntities) {
+            this.after(['READ'], entity, setActiveCriticality);
+            this.after(['NEW'], entity, setActiveCriticality);
+            this.after(['EDIT'], entity, setActiveCriticality);
+            this.after(['PATCH'], entity, setActiveCriticality);
+        }
+
+        // Strip deep-update through non-composition associations between
+        // separate draft-enabled entities. The Fiori UI sends PATCH with
+        // association data via Common.Text annotations (e.g. manufacturer.manufacture_name),
+        // but CAP cannot deep-update through these associations in draft mode.
+        this.before(['UPDATE', 'PATCH', 'NEW'], Aircraft, (req) => {
+            if (req.data.manufacturer) delete req.data.manufacturer;
+        });
+        this.before(['UPDATE', 'PATCH', 'NEW'], Routes, (req) => {
+            if (req.data.origin) delete req.data.origin;
+            if (req.data.destination) delete req.data.destination;
+        });
+        this.before(['UPDATE', 'PATCH', 'NEW'], Contracts, (req) => {
+            if (req.data.supplier) delete req.data.supplier;
+        });
 
         // ====================================================================
         // ACTIONS: S4_Sync
