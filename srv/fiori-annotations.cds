@@ -340,8 +340,7 @@ annotate service.Aircraft with @(
                 { Value: type_code, Label: 'Type Code' },
                 { Value: aircraft_model, Label: 'Aircraft Model' },
                 { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
-                { Value: manufacturer_code, Label: 'Manufacturer Code' },
-                { Value: is_active, Label: 'Active' }
+                { Value: manufacturer_code, Label: 'Manufacturer Code' }
             ]
         },
 
@@ -359,8 +358,6 @@ annotate service.Aircraft with @(
         FieldGroup#AircraftAdmin: {
             Label: 'Administrative',
             Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
-                { Value: status, Label: 'Operational Status' },
                 { Value: created_at, Label: 'Created At' },
                 { Value: created_by, Label: 'Created By' },
                 { Value: modified_at, Label: 'Modified At' },
@@ -379,7 +376,7 @@ annotate service.Aircraft with {
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
     fleet_size       @title: 'Fleet Size';
-    status           @title: 'Operational Status' @Common.ValueListWithFixedValues;
+    status           @title: 'Operational Status' @Common.ValueListWithFixedValues @readonly;
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
