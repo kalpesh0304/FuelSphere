@@ -11,13 +11,18 @@ module.exports = class MasterDataService extends cds.ApplicationService {
     async init() {
         const { Manufacturers, Aircraft, Airports, Routes, Suppliers, Products, Contracts } = this.entities;
 
-        // Helper function to set activeCriticality based on is_active
+        // Helper function to set activeCriticality based on status/is_active
         const setActiveCriticality = (data) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (item) {
-                    // Criticality: 3=Positive (green), 1=Negative (red)
-                    item.activeCriticality = item.is_active ? 3 : 1;
+                    // Criticality: 3=Positive (green), 2=Warning (yellow), 1=Negative (red)
+                    if (item.status) {
+                        item.activeCriticality = item.status === 'ACTIVE' ? 3
+                            : item.status === 'MAINTENANCE' ? 2 : 1;
+                    } else {
+                        item.activeCriticality = item.is_active ? 3 : 1;
+                    }
                 }
             });
         };

@@ -273,7 +273,7 @@ annotate service.Aircraft with @(
             { Value: mtow_kg, Label: 'MTOW (kg)', ![@UI.Importance]: #Low },
             { Value: fleet_size, Label: 'Fleet Size', ![@UI.Importance]: #Low },
             {
-                Value: is_active,
+                Value: status,
                 Label: 'Status',
                 Criticality: activeCriticality,
                 ![@UI.Importance]: #High
@@ -302,8 +302,7 @@ annotate service.Aircraft with @(
 
         FieldGroup#AircraftStatus: {
             Data: [
-                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
-                { Value: status, Label: 'Status' }
+                { Value: status, Label: 'Operational Status', Criticality: activeCriticality }
             ]
         },
 
@@ -380,7 +379,7 @@ annotate service.Aircraft with {
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
     fleet_size       @title: 'Fleet Size';
-    status           @title: 'Status';
+    status           @title: 'Operational Status' @Common.ValueListWithFixedValues;
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';

@@ -108,6 +108,15 @@ entity T001W_PLANT : ActiveStatus {
 // ============================================================================
 
 /**
+ * Aircraft Operational Status
+ */
+type AircraftStatus : String(20) enum {
+    ACTIVE      = 'ACTIVE';
+    INACTIVE    = 'INACTIVE';
+    MAINTENANCE = 'MAINTENANCE';
+}
+
+/**
  * MANUFACTURE - Aircraft Manufacturer Master
  * Source: FuelSphere native
  */
@@ -131,7 +140,7 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
         mtow_kg             : Decimal(15,2);  // Maximum takeoff weight in kg
         cruise_burn_kgph    : Decimal(10,2);  // Cruise fuel burn rate kg/hour
         fleet_size          : Integer;        // Number in fleet
-        status              : String(20) default 'ACTIVE'; // ACTIVE/INACTIVE/MAINTENANCE
+        status              : AircraftStatus default 'ACTIVE';
 }
 
 /**
