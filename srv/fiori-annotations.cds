@@ -360,6 +360,8 @@ annotate service.Aircraft with @(
         FieldGroup#AircraftAdmin: {
             Label: 'Administrative',
             Data: [
+                { Value: is_active, Label: 'Active', Criticality: activeCriticality },
+                { Value: status, Label: 'Operational Status' },
                 { Value: created_at, Label: 'Created At' },
                 { Value: created_by, Label: 'Created By' },
                 { Value: modified_at, Label: 'Modified At' },
