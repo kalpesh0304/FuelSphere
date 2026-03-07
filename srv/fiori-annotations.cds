@@ -371,7 +371,7 @@ annotate service.Aircraft with @(
 
 // Field-level annotations for Aircraft
 annotate service.Aircraft with {
-    type_code        @title: 'Type Code';
+    type_code        @title: 'Type Code' @Core.Immutable;
     aircraft_model   @title: 'Aircraft Model';
     manufacturer_code @title: 'Manufacturer Code';
     fuel_capacity_kg @title: 'Fuel Capacity (kg)';
@@ -567,7 +567,7 @@ annotate service.Routes with @(
 
 // Field-level annotations for Routes
 annotate service.Routes with {
-    route_code          @title: 'Route Code';
+    route_code          @title: 'Route Code' @Core.Immutable;
     origin_airport      @title: 'Origin';
     destination_airport @title: 'Destination';
     distance_km         @title: 'Distance (km)';
@@ -1195,7 +1195,7 @@ annotate service.Manufacturers with @(
 
 // Field-level annotations for Manufacturers
 annotate service.Manufacturers with {
-    manufacture_code @title: 'Manufacturer Code';
+    manufacture_code @title: 'Manufacturer Code' @Core.Immutable;
     manufacture_name @title: 'Manufacturer Name';
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
