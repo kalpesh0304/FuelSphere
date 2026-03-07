@@ -376,7 +376,7 @@ annotate service.Aircraft with {
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
     fleet_size       @title: 'Fleet Size';
-    status           @title: 'Operational Status' @Common.ValueListWithFixedValues @readonly;
+    status           @title: 'Operational Status' @Common.ValueListWithFixedValues @Core.Computed;
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
