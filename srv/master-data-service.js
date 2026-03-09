@@ -43,6 +43,13 @@ module.exports = class MasterDataService extends cds.ApplicationService {
         this.before(['UPDATE', 'PATCH', 'NEW'], Aircraft, (req) => {
             if (req.data.manufacturer) delete req.data.manufacturer;
         });
+
+        // Validate mandatory fields before creating Aircraft
+        this.before('CREATE', Aircraft, (req) => {
+            if (!req.data.type_code || !req.data.type_code.trim()) {
+                req.error(400, 'Aircraft Code (Type Code) is mandatory', 'type_code');
+            }
+        });
         this.before(['UPDATE', 'PATCH', 'NEW'], Routes, (req) => {
             if (req.data.origin) delete req.data.origin;
             if (req.data.destination) delete req.data.destination;
