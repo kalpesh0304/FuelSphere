@@ -339,7 +339,7 @@ annotate service.Aircraft with @(
             Data: [
                 { Value: type_code, Label: 'Type Code' },
                 { Value: aircraft_model, Label: 'Aircraft Model' },
-                { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
+                { Value: manufacturer.manufacture_name, Label: 'Manufacturer', ![@UI.ReadOnly]: true },
                 { Value: manufacturer_code, Label: 'Manufacturer Code' }
             ]
         },
@@ -376,7 +376,7 @@ annotate service.Aircraft with {
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
     fleet_size       @title: 'Fleet Size';
-    status           @title: 'Operational Status' @Common.ValueListWithFixedValues @Core.Computed;
+    status           @title: 'Operational Status' @Common.ValueListWithFixedValues;
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
