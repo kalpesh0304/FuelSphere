@@ -1,0 +1,11 @@
+material_number;material_description;material_type;material_group;base_uom;is_active
+10000001;Jet A-1 Aviation Turbine Fuel;HIBE;001;KG;true
+10000002;Jet B Wide-Cut Fuel;HIBE;001;KG;true
+10000003;Aviation Gasoline 100LL;HIBE;001;KG;true
+10000004;Sustainable Aviation Fuel SAF;HIBE;002;KG;true
+10000005;Jet A Aviation Kerosene;HIBE;001;KG;true
+10000006;TS-1 Aviation Fuel;HIBE;001;KG;true
+10000007;Aviation Gasoline 100;HIBE;001;KG;true
+10000008;Jet A-1 with FSII;HIBE;001;KG;true
+10000009;Bio-SPK Fuel Blend;HIBE;002;KG;true
+10000010;HEFA-SPK Blend;HIBE;002;KG;true

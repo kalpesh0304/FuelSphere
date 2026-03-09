@@ -884,10 +884,38 @@ annotate service.Products with {
     ID                  @UI.Hidden;
     product_code        @title: 'Product Code';
     product_name        @title: 'Product Name';
-    product_type        @title: 'Product Type';
+    product_type        @title: 'Product Type'
+                        @Common.ValueListWithFixedValues;
     specification       @title: 'Specification';
-    uom_code            @title: 'UoM';
-    s4_material_number  @title: 'S/4 Material Number';
+    uom_code            @title: 'UoM'
+                        @Common: {
+                            Text: uom.uom_name,
+                            TextArrangement: #TextFirst,
+                            ValueList: {
+                                Label: 'Units of Measure',
+                                CollectionPath: 'UnitsOfMeasure',
+                                Parameters: [
+                                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: uom_code, ValueListProperty: 'uom_code' },
+                                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'uom_name' },
+                                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'uom_category' }
+                                ]
+                            }
+                        };
+    s4_material_number  @title: 'S/4 Material Number'
+                        @Common: {
+                            Text: s4_material.material_description,
+                            TextArrangement: #TextFirst,
+                            ValueList: {
+                                Label: 'S/4HANA Materials',
+                                CollectionPath: 'S4Materials',
+                                Parameters: [
+                                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: s4_material_number, ValueListProperty: 'material_number' },
+                                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'material_description' },
+                                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'material_type' },
+                                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'material_group' }
+                                ]
+                            }
+                        };
     is_active           @title: 'Active';
     created_at          @title: 'Created At';
     created_by          @title: 'Created By';

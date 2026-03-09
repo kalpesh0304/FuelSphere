@@ -24,6 +24,9 @@ service MasterDataService {
     entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
 
     @readonly
+    entity S4Materials as projection on db.S4_MATERIAL_MASTER;
+
+    @readonly
     entity Plants as projection on db.T001W_PLANT {
             *,
             land1 : redirected to Countries
@@ -101,6 +104,7 @@ service MasterDataService {
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
         uom                               : redirected to UnitsOfMeasure,
+        s4_material                       : redirected to S4Materials,
         virtual null as activeCriticality : Integer
     };
 

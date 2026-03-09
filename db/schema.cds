@@ -194,6 +194,30 @@ entity MASTER_SUPPLIERS : cuid, ActiveStatus, AuditTrail {
 }
 
 /**
+ * ProductType - Fuel product classification
+ */
+type ProductType : String(20) enum {
+    JET_FUEL = 'JET_FUEL';   // Jet aviation turbine fuel
+    AVGAS    = 'AVGAS';       // Aviation gasoline
+    BIOFUEL  = 'BIOFUEL';    // Sustainable aviation fuel
+}
+
+/**
+ * S4_MATERIAL_MASTER - SAP S/4HANA Material Master
+ * Source: S/4HANA API_PRODUCT_SRV
+ * Sync: Daily
+ *
+ * Reference data for linking FuelSphere products to S/4HANA materials
+ */
+entity S4_MATERIAL_MASTER : ActiveStatus {
+    key material_number : String(18);     // S/4HANA Material Number (MATNR)
+        material_description : String(40); // Material description (MAKTX)
+        material_type   : String(4);      // Material type (MTART)
+        material_group  : String(9);      // Material group (MATKL)
+        base_uom        : String(3);      // Base unit of measure (MEINS)
+}
+
+/**
  * MASTER_PRODUCTS - Fuel Product Master
  * Source: S/4HANA API_PRODUCT_SRV
  * Sync: Real-time
@@ -203,10 +227,11 @@ entity MASTER_SUPPLIERS : cuid, ActiveStatus, AuditTrail {
 entity MASTER_PRODUCTS : cuid, ActiveStatus, AuditTrail {
         product_code        : String(20) @mandatory;  // Product code
         product_name        : String(100) @mandatory; // Full product name
-        product_type        : String(20) @mandatory;  // JET_FUEL / AVGAS / BIOFUEL
+        product_type        : ProductType @mandatory;  // JET_FUEL / AVGAS / BIOFUEL
         specification       : String(50) @mandatory;  // ASTM/DEF STAN specification
         uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
         uom_code            : String(3) @mandatory;   // FK to UNIT_OF_MEASURE.uom_code
+        s4_material         : Association to S4_MATERIAL_MASTER on s4_material.material_number = s4_material_number;
         s4_material_number  : String(18);             // S/4HANA Material Number (MATNR)
 }
 
