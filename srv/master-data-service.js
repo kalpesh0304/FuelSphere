@@ -12,16 +12,19 @@ module.exports = class MasterDataService extends cds.ApplicationService {
         const { Manufacturers, Aircraft, Airports, Routes, Suppliers, Products, Contracts } = this.entities;
 
         // Helper function to set activeCriticality based on status/is_active
-        const setActiveCriticality = (data) => {
+        const setActiveCriticality = (data, req) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
-                if (item) {
+                if (item && typeof item === 'object') {
                     // Criticality: 3=Positive (green), 2=Warning (yellow), 1=Negative (red)
                     if (item.status) {
                         item.activeCriticality = item.status === 'ACTIVE' ? 3
                             : item.status === 'MAINTENANCE' ? 2 : 1;
-                    } else {
+                    } else if ('is_active' in item) {
                         item.activeCriticality = item.is_active ? 3 : 1;
+                    } else {
+                        // Default to positive when no status info available (e.g. new drafts)
+                        item.activeCriticality = 3;
                     }
                 }
             });
@@ -42,12 +45,16 @@ module.exports = class MasterDataService extends cds.ApplicationService {
         // but CAP cannot deep-update through these associations in draft mode.
         this.before(['UPDATE', 'PATCH', 'NEW'], Aircraft, (req) => {
             if (req.data.manufacturer) delete req.data.manufacturer;
+            // Validate type_code during draft creation (NEW) — empty key causes DB crash
+            if (req.event === 'NEW' && (!req.data.type_code || !req.data.type_code.trim())) {
+                return req.reject(400, 'Enter Aircraft Type Code');
+            }
         });
 
-        // Validate mandatory fields before creating Aircraft
+        // Validate mandatory fields before activating Aircraft draft
         this.before('CREATE', Aircraft, (req) => {
             if (!req.data.type_code || !req.data.type_code.trim()) {
-                req.error(400, 'Aircraft Code (Type Code) is mandatory', 'type_code');
+                return req.reject(400, 'Enter Aircraft Type Code');
             }
         });
         this.before(['UPDATE', 'PATCH', 'NEW'], Routes, (req) => {

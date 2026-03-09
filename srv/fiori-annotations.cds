@@ -369,7 +369,7 @@ annotate service.Aircraft with @(
 
 // Field-level annotations for Aircraft
 annotate service.Aircraft with {
-    type_code        @title: 'Type Code' @Core.Immutable;
+    type_code        @title: 'Type Code' @Core.Immutable @mandatory;
     aircraft_model   @title: 'Aircraft Model';
     manufacturer_code @title: 'Manufacturer Code';
     fuel_capacity_kg @title: 'Fuel Capacity (kg)';
