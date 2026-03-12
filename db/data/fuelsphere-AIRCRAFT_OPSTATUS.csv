@@ -1,0 +1,4 @@
+status_code;name;descr
+ACTIVE;Active;Aircraft is currently active
+INACTIVE;InActive;Aircraft is currently inactive
+MAINTENANCE;Maintenance;Aircraft is under maintenance

@@ -261,7 +261,8 @@ annotate service.Aircraft with @(
             type_code,
             aircraft_model,
             manufacturer_code,
-            is_active
+            is_active,
+            status_status_code
         ],
 
         LineItem: [
@@ -303,7 +304,7 @@ annotate service.Aircraft with @(
         FieldGroup#AircraftStatus: {
             Data: [
                 { Value: is_active, Label: 'Active', Criticality: activeCriticality },
-                { Value: status, Label: 'Status' }
+                { Value: status_status_code, Label: 'Operational Status' }
             ]
         },
 
@@ -340,7 +341,7 @@ annotate service.Aircraft with @(
             Data: [
                 { Value: type_code, Label: 'Type Code' },
                 { Value: aircraft_model, Label: 'Aircraft Model' },
-                { Value: manufacturer.manufacture_name, Label: 'Manufacturer' },
+                { Value: manufacturer.manufacture_name, Label: 'Manufacturer', @Common.FieldControl : #ReadOnly, },
                 { Value: manufacturer_code, Label: 'Manufacturer Code' },
                 { Value: is_active, Label: 'Active' }
             ]
@@ -353,7 +354,7 @@ annotate service.Aircraft with @(
                 { Value: cruise_burn_kgph, Label: 'Cruise Burn Rate (kg/hr)' },
                 { Value: mtow_kg, Label: 'Max Takeoff Weight (kg)' },
                 { Value: fleet_size, Label: 'Fleet Size' },
-                { Value: status, Label: 'Operational Status' }
+                { Value: status.name, Label: 'Operational Status' }
             ]
         },
 
@@ -378,7 +379,7 @@ annotate service.Aircraft with {
     mtow_kg          @title: 'MTOW (kg)';
     cruise_burn_kgph @title: 'Burn Rate (kg/hr)';
     fleet_size       @title: 'Fleet Size';
-    status           @title: 'Status';
+    status           @title: 'Operational Status';
     is_active        @title: 'Active';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
@@ -401,6 +402,28 @@ annotate service.Aircraft with {
                 ]
             }
         }
+    );
+
+    status @(
+        Common: {
+            ValueListWithFixedValues,
+            ValueList : {
+                $Type : 'Common.ValueListType',
+                CollectionPath : 'AircraftStatus',
+                Parameters : [
+                    {
+                        $Type : 'Common.ValueListParameterInOut',
+                        LocalDataProperty : status_status_code,
+                        ValueListProperty : 'status_code',
+                    },
+                    {
+                        $Type : 'Common.ValueListParameterDisplayOnly',
+                        ValueListProperty : 'name',
+                    }
+                ],
+            },
+        }
+
     );
 };
 
@@ -534,13 +557,13 @@ annotate service.Routes with @(
             Label: 'Origin & Destination',
             Data: [
                 { Value: origin_airport, Label: 'Origin Code' },
-                { Value: origin.iata_code, Label: 'Origin IATA' },
-                { Value: origin.airport_name, Label: 'Origin Airport' },
-                { Value: origin.city, Label: 'Origin City' },
+                { Value: origin.iata_code, Label: 'Origin IATA', @Common.FieldControl: #ReadOnly },
+                { Value: origin.airport_name, Label: 'Origin Airport', @Common.FieldControl: #ReadOnly },
+                { Value: origin.city, Label: 'Origin City', @Common.FieldControl: #ReadOnly },
                 { Value: destination_airport, Label: 'Destination Code' },
-                { Value: destination.iata_code, Label: 'Destination IATA' },
-                { Value: destination.airport_name, Label: 'Destination Airport' },
-                { Value: destination.city, Label: 'Destination City' }
+                { Value: destination.iata_code, Label: 'Destination IATA', @Common.FieldControl: #ReadOnly },
+                { Value: destination.airport_name, Label: 'Destination Airport', @Common.FieldControl: #ReadOnly },
+                { Value: destination.city, Label: 'Destination City', @Common.FieldControl: #ReadOnly }
             ]
         },
 
@@ -763,6 +786,29 @@ annotate service.Suppliers with {
     modified_by     @title: 'Modified By';
 };
 
+annotate service.Suppliers with {
+    country_code @(
+        Common: {
+            ValueList : {
+                $Type : 'Common.ValueListType',
+                CollectionPath : 'Countries',
+                Parameters : [
+                    {
+                        $Type : 'Common.ValueListParameterInOut',
+                        LocalDataProperty : country_code,
+                        ValueListProperty : 'land1',
+                    },
+                    {
+                        $Type : 'Common.ValueListParameterDisplayOnly',
+                        ValueListProperty : 'landx',
+                    }
+                ], 
+            },
+        }
+    )
+};
+
+
 // =============================================================================
 // PRODUCTS - Enhanced List Report + Object Page
 // =============================================================================
@@ -895,6 +941,29 @@ annotate service.Products with {
     modified_by         @title: 'Modified By';
 };
 
+annotate service.Products with {
+    uom_code @(
+        Common: {
+            ValueList : {
+                $Type : 'Common.ValueListType',
+                CollectionPath : 'UnitsOfMeasure',
+                Parameters : [
+                    {
+                        $Type : 'Common.ValueListParameterInOut',
+                        LocalDataProperty : uom_code,
+                        ValueListProperty : 'uom_code',
+                    },
+                    {
+                        $Type : 'Common.ValueListParameterDisplayOnly',
+                        ValueListProperty : 'uom_name',
+                    },
+                ],
+            },
+        }
+    )
+};
+
+
 // =============================================================================
 // CONTRACTS - Enhanced List Report + Object Page
 // =============================================================================
@@ -1025,8 +1094,9 @@ annotate service.Contracts with @(
         FieldGroup#ContractParties: {
             Label: 'Contract Parties',
             Data: [
-                { Value: supplier.supplier_name, Label: 'Supplier Name' },
-                { Value: supplier.supplier_code, Label: 'Supplier Code' }
+                { Value: supplier_ID, Label: 'Supplier Code', @Common.FieldControl: #Mandatory},
+                { Value: supplier.supplier_name, Label: 'Supplier Name', @Common.FieldControl: #ReadOnly},
+                { Value: supplier.supplier_type, Label: 'Supplier Type', @Common.FieldControl: #ReadOnly}
             ]
         },
 
@@ -1086,10 +1156,10 @@ annotate service.Contracts with {
 
 // Value Help for Contract associations
 annotate service.Contracts with {
-    supplier_ID @(
+    supplier @(
         Common: {
-            Text: supplier.supplier_name,
-            TextArrangement: #TextFirst,
+            Text: supplier.supplier_code,
+            TextArrangement: #TextOnly,
             ValueList: {
                 Label: 'Suppliers',
                 CollectionPath: 'Suppliers',

@@ -67,6 +67,24 @@ module.exports = class MasterDataService extends cds.ApplicationService {
             return this._syncFromS4(entityType, req);
         });
 
+        this.before('CREATE', Aircraft.drafts, (req) => {
+            if (!req.data.type_code) {
+                req.error(500, `Please provide the Type Code to Proceed!`);
+            }
+        });
+
+        this.before('CREATE', Routes.drafts, (req) => {
+            if (!req.data.route_code) {
+                req.error(500, `Please provide the Route Code to Proceed!`);
+            }
+        });
+
+        this.before('CREATE', Manufacturers.drafts, (req) => {
+            if (!req.data.manufacture_code) {
+                req.error(500, `Please provide the Manufacturer Code to Proceed!`);
+            }
+        })
+
         await super.init();
     }
 

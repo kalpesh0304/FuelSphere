@@ -24,6 +24,9 @@ service MasterDataService {
     entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
 
     @readonly
+    entity AircraftStatus as projection on db.AIRCRAFT_OPSTATUS;
+
+    @readonly
     entity Plants as projection on db.T001W_PLANT {
             *,
             land1 : redirected to Countries

@@ -4,6 +4,7 @@
  */
 
 const cds = require('@sap/cds');
+const { SELECT } = require('@sap/cds/lib/ql/cds-ql');
 
 module.exports = class FuelOrderService extends cds.ApplicationService {
     async init() {
@@ -80,6 +81,71 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                         default:
                             item.statusCriticality = 0;
                     }
+                }
+            });
+        });
+
+        /* Logic to update the total amount on chnage of unit price or ordered quantity */
+        this.before(['PATCH','UPDATE'], [FuelOrders, FuelOrders.drafts], async(req) => {
+            const {ordered_quantity, unit_price} = req.data;
+            if (ordered_quantity !== undefined || unit_price !== undefined) {
+                // const current = await SELECT.one.from(req.target).where({ID: req.data.ID});
+
+                const current = await SELECT.one.from(req.subject);
+                
+                const quan = ordered_quantity ?? current.ordered_quantity ?? 0;
+                const unit = unit_price ?? current.unit_price ?? 0;
+                if (quan > 100000) {
+                    req.error(400, "Large order detected. Please verify quantity.");
+                    return;
+                }
+                req.data.total_amount =  Number((quan * unit).toFixed(2));
+                console.log(200, `Total Amount recalculated: ${req.data.total_amount}`);
+                
+            }
+        });
+
+        /* Logic to generate Fuel Order No and changing the status from draft to Created */
+        this.before('CREATE', FuelOrders, async (req) => {
+            const { FuelOrders } = this.entities;
+            const { station_code } = req.data;
+
+            // 1. Generate YYYYMMDD string
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+            // 2. Default station if missing (or throw error)
+            const stn = station_code || 'XXX';
+
+            // 3. Find the last sequence used TODAY for this STATION
+            // Pattern: FO-SIN-20260306-%
+            const pattern = `FO-${stn}-${today}-%`;
+            const lastOrder = await SELECT.one.from(FuelOrders)
+                .columns('order_number')
+                .where({ order_number: { like: pattern } })
+                .orderBy('order_number desc');
+
+            let nextSeq = 1;
+            if (lastOrder) {
+                // Extract the last 3 digits from FO-SIN-20260306-005 -> 005
+                const lastSeqStr = lastOrder.order_number.split('-').pop();
+                nextSeq = parseInt(lastSeqStr) + 1;
+            }
+
+            // 4. Format: FO-SIN-20260306-001
+            const seqStr = String(nextSeq).padStart(3, '0');
+            req.data.order_number = `FO-${stn}-${today}-${seqStr}`;
+
+            // 5. Update Status
+            req.data.status = 'Created';
+        });
+
+        // To enable submit for approval button in object page
+        this.after(['READ', 'EDIT'], FuelOrders, (data) => {
+            const items = Array.isArray(data) ? data : [data];
+            items.forEach(item => {
+                if (item) {
+                    // Button is visible ONLY if status is 'Created'
+                    item.canSubmit = (item.status === 'Created') ? true : false;
                 }
             });
         });

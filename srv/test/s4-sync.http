@@ -16,3 +16,37 @@ Content-Type: application/json
 # POST http://localhost:4004/odata/v4/master/Countries/S4_SyncCountries
 # Authorization: Basic alice:
 # Content-Type: application/json
+
+### 1. Create a NEW Draft (This generates a fresh ID)
+POST http://localhost:4004/odata/v4/orders/FuelOrders
+Content-Type: application/json
+
+{
+    "ordered_quantity": 100,
+    "unit_price": 10,
+    "station_code":"CEB",
+    "requested_date":"2026-03-06"
+}
+
+### 2. Test the Patch (Simulate Side Effect of Total amount)
+PATCH {{url}}/odata/v4/orders/FuelOrders(ID='97503fc7-1de0-417c-93a4-6c1d93f8cc6b',IsActiveEntity=false)
+# PATCH {{url}}/odata/v4/orders/FuelOrders(ID='97503fc7-1de0-417c-93a4-6c1d93f8cc6b',IsActiveEntity=true)
+Content-Type: application/json
+
+{
+    "unit_price": 60,
+    "ordered_quantity": 1000
+}
+
+### 3. Activate the Draft (Simulates clicking the 'Save'/ 'create' button)
+# This is what triggers your this.before('CREATE' FuelOrders) logic.
+POST {{url}}/odata/v4/orders/FuelOrders(ID='5f6ef954-9f13-4d79-8872-fe2569f6db72',IsActiveEntity=false)/FuelOrderService.draftActivate
+Content-Type: application/json
+
+{}
+
+###4. creating an aircraft entry without type_Code
+POST {{url}}/odata/v4/master/Aircraft
+Content-Type: application/json
+
+{}

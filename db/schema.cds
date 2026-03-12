@@ -12,7 +12,7 @@
 
 namespace fuelsphere;
 
-using { cuid, managed } from '@sap/cds/common';
+using { cuid, managed, sap.common.CodeList } from '@sap/cds/common';
 
 // ============================================================================
 // COMMON ASPECTS
@@ -117,6 +117,14 @@ entity MANUFACTURE : ActiveStatus, AuditTrail {
 }
 
 /**
+ * STATUSES - Aircraft Oreration Status
+ * Source: FuelSphere native
+ */
+entity AIRCRAFT_OPSTATUS : CodeList {
+    key status_code : String(20) default 'ACTIVE';     // ACTIVE/INACTIVE/MAINTENANCE
+}
+
+/**
  * AIRCRAFT_MASTER - Aircraft Type Master
  * Source: FuelSphere native
  *
@@ -131,7 +139,7 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
         mtow_kg             : Decimal(15,2);  // Maximum takeoff weight in kg
         cruise_burn_kgph    : Decimal(10,2);  // Cruise fuel burn rate kg/hour
         fleet_size          : Integer;        // Number in fleet
-        status              : String(20) default 'ACTIVE'; // ACTIVE/INACTIVE/MAINTENANCE
+        status              : Association to AIRCRAFT_OPSTATUS;
 }
 
 /**
@@ -220,6 +228,7 @@ entity MASTER_PRODUCTS : cuid, ActiveStatus, AuditTrail {
 entity MASTER_CONTRACTS : cuid, ActiveStatus, AuditTrail {
         contract_number     : String(20) @mandatory;  // Contract number
         contract_name       : String(100) @mandatory; // Contract description
+        @mandatory
         supplier            : Association to MASTER_SUPPLIERS;
         valid_from          : Date @mandatory;        // Contract start date
         valid_to            : Date @mandatory;        // Contract end date

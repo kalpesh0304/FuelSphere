@@ -227,7 +227,18 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: cancelled_by, Label: 'Cancelled By' },
                 { Value: cancelled_at, Label: 'Cancelled At' }
             ]
-        }
+        },
+
+        // Object page custom 'submit'  action button
+        Identification  : [
+            {
+                $Type : 'UI.DataFieldForAction',
+                Action : 'FuelOrderService.submit',
+                Label : 'Submit',
+                ![@UI.Importance] : #High,
+                ![@UI.Criticality]: #Positive,
+            }
+        ],
     }
 );
 
@@ -250,8 +261,8 @@ annotate FuelOrderService.FuelOrders with {
     requested_date  @title: 'Delivery Date' @mandatory;
     requested_time  @title: 'Delivery Time';
     ordered_quantity @title: 'Quantity (kg)' @mandatory @Measures.Unit: uom_code;
-    unit_price      @title: 'Unit Price' @Measures.ISOCurrency: currency_code;
-    total_amount    @title: 'Total Amount' @Measures.ISOCurrency: currency_code;
+    unit_price      @title: 'Unit Price' @Measures.ISOCurrency: currency_code ;
+    total_amount    @title: 'Total Amount' @Measures.ISOCurrency: currency_code @Common.FieldControl: #ReadOnly;
     currency_code   @title: 'Currency';
     uom_code        @title: 'UoM';
     priority        @title: 'Priority';
@@ -474,6 +485,11 @@ annotate FuelOrderService.FuelOrders @(
             contract,
             product
         ]
+    },
+
+    Common.SideEffects #updTotAmt : {
+        SourceProperties: [ ordered_quantity, unit_price],
+        TargetProperties: [ 'total_amount' ]
     }
 );
 

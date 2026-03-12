@@ -17,6 +17,7 @@
 using { fuelsphere as db } from '../db/schema';
 
 @path: '/odata/v4/orders'
+@impl: './order-service.js'
 service FuelOrderService {
 
     // ========================================================================
@@ -45,13 +46,18 @@ service FuelOrderService {
         tickets     : redirected to FuelTickets,
         // Virtual elements for UI criticality coloring
         virtual null as statusCriticality   : Integer,
-        virtual null as priorityCriticality : Integer
+        virtual null as priorityCriticality : Integer,
+        virtual null as canSubmit           : Boolean @UI.Hidden
     } actions {
         /**
          * Submit order to supplier
          * Transitions: Draft → Submitted
          * Triggers supplier dispatch via SAP CPI
          */
+        @cds.odata.bindingparameter.name: '_it'
+        @Common.SideEffects: { TargetProperties: ['_it/status', '_it/canSubmit'] }
+        @Core.OperationAvailable: _it.canSubmit
+        @Common.IsActionCritical: true
         action submit() returns FuelOrders;
 
         /**

@@ -1,4 +1,4 @@
-type_code;aircraft_model;manufacturer_code;fuel_capacity_kg;mtow_kg;cruise_burn_kgph;fleet_size;status;is_active;created_at;created_by;modified_at;modified_by
+type_code;aircraft_model;manufacturer_code;fuel_capacity_kg;mtow_kg;cruise_burn_kgph;fleet_size;status_status_code;is_active;created_at;created_by;modified_at;modified_by
 A320;Airbus A320-200;AB;24210.00;78000.00;2500.00;12;ACTIVE;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
 A321;Airbus A321-200;AB;30030.00;93500.00;2800.00;8;ACTIVE;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
 A330;Airbus A330-300;AB;97530.00;242000.00;5800.00;6;ACTIVE;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
