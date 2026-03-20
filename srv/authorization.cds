@@ -285,6 +285,7 @@ annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
 // Service-level Functions
 // ----------------------------------------------------------------------------
 
+annotate FuelOrderService.importFlightScheduleExcel with @(requires: ['FuelOrderCreate', 'AdminAccess', 'any']);
 annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate', 'any']);
 annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
 annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
