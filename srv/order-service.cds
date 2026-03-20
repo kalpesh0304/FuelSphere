@@ -266,6 +266,22 @@ service FuelOrderService {
     // ========================================================================
 
     /**
+     * Create fuel order from a flight schedule record
+     * Auto-populates station, flight reference, and requested date
+     */
+    action createOrderFromFlight(
+        flightId        : UUID,
+        supplierId      : UUID,
+        contractId      : UUID,
+        productId       : UUID,
+        orderedQuantity : Decimal(12,2),
+        unitPrice       : Decimal(15,4),
+        currencyCode    : String(3),
+        priority        : String(10),
+        notes           : String(1000)
+    ) returns FuelOrders;
+
+    /**
      * Generate next order number for a station
      * Format: FO-{STATION}-{YYYYMMDD}-{SEQ}
      */

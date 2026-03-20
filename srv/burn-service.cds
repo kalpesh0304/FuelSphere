@@ -17,6 +17,7 @@
 using { fuelsphere as db } from '../db/schema';
 
 @path: '/odata/v4/burn'
+@impl: './burn-service.js'
 service BurnService {
 
     // ========================================================================
