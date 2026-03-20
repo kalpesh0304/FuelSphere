@@ -1,0 +1,6 @@
+ID;persona_id;persona_name;description;is_active
+c2a3b4c5-0001-4000-8000-000000000001;fuel-planner;Fuel Planner;Plans fuel requirements and creates orders from flight schedules;true
+c2a3b4c5-0001-4000-8000-000000000002;station-coordinator;Station Coordinator;Manages fuel operations at airport stations including ePOD capture;true
+c2a3b4c5-0001-4000-8000-000000000003;operations-manager;Operations Manager;Oversees fuel order lifecycle approvals and delivery operations;true
+c2a3b4c5-0001-4000-8000-000000000004;system-administrator;System Administrator;Full system access for administration and configuration;true
+c2a3b4c5-0001-4000-8000-000000000005;finance-controller;Finance Controller;Reviews fuel orders and invoices for financial compliance;true

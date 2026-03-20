@@ -14,7 +14,8 @@
     "@sap/xsenv": "^5",
     "@sap/xssec": "^4",
     "express": "^4",
-    "passport": "^0.7"
+    "passport": "^0.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@cap-js/sqlite": "^1.11.1",

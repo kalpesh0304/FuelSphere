@@ -1,0 +1,6 @@
+ID;tile_id;tile_name;tile_group;target_url;icon;is_active
+c1a2b3c4-0001-4000-8000-000000000001;fuel-order-overview;Fuel Orders;Fuel Operations;#FuelOrders-manage;sap-icon://shipping-status;true
+c1a2b3c4-0001-4000-8000-000000000002;flight-excel-upload;Upload Flight Schedule;Fuel Operations;#FuelOrders-uploadFlights;sap-icon://upload;true
+c1a2b3c4-0001-4000-8000-000000000003;fuel-deliveries;Fuel Deliveries (ePOD);Fuel Operations;#FuelDeliveries-manage;sap-icon://document;true
+c1a2b3c4-0001-4000-8000-000000000004;fuel-tickets;Fuel Tickets;Fuel Operations;#FuelTickets-manage;sap-icon://receipt;true
+c1a2b3c4-0001-4000-8000-000000000005;flight-schedule;Flight Schedule;Reference Data;#Flights-display;sap-icon://flight;true

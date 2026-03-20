@@ -1,0 +1,17 @@
+Step;Required Role;Test User;Password;Action;Authorization Check
+1;StationCoordinator or FuelOrderCreate;station.coordinator@airline.com or ops;any;Create fuel order from flight schedule;FuelOrderCreate scope required
+3;StationCoordinator or FuelOrderCreate;station.coordinator@airline.com or ops;any;Submit fuel order;FuelOrderCreate scope required
+4;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Confirm fuel order;FuelOrderApprove scope required
+5;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Start delivery;FuelOrderApprove scope required
+6;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Cancel order with reason;FuelOrderApprove scope required
+7;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Capture ePOD signatures;ePODCapture scope required
+9-10;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Verify delivery quantity;ePODCapture scope required
+11-13;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Validate delivery parameters;ePODCapture scope required
+14;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;ASTM D1250 temperature correction;ePODCapture scope required
+15;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Create fuel ticket;ePODCapture scope required
+16-17;OperationsManager or ePODApprove;ops.manager@airline.com or ops;any;Verify fuel ticket;ePODApprove scope required
+18;SystemAdministrator or BurnDataEdit;alice or kalpesh;any;Ingest ACARS burn data;BurnDataEdit scope required
+19;OperationsManager or BurnDataEdit;ops.manager@airline.com or ops;any;Confirm burn record;BurnDataEdit scope required
+20-21;OperationsManager or BurnDataView;ops or analyst;any;Query ROB ledger and fleet summary;BurnDataView scope required
+22-25;Various (negative tests);Same as positive test user;any;Verify error handling;Same scope - testing business rule rejection
+FullAdmin;All scopes;alice or kalpesh;any;Can execute all steps;Use for initial walkthrough
