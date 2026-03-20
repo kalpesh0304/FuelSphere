@@ -282,21 +282,16 @@ service FuelOrderService {
     ) returns FuelOrders;
 
     /**
-     * Import flight schedule from Excel and optionally create fuel orders
-     * Parses Excel file with columns: flight_number, flight_date, aircraft_type,
-     * registration, departure_airport, arrival_airport, departure_time, arrival_time
+     * Import flight schedule from Excel and create fuel orders
+     * All dimensions are columns in the Excel file:
+     * Flight: flight_number, flight_date, aircraft_type, aircraft_reg,
+     *         origin_airport, destination_airport, departure_time, arrival_time
+     * Order:  supplier_code, contract_number, product_code, ordered_quantity,
+     *         unit_price, currency_code, priority, notes
      */
     action importFlightScheduleExcel(
-        fileContent     : LargeBinary,
-        fileName        : String,
-        createOrders    : Boolean default false,
-        supplier_ID     : UUID,
-        contract_ID     : UUID,
-        product_ID      : UUID,
-        orderedQuantity : Decimal(12,2),
-        unitPrice       : Decimal(15,4),
-        currencyCode    : String(3) default 'USD',
-        priority        : String(20) default 'Normal'
+        fileContent : LargeBinary,
+        fileName    : String(255)
     ) returns FlightExcelImportResult;
 
     /**
@@ -398,20 +393,22 @@ service FuelOrderService {
 
     type FlightExcelImportResult {
         success          : Boolean;
+        fileName         : String(255);
         flightsProcessed : Integer;
-        flightsImported  : Integer;
+        flightsCreated   : Integer;
+        flightsUpdated   : Integer;
         flightsSkipped   : Integer;
-        flightsFailed    : Integer;
         ordersCreated    : Integer;
         ordersFailed     : Integer;
         errors           : array of FlightImportError;
+        message          : String(500);
     };
 
     type FlightImportError {
         row      : Integer;
-        field    : String;
-        message  : String;
-        severity : String;  // ERROR / WARNING
+        field    : String(50);
+        message  : String(500);
+        severity : String(10);  // ERROR / WARNING
     };
 
     // ========================================================================
@@ -434,4 +431,7 @@ service FuelOrderService {
     // IMP403 - Airport not found in master data
     // IMP404 - Aircraft type not found in master data
     // IMP405 - Duplicate flight (same flight_number + flight_date)
+    // IMP406 - Supplier not found in master data
+    // IMP407 - Product not found in master data
+    // IMP408 - Contract not found in master data
 }
