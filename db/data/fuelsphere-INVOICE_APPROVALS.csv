@@ -5,3 +5,7 @@ ID;invoice_ID;sequence;action;action_date;action_by;comments;rejection_reason;in
 550e8400-e29b-41d4-a716-446655440834;550e8400-e29b-41d4-a716-446655440805;2;APPROVE;2026-01-11T09:00:00Z;finance.controller@airline.com;First approval - within tolerance;;192600.00;0.00;500000.00;true;;
 550e8400-e29b-41d4-a716-446655440835;550e8400-e29b-41d4-a716-446655440805;3;APPROVE;2026-01-12T08:00:00Z;finance.manager@airline.com;Final approval for posting;;192600.00;0.00;1000000.00;true;;
 550e8400-e29b-41d4-a716-446655440836;550e8400-e29b-41d4-a716-446655440803;1;SUBMIT;2026-01-17T15:00:00Z;ap.clerk@airline.com;Invoice submitted - price variance flagged;;235200.00;10500.00;;;;
+550e8400-e29b-41d4-a716-446655440941;550e8400-e29b-41d4-a716-446655440901;1;SUBMIT;2026-02-17T09:30:00Z;ap.clerk@airline.com;SIT: Invoice verified and submitted for approval;;4620.00;0.00;;;;
+550e8400-e29b-41d4-a716-446655440942;550e8400-e29b-41d4-a716-446655440901;2;APPROVE;2026-02-18T10:00:00Z;finance.controller@airline.com;SIT: Approved - exact match with PO/GR;;4620.00;0.00;500000.00;true;;
+550e8400-e29b-41d4-a716-446655440943;550e8400-e29b-41d4-a716-446655440902;1;SUBMIT;2026-02-18T14:00:00Z;ap.clerk@airline.com;SIT: Invoice submitted - price variance 1pct within tolerance;;20574.40;183.70;;;;
+550e8400-e29b-41d4-a716-446655440944;550e8400-e29b-41d4-a716-446655440903;1;SUBMIT;2026-02-18T15:00:00Z;ap.clerk@airline.com;SIT: Invoice submitted - 5pct variance exceeds threshold;;62832.00;2805.00;;;;
