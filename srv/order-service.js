@@ -9,6 +9,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
+const XLSX = require('xlsx');
 
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
@@ -495,6 +496,250 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             });
             req.info(200, `Ticket ${ticket.ticket_number} verified.`);
             return SELECT.one.from(FuelTickets).where({ ID: ticket.ID });
+        });
+
+        // ====================================================================
+        // IMPORT FLIGHT SCHEDULE FROM EXCEL
+        // ====================================================================
+
+        this.on('importFlightScheduleExcel', async (req) => {
+            const {
+                fileContent, fileName, createOrders,
+                supplier_ID, contract_ID, product_ID,
+                orderedQuantity, unitPrice, currencyCode, priority
+            } = req.data;
+
+            const errors = [];
+            let flightsProcessed = 0, flightsImported = 0, flightsSkipped = 0, flightsFailed = 0;
+            let ordersCreated = 0, ordersFailed = 0;
+
+            // Validate file
+            if (!fileContent) {
+                return req.error(400, 'IMP401: File content is required.');
+            }
+            const ext = (fileName || '').toLowerCase();
+            if (ext && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
+                return req.error(400, 'IMP401: Invalid file format. Only .xlsx and .xls files are supported.');
+            }
+
+            // Parse Excel
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `IMP401: Failed to parse Excel file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) {
+                return req.error(400, 'IMP401: Excel file contains no sheets.');
+            }
+
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) {
+                return req.error(400, 'IMP402: Excel sheet is empty.');
+            }
+
+            // Validate required columns
+            const requiredCols = ['flight_number', 'flight_date', 'departure_airport', 'arrival_airport'];
+            const headers = Object.keys(rows[0]);
+            const missingCols = requiredCols.filter(c => !headers.includes(c));
+            if (missingCols.length > 0) {
+                return req.error(400, `IMP402: Missing required columns: ${missingCols.join(', ')}`);
+            }
+
+            // Load master data for validation
+            const { MASTER_AIRPORTS, AIRCRAFT_MASTER, FLIGHT_SCHEDULE } = cds.entities('fuelsphere');
+            const airports = await SELECT.from(MASTER_AIRPORTS).columns('iata_code');
+            const airportSet = new Set(airports.map(a => a.iata_code));
+            const aircraft = await SELECT.from(AIRCRAFT_MASTER).columns('type_code');
+            const aircraftSet = new Set(aircraft.map(a => a.type_code));
+
+            // Collect existing flights for duplicate detection
+            const existingFlights = await SELECT.from(FLIGHT_SCHEDULE).columns('flight_number', 'flight_date');
+            const existingSet = new Set(existingFlights.map(f => `${f.flight_number}|${f.flight_date}`));
+
+            // Process each row
+            const flightsToInsert = [];
+            const ordersToCreate = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2; // Excel row (header=1, data starts at 2)
+                flightsProcessed++;
+
+                const flightNumber = String(row.flight_number || '').trim();
+                const flightDate = String(row.flight_date || '').trim();
+                const depAirport = String(row.departure_airport || '').trim().toUpperCase();
+                const arrAirport = String(row.arrival_airport || '').trim().toUpperCase();
+                const aircraftType = String(row.aircraft_type || '').trim();
+                const registration = String(row.registration || '').trim();
+                const depTime = String(row.departure_time || '').trim();
+                const arrTime = String(row.arrival_time || '').trim();
+
+                // Validate required fields
+                if (!flightNumber) {
+                    errors.push({ row: rowNum, field: 'flight_number', message: 'Flight number is required.', severity: 'ERROR' });
+                    flightsFailed++;
+                    continue;
+                }
+                if (!flightDate) {
+                    errors.push({ row: rowNum, field: 'flight_date', message: 'Flight date is required.', severity: 'ERROR' });
+                    flightsFailed++;
+                    continue;
+                }
+
+                // Normalize date to YYYY-MM-DD
+                let normalizedDate = flightDate;
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(flightDate)) {
+                    const parts = flightDate.split('/');
+                    normalizedDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                } else if (/^\d{8}$/.test(flightDate)) {
+                    normalizedDate = `${flightDate.slice(0, 4)}-${flightDate.slice(4, 6)}-${flightDate.slice(6, 8)}`;
+                }
+
+                // Validate airports
+                if (!airportSet.has(depAirport)) {
+                    errors.push({ row: rowNum, field: 'departure_airport', message: `IMP403: Airport '${depAirport}' not found in master data.`, severity: 'ERROR' });
+                    flightsFailed++;
+                    continue;
+                }
+                if (!airportSet.has(arrAirport)) {
+                    errors.push({ row: rowNum, field: 'arrival_airport', message: `IMP403: Airport '${arrAirport}' not found in master data.`, severity: 'ERROR' });
+                    flightsFailed++;
+                    continue;
+                }
+
+                // Validate aircraft type (if provided)
+                if (aircraftType && !aircraftSet.has(aircraftType)) {
+                    errors.push({ row: rowNum, field: 'aircraft_type', message: `IMP404: Aircraft type '${aircraftType}' not found in master data.`, severity: 'ERROR' });
+                    flightsFailed++;
+                    continue;
+                }
+
+                // Check for duplicate
+                const flightKey = `${flightNumber}|${normalizedDate}`;
+                if (existingSet.has(flightKey)) {
+                    errors.push({ row: rowNum, field: 'flight_number', message: `IMP405: Flight ${flightNumber} on ${normalizedDate} already exists.`, severity: 'WARNING' });
+                    flightsSkipped++;
+                    continue;
+                }
+
+                // Also check within this batch
+                if (flightsToInsert.some(f => f.flight_number === flightNumber && f.flight_date === normalizedDate)) {
+                    errors.push({ row: rowNum, field: 'flight_number', message: `IMP405: Duplicate flight ${flightNumber} on ${normalizedDate} in upload.`, severity: 'WARNING' });
+                    flightsSkipped++;
+                    continue;
+                }
+
+                const flightId = cds.utils.uuid();
+                flightsToInsert.push({
+                    ID: flightId,
+                    flight_number: flightNumber,
+                    flight_date: normalizedDate,
+                    aircraft_type: aircraftType || null,
+                    aircraft_reg: registration || null,
+                    origin_airport: depAirport,
+                    destination_airport: arrAirport,
+                    scheduled_departure: depTime || null,
+                    scheduled_arrival: arrTime || null,
+                    status: 'SCHEDULED'
+                });
+
+                // Track for order creation
+                if (createOrders) {
+                    ordersToCreate.push({
+                        flightId: flightId,
+                        stationCode: depAirport,
+                        flightNumber: flightNumber,
+                        flightDate: normalizedDate,
+                        depAirport: depAirport,
+                        arrAirport: arrAirport
+                    });
+                }
+
+                existingSet.add(flightKey);
+                flightsImported++;
+            }
+
+            // Bulk insert flight schedules
+            if (flightsToInsert.length > 0) {
+                try {
+                    await INSERT.into(FLIGHT_SCHEDULE).entries(flightsToInsert);
+                } catch (e) {
+                    return req.error(500, `Failed to insert flight schedules: ${e.message}`);
+                }
+            }
+
+            // Create fuel orders if requested
+            if (createOrders && ordersToCreate.length > 0) {
+                if (!supplier_ID || !contract_ID || !product_ID) {
+                    errors.push({ row: 0, field: 'supplier_ID', message: 'Supplier, Contract, and Product are required when createOrders is true.', severity: 'WARNING' });
+                } else {
+                    for (const oc of ordersToCreate) {
+                        try {
+                            const dateStr = oc.flightDate.replace(/-/g, '');
+                            const pattern = `FO-${oc.stationCode}-${dateStr}-%`;
+                            const lastOrder = await SELECT.one.from(FuelOrders)
+                                .columns('order_number')
+                                .where({ order_number: { like: pattern } })
+                                .orderBy('order_number desc');
+                            let nextSeq = 1;
+                            if (lastOrder) {
+                                nextSeq = parseInt(lastOrder.order_number.split('-').pop()) + 1;
+                            }
+                            const orderNumber = `FO-${oc.stationCode}-${dateStr}-${String(nextSeq).padStart(3, '0')}`;
+
+                            const airport = await SELECT.one.from(MASTER_AIRPORTS).where({ iata_code: oc.stationCode });
+                            const totalAmount = orderedQuantity && unitPrice ? Number((orderedQuantity * unitPrice).toFixed(2)) : 0;
+
+                            await INSERT.into(FuelOrders).entries({
+                                ID: cds.utils.uuid(),
+                                order_number: orderNumber,
+                                flight_ID: oc.flightId,
+                                airport_ID: airport ? airport.ID : null,
+                                station_code: oc.stationCode,
+                                supplier_ID: supplier_ID,
+                                contract_ID: contract_ID,
+                                product_ID: product_ID,
+                                uom_code: 'KG',
+                                ordered_quantity: orderedQuantity || 0,
+                                unit_price: unitPrice || 0,
+                                total_amount: totalAmount,
+                                currency_code: currencyCode || 'USD',
+                                requested_date: oc.flightDate,
+                                priority: priority || 'Normal',
+                                status: 'Created',
+                                notes: `Fuel order for flight ${oc.flightNumber} ${oc.depAirport}-${oc.arrAirport} (Excel import)`
+                            });
+                            ordersCreated++;
+                        } catch (e) {
+                            ordersFailed++;
+                            errors.push({ row: 0, field: 'order', message: `Failed to create order for flight ${oc.flightNumber}: ${e.message}`, severity: 'ERROR' });
+                        }
+                    }
+                }
+            }
+
+            const success = flightsFailed === 0 && ordersFailed === 0;
+            const msg = `Imported ${flightsImported} of ${flightsProcessed} flights.` +
+                (createOrders ? ` Created ${ordersCreated} orders.` : '') +
+                (flightsSkipped > 0 ? ` Skipped ${flightsSkipped} duplicates.` : '') +
+                (flightsFailed > 0 ? ` ${flightsFailed} failed.` : '');
+
+            req.info(200, msg);
+
+            return {
+                success,
+                flightsProcessed,
+                flightsImported,
+                flightsSkipped,
+                flightsFailed,
+                ordersCreated,
+                ordersFailed,
+                errors
+            };
         });
 
         // ====================================================================

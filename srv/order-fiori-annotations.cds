@@ -756,3 +756,26 @@ annotate FuelOrderService.Flights with {
     scheduled_arrival   @title: 'Arrival';
     status              @title: 'Status';
 };
+
+// ============================================================================
+// IMPORT FLIGHT SCHEDULE FROM EXCEL - Action Annotations
+// ============================================================================
+
+annotate FuelOrderService with @(
+    Common.SideEffects #FlightImport: {
+        TargetEntities: [Flights, FuelOrders]
+    }
+);
+
+annotate FuelOrderService.importFlightScheduleExcel with {
+    fileContent     @title: 'Excel File'       @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    fileName        @title: 'File Name';
+    createOrders    @title: 'Create Fuel Orders';
+    supplier_ID     @title: 'Supplier';
+    contract_ID     @title: 'Contract';
+    product_ID      @title: 'Product';
+    orderedQuantity @title: 'Ordered Quantity (kg)';
+    unitPrice       @title: 'Unit Price';
+    currencyCode    @title: 'Currency';
+    priority        @title: 'Priority';
+};

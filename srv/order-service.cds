@@ -282,6 +282,24 @@ service FuelOrderService {
     ) returns FuelOrders;
 
     /**
+     * Import flight schedule from Excel and optionally create fuel orders
+     * Parses Excel file with columns: flight_number, flight_date, aircraft_type,
+     * registration, departure_airport, arrival_airport, departure_time, arrival_time
+     */
+    action importFlightScheduleExcel(
+        fileContent     : LargeBinary,
+        fileName        : String,
+        createOrders    : Boolean default false,
+        supplier_ID     : UUID,
+        contract_ID     : UUID,
+        product_ID      : UUID,
+        orderedQuantity : Decimal(12,2),
+        unitPrice       : Decimal(15,4),
+        currencyCode    : String(3) default 'USD',
+        priority        : String(20) default 'Normal'
+    ) returns FlightExcelImportResult;
+
+    /**
      * Generate next order number for a station
      * Format: FO-{STATION}-{YYYYMMDD}-{SEQ}
      */
@@ -378,6 +396,24 @@ service FuelOrderService {
         severity    : String(10);   // ERROR / WARNING
     };
 
+    type FlightExcelImportResult {
+        success          : Boolean;
+        flightsProcessed : Integer;
+        flightsImported  : Integer;
+        flightsSkipped   : Integer;
+        flightsFailed    : Integer;
+        ordersCreated    : Integer;
+        ordersFailed     : Integer;
+        errors           : array of FlightImportError;
+    };
+
+    type FlightImportError {
+        row      : Integer;
+        field    : String;
+        message  : String;
+        severity : String;  // ERROR / WARNING
+    };
+
     // ========================================================================
     // ERROR CODES (FDD-05 Section 7.6.5)
     // ========================================================================
@@ -391,4 +427,11 @@ service FuelOrderService {
     // INT402 - S/4HANA GR posting failed
     // INT403 - Shell Skypad communication timeout
     // INT404 - Object Store PDF upload failed
+    //
+    // Flight Schedule Excel Import
+    // IMP401 - Invalid file format (not .xlsx/.xls)
+    // IMP402 - Missing required columns in Excel
+    // IMP403 - Airport not found in master data
+    // IMP404 - Aircraft type not found in master data
+    // IMP405 - Duplicate flight (same flight_number + flight_date)
 }
