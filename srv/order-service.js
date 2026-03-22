@@ -607,6 +607,21 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 return s; // Return as-is, will fail validation downstream if invalid
             };
 
+            // Helper: normalize Excel datetime (serial number or ISO string)
+            const _normalizeDateTime = (val) => {
+                if (!val && val !== 0) return null;
+                if (typeof val === 'number') {
+                    const parsed = XLSX.SSF.parse_date_code(val);
+                    if (parsed) {
+                        return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}T` +
+                               `${String(parsed.H).padStart(2, '0')}:${String(parsed.M).padStart(2, '0')}:${String(parsed.S).padStart(2, '0')}Z`;
+                    }
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s;
+                return s || null;
+            };
+
             // Process rows - collect flights and orders
             const flightsToInsert = [];
             const flightsToUpdate = [];
@@ -627,6 +642,22 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 const aircraftReg = String(row.aircraft_reg || '').trim();
                 const depTime = String(row.departure_time || '').trim();
                 const arrTime = String(row.arrival_time || '').trim();
+
+                // --- Extract ICD-inspired optional fields ---
+                const airlineCode = String(row.airline_code || '').trim().toUpperCase();
+                const flightSuffix = String(row.flight_suffix || '').trim();
+                const serviceType = String(row.service_type || '').trim().toUpperCase();
+                const departureTerminal = String(row.departure_terminal || '').trim();
+                const arrivalTerminal = String(row.arrival_terminal || '').trim();
+                const gateNumber = String(row.gate_number || '').trim();
+                const standNumber = String(row.stand_number || '').trim();
+                const sobt = _normalizeDateTime(row.sobt);
+                const sibt = _normalizeDateTime(row.sibt);
+                const plannedBlockMins = row.planned_block_mins ? parseInt(row.planned_block_mins) : null;
+                const flightNature = String(row.flight_nature || '').trim().toUpperCase();
+                const linkedFlightNumber = String(row.linked_flight_number || '').trim();
+                const linkedFlightDate = row.linked_flight_date ? _normalizeDate(row.linked_flight_date) : null;
+                const codeshareFlights = String(row.codeshare_flights || '').trim();
 
                 // --- Extract order fields ---
                 const supplierCode = String(row.supplier_code || '').trim();
@@ -669,6 +700,12 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     errors.push({ row: rowNum, field: 'aircraft_type', message: `IMP404: Aircraft type '${aircraftType}' not found in master data.`, severity: 'ERROR' });
                     ordersFailed++;
                     continue;
+                }
+
+                // Validate service type (optional, WARNING only)
+                const validServiceTypes = ['J', 'F', 'C', 'G', 'M', 'P'];
+                if (serviceType && !validServiceTypes.includes(serviceType)) {
+                    errors.push({ row: rowNum, field: 'service_type', message: `Invalid service type '${serviceType}'. Valid: J, F, C, G, M, P.`, severity: 'WARNING' });
                 }
 
                 // --- Validate required order fields ---
@@ -723,7 +760,21 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                         origin_airport: originAirport,
                         destination_airport: destAirport,
                         scheduled_departure: depTime || undefined,
-                        scheduled_arrival: arrTime || undefined
+                        scheduled_arrival: arrTime || undefined,
+                        airline_code: airlineCode || undefined,
+                        flight_suffix: flightSuffix || undefined,
+                        service_type: serviceType || undefined,
+                        departure_terminal: departureTerminal || undefined,
+                        arrival_terminal: arrivalTerminal || undefined,
+                        gate_number: gateNumber || undefined,
+                        stand_number: standNumber || undefined,
+                        sobt: sobt || undefined,
+                        sibt: sibt || undefined,
+                        planned_block_mins: plannedBlockMins !== null ? plannedBlockMins : undefined,
+                        flight_nature: flightNature || undefined,
+                        linked_flight_number: linkedFlightNumber || undefined,
+                        linked_flight_date: linkedFlightDate || undefined,
+                        codeshare_flights: codeshareFlights || undefined
                     });
                     flightsUpdated++;
                 } else if (batchFlightKeys.has(flightKey)) {
@@ -743,7 +794,21 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                         destination_airport: destAirport,
                         scheduled_departure: depTime || null,
                         scheduled_arrival: arrTime || null,
-                        status: 'SCHEDULED'
+                        status: 'SCHEDULED',
+                        airline_code: airlineCode || null,
+                        flight_suffix: flightSuffix || null,
+                        service_type: serviceType || null,
+                        departure_terminal: departureTerminal || null,
+                        arrival_terminal: arrivalTerminal || null,
+                        gate_number: gateNumber || null,
+                        stand_number: standNumber || null,
+                        sobt: sobt || null,
+                        sibt: sibt || null,
+                        planned_block_mins: plannedBlockMins,
+                        flight_nature: flightNature || null,
+                        linked_flight_number: linkedFlightNumber || null,
+                        linked_flight_date: linkedFlightDate || null,
+                        codeshare_flights: codeshareFlights || null
                     });
                     existingFlightMap.set(flightKey, flightId);
                     batchFlightKeys.add(flightKey);

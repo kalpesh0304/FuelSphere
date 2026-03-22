@@ -545,9 +545,44 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         origin_airport      : String(3) @mandatory;     // Departure airport IATA
         destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
         destination_airport : String(3) @mandatory;     // Arrival airport IATA
-        scheduled_departure : Time;                     // Scheduled departure time
-        scheduled_arrival   : Time;                     // Scheduled arrival time
-        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED
+        scheduled_departure : Time;                     // Scheduled departure time (backward compat)
+        scheduled_arrival   : Time;                     // Scheduled arrival time (backward compat)
+        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED/DIVERTED/DELAYED/RETURNED
+
+        // OPS-ESB ICD-inspired fields
+        airline_code        : String(3);                // IATA airline designator (e.g., PR, EY)
+        flight_suffix       : String(2);                // Operational suffix
+        service_type        : String(1);                // IATA service type: J=sched pax, F=freight, C=charter, G=ferry
+
+        departure_terminal  : String(10);               // Departure terminal
+        arrival_terminal    : String(10);               // Arrival terminal
+        gate_number         : String(10);               // Departure/arrival gate
+        stand_number        : String(10);               // Aircraft stand/bay number
+
+        // Operational timestamps (UTC)
+        sobt                : DateTime;                 // Scheduled Off Block Time
+        sibt                : DateTime;                 // Scheduled In Block Time
+        eobt                : DateTime;                 // Estimated Off Block Time
+        eibt                : DateTime;                 // Estimated In Block Time
+        aobt                : DateTime;                 // Actual Off Block Time
+        aibt                : DateTime;                 // Actual In Block Time
+        atot                : DateTime;                 // Actual Take Off Time
+        aldt                : DateTime;                 // Actual Landing Time
+
+        // Block hours
+        planned_block_mins  : Integer;                  // Planned block time in minutes
+        actual_block_mins   : Integer;                  // Actual block time in minutes
+
+        // Flight nature & linked flights
+        flight_nature       : String(10);               // PAX, FRY (ferry), AMB, TRN
+        linked_flight_number: String(10);               // Previous/next leg flight number
+        linked_flight_date  : Date;                     // Linked flight date
+
+        // Codeshare & delays
+        codeshare_flights   : String(100);              // Comma-separated codeshare flight numbers
+        delay_code          : String(10);               // IATA delay code
+        delay_minutes       : Integer;                  // Delay duration in minutes
+        cancellation_reason : String(200);              // Reason if status=CANCELLED
 }
 
 // ============================================================================

@@ -745,16 +745,40 @@ annotate FuelOrderService.Flights with @(
 );
 
 annotate FuelOrderService.Flights with {
-    ID                  @UI.Hidden;
-    flight_number       @title: 'Flight Number';
-    flight_date         @title: 'Date';
-    aircraft_type       @title: 'Aircraft Type';
-    aircraft_reg        @title: 'Registration';
-    origin_airport      @title: 'Origin';
-    destination_airport @title: 'Destination';
-    scheduled_departure @title: 'Departure';
-    scheduled_arrival   @title: 'Arrival';
-    status              @title: 'Status';
+    ID                   @UI.Hidden;
+    flight_number        @title: 'Flight Number';
+    flight_date          @title: 'Date';
+    aircraft_type        @title: 'Aircraft Type';
+    aircraft_reg         @title: 'Registration';
+    origin_airport       @title: 'Origin';
+    destination_airport  @title: 'Destination';
+    scheduled_departure  @title: 'Departure';
+    scheduled_arrival    @title: 'Arrival';
+    status               @title: 'Status';
+    airline_code         @title: 'Airline';
+    flight_suffix        @title: 'Suffix';
+    service_type         @title: 'Service Type';
+    departure_terminal   @title: 'Dep. Terminal';
+    arrival_terminal     @title: 'Arr. Terminal';
+    gate_number          @title: 'Gate';
+    stand_number         @title: 'Stand';
+    sobt                 @title: 'SOBT (UTC)';
+    sibt                 @title: 'SIBT (UTC)';
+    eobt                 @title: 'EOBT (UTC)';
+    eibt                 @title: 'EIBT (UTC)';
+    aobt                 @title: 'AOBT (UTC)';
+    aibt                 @title: 'AIBT (UTC)';
+    atot                 @title: 'ATOT (UTC)';
+    aldt                 @title: 'ALDT (UTC)';
+    planned_block_mins   @title: 'Planned Block (min)';
+    actual_block_mins    @title: 'Actual Block (min)';
+    flight_nature        @title: 'Flight Nature';
+    linked_flight_number @title: 'Linked Flight';
+    linked_flight_date   @title: 'Linked Flight Date';
+    codeshare_flights    @title: 'Codeshare';
+    delay_code           @title: 'Delay Code';
+    delay_minutes        @title: 'Delay (min)';
+    cancellation_reason  @title: 'Cancellation Reason';
 };
 
 // ============================================================================
@@ -770,12 +794,4 @@ annotate FuelOrderService with @(
 annotate FuelOrderService.importFlightScheduleExcel with {
     fileContent     @title: 'Excel File'       @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     fileName        @title: 'File Name';
-    createOrders    @title: 'Create Fuel Orders';
-    supplier_ID     @title: 'Supplier';
-    contract_ID     @title: 'Contract';
-    product_ID      @title: 'Product';
-    orderedQuantity @title: 'Ordered Quantity (kg)';
-    unitPrice       @title: 'Unit Price';
-    currencyCode    @title: 'Currency';
-    priority        @title: 'Priority';
 };

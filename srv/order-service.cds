@@ -282,12 +282,16 @@ service FuelOrderService {
     ) returns FuelOrders;
 
     /**
-     * Import flight schedule from Excel and create fuel orders
+     * Import flight schedule from Excel and create fuel orders.
      * All dimensions are columns in the Excel file:
-     * Flight: flight_number, flight_date, aircraft_type, aircraft_reg,
-     *         origin_airport, destination_airport, departure_time, arrival_time
-     * Order:  supplier_code, contract_number, product_code, ordered_quantity,
-     *         unit_price, currency_code, priority, notes
+     * Required flight: flight_number, flight_date, origin_airport, destination_airport
+     * Required order:  supplier_code, product_code, ordered_quantity, unit_price
+     * Optional flight: aircraft_type, aircraft_reg, departure_time, arrival_time
+     * Optional ICD:    airline_code, flight_suffix, service_type,
+     *                  sobt, sibt, departure_terminal, arrival_terminal,
+     *                  gate_number, stand_number, planned_block_mins,
+     *                  flight_nature, linked_flight_number, codeshare_flights
+     * Optional order:  contract_number, currency_code, priority, notes
      */
     action importFlightScheduleExcel(
         fileContent : LargeBinary,
