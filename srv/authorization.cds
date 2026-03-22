@@ -237,7 +237,7 @@ annotate FuelOrderService.FuelTickets actions {
 
 // All reference entities are read-only in order service context
 // Read access granted to anyone with order-related scopes
-annotate FuelOrderService.Flights with @(restrict: [
+annotate FuelOrderService.FlightSchedule with @(restrict: [
     { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
@@ -285,7 +285,6 @@ annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
 // Service-level Functions
 // ----------------------------------------------------------------------------
 
-annotate FuelOrderService.importFlightScheduleExcel with @(requires: ['FuelOrderCreate', 'AdminAccess', 'any']);
 annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate', 'any']);
 annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
 annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);

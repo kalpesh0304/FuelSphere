@@ -355,8 +355,8 @@ annotate FuelOrderService.FuelOrders with {
             Text: flight.flight_number,
             TextArrangement: #TextFirst,
             ValueList: {
-                Label: 'Flights',
-                CollectionPath: 'Flights',
+                Label: 'Flight Schedule',
+                CollectionPath: 'FlightSchedule',
                 Parameters: [
                     { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
                     { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
@@ -718,14 +718,14 @@ annotate FuelOrderService.FuelTickets with {
 };
 
 // ============================================================================
-// FLIGHTS - Read-only reference data
+// FLIGHT SCHEDULE - Read-only reference data
 // ============================================================================
 
-annotate FuelOrderService.Flights with @(
+annotate FuelOrderService.FlightSchedule with @(
     UI: {
         HeaderInfo: {
-            TypeName       : 'Flight',
-            TypeNamePlural : 'Flights',
+            TypeName       : 'Flight Schedule',
+            TypeNamePlural : 'Flight Schedule',
             Title          : { Value: flight_number },
             Description    : { Value: flight_date }
         },
@@ -744,7 +744,7 @@ annotate FuelOrderService.Flights with @(
     }
 );
 
-annotate FuelOrderService.Flights with {
+annotate FuelOrderService.FlightSchedule with {
     ID                   @UI.Hidden;
     flight_number        @title: 'Flight Number';
     flight_date          @title: 'Date';
@@ -755,43 +755,4 @@ annotate FuelOrderService.Flights with {
     scheduled_departure  @title: 'Departure';
     scheduled_arrival    @title: 'Arrival';
     status               @title: 'Status';
-    airline_code         @title: 'Airline';
-    flight_suffix        @title: 'Suffix';
-    service_type         @title: 'Service Type';
-    departure_terminal   @title: 'Dep. Terminal';
-    arrival_terminal     @title: 'Arr. Terminal';
-    gate_number          @title: 'Gate';
-    stand_number         @title: 'Stand';
-    sobt                 @title: 'SOBT (UTC)';
-    sibt                 @title: 'SIBT (UTC)';
-    eobt                 @title: 'EOBT (UTC)';
-    eibt                 @title: 'EIBT (UTC)';
-    aobt                 @title: 'AOBT (UTC)';
-    aibt                 @title: 'AIBT (UTC)';
-    atot                 @title: 'ATOT (UTC)';
-    aldt                 @title: 'ALDT (UTC)';
-    planned_block_mins   @title: 'Planned Block (min)';
-    actual_block_mins    @title: 'Actual Block (min)';
-    flight_nature        @title: 'Flight Nature';
-    linked_flight_number @title: 'Linked Flight';
-    linked_flight_date   @title: 'Linked Flight Date';
-    codeshare_flights    @title: 'Codeshare';
-    delay_code           @title: 'Delay Code';
-    delay_minutes        @title: 'Delay (min)';
-    cancellation_reason  @title: 'Cancellation Reason';
-};
-
-// ============================================================================
-// IMPORT FLIGHT SCHEDULE FROM EXCEL - Action Annotations
-// ============================================================================
-
-annotate FuelOrderService with @(
-    Common.SideEffects #FlightImport: {
-        TargetEntities: [Flights, FuelOrders]
-    }
-);
-
-annotate FuelOrderService.importFlightScheduleExcel with {
-    fileContent     @title: 'Excel File'       @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    fileName        @title: 'File Name';
 };

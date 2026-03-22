@@ -36,7 +36,7 @@ service FuelOrderService {
     @odata.draft.enabled
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
-        flight      : redirected to Flights,
+        flight      : redirected to FlightSchedule,
         airport     : redirected to Airports,
         supplier    : redirected to Suppliers,
         contract    : redirected to Contracts,
@@ -175,11 +175,11 @@ service FuelOrderService {
     // ========================================================================
 
     /**
-     * Flights - Read-only access to flight schedule
+     * FlightSchedule - Read-only access to flight schedule
      * Used for linking orders to specific flights
      */
     @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
@@ -282,23 +282,6 @@ service FuelOrderService {
     ) returns FuelOrders;
 
     /**
-     * Import flight schedule from Excel and create fuel orders.
-     * All dimensions are columns in the Excel file:
-     * Required flight: flight_number, flight_date, origin_airport, destination_airport
-     * Required order:  supplier_code, product_code, ordered_quantity, unit_price
-     * Optional flight: aircraft_type, aircraft_reg, departure_time, arrival_time
-     * Optional ICD:    airline_code, flight_suffix, service_type,
-     *                  sobt, sibt, departure_terminal, arrival_terminal,
-     *                  gate_number, stand_number, planned_block_mins,
-     *                  flight_nature, linked_flight_number, codeshare_flights
-     * Optional order:  contract_number, currency_code, priority, notes
-     */
-    action importFlightScheduleExcel(
-        fileContent : LargeBinary,
-        fileName    : String(255)
-    ) returns FlightExcelImportResult;
-
-    /**
      * Generate next order number for a station
      * Format: FO-{STATION}-{YYYYMMDD}-{SEQ}
      */
@@ -393,26 +376,6 @@ service FuelOrderService {
         field       : String(50);
         message     : String(500);
         severity    : String(10);   // ERROR / WARNING
-    };
-
-    type FlightExcelImportResult {
-        success          : Boolean;
-        fileName         : String(255);
-        flightsProcessed : Integer;
-        flightsCreated   : Integer;
-        flightsUpdated   : Integer;
-        flightsSkipped   : Integer;
-        ordersCreated    : Integer;
-        ordersFailed     : Integer;
-        errors           : array of FlightImportError;
-        message          : String(500);
-    };
-
-    type FlightImportError {
-        row      : Integer;
-        field    : String(50);
-        message  : String(500);
-        severity : String(10);  // ERROR / WARNING
     };
 
     // ========================================================================

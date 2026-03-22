@@ -33,7 +33,7 @@ service CostAllocationService {
      */
     entity FlightCosts as projection on db.FLIGHT_COSTS {
         *,
-        flight              : redirected to Flights,
+        flight              : redirected to FlightSchedule,
         fuel_delivery       : redirected to FuelDeliveries,
         fuel_order          : redirected to FuelOrders,
         invoice             : redirected to Invoices,
@@ -67,7 +67,7 @@ service CostAllocationService {
     @odata.draft.enabled
     entity CostAllocations as projection on db.COST_ALLOCATIONS {
         *,
-        flight              : redirected to Flights,
+        flight              : redirected to FlightSchedule,
         flight_cost         : redirected to FlightCosts,
         invoice             : redirected to Invoices,
         fuel_delivery       : redirected to FuelDeliveries,
@@ -190,7 +190,7 @@ service CostAllocationService {
     entity AccrualEntries as projection on db.ACCRUAL_ENTRIES {
         *,
         fuel_delivery       : redirected to FuelDeliveries,
-        flight              : redirected to Flights,
+        flight              : redirected to FlightSchedule,
         allocation          : redirected to CostAllocations,
         reversal_allocation : redirected to CostAllocations,
         invoice             : redirected to Invoices
@@ -206,7 +206,7 @@ service CostAllocationService {
     // ========================================================================
 
     @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,

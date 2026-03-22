@@ -36,7 +36,7 @@ service BurnService {
     @odata.draft.enabled
     entity FuelBurns as projection on db.FUEL_BURNS {
         *,
-        flight              : redirected to Flights,
+        flight              : redirected to FlightSchedule,
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
         destination_airport : redirected to Airports
@@ -93,7 +93,7 @@ service BurnService {
         *,
         aircraft        : redirected to Aircraft,
         airport         : redirected to Airports,
-        flight          : redirected to Flights,
+        flight          : redirected to FlightSchedule,
         fuel_burn       : redirected to FuelBurns,
         fuel_delivery   : redirected to FuelDeliveries
     } actions {
@@ -153,7 +153,7 @@ service BurnService {
     // ========================================================================
 
     @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,

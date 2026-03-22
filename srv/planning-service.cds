@@ -117,7 +117,7 @@ service PlanningService {
     entity DemandCalculations as projection on db.DEMAND_CALCULATION {
         *,
         version         : redirected to PlanningVersions,
-        flight_schedule : redirected to Flights,
+        flight_schedule : redirected to FlightSchedule,
         route           : redirected to Routes,
         aircraft_type   : redirected to Aircraft,
         matrix_used     : redirected to RouteAircraftMatrix
@@ -207,8 +207,11 @@ service PlanningService {
     // REFERENCE DATA (Read-only from Master Data)
     // ========================================================================
 
-    @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    /**
+     * FlightSchedule - Flight schedule management
+     * Primary entity for flight schedule data, Excel import, and planning integration
+     */
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
@@ -314,6 +317,22 @@ service PlanningService {
         fromDate: Date,
         toDate: Date
     ) returns array of PriceForecastResult;
+
+    /**
+     * Import flight schedule from Excel and optionally create fuel orders.
+     * Required flight: flight_number, flight_date, origin_airport, destination_airport
+     * Required order:  supplier_code, product_code, ordered_quantity, unit_price
+     * Optional flight: aircraft_type, aircraft_reg, departure_time, arrival_time
+     * Optional ICD:    airline_code, flight_suffix, service_type,
+     *                  sobt, sibt, departure_terminal, arrival_terminal,
+     *                  gate_number, stand_number, planned_block_mins,
+     *                  flight_nature, linked_flight_number, codeshare_flights
+     * Optional order:  contract_number, currency_code, priority, notes
+     */
+    action importFlightScheduleExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns FlightExcelImportResult;
 
     /**
      * Import SSIM flight schedule
@@ -452,6 +471,30 @@ service PlanningService {
         fileSize            : Integer;
         downloadUrl         : String(500);
         message             : String(500);
+    };
+
+    // ========================================================================
+    // FLIGHT SCHEDULE IMPORT TYPES
+    // ========================================================================
+
+    type FlightExcelImportResult {
+        success          : Boolean;
+        fileName         : String(255);
+        flightsProcessed : Integer;
+        flightsCreated   : Integer;
+        flightsUpdated   : Integer;
+        flightsSkipped   : Integer;
+        ordersCreated    : Integer;
+        ordersFailed     : Integer;
+        errors           : array of FlightImportError;
+        message          : String(500);
+    };
+
+    type FlightImportError {
+        row      : Integer;
+        field    : String(50);
+        message  : String(500);
+        severity : String(10);  // ERROR / WARNING
     };
 
     // ========================================================================
