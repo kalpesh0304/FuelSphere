@@ -59,7 +59,6 @@ annotate PlanningService.FlightSchedule with @(
         // --- Object Page Header Facets ---
         HeaderFacets: [
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightStatus', Label: 'Status' },
-            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOrderHeader', Label: 'Fuel Order' },
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#BlockTime', Label: 'Block Time' }
         ],
 
@@ -110,10 +109,12 @@ annotate PlanningService.FlightSchedule with @(
                 ]
             },
             {
-                $Type  : 'UI.ReferenceFacet',
+                $Type  : 'UI.CollectionFacet',
                 ID     : 'FuelOrderSection',
-                Target : '@UI.FieldGroup#FuelOrderInfo',
-                Label  : 'Fuel Order'
+                Label  : 'Fuel Order',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOrderInfo', Label: 'Order Details' }
+                ]
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -130,13 +131,6 @@ annotate PlanningService.FlightSchedule with @(
                 { Value: status, Label: 'Status' },
                 { Value: flight_nature, Label: 'Flight Nature' },
                 { Value: service_type, Label: 'Service Type' }
-            ]
-        },
-
-        FieldGroup #FuelOrderHeader: {
-            Data: [
-                { Value: fuel_order_number, Label: 'Order Number' },
-                { Value: fuel_order.status, Label: 'Status' }
             ]
         },
 
@@ -307,6 +301,10 @@ annotate PlanningService with @(
 );
 
 annotate PlanningService.importFlightScheduleExcel with (
-    fileContent @title: 'Excel File'       @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileContent @title: 'Excel File'
+                @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                @Core.ContentDisposition.Filename: fileName
+                @Core.ContentDisposition.Type: 'inline',
     fileName    @title: 'File Name'
+                @UI.Hidden: true
 );
