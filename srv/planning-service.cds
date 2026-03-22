@@ -215,7 +215,26 @@ service PlanningService {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        fuel_order  : redirected to FuelOrders
+    };
+
+    /**
+     * FuelOrders - Read-only reference to fuel orders linked to flight schedules
+     */
+    @readonly
+    entity FuelOrders as projection on db.FUEL_ORDERS {
+        key ID,
+        order_number,
+        status,
+        station_code,
+        ordered_quantity,
+        unit_price,
+        total_amount,
+        currency_code,
+        requested_date,
+        priority,
+        notes
     };
 
     @readonly
@@ -319,15 +338,15 @@ service PlanningService {
     ) returns array of PriceForecastResult;
 
     /**
-     * Import flight schedule from Excel and optionally create fuel orders.
-     * Required flight: flight_number, flight_date, origin_airport, destination_airport
-     * Required order:  supplier_code, product_code, ordered_quantity, unit_price
-     * Optional flight: aircraft_type, aircraft_reg, departure_time, arrival_time
-     * Optional ICD:    airline_code, flight_suffix, service_type,
-     *                  sobt, sibt, departure_terminal, arrival_terminal,
-     *                  gate_number, stand_number, planned_block_mins,
-     *                  flight_nature, linked_flight_number, codeshare_flights
-     * Optional order:  contract_number, currency_code, priority, notes
+     * Import flight schedule from Excel.
+     * Auto-creates a Draft Fuel Order for each new flight schedule.
+     *
+     * Required columns: flight_number, flight_date, origin_airport, destination_airport
+     * Optional columns: aircraft_type, aircraft_reg, departure_time, arrival_time,
+     *                   airline_code, flight_suffix, service_type,
+     *                   sobt, sibt, departure_terminal, arrival_terminal,
+     *                   gate_number, stand_number, planned_block_mins,
+     *                   flight_nature, linked_flight_number, codeshare_flights
      */
     action importFlightScheduleExcel(
         fileContent : LargeBinary,

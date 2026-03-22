@@ -47,6 +47,7 @@ annotate PlanningService.FlightSchedule with @(
             { Value: scheduled_departure, Label: 'Departure' },
             { Value: scheduled_arrival, Label: 'Arrival' },
             { Value: status, Label: 'Status' },
+            { Value: fuel_order_number, Label: 'Fuel Order' },
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'PlanningService.importFlightScheduleExcel',
@@ -58,6 +59,7 @@ annotate PlanningService.FlightSchedule with @(
         // --- Object Page Header Facets ---
         HeaderFacets: [
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightStatus', Label: 'Status' },
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOrderHeader', Label: 'Fuel Order' },
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#BlockTime', Label: 'Block Time' }
         ],
 
@@ -109,6 +111,12 @@ annotate PlanningService.FlightSchedule with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'FuelOrderSection',
+                Target : '@UI.FieldGroup#FuelOrderInfo',
+                Label  : 'Fuel Order'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
                 ID     : 'AdminSection',
                 Target : '@UI.FieldGroup#AdminInfo',
                 Label  : 'Administration'
@@ -122,6 +130,13 @@ annotate PlanningService.FlightSchedule with @(
                 { Value: status, Label: 'Status' },
                 { Value: flight_nature, Label: 'Flight Nature' },
                 { Value: service_type, Label: 'Service Type' }
+            ]
+        },
+
+        FieldGroup #FuelOrderHeader: {
+            Data: [
+                { Value: fuel_order_number, Label: 'Order Number' },
+                { Value: fuel_order.status, Label: 'Status' }
             ]
         },
 
@@ -212,6 +227,17 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
+        FieldGroup #FuelOrderInfo: {
+            Data: [
+                { Value: fuel_order_number, Label: 'Fuel Order Number' },
+                { Value: fuel_order.status, Label: 'Order Status' },
+                { Value: fuel_order.station_code, Label: 'Station' },
+                { Value: fuel_order.ordered_quantity, Label: 'Ordered Quantity (KG)' },
+                { Value: fuel_order.priority, Label: 'Priority' },
+                { Value: fuel_order.notes, Label: 'Notes' }
+            ]
+        },
+
         FieldGroup #AdminInfo: {
             Data: [
                 { Value: created_at, Label: 'Created At' },
@@ -262,6 +288,8 @@ annotate PlanningService.FlightSchedule with {
     delay_code           @title: 'Delay Code';
     delay_minutes        @title: 'Delay (min)';
     cancellation_reason  @title: 'Cancellation Reason';
+    fuel_order_number    @title: 'Fuel Order';
+    fuel_order           @title: 'Fuel Order';
     created_at           @title: 'Created At';
     created_by           @title: 'Created By';
     modified_at          @title: 'Modified At';

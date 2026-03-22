@@ -183,7 +183,8 @@ service FuelOrderService {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        fuel_order  : redirected to FuelOrders
     };
 
     // ========================================================================
