@@ -1,17 +1,25 @@
-Step;Required Role;Test User;Password;Action;Authorization Check
-1;StationCoordinator or FuelOrderCreate;station.coordinator@airline.com or ops;any;Create fuel order from flight schedule;FuelOrderCreate scope required
-3;StationCoordinator or FuelOrderCreate;station.coordinator@airline.com or ops;any;Submit fuel order;FuelOrderCreate scope required
-4;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Confirm fuel order;FuelOrderApprove scope required
-5;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Start delivery;FuelOrderApprove scope required
-6;OperationsManager or FuelOrderApprove;ops.manager@airline.com or ops;any;Cancel order with reason;FuelOrderApprove scope required
-7;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Capture ePOD signatures;ePODCapture scope required
-9-10;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Verify delivery quantity;ePODCapture scope required
-11-13;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Validate delivery parameters;ePODCapture scope required
-14;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;ASTM D1250 temperature correction;ePODCapture scope required
-15;StationCoordinator or ePODCapture;station.coordinator@airline.com or ops;any;Create fuel ticket;ePODCapture scope required
-16-17;OperationsManager or ePODApprove;ops.manager@airline.com or ops;any;Verify fuel ticket;ePODApprove scope required
-18;SystemAdministrator or BurnDataEdit;alice or kalpesh;any;Ingest ACARS burn data;BurnDataEdit scope required
-19;OperationsManager or BurnDataEdit;ops.manager@airline.com or ops;any;Confirm burn record;BurnDataEdit scope required
-20-21;OperationsManager or BurnDataView;ops or analyst;any;Query ROB ledger and fleet summary;BurnDataView scope required
-22-25;Various (negative tests);Same as positive test user;any;Verify error handling;Same scope - testing business rule rejection
-FullAdmin;All scopes;alice or kalpesh;any;Can execute all steps;Use for initial walkthrough
+Step;Scenario;Required Role;Test User;Password;Action;Authorization Check
+A1;In-Plane;StationCoordinator or FuelOrderCreate;ops;any;Upload flight schedule Excel and create orders;FuelOrderCreate scope required for importFlightScheduleExcel
+A2;In-Plane;Any authenticated user;ops;any;Verify order fields (read);FuelOrderCreate or ReportView
+A3;In-Plane;StationCoordinator or FuelOrderCreate;ops;any;Submit fuel order to supplier;FuelOrderCreate scope required
+A4;In-Plane;OperationsManager or FuelOrderApprove;ops;any;Record supplier confirmation;FuelOrderApprove scope required
+A5;In-Plane;OperationsManager or FuelOrderApprove;ops;any;Start delivery (mark InProgress);FuelOrderApprove scope required
+A6;In-Plane;StationCoordinator or ePODCapture;ops;any;Create fuel ticket;ePODCapture scope required
+A7;In-Plane;StationCoordinator or ePODCapture;ops;any;Create delivery (ePOD);ePODCapture scope required
+A8;In-Plane;StationCoordinator or ePODCapture;ops;any;Capture dual signatures on ePOD;ePODCapture scope required
+A9;In-Plane;OperationsManager or ePODApprove;ops;any;Verify fuel ticket;ePODApprove scope required
+A10;In-Plane;SystemAdministrator or BurnDataEdit;alice;any;Ingest ACARS burn data;BurnDataEdit scope required (system integration)
+A11;In-Plane;OperationsManager or BurnDataEdit;ops;any;Confirm burn record;BurnDataEdit scope required
+A12;In-Plane;OperationsManager or BurnDataView;ops;any;Query ROB ledger chain;BurnDataView scope required
+B1;In-Tank;StationCoordinator or FuelOrderCreate;ops;any;Create station stock order (no flight);FuelOrderCreate scope required
+B2;In-Tank;StationCoordinator + OperationsManager;ops;any;Submit and confirm order;FuelOrderCreate + FuelOrderApprove
+B3;In-Tank;OperationsManager or FuelOrderApprove;ops;any;Start tank delivery;FuelOrderApprove scope required
+B4;In-Tank;StationCoordinator or ePODCapture;ops;any;Create ticket for tank receipt;ePODCapture scope required
+B5;In-Tank;StationCoordinator or ePODCapture;ops;any;Capture signatures for tank delivery;ePODCapture scope required
+B6;In-Tank;OperationsManager or ePODApprove;ops;any;Verify tank receipt ticket;ePODApprove scope required
+B7;In-Tank;StationCoordinator or FuelOrderCreate;ops;any;Create aircraft uplift order from tank;FuelOrderCreate scope required
+B8;In-Tank;StationCoordinator or ePODCapture;ops;any;Complete aircraft uplift delivery + signatures;ePODCapture scope required
+B9;In-Tank;SystemAdministrator or BurnDataEdit;alice;any;Ingest ACARS burn data for PR702;BurnDataEdit scope required
+B10;In-Tank;OperationsManager or BurnDataEdit;ops;any;Confirm burn record;BurnDataEdit scope required
+B11;In-Tank;OperationsManager or BurnDataView;ops;any;Query complete ROB chain (5 entries);BurnDataView scope required
+FullAdmin;Both;All scopes;alice or kalpesh;any;Can execute all steps end-to-end;Use for initial walkthrough
