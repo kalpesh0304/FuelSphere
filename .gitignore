@@ -42,6 +42,8 @@ temp/
 # SQLite database (for local development)
 *.db
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 sqlite.db
 db.sqlite
 
