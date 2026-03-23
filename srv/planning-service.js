@@ -31,6 +31,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
 
         this.on('importFlightScheduleExcel', async (req) => {
             const { fileContent, fileName } = req.data;
+            console.log(`[FlightScheduleImport] Starting import. File: ${fileName}, Content length: ${fileContent ? (typeof fileContent === 'string' ? fileContent.length : 'Buffer') : 'null'}`);
 
             const errors = [];
             let flightsProcessed = 0, flightsCreated = 0, flightsUpdated = 0, flightsSkipped = 0;
@@ -81,6 +82,15 @@ module.exports = class PlanningService extends cds.ApplicationService {
             const aircraftRows = await SELECT.from(AIRCRAFT_MASTER).columns('type_code');
             const aircraftSet = new Set(aircraftRows.map(a => a.type_code));
 
+            // Pre-fetch suppliers, contracts, products for order field resolution
+            const { MASTER_SUPPLIERS, MASTER_CONTRACTS, MASTER_PRODUCTS } = cds.entities('fuelsphere');
+            const supplierRows = await SELECT.from(MASTER_SUPPLIERS).columns('ID', 'supplier_code');
+            const supplierMap = new Map(supplierRows.map(s => [s.supplier_code, s.ID]));
+            const contractRows = await SELECT.from(MASTER_CONTRACTS).columns('ID', 'contract_number');
+            const contractMap = new Map(contractRows.map(c => [c.contract_number, c.ID]));
+            const productRows = await SELECT.from(MASTER_PRODUCTS).columns('ID', 'product_code');
+            const productMap = new Map(productRows.map(p => [p.product_code, p.ID]));
+
             // Existing flights for duplicate detection
             const existingFlights = await SELECT.from(FLIGHT_SCHEDULE).columns('ID', 'flight_number', 'flight_date');
             const existingFlightMap = new Map(existingFlights.map(f => [`${f.flight_number}|${f.flight_date}`, f.ID]));
@@ -121,6 +131,23 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 return s;
             };
 
+            // Helper: normalize Excel time (decimal fraction → HH:MM:SS)
+            const _normalizeTime = (val) => {
+                if (!val && val !== 0) return null;
+                if (typeof val === 'number' && val >= 0 && val < 1) {
+                    // Excel time fraction: 0.333333 = 08:00:00
+                    const totalSeconds = Math.round(val * 86400);
+                    const h = Math.floor(totalSeconds / 3600);
+                    const m = Math.floor((totalSeconds % 3600) / 60);
+                    const s = totalSeconds % 60;
+                    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                }
+                const s = String(val).trim();
+                // Already HH:MM or HH:MM:SS format
+                if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) return s;
+                return s || null;
+            };
+
             // Helper: normalize Excel datetime
             const _normalizeDateTime = (val) => {
                 if (!val && val !== 0) return null;
@@ -156,8 +183,8 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 const destAirport = String(row.destination_airport || '').trim().toUpperCase();
                 const aircraftType = String(row.aircraft_type || '').trim();
                 const aircraftReg = String(row.aircraft_reg || '').trim();
-                const depTime = String(row.departure_time || '').trim();
-                const arrTime = String(row.arrival_time || '').trim();
+                const depTime = _normalizeTime(row.departure_time);
+                const arrTime = _normalizeTime(row.arrival_time);
 
                 // --- Extract ICD-inspired optional fields ---
                 const airlineCode = String(row.airline_code || '').trim().toUpperCase();
@@ -174,6 +201,14 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 const linkedFlightNumber = String(row.linked_flight_number || '').trim();
                 const linkedFlightDate = row.linked_flight_date ? _normalizeDate(row.linked_flight_date) : null;
                 const codeshareFlights = String(row.codeshare_flights || '').trim();
+
+                // --- Extract optional order fields from Excel ---
+                const supplierCode = String(row.supplier_code || '').trim();
+                const contractNumber = String(row.contract_number || '').trim();
+                const productCode = String(row.product_code || '').trim();
+                const orderedQuantity = row.ordered_quantity ? parseFloat(row.ordered_quantity) : 0;
+                const unitPrice = row.unit_price ? parseFloat(row.unit_price) : null;
+                const currencyCode = String(row.currency_code || '').trim().toUpperCase();
 
                 // --- Validate required flight fields ---
                 if (!flightNumber) {
@@ -280,20 +315,27 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         fuel_order_number: orderNumber
                     });
 
-                    // Auto-create Draft Fuel Order
-                    ordersToInsert.push({
+                    // Auto-create Draft Fuel Order with optional Excel fields
+                    const orderEntry = {
                         ID: orderId,
                         order_number: orderNumber,
                         flight_ID: flightId,
                         airport_ID: airportID,
                         station_code: originAirport,
                         uom_code: 'KG',
-                        ordered_quantity: 0,
+                        ordered_quantity: orderedQuantity || 0,
                         requested_date: flightDate,
                         priority: 'Normal',
                         status: 'Draft',
                         notes: `Draft order for flight ${flightNumber} ${originAirport}-${destAirport}`
-                    });
+                    };
+                    if (supplierCode && supplierMap.has(supplierCode)) orderEntry.supplier_ID = supplierMap.get(supplierCode);
+                    if (contractNumber && contractMap.has(contractNumber)) orderEntry.contract_ID = contractMap.get(contractNumber);
+                    if (productCode && productMap.has(productCode)) orderEntry.product_ID = productMap.get(productCode);
+                    if (unitPrice !== null) orderEntry.unit_price = unitPrice;
+                    if (currencyCode) orderEntry.currency_code = currencyCode;
+                    if (orderedQuantity && unitPrice) orderEntry.total_amount = orderedQuantity * unitPrice;
+                    ordersToInsert.push(orderEntry);
 
                     existingFlightMap.set(flightKey, flightId);
                     batchFlightKeys.add(flightKey);
@@ -339,6 +381,13 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 (flightsSkipped > 0 ? `, ${flightsSkipped} skipped` : '') + '. ' +
                 `Draft Orders: ${ordersCreated} created.` +
                 (errors.length > 0 ? ` ${errors.filter(e => e.severity === 'ERROR').length} errors.` : '');
+
+            // Log import summary and errors for debugging
+            console.log(`[FlightScheduleImport] ${msg}`);
+            if (errors.length > 0) {
+                console.log(`[FlightScheduleImport] Validation errors:`);
+                errors.forEach(e => console.log(`  Row ${e.row}: [${e.severity}] ${e.field} - ${e.message}`));
+            }
 
             req.info(200, msg);
 

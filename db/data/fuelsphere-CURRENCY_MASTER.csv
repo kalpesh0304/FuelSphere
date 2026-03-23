@@ -8,3 +8,6 @@ JPY;Japanese Yen;0;¥;true
 AUD;Australian Dollar;2;A$;true
 HKD;Hong Kong Dollar;2;HK$;true
 THB;Thai Baht;2;฿;true
+CAD;Canadian Dollar;2;C$;true
+EUR;Euro;2;€;true
+GBP;British Pound;2;£;true
