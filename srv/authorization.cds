@@ -351,3 +351,50 @@ annotate TicketService.Suppliers with @(restrict: [
 annotate TicketService.generateTicketNumber with @(requires: ['ePODCapture', 'any']);
 annotate TicketService.getTicketsByOrder with @(requires: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any']);
 annotate TicketService.getUnattachedTickets with @(requires: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any']);
+
+// ============================================================================
+// BURN SERVICE - Authorization (Fuel Burn & ROB Tracking)
+// ============================================================================
+
+using BurnService from './burn-service';
+
+// Service-level: Require authenticated user
+annotate BurnService with @(requires: 'authenticated-user');
+
+// ----------------------------------------------------------------------------
+// FuelBurns - Actual burn records from ACARS/EFB/Manual/Jefferson
+// ----------------------------------------------------------------------------
+
+annotate BurnService.FuelBurns with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// ROBLedger - Remaining On Board tracking
+// ----------------------------------------------------------------------------
+
+annotate BurnService.ROBLedger with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// FuelBurnExceptions - Variance exception records
+// ----------------------------------------------------------------------------
+
+annotate BurnService.FuelBurnExceptions with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// BurnService Actions - Upload permissions
+// ----------------------------------------------------------------------------
+
+annotate BurnService.importFuelBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);
+annotate BurnService.importROBInitialExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);
+annotate BurnService.importPlannedBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);
