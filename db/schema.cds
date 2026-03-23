@@ -684,6 +684,9 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         s4_po_number        : String(10);               // S/4HANA Purchase Order Number
         s4_po_item          : String(5);                // PO Line Item
 
+        // Dispatch System Reference
+        dispatch_fuel_order_id : String(20);            // Fuel Order ID from dispatch system (e.g. Legate TripRecord)
+
         // Notes & Comments
         notes               : String(1000);             // Order notes/special instructions
 
@@ -786,6 +789,54 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // Verification
         verified_by         : String(100);              // User who verified
         verified_at         : DateTime;                 // Verification timestamp
+}
+
+// ============================================================================
+// FLIGHT DISPATCH (FDD-04 - Dispatch Data from External Systems)
+// ============================================================================
+
+/**
+ * FLIGHT_DISPATCH - Dispatch data from external systems
+ * Source: Legate TripRecord, Manual, SmartDoc
+ * Volume: ~200,000/year
+ *
+ * Matched to FLIGHT_SCHEDULE by flight_number + flight_date
+ * Updates FUEL_ORDERS.dispatch_fuel_order_id on upload
+ */
+entity FLIGHT_DISPATCH : cuid, AuditTrail {
+        // Match Keys
+        dispatch_order_id       : String(20) @mandatory;    // External dispatch system's Fuel Order ID (e.g. FO-2026-00101)
+        flight_number           : String(10) @mandatory;    // Must match FLIGHT_SCHEDULE
+        flight_date             : Date @mandatory;          // Must match FLIGHT_SCHEDULE
+
+        // Associations
+        flight_schedule         : Association to FLIGHT_SCHEDULE;
+        fuel_order              : Association to FUEL_ORDERS;
+
+        // Aircraft & Crew
+        tail_number             : String(10);               // Aircraft registration at dispatch (e.g. A6-EGD)
+        captain_id              : String(20);               // Captain employee or license ID (e.g. CAP-10234)
+        dispatcher_id           : String(20);               // Dispatcher employee ID (e.g. DSP-00456)
+
+        // Timing
+        atd                     : DateTime;                 // Actual Time of Departure (UTC)
+        ata                     : DateTime;                 // Actual Time of Arrival (UTC)
+        dispatch_timestamp      : DateTime;                 // When dispatch was officially released (UTC)
+
+        // Quantities
+        dispatch_qty_kg         : Decimal(10,2);            // Dispatcher-confirmed uplift quantity (kg)
+        rob_departure_kg        : Decimal(10,2);            // Remaining On Board at chocks-off (kg)
+        payload_kg              : Decimal(10,2);            // Actual payload weight (kg) - for Jeppesen burn calc
+
+        // Flight Data
+        flight_level            : Integer;                  // Planned cruise flight level (e.g. 350)
+        wind_component          : Decimal(5,1);             // Average wind component in knots (+headwind/-tailwind)
+        alternate_airport       : String(3);                // IATA code of alternate airport
+
+        // Source & References
+        dispatch_source         : String(15);               // TRIPRECORD | MANUAL | SMARTDOC
+        ofplan_reference        : String(30);               // Operational Flight Plan reference (e.g. OFP-EK001-20260316)
+        remarks                 : String(200);              // Operational notes (e.g. Extra fuel for EDTO)
 }
 
 // ============================================================================

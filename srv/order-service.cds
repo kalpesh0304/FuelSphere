@@ -188,6 +188,21 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // FLIGHT DISPATCH (Dispatch Data from External Systems)
+    // ========================================================================
+
+    /**
+     * FlightDispatches - Dispatch data from external systems
+     * Matched to flight schedule by flight_number + flight_date
+     * Updates FUEL_ORDERS.dispatch_fuel_order_id on upload
+     */
+    entity FlightDispatches as projection on db.FLIGHT_DISPATCH {
+        *,
+        flight_schedule : redirected to FlightSchedule,
+        fuel_order      : redirected to FuelOrders
+    };
+
+    // ========================================================================
     // REFERENCE DATA (Read-only from Master Data)
     // ========================================================================
 
@@ -304,6 +319,22 @@ service FuelOrderService {
      */
     function getOrdersBySupplier(supplierId: UUID, fromDate: Date, toDate: Date) returns OrderSummary;
 
+    /**
+     * Import flight dispatch data from Excel
+     * Maps dispatch records to existing fuel orders via flight_number + flight_date
+     * Updates FUEL_ORDERS.dispatch_fuel_order_id with external dispatch ID
+     *
+     * Required columns: FUEL_ORDER_ID, FLIGHT_NUMBER, FLIGHT_DATE, TAIL_NUMBER,
+     *                   ATD, DISPATCH_QTY_KG, ROB_DEPARTURE_KG, PAYLOAD_KG,
+     *                   CAPTAIN_ID, DISPATCHER_ID, DISPATCH_TIMESTAMP, DISPATCH_SOURCE
+     * Optional columns: ATA, FLIGHT_LEVEL, WIND_COMPONENT, ALTERNATE_AIRPORT,
+     *                   OFPLAN_REFERENCE, REMARKS
+     */
+    action importFlightDispatchExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns DispatchImportResult;
+
     // ========================================================================
     // TYPE DEFINITIONS
     // ========================================================================
@@ -377,6 +408,27 @@ service FuelOrderService {
         field       : String(50);
         message     : String(500);
         severity    : String(10);   // ERROR / WARNING
+    };
+
+    /**
+     * Flight Dispatch Import Result
+     */
+    type DispatchImportResult {
+        success              : Boolean;
+        fileName             : String(255);
+        dispatchesProcessed  : Integer;
+        dispatchesCreated    : Integer;
+        dispatchesSkipped    : Integer;
+        ordersUpdated        : Integer;
+        errors               : array of DispatchImportError;
+        message              : String(500);
+    };
+
+    type DispatchImportError {
+        row      : Integer;
+        field    : String(50);
+        message  : String(500);
+        severity : String(10);   // ERROR / WARNING
     };
 
     // ========================================================================

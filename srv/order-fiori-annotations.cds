@@ -206,12 +206,13 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Field Group: S/4HANA References
+        // Field Group: S/4HANA & External References
         FieldGroup#S4References: {
-            Label: 'S/4HANA References',
+            Label: 'S/4HANA & External References',
             Data: [
                 { Value: s4_po_number, Label: 'Purchase Order' },
-                { Value: s4_po_item, Label: 'PO Item' }
+                { Value: s4_po_item, Label: 'PO Item' },
+                { Value: dispatch_fuel_order_id, Label: 'Dispatch Order ID' }
             ]
         },
 
@@ -270,6 +271,7 @@ annotate FuelOrderService.FuelOrders with {
     notes           @title: 'Notes' @UI.MultiLineText;
     s4_po_number    @title: 'PO Number' @Common.FieldControl: #ReadOnly;
     s4_po_item      @title: 'PO Item' @Common.FieldControl: #ReadOnly;
+    dispatch_fuel_order_id @title: 'Dispatch Order ID' @Common.FieldControl: #ReadOnly;
     cancelled_reason @title: 'Cancellation Reason' @UI.MultiLineText;
     cancelled_by    @title: 'Cancelled By' @Common.FieldControl: #ReadOnly;
     cancelled_at    @title: 'Cancelled At' @Common.FieldControl: #ReadOnly;
@@ -756,3 +758,226 @@ annotate FuelOrderService.FlightSchedule with {
     scheduled_arrival    @title: 'Arrival';
     status               @title: 'Status';
 };
+
+// ============================================================================
+// FLIGHT DISPATCHES - List Report + Object Page
+// ============================================================================
+
+annotate FuelOrderService.FlightDispatches with @(
+    UI: {
+        // --- Header Info ---
+        HeaderInfo: {
+            TypeName       : 'Flight Dispatch',
+            TypeNamePlural : 'Flight Dispatches',
+            Title          : { Value: dispatch_order_id },
+            Description    : { Value: flight_number }
+        },
+
+        // --- Filter Bar ---
+        SelectionFields: [
+            flight_number,
+            flight_date,
+            dispatch_source,
+            tail_number
+        ],
+
+        // --- List Report Table ---
+        LineItem: [
+            { Value: dispatch_order_id, Label: 'Dispatch Order ID', ![@UI.Importance]: #High },
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: flight_date, Label: 'Flight Date', ![@UI.Importance]: #High },
+            { Value: tail_number, Label: 'Tail Number', ![@UI.Importance]: #High },
+            { Value: atd, Label: 'ATD', ![@UI.Importance]: #Medium },
+            { Value: ata, Label: 'ATA', ![@UI.Importance]: #Low },
+            { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)', ![@UI.Importance]: #High },
+            { Value: rob_departure_kg, Label: 'ROB Departure (kg)', ![@UI.Importance]: #Medium },
+            { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
+            { Value: dispatch_source, Label: 'Source', ![@UI.Importance]: #Medium },
+            { Value: dispatch_timestamp, Label: 'Dispatch Time', ![@UI.Importance]: #Low },
+            {
+                $Type  : 'UI.DataFieldForAction',
+                Action : 'FuelOrderService.importFlightDispatchExcel',
+                Label  : 'Upload Dispatch Data',
+                Inline : false
+            }
+        ],
+
+        // --- Default Sort ---
+        PresentationVariant: {
+            SortOrder: [
+                { Property: flight_date, Descending: true },
+                { Property: flight_number, Descending: false }
+            ],
+            Visualizations: [
+                '@UI.LineItem'
+            ]
+        },
+
+        // --- Object Page Header Facets ---
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DispatchStatus', Label: 'Dispatch Info' },
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DispatchQuantities', Label: 'Quantities' }
+        ],
+
+        FieldGroup #DispatchStatus: {
+            Data: [
+                { Value: dispatch_source, Label: 'Source' },
+                { Value: dispatch_timestamp, Label: 'Dispatch Time' }
+            ]
+        },
+
+        FieldGroup #DispatchQuantities: {
+            Data: [
+                { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)' },
+                { Value: rob_departure_kg, Label: 'ROB Departure (kg)' },
+                { Value: payload_kg, Label: 'Payload (kg)' }
+            ]
+        },
+
+        // --- Object Page Sections ---
+        Facets: [
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'DispatchIdentification',
+                Label  : 'Dispatch Identification',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DispatchID', Label: 'Identification' }
+                ]
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'AircraftCrew',
+                Label  : 'Aircraft & Crew',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#AircraftCrew', Label: 'Aircraft & Crew' }
+                ]
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'TimingSection',
+                Label  : 'Timing',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DispatchTiming', Label: 'Timing' }
+                ]
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'QuantitiesSection',
+                Label  : 'Quantities',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DispatchQty', Label: 'Quantities' }
+                ]
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'FlightDataSection',
+                Label  : 'Flight Data',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightData', Label: 'Flight Data' }
+                ]
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DispatchAdmin',
+                Target : '@UI.FieldGroup#DispatchAdmin',
+                Label  : 'Administration'
+            }
+        ],
+
+        // --- Field Groups ---
+        FieldGroup #DispatchID: {
+            Data: [
+                { Value: dispatch_order_id, Label: 'Dispatch Order ID' },
+                { Value: flight_number, Label: 'Flight Number' },
+                { Value: flight_date, Label: 'Flight Date' },
+                { Value: dispatch_source, Label: 'Source' },
+                { Value: ofplan_reference, Label: 'OFP Reference' }
+            ]
+        },
+
+        FieldGroup #AircraftCrew: {
+            Data: [
+                { Value: tail_number, Label: 'Tail Number' },
+                { Value: captain_id, Label: 'Captain ID' },
+                { Value: dispatcher_id, Label: 'Dispatcher ID' }
+            ]
+        },
+
+        FieldGroup #DispatchTiming: {
+            Data: [
+                { Value: atd, Label: 'Actual Time of Departure' },
+                { Value: ata, Label: 'Actual Time of Arrival' },
+                { Value: dispatch_timestamp, Label: 'Dispatch Timestamp' }
+            ]
+        },
+
+        FieldGroup #DispatchQty: {
+            Data: [
+                { Value: dispatch_qty_kg, Label: 'Dispatch Quantity (kg)' },
+                { Value: rob_departure_kg, Label: 'ROB at Departure (kg)' },
+                { Value: payload_kg, Label: 'Payload Weight (kg)' }
+            ]
+        },
+
+        FieldGroup #FlightData: {
+            Data: [
+                { Value: flight_level, Label: 'Flight Level' },
+                { Value: wind_component, Label: 'Wind Component (knots)' },
+                { Value: alternate_airport, Label: 'Alternate Airport' },
+                { Value: remarks, Label: 'Remarks' }
+            ]
+        },
+
+        FieldGroup #DispatchAdmin: {
+            Data: [
+                { Value: created_at, Label: 'Created At' },
+                { Value: created_by, Label: 'Created By' },
+                { Value: modified_at, Label: 'Modified At' },
+                { Value: modified_by, Label: 'Modified By' }
+            ]
+        }
+    }
+);
+
+// Flight Dispatch field-level annotations
+annotate FuelOrderService.FlightDispatches with {
+    ID                   @UI.Hidden;
+    dispatch_order_id        @title: 'Dispatch Order ID';
+    flight_number        @title: 'Flight Number';
+    flight_date          @title: 'Flight Date';
+    tail_number          @title: 'Tail Number';
+    captain_id           @title: 'Captain ID';
+    dispatcher_id        @title: 'Dispatcher ID';
+    atd                  @title: 'ATD (UTC)';
+    ata                  @title: 'ATA (UTC)';
+    dispatch_timestamp   @title: 'Dispatch Time';
+    dispatch_qty_kg      @title: 'Dispatch Qty (kg)';
+    rob_departure_kg     @title: 'ROB Departure (kg)';
+    payload_kg           @title: 'Payload (kg)';
+    flight_level         @title: 'Flight Level';
+    wind_component       @title: 'Wind Component';
+    alternate_airport    @title: 'Alternate Airport';
+    dispatch_source      @title: 'Dispatch Source';
+    ofplan_reference     @title: 'OFP Reference';
+    remarks              @title: 'Remarks' @UI.MultiLineText;
+    created_at           @title: 'Created At' @Common.FieldControl: #ReadOnly;
+    created_by           @title: 'Created By' @Common.FieldControl: #ReadOnly;
+    modified_at          @title: 'Modified At' @Common.FieldControl: #ReadOnly;
+    modified_by          @title: 'Modified By' @Common.FieldControl: #ReadOnly;
+};
+
+// Import action annotations
+annotate FuelOrderService with @(
+    Common.SideEffects #DispatchImport: {
+        TargetEntities: [FlightDispatches]
+    }
+);
+
+annotate FuelOrderService.importFlightDispatchExcel with (
+    fileContent @title: 'Excel File'
+                @Core.MediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                @Core.ContentDisposition.Filename: fileName
+                @Core.ContentDisposition.Type: 'inline',
+    fileName    @title: 'File Name'
+                @UI.Hidden: true
+);

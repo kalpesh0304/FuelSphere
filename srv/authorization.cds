@@ -232,6 +232,17 @@ annotate FuelOrderService.FuelTickets actions {
 };
 
 // ----------------------------------------------------------------------------
+// Flight Dispatches - Dispatch data from external systems
+// ----------------------------------------------------------------------------
+
+annotate FuelOrderService.FlightDispatches with @(restrict: [
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
 // Reference Data - Read-only in Order Service
 // ----------------------------------------------------------------------------
 
