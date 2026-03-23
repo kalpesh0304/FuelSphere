@@ -588,9 +588,18 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
             // Build flight lookup map: "flight_number|flight_date" → { ID, fuel_order_ID }
             const flightRows = await SELECT.from(FLIGHT_SCHEDULE)
-                .columns('ID', 'flight_number', 'flight_date', 'fuel_order_ID');
+                .columns('ID', 'flight_number', 'flight_date');
+
+            // Build reverse lookup from FUEL_ORDERS: flight_ID → fuel order ID
+            const fuelOrderRows = await SELECT.from(FUEL_ORDERS)
+                .columns('ID', 'flight_ID')
+                .where({ flight_ID: { '!=': null } });
+            const flightToFuelOrder = new Map(
+                fuelOrderRows.map(fo => [fo.flight_ID, fo.ID])
+            );
+
             const flightMap = new Map(
-                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, { ID: f.ID, fuel_order_ID: f.fuel_order_ID }])
+                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, { ID: f.ID, fuel_order_ID: flightToFuelOrder.get(f.ID) || null }])
             );
 
             // Existing dispatches for duplicate detection
