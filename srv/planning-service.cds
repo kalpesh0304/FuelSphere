@@ -226,6 +226,7 @@ service PlanningService {
     entity FuelOrders as projection on db.FUEL_ORDERS {
         key ID,
         order_number,
+        flight : redirected to FlightSchedule,
         status,
         station_code,
         ordered_quantity,

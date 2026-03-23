@@ -311,7 +311,6 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         linked_flight_number: linkedFlightNumber || null,
                         linked_flight_date: linkedFlightDate || null,
                         codeshare_flights: codeshareFlights || null,
-                        fuel_order_ID: orderId,
                         fuel_order_number: orderNumber
                     });
 
@@ -443,9 +442,9 @@ module.exports = class PlanningService extends cds.ApplicationService {
             notes: `Draft order for flight ${flight.flight_number} ${flight.origin_airport}-${flight.destination_airport}`
         });
 
-        // Link back to flight schedule
+        // Link back to flight schedule (fuel_order_number denormalized for display)
         await UPDATE(FLIGHT_SCHEDULE)
             .where({ ID: flight.ID })
-            .set({ fuel_order_ID: orderId, fuel_order_number: orderNumber });
+            .set({ fuel_order_number: orderNumber });
     }
 };

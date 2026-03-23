@@ -550,7 +550,7 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED/DIVERTED/DELAYED/RETURNED
 
         // Fuel Order linkage (auto-created as Draft on upload)
-        fuel_order          : Association to FUEL_ORDERS;
+        fuel_order          : Association to FUEL_ORDERS on fuel_order.flight = $self;
         fuel_order_number   : String(25);               // Denormalized for display
 
         // OPS-ESB ICD-inspired fields
