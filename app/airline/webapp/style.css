@@ -144,6 +144,10 @@ tbody tr:hover { background: #F8FAFD; }
 .upload-warning { background: #FFF8E1; color: #E65100; }
 .upload-error { background: #FFEBEE; color: #B71C1C; }
 
+/* Enrichment & Dispatch upload icons */
+.enrich-icon { color: #7B68EE; }
+.dispatch-icon { color: var(--warning); }
+
 /* Quick Links */
 .links-section { padding: 16px 24px; }
 .links-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }

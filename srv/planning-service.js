@@ -404,6 +404,166 @@ module.exports = class PlanningService extends cds.ApplicationService {
             };
         });
 
+        // ====================================================================
+        // ENRICH FLIGHT SCHEDULE FROM EXCEL
+        // ====================================================================
+
+        this.on('enrichFlightScheduleExcel', async (req) => {
+            const { fileContent, fileName } = req.data;
+
+            const errors = [];
+            let flightsProcessed = 0, flightsEnriched = 0, flightsNotFound = 0, flightsSkipped = 0;
+
+            if (!fileContent) {
+                return req.error(400, 'ENR401: File content is required.');
+            }
+
+            const ext = (fileName || '').toLowerCase();
+            if (ext && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.csv')) {
+                return req.error(400, 'ENR401: Invalid file format. Only .xlsx, .xls and .csv files are supported.');
+            }
+
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `ENR401: Failed to parse file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) return req.error(400, 'ENR401: File contains no sheets.');
+
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) return req.error(400, 'ENR402: Sheet is empty.');
+
+            // Validate required columns
+            const headers = Object.keys(rows[0]).map(h => h.toLowerCase().trim());
+            const hasFlightNumber = headers.includes('flight_number');
+            const hasFlightDate = headers.includes('flight_date');
+            if (!hasFlightNumber || !hasFlightDate) {
+                const missing = [];
+                if (!hasFlightNumber) missing.push('flight_number');
+                if (!hasFlightDate) missing.push('flight_date');
+                return req.error(400, `ENR402: Missing required columns: ${missing.join(', ')}`);
+            }
+
+            // Check at least one enrichment column exists
+            const enrichCols = ['aircraft_reg', 'aircraft_type', 'departure_terminal', 'arrival_terminal', 'gate_number', 'stand_number'];
+            const hasEnrichCol = enrichCols.some(c => headers.includes(c));
+            if (!hasEnrichCol) {
+                return req.error(400, `ENR402: No enrichment columns found. At least one of: ${enrichCols.join(', ')}`);
+            }
+
+            const { FLIGHT_SCHEDULE } = cds.entities('fuelsphere');
+
+            // Normalize header keys
+            const normalizeKey = (key) => key.toLowerCase().trim().replace(/\s+/g, '_');
+
+            // Date normalization helper
+            const _normalizeDate = (val) => {
+                if (typeof val === 'number') {
+                    const parsed = XLSX.SSF.parse_date_code(val);
+                    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+                    const parts = s.split('/');
+                    return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                }
+                if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+                return s;
+            };
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = {};
+                // Normalize all keys
+                for (const [k, v] of Object.entries(rows[i])) {
+                    row[normalizeKey(k)] = v;
+                }
+
+                const rowNum = i + 2;
+                flightsProcessed++;
+
+                const flightNumber = String(row.flight_number || '').trim();
+                const rawDate = row.flight_date;
+
+                if (!flightNumber) {
+                    errors.push({ row: rowNum, field: 'flight_number', message: 'Flight number is required.', severity: 'ERROR' });
+                    flightsSkipped++; continue;
+                }
+
+                const flightDate = _normalizeDate(rawDate);
+                if (!flightDate || !/^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
+                    errors.push({ row: rowNum, field: 'flight_date', message: `Invalid date: '${rawDate}'.`, severity: 'ERROR' });
+                    flightsSkipped++; continue;
+                }
+
+                // Find matching flight
+                const existing = await SELECT.one.from(FLIGHT_SCHEDULE)
+                    .where({ flight_number: flightNumber, flight_date: flightDate });
+
+                if (!existing) {
+                    errors.push({ row: rowNum, field: 'flight_number',
+                        message: `No flight found for ${flightNumber} on ${flightDate}. Upload schedule first.`, severity: 'WARNING' });
+                    flightsNotFound++; continue;
+                }
+
+                // Build update set from enrichment columns
+                const updateSet = {};
+                if (row.aircraft_reg && String(row.aircraft_reg).trim()) {
+                    updateSet.aircraft_reg = String(row.aircraft_reg).trim().toUpperCase();
+                }
+                if (row.aircraft_type && String(row.aircraft_type).trim()) {
+                    updateSet.aircraft_type = String(row.aircraft_type).trim().toUpperCase();
+                }
+                if (row.departure_terminal && String(row.departure_terminal).trim()) {
+                    updateSet.departure_terminal = String(row.departure_terminal).trim();
+                }
+                if (row.arrival_terminal && String(row.arrival_terminal).trim()) {
+                    updateSet.arrival_terminal = String(row.arrival_terminal).trim();
+                }
+                if (row.gate_number && String(row.gate_number).trim()) {
+                    updateSet.gate_number = String(row.gate_number).trim();
+                }
+                if (row.stand_number && String(row.stand_number).trim()) {
+                    updateSet.stand_number = String(row.stand_number).trim();
+                }
+
+                if (Object.keys(updateSet).length === 0) {
+                    errors.push({ row: rowNum, field: '-', message: 'No enrichment data provided.', severity: 'WARNING' });
+                    flightsSkipped++; continue;
+                }
+
+                try {
+                    await UPDATE(FLIGHT_SCHEDULE).set(updateSet).where({ ID: existing.ID });
+                    flightsEnriched++;
+                } catch (e) {
+                    errors.push({ row: rowNum, field: '-', message: `Update failed: ${e.message}`, severity: 'ERROR' });
+                    flightsSkipped++;
+                }
+            }
+
+            const hasErrors = errors.some(e => e.severity === 'ERROR');
+            const msg = flightsEnriched > 0
+                ? `Enriched ${flightsEnriched} flight(s).` +
+                  (flightsNotFound > 0 ? ` ${flightsNotFound} not found.` : '') +
+                  (flightsSkipped > 0 ? ` ${flightsSkipped} skipped.` : '')
+                : `No flights enriched. ${flightsNotFound} not found, ${flightsSkipped} skipped.`;
+
+            return {
+                success: !hasErrors && flightsEnriched > 0,
+                fileName: fileName || '',
+                flightsProcessed,
+                flightsEnriched,
+                flightsNotFound,
+                flightsSkipped,
+                errors,
+                message: msg
+            };
+        });
+
         await super.init();
     }
 

@@ -355,6 +355,23 @@ service PlanningService {
     ) returns FlightExcelImportResult;
 
     /**
+     * Enrich existing flight schedule records with tail numbers, aircraft types,
+     * and operational data (Step 2 of 7-step journey: "Flight Enriched").
+     *
+     * Matches by flight_number + flight_date, then updates:
+     *   aircraft_reg (tail number), aircraft_type, departure_terminal,
+     *   arrival_terminal, gate_number, stand_number
+     *
+     * Required columns: flight_number, flight_date
+     * Enrichment columns (at least one required): aircraft_reg, aircraft_type,
+     *   departure_terminal, arrival_terminal, gate_number, stand_number
+     */
+    action enrichFlightScheduleExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns FlightEnrichmentResult;
+
+    /**
      * Import SSIM flight schedule
      * Parses SSIM file and creates flight records
      */
@@ -515,6 +532,17 @@ service PlanningService {
         field    : String(50);
         message  : String(500);
         severity : String(10);  // ERROR / WARNING
+    };
+
+    type FlightEnrichmentResult {
+        success           : Boolean;
+        fileName          : String(255);
+        flightsProcessed  : Integer;
+        flightsEnriched   : Integer;
+        flightsNotFound   : Integer;
+        flightsSkipped    : Integer;
+        errors            : array of FlightImportError;
+        message           : String(500);
     };
 
     // ========================================================================

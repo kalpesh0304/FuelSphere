@@ -88,16 +88,26 @@
             odata('/odata/v4/invoice/Invoices?$top=200')
         ]);
 
-        // Use all orders — no airline filtering
-        const allOrders = orders;
+        // Filter out PR (Philippine Airlines) data
+        function isPRFlight(f) {
+            if (f.airline_code === 'PR') return true;
+            if (f.flight_number && f.flight_number.substring(0, 2) === 'PR') return true;
+            return false;
+        }
+        var filteredFlights = flights.filter(function(f) { return !isPRFlight(f); });
+        const allOrders = orders.filter(function(o) {
+            var flight = flights.find(function(f) { return f.ID === o.flight_ID; });
+            if (!flight) return true; // Keep orders without flight link
+            return !isPRFlight(flight);
+        });
 
         // ====================================================================
         // JOURNEY TIMELINE COUNTS
         // ====================================================================
 
-        // Step 1: Flights without orders
-        const flightsWithOrders = new Set(orders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
-        var step1 = flights.filter(function(f) { return !flightsWithOrders.has(f.ID); }).length;
+        // Step 1: Flights without orders (using filtered flights)
+        const flightsWithOrders = new Set(allOrders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
+        var step1 = filteredFlights.filter(function(f) { return !flightsWithOrders.has(f.ID); }).length;
 
         // Step 2: Draft/Submitted orders
         var step2 = allOrders.filter(function(o) { return o.status === 'Draft' || o.status === 'Submitted'; }).length;
@@ -168,15 +178,15 @@
         }
 
         // ====================================================================
-        // FLIGHTS TABLE
+        // FLIGHTS TABLE (using filtered flights)
         // ====================================================================
 
         var flightsBody = document.getElementById('flightsBody');
         if (flightsBody) {
-            if (flights.length === 0) {
+            if (filteredFlights.length === 0) {
                 flightsBody.innerHTML = '<tr><td colspan="7" class="loading">No flights found</td></tr>';
             } else {
-                flightsBody.innerHTML = flights.map(function(f) {
+                flightsBody.innerHTML = filteredFlights.map(function(f) {
                     var hasOrder = flightsWithOrders.has(f.ID);
                     return '<tr>' +
                         '<td><strong>' + f.flight_number + '</strong></td>' +
@@ -318,12 +328,192 @@
     }
 
     // ========================================================================
+    // FLIGHT ENRICHMENT UPLOAD
+    // ========================================================================
+
+    function initEnrichUpload() {
+        var enrichArea = document.getElementById('enrichArea');
+        var fileInput = document.getElementById('enrichFile');
+        var browseBtn = document.getElementById('enrichBrowseBtn');
+        var uploadStatus = document.getElementById('enrichUploadStatus');
+        var uploadMessage = document.getElementById('enrichUploadMessage');
+        var uploadProgress = document.getElementById('enrichUploadProgress');
+
+        if (!enrichArea || !fileInput) return;
+
+        browseBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        enrichArea.addEventListener('click', function() { fileInput.click(); });
+
+        enrichArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            enrichArea.classList.add('drag-over');
+        });
+        enrichArea.addEventListener('dragleave', function() {
+            enrichArea.classList.remove('drag-over');
+        });
+        enrichArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            enrichArea.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) handleEnrichFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) handleEnrichFile(fileInput.files[0]);
+        });
+
+        function handleEnrichFile(file) {
+            var validExts = ['.xlsx', '.xls', '.csv'];
+            var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (validExts.indexOf(ext) === -1) {
+                showResult('error', 'Invalid file format. Please upload .xlsx, .xls, or .csv files.');
+                return;
+            }
+            showResult('loading', 'Enriching flights from "' + file.name + '"...');
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var base64 = e.target.result.split(',')[1];
+                fetch(PLANNING_SVC + '/enrichFlightScheduleExcel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileContent: base64, fileName: file.name })
+                })
+                .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+                .then(function(result) {
+                    if (result.ok) {
+                        var d = result.data;
+                        var msg = d.message || ('Enriched: ' + (d.flightsEnriched || 0) + ' flights.');
+                        var type = d.success ? 'success' : 'warning';
+                        if (d.errors && d.errors.length > 0) {
+                            var errorDetails = d.errors.filter(function(e) { return e.severity === 'ERROR'; });
+                            if (errorDetails.length > 0) {
+                                msg += '\n\nErrors:';
+                                errorDetails.forEach(function(e) { msg += '\n  Row ' + e.row + ': ' + e.message; });
+                                type = 'error';
+                            }
+                        }
+                        showResult(type, msg);
+                        if (d.flightsEnriched > 0) loadDashboard();
+                    } else {
+                        var errMsg = result.data.error ? result.data.error.message : 'Enrichment failed.';
+                        showResult('error', errMsg);
+                    }
+                })
+                .catch(function(err) { showResult('error', 'Network error: ' + err.message); });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showResult(type, message) {
+            uploadStatus.style.display = 'block';
+            uploadProgress.className = 'upload-progress upload-' + type;
+            uploadMessage.innerHTML = message.replace(/\n/g, '<br>');
+            if (type === 'success') setTimeout(function() { uploadStatus.style.display = 'none'; }, 8000);
+        }
+    }
+
+    // ========================================================================
+    // DISPATCH DATA UPLOAD
+    // ========================================================================
+
+    function initDispatchUpload() {
+        var dispatchArea = document.getElementById('dispatchArea');
+        var fileInput = document.getElementById('dispatchFile');
+        var browseBtn = document.getElementById('dispatchBrowseBtn');
+        var uploadStatus = document.getElementById('dispatchUploadStatus');
+        var uploadMessage = document.getElementById('dispatchUploadMessage');
+        var uploadProgress = document.getElementById('dispatchUploadProgress');
+
+        if (!dispatchArea || !fileInput) return;
+
+        browseBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dispatchArea.addEventListener('click', function() { fileInput.click(); });
+
+        dispatchArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dispatchArea.classList.add('drag-over');
+        });
+        dispatchArea.addEventListener('dragleave', function() {
+            dispatchArea.classList.remove('drag-over');
+        });
+        dispatchArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dispatchArea.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) handleDispatchFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) handleDispatchFile(fileInput.files[0]);
+        });
+
+        function handleDispatchFile(file) {
+            var validExts = ['.xlsx', '.xls', '.csv'];
+            var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (validExts.indexOf(ext) === -1) {
+                showResult('error', 'Invalid file format. Please upload .xlsx, .xls, or .csv files.');
+                return;
+            }
+            showResult('loading', 'Importing dispatch data from "' + file.name + '"...');
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var base64 = e.target.result.split(',')[1];
+                fetch(ORDER_SVC + '/importFlightDispatchExcel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileContent: base64, fileName: file.name })
+                })
+                .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+                .then(function(result) {
+                    if (result.ok) {
+                        var d = result.data;
+                        var msg = d.message || ('Dispatches: ' + (d.dispatchesCreated || 0) + ' created. Orders updated: ' + (d.ordersUpdated || 0));
+                        var type = d.success ? 'success' : 'warning';
+                        if (d.errors && d.errors.length > 0) {
+                            var errorDetails = d.errors.filter(function(e) { return e.severity === 'ERROR'; });
+                            if (errorDetails.length > 0) {
+                                msg += '\n\nErrors:';
+                                errorDetails.forEach(function(e) { msg += '\n  Row ' + e.row + ': ' + e.message; });
+                                type = 'error';
+                            }
+                        }
+                        showResult(type, msg);
+                        if (d.dispatchesCreated > 0) loadDashboard();
+                    } else {
+                        var errMsg = result.data.error ? result.data.error.message : 'Dispatch import failed.';
+                        showResult('error', errMsg);
+                    }
+                })
+                .catch(function(err) { showResult('error', 'Network error: ' + err.message); });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showResult(type, message) {
+            uploadStatus.style.display = 'block';
+            uploadProgress.className = 'upload-progress upload-' + type;
+            uploadMessage.innerHTML = message.replace(/\n/g, '<br>');
+            if (type === 'success') setTimeout(function() { uploadStatus.style.display = 'none'; }, 8000);
+        }
+    }
+
+    // ========================================================================
     // INIT
     // ========================================================================
 
     function init() {
         loadDashboard();
         initUpload();
+        initEnrichUpload();
+        initDispatchUpload();
     }
 
     if (document.readyState === 'loading') {
