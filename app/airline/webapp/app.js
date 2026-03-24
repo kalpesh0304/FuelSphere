@@ -4,7 +4,7 @@
 
     // OData base paths
     const ORDER_SVC = '/odata/v4/orders';
-    const BURN_SVC = '/odata/v4/burn';
+    const PLANNING_SVC = '/odata/v4/planning';
 
     // ========================================================================
     // HELPERS
@@ -36,7 +36,7 @@
     function journeyStep(order) {
         if (!order) return 1;
         if (order.status === 'Delivered' || order.status === 'Completed') {
-            if (order.s4_po_number) return 7; // has S4 PO → step 6 or 7
+            if (order.s4_po_number) return 7;
             return 6;
         }
         if (order.status === 'InProgress') return 5;
@@ -81,43 +81,41 @@
     // ========================================================================
 
     async function loadDashboard() {
-        // Fetch orders and flights in parallel
+        // Fetch ALL orders and flights (no airline filter)
         const [orders, flights, invoices] = await Promise.all([
             odata(ORDER_SVC + '/FuelOrders?$orderby=requested_date desc'),
-            odata(ORDER_SVC + '/FlightSchedule?$filter=airline_code eq \'AC\'&$orderby=flight_date desc,scheduled_departure asc'),
-            odata('/odata/v4/invoice/Invoices?$filter=status eq \'POSTED\'&$top=100')
+            odata(ORDER_SVC + '/FlightSchedule?$orderby=flight_date desc,scheduled_departure asc'),
+            odata('/odata/v4/invoice/Invoices?$top=200')
         ]);
 
-        // Filter AC orders (station codes YYZ, YVR, LHR, CDG, NRT, FLL, YUL or order number contains AC pattern)
-        const acStations = new Set(['YYZ', 'YVR', 'LHR', 'CDG', 'NRT', 'FLL', 'YUL']);
-        const acFlightIds = new Set(flights.map(f => f.ID));
-        const acOrders = orders.filter(o => acFlightIds.has(o.flight_ID) || (o.order_number && o.order_number.match(/FO-(YYZ|YVR|LHR|CDG|NRT|FLL|YUL)-/)));
+        // Use all orders — no airline filtering
+        const allOrders = orders;
 
         // ====================================================================
         // JOURNEY TIMELINE COUNTS
         // ====================================================================
 
         // Step 1: Flights without orders
-        const flightsWithOrders = new Set(orders.filter(o => o.flight_ID).map(o => o.flight_ID));
-        const step1 = flights.filter(f => !flightsWithOrders.has(f.ID)).length;
+        const flightsWithOrders = new Set(orders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
+        var step1 = flights.filter(function(f) { return !flightsWithOrders.has(f.ID); }).length;
 
-        // Step 2: Flights with tail (enriched) that have draft/submitted orders
-        const step2 = acOrders.filter(o => o.status === 'Draft' || o.status === 'Submitted').length;
+        // Step 2: Draft/Submitted orders
+        var step2 = allOrders.filter(function(o) { return o.status === 'Draft' || o.status === 'Submitted'; }).length;
 
-        // Step 3: Confirmed orders (dispatch complete, no crew review yet)
-        const step3 = acOrders.filter(o => o.status === 'Confirmed' && !o.crew_review_status).length;
+        // Step 3: Confirmed orders (no crew review yet)
+        var step3 = allOrders.filter(function(o) { return o.status === 'Confirmed' && !o.crew_review_status; }).length;
 
         // Step 4: Crew reviewed
-        const step4 = acOrders.filter(o => (o.crew_review_status === 'CONFIRMED' || o.crew_review_status === 'ADJUSTED') && o.status === 'Confirmed').length;
+        var step4 = allOrders.filter(function(o) { return (o.crew_review_status === 'CONFIRMED' || o.crew_review_status === 'ADJUSTED') && o.status === 'Confirmed'; }).length;
 
         // Step 5: InProgress (refueling)
-        const step5 = acOrders.filter(o => o.status === 'InProgress').length;
+        var step5 = allOrders.filter(function(o) { return o.status === 'InProgress'; }).length;
 
-        // Step 6: Delivered with S4 PO (ticket signed)
-        const step6 = acOrders.filter(o => o.status === 'Delivered' && o.s4_po_number && !invoices.some(inv => inv.fuel_order_ID === o.ID && inv.status === 'POSTED')).length;
+        // Step 6: Delivered (ticket signed)
+        var step6 = allOrders.filter(function(o) { return o.status === 'Delivered'; }).length;
 
-        // Step 7: Invoice settled
-        const step7 = acOrders.filter(o => o.status === 'Delivered' && invoices.some(inv => inv.fuel_order_ID === o.ID && inv.status === 'POSTED')).length;
+        // Step 7: Completed (invoice settled)
+        var step7 = allOrders.filter(function(o) { return o.status === 'Completed'; }).length;
 
         setText('step1Count', step1);
         setText('step2Count', step2);
@@ -131,10 +129,10 @@
         // KPI CARDS
         // ====================================================================
 
-        const activeOrders = acOrders.filter(o => o.status !== 'Cancelled' && o.status !== 'Completed').length;
-        const crewPending = acOrders.filter(o => o.status === 'Confirmed' && (!o.crew_review_status || o.crew_review_status === 'PENDING')).length;
-        const deliveriesInProgress = acOrders.filter(o => o.status === 'InProgress').length;
-        const deliveredCompleted = acOrders.filter(o => o.status === 'Delivered' || o.status === 'Completed').length;
+        var activeOrders = allOrders.filter(function(o) { return o.status !== 'Cancelled' && o.status !== 'Completed'; }).length;
+        var crewPending = allOrders.filter(function(o) { return o.status === 'Confirmed' && (!o.crew_review_status || o.crew_review_status === 'PENDING'); }).length;
+        var deliveriesInProgress = allOrders.filter(function(o) { return o.status === 'InProgress'; }).length;
+        var deliveredCompleted = allOrders.filter(function(o) { return o.status === 'Delivered' || o.status === 'Completed'; }).length;
 
         setText('kpiActiveOrders', activeOrders);
         setText('kpiCrewPending', crewPending);
@@ -145,21 +143,21 @@
         // ORDERS TABLE
         // ====================================================================
 
-        const ordersBody = document.getElementById('ordersBody');
+        var ordersBody = document.getElementById('ordersBody');
         if (ordersBody) {
-            if (acOrders.length === 0) {
-                ordersBody.innerHTML = '<tr><td colspan="8" class="loading">No Air Canada orders found</td></tr>';
+            if (allOrders.length === 0) {
+                ordersBody.innerHTML = '<tr><td colspan="8" class="loading">No fuel orders found</td></tr>';
             } else {
-                ordersBody.innerHTML = acOrders.map(o => {
-                    const flight = flights.find(f => f.ID === o.flight_ID);
-                    const route = flight ? (flight.origin_airport + ' → ' + flight.destination_airport) : '—';
-                    const flightNum = flight ? flight.flight_number : '—';
-                    const step = journeyStep(o);
+                ordersBody.innerHTML = allOrders.map(function(o) {
+                    var flight = flights.find(function(f) { return f.ID === o.flight_ID; });
+                    var route = flight ? (flight.origin_airport + ' \u2192 ' + flight.destination_airport) : '\u2014';
+                    var flightNum = flight ? flight.flight_number : '\u2014';
+                    var step = journeyStep(o);
                     return '<tr>' +
-                        '<td><strong>' + (o.order_number || '—') + '</strong></td>' +
+                        '<td><strong>' + (o.order_number || '\u2014') + '</strong></td>' +
                         '<td>' + flightNum + '</td>' +
                         '<td>' + route + '</td>' +
-                        '<td>' + (o.requested_date || '—') + '</td>' +
+                        '<td>' + (o.requested_date || '\u2014') + '</td>' +
                         '<td>' + fmt(o.ordered_quantity) + '</td>' +
                         '<td>' + statusBadge(o.status) + '</td>' +
                         '<td>' + crewBadge(o.crew_review_status) + '</td>' +
@@ -173,19 +171,19 @@
         // FLIGHTS TABLE
         // ====================================================================
 
-        const flightsBody = document.getElementById('flightsBody');
+        var flightsBody = document.getElementById('flightsBody');
         if (flightsBody) {
             if (flights.length === 0) {
-                flightsBody.innerHTML = '<tr><td colspan="7" class="loading">No Air Canada flights found</td></tr>';
+                flightsBody.innerHTML = '<tr><td colspan="7" class="loading">No flights found</td></tr>';
             } else {
-                flightsBody.innerHTML = flights.map(f => {
-                    const hasOrder = flightsWithOrders.has(f.ID);
+                flightsBody.innerHTML = flights.map(function(f) {
+                    var hasOrder = flightsWithOrders.has(f.ID);
                     return '<tr>' +
                         '<td><strong>' + f.flight_number + '</strong></td>' +
                         '<td>' + f.flight_date + '</td>' +
-                        '<td>' + f.origin_airport + ' → ' + f.destination_airport + '</td>' +
-                        '<td>' + (f.aircraft_type || '—') + '</td>' +
-                        '<td>' + (f.aircraft_reg || '—') + '</td>' +
+                        '<td>' + f.origin_airport + ' \u2192 ' + f.destination_airport + '</td>' +
+                        '<td>' + (f.aircraft_type || '\u2014') + '</td>' +
+                        '<td>' + (f.aircraft_reg || '\u2014') + '</td>' +
                         '<td>' + statusBadge(f.status) + '</td>' +
                         '<td>' + (hasOrder
                             ? '<span class="badge badge-confirmed">Yes</span>'
@@ -197,14 +195,127 @@
     }
 
     function setText(id, val) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val != null ? val : '—';
+        var el = document.getElementById(id);
+        if (el) el.textContent = val != null ? val : '\u2014';
     }
 
-    // Load on DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadDashboard);
-    } else {
+    // ========================================================================
+    // FLIGHT SCHEDULE UPLOAD
+    // ========================================================================
+
+    function initUpload() {
+        var uploadArea = document.getElementById('uploadArea');
+        var fileInput = document.getElementById('scheduleFile');
+        var browseBtn = document.getElementById('browseBtn');
+        var uploadStatus = document.getElementById('uploadStatus');
+        var uploadMessage = document.getElementById('uploadMessage');
+        var uploadProgress = document.getElementById('uploadProgress');
+
+        if (!uploadArea || !fileInput) return;
+
+        // Browse button click
+        browseBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        // Click on upload area
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        // Drag & drop
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        uploadArea.addEventListener('dragleave', function() {
+            uploadArea.classList.remove('drag-over');
+        });
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            var validExts = ['.xlsx', '.xls', '.csv'];
+            var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (validExts.indexOf(ext) === -1) {
+                showUploadResult('error', 'Invalid file format. Please upload .xlsx, .xls, or .csv files.');
+                return;
+            }
+
+            showUploadResult('loading', 'Uploading "' + file.name + '"...');
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var base64 = e.target.result.split(',')[1];
+                uploadSchedule(base64, file.name);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function uploadSchedule(base64Content, fileName) {
+            fetch(PLANNING_SVC + '/importFlightScheduleExcel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fileContent: base64Content,
+                    fileName: fileName
+                })
+            })
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(result) {
+                if (result.ok) {
+                    var d = result.data;
+                    var msg = d.message || ('Successfully imported ' + (d.recordsCreated || 0) + ' flight(s).');
+                    if (d.recordsSkipped) msg += ' ' + d.recordsSkipped + ' skipped.';
+                    showUploadResult('success', msg);
+                    // Reload dashboard to show new flights
+                    loadDashboard();
+                } else {
+                    var errMsg = result.data.error ? result.data.error.message : 'Upload failed. Please check the file format.';
+                    showUploadResult('error', errMsg);
+                }
+            })
+            .catch(function(err) {
+                showUploadResult('error', 'Network error: ' + err.message);
+            });
+        }
+
+        function showUploadResult(type, message) {
+            uploadStatus.style.display = 'block';
+            uploadProgress.className = 'upload-progress upload-' + type;
+            uploadMessage.textContent = message;
+
+            if (type === 'success') {
+                setTimeout(function() { uploadStatus.style.display = 'none'; }, 8000);
+            }
+        }
+    }
+
+    // ========================================================================
+    // INIT
+    // ========================================================================
+
+    function init() {
         loadDashboard();
+        initUpload();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
     }
 })();

@@ -122,6 +122,27 @@ tbody tr:hover { background: #F8FAFD; }
 .badge-adjusted { background: #E1BEE7; color: #6A1B9A; }
 .badge-step { background: #F3E5F5; color: #7B1FA2; font-size: 10px; }
 
+/* Upload Section */
+.upload-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.upload-area {
+    border: 2px dashed #C4C4C4; border-radius: var(--radius); padding: 24px;
+    display: flex; align-items: center; gap: 16px; cursor: pointer;
+    transition: all 0.2s; background: #FAFBFC;
+}
+.upload-area:hover, .upload-area.drag-over {
+    border-color: var(--primary); background: #E8F0FE;
+}
+.upload-icon { color: var(--primary); flex-shrink: 0; }
+.upload-text { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.upload-text strong { font-size: 14px; color: var(--text); }
+.upload-text span { font-size: 12px; color: var(--text-light); }
+.upload-hint { font-size: 11px !important; color: #999 !important; font-style: italic; }
+.upload-status { padding: 12px 0 0; }
+.upload-progress { padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.upload-loading { background: #E3F2FD; color: #0D47A1; }
+.upload-success { background: #E8F5E9; color: #1B5E20; }
+.upload-error { background: #FFEBEE; color: #B71C1C; }
+
 /* Quick Links */
 .links-section { padding: 16px 24px; }
 .links-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
