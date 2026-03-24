@@ -23,8 +23,22 @@
         "ops": {
           "roles": ["OperationsManager", "StationCoordinator"],
           "attributes": {
-            "station": ["MNL", "CEB"],
-            "region": ["APAC"]
+            "station": ["MNL", "CEB", "YYZ", "YVR"],
+            "region": ["APAC", "NAM"]
+          }
+        },
+        "refueler": {
+          "roles": ["FuelOrderApprove", "ePODCapture", "MasterDataRead"],
+          "attributes": {
+            "station": ["YYZ", "YVR", "LHR", "CDG"],
+            "region": ["NAM", "EUR"]
+          }
+        },
+        "crew": {
+          "roles": ["FuelOrderCreate", "MasterDataRead"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
           }
         },
         "finance": {

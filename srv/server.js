@@ -7,13 +7,16 @@ cds.on('bootstrap', (app) => {
     const appFolder = path.join(__dirname, '..', 'app');
     console.log('[server.js] Registering static middleware for:', appFolder);
 
-    // Serve entire app folder at root - this allows /airports/webapp/* to work
+    // Serve airline dashboard at /airline
+    app.use('/airline', express.static(path.join(appFolder, 'airline', 'webapp')));
+
+    // Serve refueler dashboard at /refueler
+    app.use('/refueler', express.static(path.join(appFolder, 'refueler', 'webapp')));
+
+    // Serve entire app folder at root as fallback
     app.use(express.static(appFolder));
 
-    // Also explicitly serve airports at /airports path
-    app.use('/airports', express.static(path.join(appFolder, 'airports')));
-
-    console.log('[server.js] Static middleware registered');
+    console.log('[server.js] Static middleware registered: /airline, /refueler');
 });
 
 module.exports = cds.server;

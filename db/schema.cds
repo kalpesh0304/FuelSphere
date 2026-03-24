@@ -636,6 +636,30 @@ type TicketStatus : String(20) enum {
 }
 
 /**
+ * Cockpit Crew Review Status (Step 4 of 7-step journey)
+ */
+type CrewReviewStatus : String(20) enum {
+    Pending   = 'PENDING';
+    Confirmed = 'CONFIRMED';
+    Adjusted  = 'ADJUSTED';
+    Skipped   = 'SKIPPED';
+}
+
+/**
+ * Sales Order Status (Supplier/Refueler Perspective)
+ */
+type SalesOrderStatus : String(20) enum {
+    Received    = 'RECEIVED';
+    Confirmed   = 'CONFIRMED';
+    Scheduled   = 'SCHEDULED';
+    InDelivery  = 'IN_DELIVERY';
+    Delivered   = 'DELIVERED';
+    Invoiced    = 'INVOICED';
+    Closed      = 'CLOSED';
+    Cancelled   = 'CANCELLED';
+}
+
+/**
  * FUEL_ORDERS - Core Fuel Order Entity
  * Source: FuelSphere native
  * Volume: ~300,000/year
@@ -687,6 +711,14 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Dispatch System Reference
         dispatch_fuel_order_id : String(20);            // Fuel Order ID from dispatch system (e.g. Legate TripRecord)
 
+        // Cockpit Crew Review (Step 4 of 7-step journey)
+        crew_review_status      : CrewReviewStatus;              // Crew review outcome
+        crew_reviewed_by        : String(100);                   // Captain name/ID
+        crew_reviewed_at        : DateTime;                      // Review timestamp
+        crew_adjusted_quantity  : Decimal(12,2);                 // Crew-adjusted fuel qty (if different)
+        crew_adjustment_reason  : String(500);                   // Reason for adjustment
+        crew_notes              : String(1000);                  // Crew operational notes
+
         // Notes & Comments
         notes               : String(1000);             // Order notes/special instructions
 
@@ -713,6 +745,7 @@ entity FUEL_ORDERS : cuid, AuditTrail {
  */
 entity FUEL_DELIVERIES : cuid, AuditTrail {
         order               : Association to FUEL_ORDERS @mandatory;
+        sales_order         : Association to FUEL_SALES_ORDERS;  // Link to supplier's sales order
         delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
 
         // Delivery Details
@@ -789,6 +822,83 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // Verification
         verified_by         : String(100);              // User who verified
         verified_at         : DateTime;                 // Verification timestamp
+}
+
+// ============================================================================
+// FUEL SALES ORDERS (Supplier/Refueler Perspective - Scenario B)
+// ============================================================================
+
+/**
+ * FUEL_SALES_ORDERS - Supplier-side sales order entity
+ * Represents the same fuel transaction from the refueler/supplier perspective.
+ * Has its own lifecycle independent from the airline's FUEL_ORDERS.
+ *
+ * Sales Order Format: SO-{STATION}-{YYYYMMDD}-{SEQ}
+ * Example: SO-YYZ-20260325-001
+ */
+entity FUEL_SALES_ORDERS : cuid, AuditTrail {
+        // Sales Order Identity
+        sales_order_number   : String(25) @mandatory;    // SO-{STATION}-{YYYYMMDD}-{SEQ}
+
+        // Link to airline's purchase order (if exists)
+        purchase_order       : Association to FUEL_ORDERS;
+        customer_order_number: String(25);               // Airline's FO number
+
+        // Customer (the airline buying fuel)
+        customer_airline     : String(100) @mandatory;   // e.g., "Air Canada"
+        customer_airline_code: String(3);                // IATA code (e.g., AC)
+
+        // Flight Reference
+        flight               : Association to FLIGHT_SCHEDULE;
+        flight_number        : String(10);
+        flight_date          : Date;
+
+        // Station (Delivery Location)
+        airport              : Association to MASTER_AIRPORTS;
+        station_code         : String(3) @mandatory;
+
+        // Supplier (self - the refueling company)
+        supplier             : Association to MASTER_SUPPLIERS;
+        contract             : Association to MASTER_CONTRACTS;
+
+        // Product
+        product              : Association to MASTER_PRODUCTS;
+        uom_code             : String(3) default 'KG';
+
+        // Quantities (progressive enrichment)
+        estimated_quantity   : Decimal(12,2);             // Historical/estimated uplift
+        requested_quantity   : Decimal(12,2);             // From airline PO (if received)
+        crew_confirmed_qty   : Decimal(12,2);             // Cockpit crew confirmed
+        delivered_quantity   : Decimal(12,2);             // Actual delivered
+
+        // Pricing & Revenue
+        unit_price           : Decimal(15,4);
+        total_amount         : Decimal(15,2);
+        currency_code        : String(3) default 'USD';
+
+        // Delivery Planning
+        scheduled_date       : Date;
+        scheduled_time       : Time;
+        vehicle_id           : String(20);               // Bowser/tanker ID
+        driver_name          : String(100);
+
+        // Status & Timing
+        status               : SalesOrderStatus default 'RECEIVED';
+        confirmed_at         : DateTime;
+        delivered_at         : DateTime;
+        invoiced_at          : DateTime;
+
+        // Invoice Reference (supplier invoices the airline)
+        invoice_number       : String(25);
+        invoice_date         : Date;
+        invoice_amount       : Decimal(15,2);
+
+        // Notes
+        notes                : String(1000);
+
+        // Compositions
+        delivery_records     : Composition of many FUEL_DELIVERIES
+                               on delivery_records.sales_order = $self;
 }
 
 // ============================================================================
@@ -1205,7 +1315,7 @@ type ToleranceType : String(20) enum {
  * Volume: ~50,000/year
  *
  * Invoice Number Format: INV-{SUPPLIER_CODE}-{YYYYMMDD}-{SEQ}
- * Example: INV-SHELL-20260117-001
+ * Example: INV-WFS-20260117-001
  *
  * Key Features:
  * - Three-way matching: PO ↔ GR (ePOD) ↔ Invoice

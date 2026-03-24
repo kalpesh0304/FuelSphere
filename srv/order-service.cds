@@ -80,6 +80,17 @@ service FuelOrderService {
         action cancel(reason: String) returns FuelOrders;
 
         /**
+         * Cockpit crew review of fuel quantity (Step 4 of 7-step journey)
+         * Captain confirms or adjusts dispatch quantity before refueling
+         */
+        action crewReview(
+            captainName      : String,
+            adjustedQuantity : Decimal,
+            adjustmentReason : String,
+            notes            : String
+        ) returns FuelOrders;
+
+        /**
          * Calculate pricing from CPE
          * Returns unit price based on contract, product, and date
          */
@@ -201,6 +212,21 @@ service FuelOrderService {
         flight_schedule : redirected to FlightSchedule,
         fuel_order      : redirected to FuelOrders
     };
+
+    // ========================================================================
+    // CREW REVIEW QUEUE (Step 4 - Cockpit Crew Work Queue)
+    // ========================================================================
+
+    /**
+     * CrewReviewQueue - Fuel orders pending cockpit crew review
+     * Shows orders that have dispatch data but crew hasn't reviewed yet
+     */
+    @readonly
+    entity CrewReviewQueue as select from db.FUEL_ORDERS {
+        *,
+        flight : redirected to FlightSchedule
+    } where status = 'Confirmed'
+      and (crew_review_status is null or crew_review_status = 'PENDING');
 
     // ========================================================================
     // REFERENCE DATA (Read-only from Master Data)
@@ -442,7 +468,7 @@ service FuelOrderService {
     // EPD411 - Meter reading does not match ticket quantity
     // INT401 - S/4HANA PO creation failed
     // INT402 - S/4HANA GR posting failed
-    // INT403 - Shell Skypad communication timeout
+    // INT403 - External supplier system communication timeout
     // INT404 - Object Store PDF upload failed
     //
     // Flight Schedule Excel Import

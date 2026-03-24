@@ -158,7 +158,19 @@ annotate FuelOrderService.FuelOrders with @(
                 Target : 'tickets/@UI.LineItem',
                 Label  : 'Fuel Tickets'
             },
-            // Section 7: Administrative
+            // Section 7: Journey Progress
+            {
+                $Type: 'UI.ReferenceFacet',
+                Target: '@UI.FieldGroup#JourneyProgress',
+                Label: 'Journey Progress'
+            },
+            // Section 8: Cockpit Crew Review
+            {
+                $Type: 'UI.ReferenceFacet',
+                Target: '@UI.FieldGroup#CrewReview',
+                Label: 'Cockpit Crew Review'
+            },
+            // Section 9: Administrative
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Administrative',
@@ -216,6 +228,30 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
+        // Field Group: Cockpit Crew Review
+        FieldGroup#CrewReview: {
+            Label: 'Cockpit Crew Review',
+            Data: [
+                { Value: crew_review_status, Label: 'Review Status' },
+                { Value: crew_reviewed_by, Label: 'Reviewed By (Captain)' },
+                { Value: crew_reviewed_at, Label: 'Reviewed At' },
+                { Value: crew_adjusted_quantity, Label: 'Crew Adjusted Quantity (kg)' },
+                { Value: crew_adjustment_reason, Label: 'Adjustment Reason' },
+                { Value: crew_notes, Label: 'Crew Notes' }
+            ]
+        },
+
+        // Field Group: Journey Progress
+        FieldGroup#JourneyProgress: {
+            Label: 'Fuel Order Journey',
+            Data: [
+                { Value: status, Label: 'Order Status' },
+                { Value: dispatch_fuel_order_id, Label: 'Dispatch Reference' },
+                { Value: crew_review_status, Label: 'Crew Review' },
+                { Value: s4_po_number, Label: 'S/4 PO Number' }
+            ]
+        },
+
         // Field Group: Administrative
         FieldGroup#Administrative: {
             Label: 'Administrative',
@@ -230,7 +266,7 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        // Object page custom 'submit'  action button
+        // Object page custom action buttons
         Identification  : [
             {
                 $Type : 'UI.DataFieldForAction',
@@ -238,6 +274,12 @@ annotate FuelOrderService.FuelOrders with @(
                 Label : 'Submit',
                 ![@UI.Importance] : #High,
                 ![@UI.Criticality]: #Positive,
+            },
+            {
+                $Type: 'UI.DataFieldForAction',
+                Action: 'FuelOrderService.crewReview',
+                Label: 'Crew Review',
+                Criticality: 2
             }
         ],
     }
@@ -279,6 +321,16 @@ annotate FuelOrderService.FuelOrders with {
     created_by      @title: 'Created By' @Common.FieldControl: #ReadOnly;
     modified_at     @title: 'Modified At' @Common.FieldControl: #ReadOnly;
     modified_by     @title: 'Modified By' @Common.FieldControl: #ReadOnly;
+};
+
+// Field-level annotations for Crew Review fields
+annotate FuelOrderService.FuelOrders with {
+    crew_review_status     @title: 'Crew Review Status';
+    crew_reviewed_by       @title: 'Reviewed By (Captain)';
+    crew_reviewed_at       @title: 'Crew Review Time';
+    crew_adjusted_quantity @title: 'Crew Adjusted Qty (kg)';
+    crew_adjustment_reason @title: 'Adjustment Reason';
+    crew_notes             @title: 'Crew Notes' @UI.MultiLineText;
 };
 
 // Value Help for associations

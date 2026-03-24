@@ -190,6 +190,39 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             return SELECT.one.from(FuelOrders).where({ ID: order.ID });
         });
 
+        // ================================================================
+        // COCKPIT CREW REVIEW (Step 4 of 7-step journey)
+        // ================================================================
+        this.on('crewReview', FuelOrders, async (req) => {
+            const { captainName, adjustedQuantity, adjustmentReason, notes } = req.data;
+            const orderID = _id(req.params);
+
+            const order = await SELECT.one.from(FuelOrders).where({ ID: orderID });
+            if (!order) return req.error(404, 'Fuel order not found.');
+            if (order.status !== 'Confirmed') {
+                return req.error(400, `Crew review requires order status 'Confirmed'. Current status: '${order.status}'.`);
+            }
+
+            const updateData = {
+                crew_reviewed_by: captainName || req.user.id,
+                crew_reviewed_at: new Date().toISOString(),
+                crew_notes: notes || null
+            };
+
+            if (adjustedQuantity && adjustedQuantity !== order.ordered_quantity) {
+                updateData.crew_review_status = 'ADJUSTED';
+                updateData.crew_adjusted_quantity = adjustedQuantity;
+                updateData.crew_adjustment_reason = adjustmentReason || 'Quantity adjusted by cockpit crew';
+            } else {
+                updateData.crew_review_status = 'CONFIRMED';
+                updateData.crew_adjusted_quantity = order.ordered_quantity;
+            }
+
+            await UPDATE(FuelOrders).where({ ID: orderID }).set(updateData);
+
+            return SELECT.one.from(FuelOrders).where({ ID: orderID });
+        });
+
         // ====================================================================
         // CREATE ORDER FROM FLIGHT (Service-level action)
         // ====================================================================

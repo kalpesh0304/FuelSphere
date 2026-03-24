@@ -1,8 +1,20 @@
 {
-    "welcomeFile": "/airports/webapp/index.html",
+    "welcomeFile": "/airline/index.html",
     "authenticationMethod": "route",
     "sessionTimeout": 60,
     "routes": [
+        {
+            "source": "^/airline/(.*)$",
+            "target": "/airline/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/refueler/(.*)$",
+            "target": "/refueler/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
         {
             "source": "^/odata/v4/(.*)$",
             "target": "/odata/v4/$1",
