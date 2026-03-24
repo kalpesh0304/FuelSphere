@@ -184,20 +184,36 @@
         var flightsBody = document.getElementById('flightsBody');
         if (flightsBody) {
             if (filteredFlights.length === 0) {
-                flightsBody.innerHTML = '<tr><td colspan="7" class="loading">No flights found</td></tr>';
+                flightsBody.innerHTML = '<tr><td colspan="10" class="loading">No flights found</td></tr>';
             } else {
                 flightsBody.innerHTML = filteredFlights.map(function(f) {
                     var hasOrder = flightsWithOrders.has(f.ID);
+                    var depTerm = f.departure_terminal || '\u2014';
+                    var arrTerm = f.arrival_terminal || '\u2014';
+                    var terminal = depTerm + ' / ' + arrTerm;
+                    if (!f.departure_terminal && !f.arrival_terminal) terminal = '\u2014';
                     return '<tr>' +
                         '<td><strong>' + f.flight_number + '</strong></td>' +
                         '<td>' + f.flight_date + '</td>' +
                         '<td>' + f.origin_airport + ' \u2192 ' + f.destination_airport + '</td>' +
                         '<td>' + (f.aircraft_type || '\u2014') + '</td>' +
                         '<td>' + (f.aircraft_reg || '\u2014') + '</td>' +
+                        '<td>' + terminal + '</td>' +
+                        '<td>' + (f.gate_number || '\u2014') + '</td>' +
                         '<td>' + statusBadge(f.status) + '</td>' +
                         '<td>' + (hasOrder
                             ? '<span class="badge badge-confirmed">Yes</span>'
                             : '<span class="badge badge-draft">No</span>') + '</td>' +
+                        '<td><button class="btn-enrich" data-flight-id="' + f.ID + '" ' +
+                            'data-flight-number="' + f.flight_number + '" ' +
+                            'data-flight-date="' + f.flight_date + '" ' +
+                            'data-aircraft-type="' + (f.aircraft_type || '') + '" ' +
+                            'data-aircraft-reg="' + (f.aircraft_reg || '') + '" ' +
+                            'data-dep-terminal="' + (f.departure_terminal || '') + '" ' +
+                            'data-arr-terminal="' + (f.arrival_terminal || '') + '" ' +
+                            'data-gate="' + (f.gate_number || '') + '" ' +
+                            'data-stand="' + (f.stand_number || '') + '"' +
+                            '>Enrich</button></td>' +
                         '</tr>';
                 }).join('');
             }
@@ -328,92 +344,92 @@
     }
 
     // ========================================================================
-    // FLIGHT ENRICHMENT UPLOAD
+    // FLIGHT ENRICHMENT — INLINE MODAL (per-flight editing)
     // ========================================================================
 
-    function initEnrichUpload() {
-        var enrichArea = document.getElementById('enrichArea');
-        var fileInput = document.getElementById('enrichFile');
-        var browseBtn = document.getElementById('enrichBrowseBtn');
-        var uploadStatus = document.getElementById('enrichUploadStatus');
-        var uploadMessage = document.getElementById('enrichUploadMessage');
-        var uploadProgress = document.getElementById('enrichUploadProgress');
+    function initEnrichModal() {
+        var modal = document.getElementById('enrichModal');
+        var closeBtn = document.getElementById('enrichModalClose');
+        var cancelBtn = document.getElementById('enrichCancelBtn');
+        var saveBtn = document.getElementById('enrichSaveBtn');
+        var statusEl = document.getElementById('enrichSaveStatus');
 
-        if (!enrichArea || !fileInput) return;
+        if (!modal) return;
 
-        browseBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            fileInput.click();
+        // Close modal
+        function closeModal() { modal.style.display = 'none'; }
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeModal();
         });
 
-        enrichArea.addEventListener('click', function() { fileInput.click(); });
+        // Open modal from enrich button click (event delegation)
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.btn-enrich');
+            if (!btn) return;
 
-        enrichArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            enrichArea.classList.add('drag-over');
-        });
-        enrichArea.addEventListener('dragleave', function() {
-            enrichArea.classList.remove('drag-over');
-        });
-        enrichArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            enrichArea.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) handleEnrichFile(e.dataTransfer.files[0]);
+            var flightId = btn.getAttribute('data-flight-id');
+            var flightNum = btn.getAttribute('data-flight-number');
+            var flightDate = btn.getAttribute('data-flight-date');
+
+            document.getElementById('enrichFlightTitle').textContent = flightNum + ' (' + flightDate + ')';
+            document.getElementById('enrichFlightId').value = flightId;
+            document.getElementById('enrichAircraftType').value = btn.getAttribute('data-aircraft-type') || '';
+            document.getElementById('enrichAircraftReg').value = btn.getAttribute('data-aircraft-reg') || '';
+            document.getElementById('enrichDepTerminal').value = btn.getAttribute('data-dep-terminal') || '';
+            document.getElementById('enrichArrTerminal').value = btn.getAttribute('data-arr-terminal') || '';
+            document.getElementById('enrichGate').value = btn.getAttribute('data-gate') || '';
+            document.getElementById('enrichStand').value = btn.getAttribute('data-stand') || '';
+            statusEl.style.display = 'none';
+
+            modal.style.display = 'flex';
         });
 
-        fileInput.addEventListener('change', function() {
-            if (fileInput.files.length > 0) handleEnrichFile(fileInput.files[0]);
-        });
-
-        function handleEnrichFile(file) {
-            var validExts = ['.xlsx', '.xls', '.csv'];
-            var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-            if (validExts.indexOf(ext) === -1) {
-                showResult('error', 'Invalid file format. Please upload .xlsx, .xls, or .csv files.');
-                return;
-            }
-            showResult('loading', 'Enriching flights from "' + file.name + '"...');
-
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                var base64 = e.target.result.split(',')[1];
-                fetch(PLANNING_SVC + '/enrichFlightScheduleExcel', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileContent: base64, fileName: file.name })
-                })
-                .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
-                .then(function(result) {
-                    if (result.ok) {
-                        var d = result.data;
-                        var msg = d.message || ('Enriched: ' + (d.flightsEnriched || 0) + ' flights.');
-                        var type = d.success ? 'success' : 'warning';
-                        if (d.errors && d.errors.length > 0) {
-                            var errorDetails = d.errors.filter(function(e) { return e.severity === 'ERROR'; });
-                            if (errorDetails.length > 0) {
-                                msg += '\n\nErrors:';
-                                errorDetails.forEach(function(e) { msg += '\n  Row ' + e.row + ': ' + e.message; });
-                                type = 'error';
-                            }
-                        }
-                        showResult(type, msg);
-                        if (d.flightsEnriched > 0) loadDashboard();
-                    } else {
-                        var errMsg = result.data.error ? result.data.error.message : 'Enrichment failed.';
-                        showResult('error', errMsg);
-                    }
-                })
-                .catch(function(err) { showResult('error', 'Network error: ' + err.message); });
+        // Save enrichment via OData PATCH
+        saveBtn.addEventListener('click', function() {
+            var flightId = document.getElementById('enrichFlightId').value;
+            var payload = {
+                aircraft_type: document.getElementById('enrichAircraftType').value || null,
+                aircraft_reg: document.getElementById('enrichAircraftReg').value || null,
+                departure_terminal: document.getElementById('enrichDepTerminal').value || null,
+                arrival_terminal: document.getElementById('enrichArrTerminal').value || null,
+                gate_number: document.getElementById('enrichGate').value || null,
+                stand_number: document.getElementById('enrichStand').value || null
             };
-            reader.readAsDataURL(file);
-        }
 
-        function showResult(type, message) {
-            uploadStatus.style.display = 'block';
-            uploadProgress.className = 'upload-progress upload-' + type;
-            uploadMessage.innerHTML = message.replace(/\n/g, '<br>');
-            if (type === 'success') setTimeout(function() { uploadStatus.style.display = 'none'; }, 8000);
-        }
+            statusEl.style.display = 'block';
+            statusEl.className = 'enrich-status status-loading';
+            statusEl.textContent = 'Saving...';
+            saveBtn.disabled = true;
+
+            fetch(PLANNING_SVC + '/FlightSchedule(' + flightId + ')', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(res) {
+                if (res.ok) {
+                    statusEl.className = 'enrich-status status-success';
+                    statusEl.textContent = 'Flight enriched successfully!';
+                    setTimeout(function() {
+                        closeModal();
+                        loadDashboard();
+                    }, 800);
+                } else {
+                    return res.json().then(function(data) {
+                        var msg = (data.error && data.error.message) || 'Failed to save enrichment.';
+                        statusEl.className = 'enrich-status status-error';
+                        statusEl.textContent = msg;
+                    });
+                }
+            })
+            .catch(function(err) {
+                statusEl.className = 'enrich-status status-error';
+                statusEl.textContent = 'Network error: ' + err.message;
+            })
+            .finally(function() { saveBtn.disabled = false; });
+        });
     }
 
     // ========================================================================
@@ -512,7 +528,7 @@
     function init() {
         loadDashboard();
         initUpload();
-        initEnrichUpload();
+        initEnrichModal();
         initDispatchUpload();
     }
 

@@ -143,55 +143,7 @@
                 </div>
             </div>
 
-            <!-- Enrich Flight Schedule -->
-            <div class="upload-section" id="enrichSection">
-                <div class="upload-area" id="enrichArea">
-                    <div class="upload-icon enrich-icon">
-                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/></svg>
-                    </div>
-                    <div class="upload-text">
-                        <strong>Enrich Flights (Step 2 — Assign Tail / Aircraft)</strong>
-                        <span>Upload Excel/CSV to assign tail numbers, aircraft types, terminals, and gates to existing flights</span>
-                        <span class="upload-hint">Required: flight_number, flight_date. Enrichment: aircraft_reg, aircraft_type, departure_terminal, arrival_terminal, gate_number, stand_number</span>
-                    </div>
-                    <input type="file" id="enrichFile" accept=".xlsx,.xls,.csv" style="display:none">
-                    <button class="btn btn-primary" id="enrichBrowseBtn">Browse Files</button>
-                </div>
-                <div class="upload-status" id="enrichUploadStatus" style="display:none">
-                    <div class="upload-progress" id="enrichUploadProgress"></div>
-                    <div class="upload-message" id="enrichUploadMessage"></div>
-                </div>
-            </div>
-
-            <table id="flightsTable">
-                <thead>
-                    <tr>
-                        <th>Flight #</th>
-                        <th>Date</th>
-                        <th>Route</th>
-                        <th>Aircraft</th>
-                        <th>Tail #</th>
-                        <th>Status</th>
-                        <th>Has Order</th>
-                    </tr>
-                </thead>
-                <tbody id="flightsBody">
-                    <tr><td colspan="7" class="loading">Loading flights...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- FUEL ORDERS -->
-        <div class="table-card">
-            <div class="table-header">
-                <h3>Fuel Orders</h3>
-                <div class="table-actions">
-                    <a href="/$fiori-preview/FuelOrderService/FuelOrders#preview-app" target="_blank" class="btn btn-secondary">Open in Fiori</a>
-                    <a href="/$fiori-preview/FuelOrderService/CrewReviewQueue#preview-app" target="_blank" class="btn btn-primary">Crew Review Queue</a>
-                </div>
-            </div>
-
-            <!-- Dispatch Upload -->
+            <!-- Dispatch Upload (Step 3) — moved here from Fuel Orders for logical flow -->
             <div class="upload-section" id="dispatchSection">
                 <div class="upload-area" id="dispatchArea">
                     <div class="upload-icon dispatch-icon">
@@ -208,6 +160,90 @@
                 <div class="upload-status" id="dispatchUploadStatus" style="display:none">
                     <div class="upload-progress" id="dispatchUploadProgress"></div>
                     <div class="upload-message" id="dispatchUploadMessage"></div>
+                </div>
+            </div>
+
+            <div class="enrich-info-bar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/></svg>
+                <span>Step 2 — Click the <strong>Enrich</strong> button on any flight to assign tail number, aircraft type, terminal &amp; gate</span>
+            </div>
+
+            <table id="flightsTable">
+                <thead>
+                    <tr>
+                        <th>Flight #</th>
+                        <th>Date</th>
+                        <th>Route</th>
+                        <th>Aircraft</th>
+                        <th>Tail #</th>
+                        <th>Terminal</th>
+                        <th>Gate</th>
+                        <th>Status</th>
+                        <th>Has Order</th>
+                        <th>Enrich</th>
+                    </tr>
+                </thead>
+                <tbody id="flightsBody">
+                    <tr><td colspan="10" class="loading">Loading flights...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Enrich Flight Modal -->
+        <div class="modal-overlay" id="enrichModal" style="display:none">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Enrich Flight — <span id="enrichFlightTitle"></span></h3>
+                    <button class="modal-close" id="enrichModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="enrichFlightId">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichAircraftType">Aircraft Type</label>
+                            <input type="text" id="enrichAircraftType" placeholder="e.g., B787, A330">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichAircraftReg">Tail # (Registration)</label>
+                            <input type="text" id="enrichAircraftReg" placeholder="e.g., C-GHPQ">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichDepTerminal">Departure Terminal</label>
+                            <input type="text" id="enrichDepTerminal" placeholder="e.g., T1">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichArrTerminal">Arrival Terminal</label>
+                            <input type="text" id="enrichArrTerminal" placeholder="e.g., T3">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichGate">Gate Number</label>
+                            <input type="text" id="enrichGate" placeholder="e.g., B42">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichStand">Stand Number</label>
+                            <input type="text" id="enrichStand" placeholder="e.g., 105">
+                        </div>
+                    </div>
+                    <div class="enrich-status" id="enrichSaveStatus" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="enrichCancelBtn">Cancel</button>
+                    <button class="btn btn-primary" id="enrichSaveBtn">Save Enrichment</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FUEL ORDERS -->
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Fuel Orders</h3>
+                <div class="table-actions">
+                    <a href="/$fiori-preview/FuelOrderService/FuelOrders#preview-app" target="_blank" class="btn btn-secondary">Open in Fiori</a>
+                    <a href="/$fiori-preview/FuelOrderService/CrewReviewQueue#preview-app" target="_blank" class="btn btn-primary">Crew Review Queue</a>
                 </div>
             </div>
 

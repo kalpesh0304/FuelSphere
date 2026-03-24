@@ -148,6 +148,62 @@ tbody tr:hover { background: #F8FAFD; }
 .enrich-icon { color: #7B68EE; }
 .dispatch-icon { color: var(--warning); }
 
+/* Enrich info bar */
+.enrich-info-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px; background: #F3E8FD; color: #5B2D8E;
+    font-size: 13px; border-bottom: 1px solid var(--border);
+}
+.enrich-info-bar svg { flex-shrink: 0; color: #7B68EE; }
+
+/* Enrich button in table */
+.btn-enrich {
+    padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    background: #7B68EE; color: #fff; border: none; cursor: pointer;
+    transition: background 0.15s;
+}
+.btn-enrich:hover { background: #6A5ACD; }
+
+/* Modal */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.45); z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+    background: #fff; border-radius: 12px; width: 520px; max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2); overflow: hidden;
+}
+.modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border); background: #FAFBFC;
+}
+.modal-header h3 { font-size: 15px; font-weight: 600; }
+.modal-close {
+    background: none; border: none; font-size: 22px; cursor: pointer;
+    color: var(--text-light); line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; }
+.modal-footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--border); background: #FAFBFC;
+}
+.form-row { display: flex; gap: 16px; margin-bottom: 14px; }
+.form-group { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--text-light); }
+.form-group input {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+    font-size: 13px; font-family: inherit; color: var(--text);
+}
+.form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0,112,242,0.15); }
+.enrich-status {
+    padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; margin-top: 8px;
+}
+.enrich-status.status-success { background: #E8F5E9; color: #1B5E20; }
+.enrich-status.status-error { background: #FFEBEE; color: #B71C1C; }
+.enrich-status.status-loading { background: #E3F2FD; color: #0D47A1; }
+
 /* Quick Links */
 .links-section { padding: 16px 24px; }
 .links-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
