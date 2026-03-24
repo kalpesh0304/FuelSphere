@@ -278,11 +278,23 @@
             .then(function(result) {
                 if (result.ok) {
                     var d = result.data;
-                    var msg = d.message || ('Successfully imported ' + (d.recordsCreated || 0) + ' flight(s).');
-                    if (d.recordsSkipped) msg += ' ' + d.recordsSkipped + ' skipped.';
-                    showUploadResult('success', msg);
-                    // Reload dashboard to show new flights
-                    loadDashboard();
+                    var msg = d.message || ('Processed. Flights: ' + (d.flightsCreated || 0) + ' created, ' + (d.flightsUpdated || 0) + ' updated.');
+                    var type = d.success ? 'success' : 'warning';
+                    // Show row-level errors if any
+                    if (d.errors && d.errors.length > 0) {
+                        var errorDetails = d.errors.filter(function(e) { return e.severity === 'ERROR'; });
+                        if (errorDetails.length > 0) {
+                            msg += '\n\nErrors:';
+                            errorDetails.forEach(function(e) {
+                                msg += '\n  Row ' + e.row + ': ' + e.message;
+                            });
+                            type = 'error';
+                        }
+                    }
+                    showUploadResult(type, msg);
+                    if (d.flightsCreated > 0 || d.flightsUpdated > 0) {
+                        loadDashboard();
+                    }
                 } else {
                     var errMsg = result.data.error ? result.data.error.message : 'Upload failed. Please check the file format.';
                     showUploadResult('error', errMsg);
@@ -296,7 +308,8 @@
         function showUploadResult(type, message) {
             uploadStatus.style.display = 'block';
             uploadProgress.className = 'upload-progress upload-' + type;
-            uploadMessage.textContent = message;
+            // Support multiline messages with line breaks
+            uploadMessage.innerHTML = message.replace(/\n/g, '<br>');
 
             if (type === 'success') {
                 setTimeout(function() { uploadStatus.style.display = 'none'; }, 8000);

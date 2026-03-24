@@ -138,9 +138,10 @@ tbody tr:hover { background: #F8FAFD; }
 .upload-text span { font-size: 12px; color: var(--text-light); }
 .upload-hint { font-size: 11px !important; color: #999 !important; font-style: italic; }
 .upload-status { padding: 12px 0 0; }
-.upload-progress { padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.upload-progress { padding: 10px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; line-height: 1.6; }
 .upload-loading { background: #E3F2FD; color: #0D47A1; }
 .upload-success { background: #E8F5E9; color: #1B5E20; }
+.upload-warning { background: #FFF8E1; color: #E65100; }
 .upload-error { background: #FFEBEE; color: #B71C1C; }
 
 /* Quick Links */
