@@ -595,7 +595,7 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
 
 /**
  * Order Status Enumeration
- * Draft → Submitted → Confirmed → InProgress → Delivered → Cancelled
+ * Draft → Submitted → Confirmed → InProgress → Delivered → Completed → Cancelled
  */
 type OrderStatus : String(20) enum {
     Draft       = 'Draft';
@@ -603,6 +603,7 @@ type OrderStatus : String(20) enum {
     Confirmed   = 'Confirmed';
     InProgress  = 'InProgress';
     Delivered   = 'Delivered';
+    Completed   = 'Completed';
     Cancelled   = 'Cancelled';
 }
 
