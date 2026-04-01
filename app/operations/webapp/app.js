@@ -188,5 +188,35 @@
         }
     }
 
+    // Persona filtering
+    function initPersona() {
+        var selector = document.getElementById('personaSelector');
+        if (!selector) return;
+        selector.addEventListener('change', function() {
+            applyPersona(selector.value);
+        });
+    }
+
+    function applyPersona(persona) {
+        var burnSection = document.querySelector('.burn-section');
+        var journeySection = document.querySelector('.journey-section');
+        var cycleSection = document.querySelector('.cycle-section');
+        var dminusSection = document.querySelector('.dminus-section');
+
+        // Reset all visible
+        [burnSection, journeySection, cycleSection, dminusSection].forEach(function(el) {
+            if (el) el.style.display = '';
+        });
+
+        if (persona === 'dispatch') {
+            // Dispatch Team: focus on D-minus, journey, flights — hide burn analysis
+            if (burnSection) burnSection.style.display = 'none';
+            if (cycleSection) cycleSection.style.display = 'none';
+        } else if (persona === 'ops') {
+            // Ops Manager: sees everything — default view
+        }
+    }
+
     loadDashboard();
+    initPersona();
 })();

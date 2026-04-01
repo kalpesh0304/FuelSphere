@@ -153,5 +153,37 @@
         }
     }
 
+    // Persona filtering
+    function initPersona() {
+        var selector = document.getElementById('personaSelector');
+        if (!selector) return;
+        selector.addEventListener('change', function() {
+            applyPersona(selector.value);
+        });
+    }
+
+    function applyPersona(persona) {
+        var ticketSection = document.querySelector('.ticket-section');
+        var uomSection = document.querySelector('.uom-section');
+        var photoCard = document.querySelector('.photo-upload-placeholder');
+        var pipelineSection = document.querySelector('.pipeline-section');
+
+        // Reset all visible
+        [ticketSection, uomSection, pipelineSection].forEach(function(el) {
+            if (el) el.style.display = '';
+        });
+        if (photoCard) photoCard.closest('.table-card').style.display = '';
+
+        if (persona === 'supplier') {
+            // Supplier Planner: focus on pipeline + orders, hide ticket/photo details
+            if (ticketSection) ticketSection.style.display = 'none';
+            if (photoCard) photoCard.closest('.table-card').style.display = 'none';
+        } else if (persona === 'delivery') {
+            // Delivery Crew: focus on tickets + photo + UoM, hide pipeline overview
+            if (pipelineSection) pipelineSection.style.display = 'none';
+        }
+    }
+
     loadDashboard();
+    initPersona();
 })();

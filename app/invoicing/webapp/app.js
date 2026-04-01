@@ -143,5 +143,32 @@
         }
     }
 
+    // Buyer/Seller view toggle
+    function initViewToggle() {
+        var toggle = document.getElementById('viewToggle');
+        if (!toggle) return;
+        toggle.addEventListener('change', function() {
+            applyView(toggle.value);
+        });
+    }
+
+    function applyView(view) {
+        var matchSection = document.querySelector('.match-section');
+        var exceptionCard = document.querySelectorAll('.table-card')[1]; // Exception queue card
+        var headerSubtitle = document.querySelector('.app-subtitle');
+
+        if (view === 'buyer') {
+            // Buyer view: full 3-way match, exception queue, approval focus
+            if (matchSection) matchSection.style.display = '';
+            if (exceptionCard) exceptionCard.style.display = '';
+            if (headerSubtitle) headerSubtitle.textContent = 'Invoice Verification — Buyer View';
+        } else if (view === 'seller') {
+            // Seller view: hide exception queue, show match for reference
+            if (exceptionCard) exceptionCard.style.display = 'none';
+            if (headerSubtitle) headerSubtitle.textContent = 'Invoice Verification — Seller View';
+        }
+    }
+
     loadDashboard();
+    initViewToggle();
 })();

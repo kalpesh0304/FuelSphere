@@ -311,10 +311,47 @@
         }
     }
 
+    // Persona filtering
+    function initPersona() {
+        var selector = document.getElementById('personaSelector');
+        if (!selector) return;
+        selector.addEventListener('change', function() {
+            applyPersona(selector.value);
+        });
+    }
+
+    function applyPersona(persona) {
+        var overrideSection = document.getElementById('overrideSection');
+        var compSection = document.querySelector('.comparison-section');
+        var uploadSections = document.querySelectorAll('.tables-section');
+
+        // Highlight relevant columns in comparison
+        var dispatchCells = document.querySelectorAll('.qty-dispatch');
+        var plannerCells = document.querySelectorAll('.qty-planner');
+        var cockpitCells = document.querySelectorAll('.qty-cockpit');
+
+        // Reset highlights
+        dispatchCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
+        plannerCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
+        cockpitCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
+
+        if (persona === 'dispatch') {
+            // Dispatch Team: emphasize dispatch qty column
+            dispatchCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
+        } else if (persona === 'planner') {
+            // Fuel Planner: emphasize planner qty, show uploads
+            plannerCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
+        } else if (persona === 'cockpit') {
+            // Cockpit Crew: emphasize cockpit qty + override section
+            cockpitCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
+        }
+    }
+
     function init() {
         loadDashboard();
         initEnrichModal();
         initUploads();
+        initPersona();
     }
 
     if (document.readyState === 'loading') {
