@@ -1,8 +1,38 @@
 {
-    "welcomeFile": "/airline/index.html",
+    "welcomeFile": "/admin/index.html",
     "authenticationMethod": "route",
     "sessionTimeout": 60,
     "routes": [
+        {
+            "source": "^/admin/(.*)$",
+            "target": "/admin/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/operations/(.*)$",
+            "target": "/operations/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/planning/(.*)$",
+            "target": "/planning/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/fulfillment/(.*)$",
+            "target": "/fulfillment/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/invoicing/(.*)$",
+            "target": "/invoicing/$1",
+            "localDir": ".",
+            "authenticationType": "none"
+        },
         {
             "source": "^/airline/(.*)$",
             "target": "/airline/$1",

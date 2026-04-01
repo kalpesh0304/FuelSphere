@@ -1,0 +1,129 @@
+/* FuelSphere Admin Portal — SAP Fiori-inspired Design */
+:root {
+    --primary: #0070F2;
+    --primary-dark: #0054B6;
+    --accent: #354A5F;
+    --success: #107E3E;
+    --warning: #E9730C;
+    --error: #BB0000;
+    --neutral: #6A6D70;
+    --bg: #F5F6F7;
+    --card-bg: #FFFFFF;
+    --text: #32363A;
+    --text-light: #6A6D70;
+    --border: #E5E5E5;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08);
+    --radius: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+/* Header */
+.app-header {
+    background: linear-gradient(135deg, #354A5F 0%, #1B2D3E 100%);
+    color: #fff;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.logo { display: flex; align-items: center; gap: 8px; }
+.app-title { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+.app-subtitle { font-size: 14px; opacity: 0.9; }
+.header-right { display: flex; align-items: center; gap: 16px; font-size: 13px; }
+.user-badge { background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.datetime { opacity: 0.8; }
+
+/* KPI Cards */
+.kpi-section { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 20px 24px; }
+.kpi-card {
+    background: var(--card-bg); border-radius: var(--radius); padding: 20px;
+    box-shadow: var(--shadow); border-left: 4px solid var(--primary); text-align: center;
+}
+.kpi-card.kpi-warning { border-left-color: var(--warning); }
+.kpi-card.kpi-info { border-left-color: #5B9BD5; }
+.kpi-card.kpi-success { border-left-color: var(--success); }
+.kpi-value { font-size: 32px; font-weight: 700; color: var(--text); }
+.kpi-label { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+
+/* Application Tiles */
+.apps-section { padding: 0 24px 16px; }
+.section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+.app-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.app-tile {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--card-bg); border-radius: var(--radius); padding: 20px 24px;
+    text-decoration: none; color: var(--text); box-shadow: var(--shadow);
+    border-left: 5px solid var(--border); transition: all 0.2s;
+    position: relative;
+}
+.app-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.app-operations { border-left-color: #F01428; }
+.app-planning { border-left-color: #7B68EE; }
+.app-fulfillment { border-left-color: #107E3E; }
+.app-invoicing { border-left-color: #E9730C; }
+
+.app-tile-icon {
+    width: 56px; height: 56px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.app-operations .app-tile-icon { background: #FEE8EA; color: #F01428; }
+.app-planning .app-tile-icon { background: #F0EBFF; color: #7B68EE; }
+.app-fulfillment .app-tile-icon { background: #E8F5E9; color: #107E3E; }
+.app-invoicing .app-tile-icon { background: #FFF3E0; color: #E9730C; }
+
+.app-tile-body { flex: 1; }
+.app-tile-body h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.app-tile-body p { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+
+.app-tile-roles { display: flex; gap: 6px; flex-wrap: wrap; }
+.role-tag {
+    padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+    background: #F0F1F2; color: var(--text-light); white-space: nowrap;
+}
+
+.app-tile-arrow {
+    color: var(--text-light); flex-shrink: 0;
+    transition: transform 0.2s;
+}
+.app-tile:hover .app-tile-arrow { transform: translateX(4px); color: var(--primary); }
+
+/* Quick Links */
+.links-section { padding: 16px 24px; }
+.links-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.link-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.link-card {
+    background: var(--card-bg); border-radius: var(--radius); padding: 16px;
+    text-decoration: none; color: var(--text); box-shadow: var(--shadow);
+    transition: all 0.2s; text-align: center; border: 1px solid transparent;
+}
+.link-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.link-card-legacy { background: #FAFAFA; border: 1px dashed var(--border); }
+.link-card-legacy:hover { border-color: var(--text-light); border-style: solid; }
+.link-icon { margin-bottom: 8px; }
+.link-title { font-size: 13px; font-weight: 600; }
+.link-desc { font-size: 11px; color: var(--text-light); margin-top: 4px; }
+
+.legacy-section .link-cards { grid-template-columns: repeat(2, 1fr); max-width: 500px; }
+
+/* Footer */
+.app-footer { text-align: center; padding: 16px; color: var(--text-light); font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px; }
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .kpi-section { grid-template-columns: repeat(2, 1fr); }
+    .app-grid { grid-template-columns: 1fr; }
+    .link-cards { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+    .app-header { flex-direction: column; gap: 8px; text-align: center; }
+    .kpi-section { grid-template-columns: 1fr; }
+    .link-cards { grid-template-columns: repeat(2, 1fr); }
+}
