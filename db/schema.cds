@@ -590,6 +590,49 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
 }
 
 // ============================================================================
+// FLIGHT CYCLE EVENTS (Operations App — D-0 tracking)
+// ============================================================================
+
+/**
+ * Flight Cycle Event Types
+ * Landing → Taxi In → Chocks On → Refueling → Chocks Off → Taxi Out → Takeoff → Airborne
+ */
+type FlightCycleEventType : String(20) enum {
+    LANDING     = 'LANDING';
+    TAXI_IN     = 'TAXI_IN';
+    CHOCKS_ON   = 'CHOCKS_ON';
+    REFUELING   = 'REFUELING';
+    CHOCKS_OFF  = 'CHOCKS_OFF';
+    TAXI_OUT    = 'TAXI_OUT';
+    TAKEOFF     = 'TAKEOFF';
+    AIRBORNE    = 'AIRBORNE';
+}
+
+/**
+ * FLIGHT_CYCLE_EVENTS
+ * Tracks real-time flight turnaround events for D-0 operations monitoring.
+ * Each event represents a milestone in the ground handling cycle.
+ */
+entity FLIGHT_CYCLE_EVENTS : cuid, AuditTrail {
+    flight              : Association to FLIGHT_SCHEDULE @mandatory;
+    fuel_order          : Association to FUEL_ORDERS;      // Optional link to fuel order
+    event_type          : FlightCycleEventType @mandatory;
+    event_timestamp     : Timestamp @mandatory;            // When the event occurred
+    recorded_by         : String(50);                      // User/system that recorded
+    source_system       : String(30);                      // ACARS, AMS, Manual, etc.
+    latitude            : Decimal(10,7);                   // GPS latitude
+    longitude           : Decimal(10,7);                   // GPS longitude
+    remarks             : String(500);                     // Free-text notes
+    // Refueling-specific fields (populated when event_type = REFUELING)
+    uplift_kg           : Decimal(12,2);                   // Fuel uplifted during refueling
+    density_kg_l        : Decimal(6,4);                    // Fuel density at delivery
+    temperature_c       : Decimal(5,1);                    // Fuel temperature
+    bowser_id           : String(20);                      // Refueling vehicle identifier
+    // Computed
+    sequence_number     : Integer;                         // Auto-assigned order within flight
+}
+
+// ============================================================================
 // FUEL ORDERS MODULE (FDD-04)
 // ============================================================================
 

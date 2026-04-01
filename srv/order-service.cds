@@ -214,6 +214,20 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // FLIGHT CYCLE EVENTS (D-0 Operations Tracking)
+    // ========================================================================
+
+    /**
+     * FlightCycleEvents - Real-time flight turnaround events
+     * Landing → Taxi In → Chocks On → Refueling → Chocks Off → Taxi Out → Takeoff → Airborne
+     */
+    entity FlightCycleEvents as projection on db.FLIGHT_CYCLE_EVENTS {
+        *,
+        flight     : redirected to FlightSchedule,
+        fuel_order : redirected to FuelOrders
+    };
+
+    // ========================================================================
     // CREW REVIEW QUEUE (Step 4 - Cockpit Crew Work Queue)
     // ========================================================================
 

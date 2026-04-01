@@ -18,13 +18,45 @@
           }
         },
         "planner": {
-          "roles": ["FuelPlanner"]
+          "roles": ["FuelPlanner", "MasterDataRead", "FuelOrderCreate", "PlanningAccess", "ReportView"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
+        },
+        "dispatch": {
+          "roles": ["DispatchTeam", "MasterDataRead", "FuelOrderCreate", "PlanningAccess", "BurnDataView"],
+          "attributes": {
+            "station": ["YYZ", "YVR", "LHR"],
+            "region": ["NAM", "EUR"]
+          }
+        },
+        "cockpit": {
+          "roles": ["CockpitCrew", "MasterDataRead", "FuelOrderCreate", "BurnDataView"],
+          "attributes": {
+            "station": ["*"],
+            "region": ["*"]
+          }
         },
         "ops": {
-          "roles": ["OperationsManager", "StationCoordinator"],
+          "roles": ["OperationsManager", "StationCoordinator", "MasterDataRead", "BurnDataView", "BurnDataEdit", "FuelOrderApprove", "ePODApprove", "ReportView"],
           "attributes": {
             "station": ["MNL", "CEB", "YYZ", "YVR"],
             "region": ["APAC", "NAM"]
+          }
+        },
+        "supplier": {
+          "roles": ["SupplierPlanner", "MasterDataRead", "FuelOrderApprove", "ReportView"],
+          "attributes": {
+            "station": ["YYZ", "YVR", "LHR", "CDG"],
+            "region": ["NAM", "EUR"]
+          }
+        },
+        "delivery": {
+          "roles": ["FulfillmentCrew", "MasterDataRead", "ePODCapture", "FuelOrderCreate"],
+          "attributes": {
+            "station": ["YYZ", "YVR"],
+            "region": ["NAM"]
           }
         },
         "refueler": {
@@ -42,10 +74,10 @@
           }
         },
         "finance": {
-          "roles": ["FinanceManager", "FinanceController"]
+          "roles": ["FinanceController", "MasterDataRead", "InvoiceVerify", "InvoiceApprove", "FinancePost", "ReportView"]
         },
         "analyst": {
-          "roles": ["Analyst"]
+          "roles": ["MasterDataRead", "ReportView", "BurnDataView"]
         },
         "*": true
       }
