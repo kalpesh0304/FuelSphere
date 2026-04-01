@@ -14,14 +14,10 @@ cds.on('bootstrap', (app) => {
     app.use('/fulfillment', express.static(path.join(appFolder, 'fulfillment', 'webapp')));
     app.use('/invoicing', express.static(path.join(appFolder, 'invoicing', 'webapp')));
 
-    // Legacy dashboards (kept for backward compatibility)
-    app.use('/airline', express.static(path.join(appFolder, 'airline', 'webapp')));
-    app.use('/refueler', express.static(path.join(appFolder, 'refueler', 'webapp')));
-
     // Serve entire app folder at root as fallback
     app.use(express.static(appFolder));
 
-    console.log('[server.js] Static middleware registered: /admin, /operations, /planning, /fulfillment, /invoicing, /airline, /refueler');
+    console.log('[server.js] Static middleware registered: /admin, /operations, /planning, /fulfillment, /invoicing');
 });
 
 module.exports = cds.server;

@@ -83,7 +83,8 @@
       }
     },
     "features": {
-      "fetch_csrf": true
+      "fetch_csrf": true,
+      "fiori_preview": false
     }
   },
   "engines": {

@@ -34,18 +34,6 @@
             "authenticationType": "none"
         },
         {
-            "source": "^/airline/(.*)$",
-            "target": "/airline/$1",
-            "localDir": ".",
-            "authenticationType": "none"
-        },
-        {
-            "source": "^/refueler/(.*)$",
-            "target": "/refueler/$1",
-            "localDir": ".",
-            "authenticationType": "none"
-        },
-        {
             "source": "^/odata/v4/(.*)$",
             "target": "/odata/v4/$1",
             "destination": "srv-api",
