@@ -4,6 +4,7 @@
 
     var ORDER_SVC = '/odata/v4/orders';
     var PLANNING_SVC = '/odata/v4/planning';
+    var currentPersona = 'all';
 
     function fmt(n) { return n == null ? '--' : Number(n).toLocaleString(); }
 
@@ -15,7 +16,8 @@
             Delivered: 'badge-delivered', Completed: 'badge-completed',
             Cancelled: 'badge-cancelled', SCHEDULED: 'badge-scheduled',
             ARRIVED: 'badge-arrived', DEPARTED: 'badge-departed',
-            PENDING: 'badge-pending', ADJUSTED: 'badge-adjusted'
+            PENDING: 'badge-pending', ADJUSTED: 'badge-adjusted',
+            DRAFT: 'badge-draft', AWAITING_REVIEW: 'badge-pending'
         };
         return '<span class="badge ' + (cls[status] || 'badge-draft') + '">' + status + '</span>';
     }
@@ -37,7 +39,6 @@
         if (el) el.textContent = val != null ? val : '--';
     }
 
-    // DateTime
     function updateDateTime() {
         var el = document.getElementById('datetime');
         if (el) el.textContent = new Date().toLocaleString('en-CA', {
@@ -48,9 +49,23 @@
     updateDateTime();
     setInterval(updateDateTime, 60000);
 
-    // Filter out PR flights
     function isPRFlight(f) {
         return f.airline_code === 'PR' || (f.flight_number && f.flight_number.substring(0, 2) === 'PR');
+    }
+
+    // Determine the correct crew status label for display
+    function getCrewStatusLabel(order) {
+        if (!order) return 'DRAFT';
+        // Draft orders haven't been submitted yet — show DRAFT, not PENDING
+        if (order.status === 'Draft') return 'DRAFT';
+        // Confirmed orders without crew review → awaiting crew review
+        if (order.status === 'Confirmed' && (!order.crew_review_status || order.crew_review_status === 'PENDING')) return 'AWAITING_REVIEW';
+        // Crew has reviewed
+        if (order.crew_review_status === 'ADJUSTED') return 'ADJUSTED';
+        if (order.crew_review_status === 'CONFIRMED') return 'CONFIRMED';
+        // InProgress / Delivered / Completed — already past crew review
+        if (['InProgress', 'Delivered', 'Completed'].indexOf(order.status) >= 0) return 'CONFIRMED';
+        return order.crew_review_status || 'DRAFT';
     }
 
     async function loadDashboard() {
@@ -69,17 +84,33 @@
 
         // KPIs
         var flightsWithOrders = new Set(allOrders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
-        var needsPlan = filteredFlights.filter(function(f) { return !flightsWithOrders.has(f.ID) && f.status === 'SCHEDULED'; }).length;
-        var pendingReview = allOrders.filter(function(o) { return o.status === 'Confirmed' && (!o.crew_review_status || o.crew_review_status === 'PENDING'); }).length;
-        var pilotOverrides = allOrders.filter(function(o) { return o.crew_review_status === 'ADJUSTED'; }).length;
-        var confirmed = allOrders.filter(function(o) { return o.crew_review_status === 'CONFIRMED'; }).length;
 
-        setText('kpiFlightsToday', needsPlan);
-        setText('kpiPendingReview', pendingReview);
+        // "Flights Needing Fuel Plan" = SCHEDULED flights that have NO fuel order yet
+        var scheduledNoOrder = filteredFlights.filter(function(f) {
+            return !flightsWithOrders.has(f.ID) && f.status === 'SCHEDULED';
+        });
+        setText('kpiFlightsToday', scheduledNoOrder.length);
+        // Show which flights in tooltip
+        var noOrderNames = scheduledNoOrder.map(function(f) { return f.flight_number; }).join(', ');
+        var kpiEl = document.getElementById('kpiFlightsToday');
+        if (kpiEl) kpiEl.title = noOrderNames || 'None';
+
+        // "Pending Crew Review" = Confirmed orders where crew hasn't reviewed yet
+        var pendingReview = allOrders.filter(function(o) {
+            return o.status === 'Confirmed' && (!o.crew_review_status || o.crew_review_status === 'PENDING');
+        });
+        setText('kpiPendingReview', pendingReview.length);
+
+        var pilotOverrides = allOrders.filter(function(o) { return o.crew_review_status === 'ADJUSTED'; }).length;
+        var confirmed = allOrders.filter(function(o) {
+            return o.crew_review_status === 'CONFIRMED' ||
+                   ['InProgress', 'Delivered', 'Completed'].indexOf(o.status) >= 0;
+        }).length;
+
         setText('kpiOverrides', pilotOverrides);
         setText('kpiConfirmed', confirmed);
 
-        // 3-Figure comparison with inline override reason
+        // 3-Figure comparison
         var compBody = document.getElementById('comparisonBody');
         if (compBody) {
             if (allOrders.length === 0) {
@@ -98,20 +129,30 @@
                     var robKg = dispatch ? (dispatch.rob_departure_kg || 0) : 0;
                     var netUplift = Math.max(0, cockpitQty - robKg);
 
-                    var crewStatus = o.crew_review_status || 'PENDING';
+                    var crewStatus = getCrewStatusLabel(o);
                     var isAdjusted = o.crew_review_status === 'ADJUSTED';
+                    var isAwaitingReview = crewStatus === 'AWAITING_REVIEW';
 
-                    html += '<div class="comparison-row' + (isAdjusted ? ' comparison-row-adjusted' : '') + '">' +
+                    // Cockpit crew action buttons (only for AWAITING_REVIEW orders)
+                    var cockpitActions = '';
+                    if (currentPersona === 'cockpit' && isAwaitingReview) {
+                        cockpitActions = '<div class="cockpit-actions">' +
+                            '<button class="btn-confirm" data-order-id="' + o.ID + '" data-flight="' + flightNum + '" data-qty="' + plannerQty + '">Confirm</button>' +
+                            '<button class="btn-adjust" data-order-id="' + o.ID + '" data-flight="' + flightNum + '" data-qty="' + plannerQty + '">Adjust</button>' +
+                            '</div>';
+                    }
+
+                    html += '<div class="comparison-row' + (isAdjusted ? ' comparison-row-adjusted' : '') + (isAwaitingReview && currentPersona === 'cockpit' ? ' comparison-row-review' : '') + '">' +
                         '<div class="flight-info"><span class="flight-number">' + flightNum + '</span><span class="flight-route">' + route + '</span></div>' +
                         '<div class="qty-cell qty-dispatch">' + fmt(Math.round(dispatchQty)) + '</div>' +
                         '<div class="qty-cell qty-planner">' + fmt(Math.round(plannerQty)) + '</div>' +
                         '<div class="qty-cell qty-cockpit">' + fmt(Math.round(cockpitQty)) + '</div>' +
                         '<div class="qty-cell qty-uplift">' + fmt(Math.round(netUplift)) + '</div>' +
                         '<div class="qty-cell qty-rob">' + fmt(Math.round(robKg)) + '</div>' +
-                        '<div>' + statusBadge(crewStatus) + '</div>' +
+                        '<div>' + statusBadge(crewStatus) + cockpitActions + '</div>' +
                         '</div>';
 
-                    // Inline override reason row when adjusted
+                    // Inline override reason row
                     if (isAdjusted) {
                         var diff = (o.crew_adjusted_quantity || 0) - (o.ordered_quantity || 0);
                         var diffStr = diff >= 0 ? '+' + fmt(diff) : fmt(diff);
@@ -132,15 +173,15 @@
             }
         }
 
-        // Flights table — only show SCHEDULED flights (filter out ARRIVED/DEPARTED)
-        var scheduledFlights = filteredFlights.filter(function(f) {
-            return f.status === 'SCHEDULED';
-        });
+        // Flights table — only SCHEDULED
+        var scheduledFlights = filteredFlights.filter(function(f) { return f.status === 'SCHEDULED'; });
         var flightsBody = document.getElementById('flightsBody');
         if (flightsBody) {
             if (scheduledFlights.length === 0) {
                 flightsBody.innerHTML = '<tr><td colspan="8" class="loading">No scheduled flights found</td></tr>';
             } else {
+                // Show/hide enrich column based on persona
+                var showEnrich = (currentPersona === 'all' || currentPersona === 'planner');
                 flightsBody.innerHTML = scheduledFlights.map(function(f) {
                     var hasOrder = flightsWithOrders.has(f.ID);
                     var needsEnrich = !f.aircraft_type || !f.aircraft_reg;
@@ -152,7 +193,8 @@
                         '<td>' + (f.aircraft_reg || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
                         '<td>' + statusBadge(f.status) + '</td>' +
                         '<td>' + (hasOrder ? '<span class="badge badge-confirmed">YES</span>' : '<span class="badge badge-pending">NO</span>') + '</td>' +
-                        '<td><button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
+                        (showEnrich ?
+                            '<td><button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
                             'data-flight-number="' + f.flight_number + '" ' +
                             'data-flight-date="' + f.flight_date + '" ' +
                             'data-aircraft-type="' + (f.aircraft_type || '') + '" ' +
@@ -161,11 +203,15 @@
                             'data-arr-terminal="' + (f.arrival_terminal || '') + '" ' +
                             'data-gate="' + (f.gate_number || '') + '" ' +
                             'data-stand="' + (f.stand_number || '') + '"' +
-                            '>' + (needsEnrich ? 'Enrich Now' : 'Edit') + '</button></td>' +
+                            '>' + (needsEnrich ? 'Enrich Now' : 'Edit') + '</button></td>' :
+                            '<td>--</td>') +
                         '</tr>';
                 }).join('');
             }
         }
+
+        // Apply persona visibility after data loads
+        applyPersona(currentPersona);
     }
 
     // Enrich modal
@@ -234,6 +280,63 @@
             })
             .finally(function() { saveBtn.disabled = false; });
         });
+    }
+
+    // Cockpit crew confirm/adjust handlers
+    function initCockpitActions() {
+        document.addEventListener('click', function(e) {
+            var confirmBtn = e.target.closest('.btn-confirm');
+            var adjustBtn = e.target.closest('.btn-adjust');
+
+            if (confirmBtn) {
+                var orderId = confirmBtn.getAttribute('data-order-id');
+                var flightNum = confirmBtn.getAttribute('data-flight');
+                if (confirm('Confirm fuel quantity for ' + flightNum + ' as planned?')) {
+                    patchCrewReview(orderId, 'CONFIRMED', null, null, flightNum);
+                }
+            }
+
+            if (adjustBtn) {
+                var orderId2 = adjustBtn.getAttribute('data-order-id');
+                var flightNum2 = adjustBtn.getAttribute('data-flight');
+                var currentQty = adjustBtn.getAttribute('data-qty');
+                var newQty = prompt('Adjust fuel quantity for ' + flightNum2 + ' (current: ' + fmt(Number(currentQty)) + ' kg).\nEnter new quantity in kg:', currentQty);
+                if (newQty !== null && newQty !== '' && Number(newQty) > 0) {
+                    var reason = prompt('Mandatory: Provide reason for adjustment:');
+                    if (reason && reason.trim()) {
+                        patchCrewReview(orderId2, 'ADJUSTED', Number(newQty), reason.trim(), flightNum2);
+                    } else {
+                        alert('Adjustment reason is mandatory. Cancelled.');
+                    }
+                }
+            }
+        });
+    }
+
+    function patchCrewReview(orderId, status, adjustedQty, reason, flightNum) {
+        var payload = { crew_review_status: status };
+        if (status === 'ADJUSTED') {
+            payload.crew_adjusted_quantity = adjustedQty;
+            payload.crew_adjustment_reason = reason;
+        }
+        payload.crew_reviewed_by = 'Cockpit Crew';
+        payload.crew_reviewed_at = new Date().toISOString();
+
+        fetch(ORDER_SVC + '/FuelOrders(' + orderId + ')', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) {
+            if (res.ok) {
+                alert(flightNum + ': Crew review ' + status.toLowerCase() + ' successfully.');
+                loadDashboard();
+            } else {
+                return res.json().then(function(data) {
+                    alert('Failed: ' + ((data.error && data.error.message) || 'Unknown error'));
+                });
+            }
+        })
+        .catch(function(err) { alert('Network error: ' + err.message); });
     }
 
     // Upload handlers
@@ -312,39 +415,81 @@
         }
     }
 
-    // Persona filtering
+    // Persona filtering — controls what each role can see
     function initPersona() {
         var selector = document.getElementById('personaSelector');
         if (!selector) return;
         selector.addEventListener('change', function() {
-            applyPersona(selector.value);
+            currentPersona = selector.value;
+            loadDashboard(); // Reload to rebuild comparison with actions
         });
     }
 
     function applyPersona(persona) {
+        var workflowSection = document.querySelector('.workflow-section');
+        var flightTableSection = document.querySelector('.tables-section');
+        var uploadSchedule = document.getElementById('uploadArea');
+        var uploadDispatch = document.getElementById('dispatchArea');
+        var compSection = document.querySelector('.comparison-section');
+
+        // Workflow step highlights
+        var steps = document.querySelectorAll('.workflow-step');
+        steps.forEach(function(s) { s.classList.remove('workflow-step-active'); s.style.display = ''; });
+        var arrows = document.querySelectorAll('.workflow-arrow');
+        arrows.forEach(function(a) { a.style.display = ''; });
+
+        // Column emphasis
         var dispatchCells = document.querySelectorAll('.qty-dispatch');
         var plannerCells = document.querySelectorAll('.qty-planner');
         var cockpitCells = document.querySelectorAll('.qty-cockpit');
-
-        // Reset highlights
         dispatchCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
         plannerCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
         cockpitCells.forEach(function(c) { c.style.fontWeight = ''; c.style.fontSize = ''; });
 
-        // Highlight workflow steps based on persona
-        var steps = document.querySelectorAll('.workflow-step');
-        steps.forEach(function(s) { s.classList.remove('workflow-step-active'); });
-
-        if (persona === 'dispatch') {
-            dispatchCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            if (steps[2]) steps[2].classList.add('workflow-step-active'); // Step C
+        if (persona === 'all') {
+            // All Roles: show everything
+            if (workflowSection) workflowSection.style.display = '';
+            if (flightTableSection) flightTableSection.style.display = '';
+            if (uploadSchedule) uploadSchedule.style.display = '';
+            if (uploadDispatch) uploadDispatch.style.display = '';
         } else if (persona === 'planner') {
+            // Fuel Planner: Steps A + B, schedule upload, enrich, comparison (planner col)
+            if (workflowSection) workflowSection.style.display = '';
+            if (flightTableSection) flightTableSection.style.display = '';
+            if (uploadSchedule) uploadSchedule.style.display = '';
+            if (uploadDispatch) uploadDispatch.style.display = 'none';
             plannerCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            if (steps[0]) steps[0].classList.add('workflow-step-active'); // Step A
-            if (steps[1]) steps[1].classList.add('workflow-step-active'); // Step B
+            if (steps[0]) steps[0].classList.add('workflow-step-active');
+            if (steps[1]) steps[1].classList.add('workflow-step-active');
+            // Hide dispatch and cockpit workflow steps
+            if (steps[2]) steps[2].style.display = 'none'; // Step C
+            if (steps[3]) steps[3].style.display = 'none'; // Step D
+            if (arrows[2]) arrows[2].style.display = 'none';
+            if (arrows[3]) arrows[3].style.display = 'none';
+        } else if (persona === 'dispatch') {
+            // Dispatch Team: Step C only, dispatch upload, comparison (dispatch col), no enrich
+            if (workflowSection) workflowSection.style.display = '';
+            if (flightTableSection) flightTableSection.style.display = 'none'; // Hide flight table + enrich
+            if (uploadSchedule) uploadSchedule.style.display = 'none';
+            if (uploadDispatch) uploadDispatch.style.display = '';
+            dispatchCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
+            // Only show Step C
+            if (steps[0]) steps[0].style.display = 'none';
+            if (steps[1]) steps[1].style.display = 'none';
+            if (steps[2]) steps[2].classList.add('workflow-step-active');
+            if (steps[3]) steps[3].style.display = 'none';
+            arrows.forEach(function(a) { a.style.display = 'none'; });
         } else if (persona === 'cockpit') {
+            // Cockpit Crew: comparison only (cockpit col + confirm/adjust), Step D only
+            if (workflowSection) workflowSection.style.display = '';
+            if (flightTableSection) flightTableSection.style.display = 'none'; // Hide flight table + uploads
             cockpitCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            if (steps[3]) steps[3].classList.add('workflow-step-active'); // Step D
+            // Only show Step D
+            if (steps[0]) steps[0].style.display = 'none';
+            if (steps[1]) steps[1].style.display = 'none';
+            if (steps[2]) steps[2].style.display = 'none';
+            if (steps[3]) steps[3].classList.add('workflow-step-active');
+            arrows.forEach(function(a) { a.style.display = 'none'; });
         }
     }
 
@@ -353,6 +498,7 @@
         initEnrichModal();
         initUploads();
         initPersona();
+        initCockpitActions();
     }
 
     if (document.readyState === 'loading') {

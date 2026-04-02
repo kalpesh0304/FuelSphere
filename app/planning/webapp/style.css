@@ -175,6 +175,21 @@ tbody tr:hover { background: #F8FAFD; }
 .badge-departed { background: #FFF9C4; color: #F57F17; }
 .badge-pending { background: #FFF3CD; color: #856404; }
 .badge-adjusted { background: #E1BEE7; color: #6A1B9A; }
+.badge-AWAITING_REVIEW { background: #FFE0B2; color: #E65100; }
+
+/* Cockpit Crew action buttons */
+.cockpit-actions { display: flex; gap: 6px; margin-top: 6px; }
+.btn-confirm {
+    padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    background: var(--success); color: #fff; border: none; cursor: pointer;
+}
+.btn-confirm:hover { background: #0A6130; }
+.btn-adjust {
+    padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    background: var(--warning); color: #fff; border: none; cursor: pointer;
+}
+.btn-adjust:hover { background: #C75E00; }
+.comparison-row-review { background: #FFF3E0; border-left: 3px solid var(--warning); }
 
 /* Upload row — side by side */
 .upload-row {
