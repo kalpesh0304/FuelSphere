@@ -82,6 +82,11 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .app-tile-body { flex: 1; }
 .app-tile-body h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
 .app-tile-body p { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+.app-step-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; margin-bottom: 4px;
+    background: #E8F0FE; color: #0070F2; letter-spacing: 0.5px;
+}
 
 .app-tile-roles { display: flex; gap: 6px; flex-wrap: wrap; }
 .role-tag {
