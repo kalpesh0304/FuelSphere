@@ -426,17 +426,10 @@
     }
 
     function applyPersona(persona) {
+        var kpiSection = document.querySelector('.kpi-section');
         var workflowSection = document.querySelector('.workflow-section');
         var flightTableSection = document.querySelector('.tables-section');
-        var uploadSchedule = document.getElementById('uploadArea');
-        var uploadDispatch = document.getElementById('dispatchArea');
-        var compSection = document.querySelector('.comparison-section');
-
-        // Workflow step highlights
-        var steps = document.querySelectorAll('.workflow-step');
-        steps.forEach(function(s) { s.classList.remove('workflow-step-active'); s.style.display = ''; });
-        var arrows = document.querySelectorAll('.workflow-arrow');
-        arrows.forEach(function(a) { a.style.display = ''; });
+        var dispatchUploadSection = document.getElementById('dispatchUploadSection');
 
         // Column emphasis
         var dispatchCells = document.querySelectorAll('.qty-dispatch');
@@ -448,48 +441,31 @@
 
         if (persona === 'all') {
             // All Roles: show everything
+            if (kpiSection) kpiSection.style.display = '';
             if (workflowSection) workflowSection.style.display = '';
             if (flightTableSection) flightTableSection.style.display = '';
-            if (uploadSchedule) uploadSchedule.style.display = '';
-            if (uploadDispatch) uploadDispatch.style.display = '';
+            if (dispatchUploadSection) dispatchUploadSection.style.display = '';
         } else if (persona === 'planner') {
-            // Fuel Planner: Steps A + B, schedule upload, enrich, comparison (planner col)
+            // Fuel Planner: KPIs, workflow, schedule upload, enrich, comparison (planner col)
+            if (kpiSection) kpiSection.style.display = '';
             if (workflowSection) workflowSection.style.display = '';
             if (flightTableSection) flightTableSection.style.display = '';
-            if (uploadSchedule) uploadSchedule.style.display = '';
-            if (uploadDispatch) uploadDispatch.style.display = 'none';
+            if (dispatchUploadSection) dispatchUploadSection.style.display = 'none';
             plannerCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            if (steps[0]) steps[0].classList.add('workflow-step-active');
-            if (steps[1]) steps[1].classList.add('workflow-step-active');
-            // Hide dispatch and cockpit workflow steps
-            if (steps[2]) steps[2].style.display = 'none'; // Step C
-            if (steps[3]) steps[3].style.display = 'none'; // Step D
-            if (arrows[2]) arrows[2].style.display = 'none';
-            if (arrows[3]) arrows[3].style.display = 'none';
         } else if (persona === 'dispatch') {
-            // Dispatch Team: Step C only, dispatch upload, comparison (dispatch col), no enrich
-            if (workflowSection) workflowSection.style.display = '';
-            if (flightTableSection) flightTableSection.style.display = 'none'; // Hide flight table + enrich
-            if (uploadSchedule) uploadSchedule.style.display = 'none';
-            if (uploadDispatch) uploadDispatch.style.display = '';
+            // Dispatch Team: comparison (dispatch col) + dispatch upload only
+            if (kpiSection) kpiSection.style.display = 'none';
+            if (workflowSection) workflowSection.style.display = 'none';
+            if (flightTableSection) flightTableSection.style.display = 'none';
+            if (dispatchUploadSection) dispatchUploadSection.style.display = '';
             dispatchCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            // Only show Step C
-            if (steps[0]) steps[0].style.display = 'none';
-            if (steps[1]) steps[1].style.display = 'none';
-            if (steps[2]) steps[2].classList.add('workflow-step-active');
-            if (steps[3]) steps[3].style.display = 'none';
-            arrows.forEach(function(a) { a.style.display = 'none'; });
         } else if (persona === 'cockpit') {
-            // Cockpit Crew: comparison only (cockpit col + confirm/adjust), Step D only
-            if (workflowSection) workflowSection.style.display = '';
-            if (flightTableSection) flightTableSection.style.display = 'none'; // Hide flight table + uploads
+            // Cockpit Crew: comparison only (cockpit col + confirm/adjust)
+            if (kpiSection) kpiSection.style.display = 'none';
+            if (workflowSection) workflowSection.style.display = 'none';
+            if (flightTableSection) flightTableSection.style.display = 'none';
+            if (dispatchUploadSection) dispatchUploadSection.style.display = 'none';
             cockpitCells.forEach(function(c) { c.style.fontWeight = '800'; c.style.fontSize = '16px'; });
-            // Only show Step D
-            if (steps[0]) steps[0].style.display = 'none';
-            if (steps[1]) steps[1].style.display = 'none';
-            if (steps[2]) steps[2].style.display = 'none';
-            if (steps[3]) steps[3].classList.add('workflow-step-active');
-            arrows.forEach(function(a) { a.style.display = 'none'; });
         }
     }
 

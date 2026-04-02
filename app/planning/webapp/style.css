@@ -138,6 +138,10 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .workflow-step-desc { font-size: 12px; color: var(--text-light); margin-top: 4px; line-height: 1.4; }
 .workflow-arrow { display: flex; justify-content: center; color: var(--border); padding: 2px 0; }
 
+/* Dispatch upload standalone section */
+.dispatch-upload-section { padding: 0 24px 16px; }
+.upload-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+
 /* Upload + Tables */
 .tables-section { padding: 0 24px 16px; display: flex; flex-direction: column; gap: 16px; }
 .table-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
