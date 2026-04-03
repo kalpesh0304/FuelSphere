@@ -89,7 +89,11 @@
     "fiori": {
       "preview": {
         "ui5": {
-          "theme": "sap_horizon",
+          "theme": {
+            "light": "sap_horizon",
+            "dark": "sap_horizon_dark",
+            "switch": true
+          },
           "version": "1.121.0"
         }
       }
