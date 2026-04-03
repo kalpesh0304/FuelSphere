@@ -22,11 +22,8 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 /* Header */
 .app-header {
     background: linear-gradient(135deg, var(--accent) 0%, #0A5C2E 100%);
-    color: #fff;
-    padding: 12px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    color: #fff; padding: 12px 24px;
+    display: flex; justify-content: space-between; align-items: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 .header-left { display: flex; align-items: center; gap: 16px; }
@@ -34,27 +31,21 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .app-title { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
 .app-subtitle { font-size: 14px; opacity: 0.9; }
 .side-badge {
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.4);
-    border-radius: 4px;
-    padding: 2px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
+    background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.3px; text-transform: uppercase;
 }
 .header-right { display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .nav-link { color: #fff; text-decoration: none; opacity: 0.85; font-size: 12px; padding: 4px 10px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; }
 .nav-link:hover { opacity: 1; background: rgba(255,255,255,0.1); }
 .persona-select {
     padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3);
-    background: rgba(255,255,255,0.15); color: #fff; font-size: 12px; font-family: inherit;
-    max-width: 280px;
+    background: rgba(255,255,255,0.15); color: #fff; font-size: 12px; font-family: inherit; max-width: 280px;
 }
 .persona-select option { color: #333; background: #fff; }
 .datetime { opacity: 0.8; font-size: 12px; }
 
-/* Section titles & descriptions */
+/* Section titles */
 .section-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
 .section-desc { font-size: 12px; color: var(--text-light); margin-bottom: 16px; }
 .table-filter-note { font-size: 12px; color: var(--text-light); }
@@ -75,7 +66,7 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .pipeline-stage[data-status="DELIVERED"] { border-top-color: #2E7D32; }
 .pipeline-stage[data-status="INVOICED"] { border-top-color: #7B1FA2; }
 .pipeline-stage[data-status="CLOSED"] { border-top-color: #6A6D70; }
-.stage-count { font-size: 28px; font-weight: 700; color: var(--text); }
+.stage-count { font-size: 28px; font-weight: 700; }
 .pipeline-stage[data-status="RECEIVED"] .stage-count { color: #0070F2; }
 .pipeline-stage[data-status="CONFIRMED"] .stage-count { color: #107E3E; }
 .pipeline-stage[data-status="SCHEDULED"] .stage-count { color: #0891B2; }
@@ -104,74 +95,93 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .workflow-step {
     display: flex; gap: 16px; align-items: flex-start;
     background: var(--card-bg); border-radius: var(--radius); padding: 16px 20px;
-    box-shadow: var(--shadow); border-left: 4px solid var(--accent);
+    box-shadow: var(--shadow); border-left: 4px solid var(--border);
 }
+.workflow-step-active { border-left-color: var(--accent); background: #F1F8E9; }
 .workflow-step-number {
-    width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+    width: 32px; height: 32px; border-radius: 50%; background: var(--neutral); color: #fff;
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 14px; flex-shrink: 0;
 }
+.workflow-step-active .workflow-step-number { background: var(--accent); }
 .workflow-step-body { flex: 1; }
 .workflow-step-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
 .workflow-step-role { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
 .workflow-step-desc { font-size: 12px; color: var(--text-light); line-height: 1.5; }
 .workflow-arrow { display: flex; justify-content: center; padding: 4px 0; color: var(--text-light); }
 
-/* Ticket Section */
-.ticket-section { padding: 0 24px 16px; }
-.ticket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-.ticket-card {
-    background: var(--card-bg); border-radius: var(--radius); padding: 16px;
-    box-shadow: var(--shadow); border-left: 4px solid var(--accent);
-    transition: all 0.2s;
+/* ═══ Delivery Cards — Fuel-order-centric ═══ */
+.delivery-section { padding: 0 24px 16px; }
+.delivery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+
+.delivery-card {
+    background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+    border-left: 4px solid var(--border); overflow: hidden; transition: all 0.2s;
 }
-.ticket-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
-.ticket-card-pending { border-left-color: var(--warning); }
-.ticket-card-posted { border-left-color: #2E7D32; }
-.ticket-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-.ticket-id { display: flex; flex-direction: column; gap: 2px; }
-.ticket-number { font-weight: 700; font-size: 14px; }
-.ticket-flight { font-size: 11px; color: var(--text-light); }
-.ticket-status { font-size: 11px; flex-shrink: 0; }
-.ticket-details { font-size: 13px; color: var(--text-light); }
-.ticket-detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F5F5F5; }
-.ticket-detail-row:last-child { border-bottom: none; }
+.delivery-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.delivery-card-pending { border-left-color: var(--warning); }
+.delivery-card-inprogress { border-left-color: #0070F2; }
+.delivery-card-signed { border-left-color: #0891B2; }
+.delivery-card-complete { border-left-color: var(--success); }
+
+.delivery-card-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+}
+.delivery-card-ref { display: flex; flex-direction: column; gap: 2px; }
+.delivery-order-num { font-weight: 700; font-size: 14px; color: var(--text); }
+.delivery-flight { font-size: 12px; color: var(--accent); font-weight: 600; }
+
+.delivery-card-order { padding: 10px 16px; background: #FAFBFC; }
+.delivery-card-epod { padding: 10px 16px; }
+.delivery-card-epod-empty { text-align: center; padding: 20px 16px; }
+.epod-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.epod-title { font-weight: 700; font-size: 13px; color: var(--primary); }
+.epod-empty-msg { font-weight: 600; font-size: 14px; color: var(--warning); margin-bottom: 6px; }
+.epod-empty-hint { font-size: 12px; color: var(--text-light); line-height: 1.5; }
+
+.detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F5F5F5; }
+.detail-row:last-child { border-bottom: none; }
 .detail-label { color: var(--text-light); font-size: 12px; }
 .detail-value { color: var(--text); font-weight: 600; font-size: 12px; }
-.ticket-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); }
-.ticket-ref { font-size: 11px; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 4px; }
-.ticket-ref-pending { color: var(--warning); }
-.ticket-signed { font-size: 11px; color: var(--accent); display: flex; align-items: center; gap: 4px; }
-.ticket-unsigned { color: var(--text-light); }
+.detail-value-lg { font-size: 14px; color: var(--text); }
 
-/* Photo Upload Section */
-.photo-section { padding: 0 24px 16px; }
-.photo-upload-area {
-    display: flex; align-items: center; gap: 20px; padding: 32px 24px;
-    border: 2px dashed #A5D6A7; border-radius: var(--radius);
-    background: #F1F8E9; cursor: pointer; transition: all 0.2s;
-    margin: 16px 20px;
+/* Signature area */
+.delivery-card-sig {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    font-size: 12px; font-weight: 600; border-top: 1px solid var(--border);
 }
-.photo-upload-area:hover, .photo-upload-area.drag-over {
-    border-color: var(--accent); background: #E8F5E9;
+.delivery-card-sig-done { color: var(--success); background: #F1F8E9; }
+.delivery-card-sig-pending { color: var(--warning); background: #FFF8E1; }
+.btn-sign { margin-left: auto; }
+
+/* Photo area inside card */
+.delivery-card-photo {
+    display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+    border-top: 1px solid #F5F5F5; flex-wrap: wrap;
 }
-.photo-upload-icon { color: var(--accent); flex-shrink: 0; }
-.photo-upload-text { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.photo-upload-text strong { font-size: 15px; color: var(--text); }
-.photo-upload-text span { font-size: 12px; color: var(--text-light); }
-.photo-mobile-hint { color: var(--accent); font-weight: 600; }
-.btn-large { padding: 12px 24px; font-size: 14px; }
-.photo-preview-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px; padding: 16px 20px;
+.photo-thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
+.photo-thumb { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border); }
+
+/* ═══ Document Flow — Ticket → SAP SO → Delivery+Invoice ═══ */
+.delivery-card-docflow {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: #FAFBFC; border-top: 1px solid var(--border);
+    gap: 4px;
 }
-.photo-preview-item {
-    border-radius: var(--radius); overflow: hidden; background: var(--card-bg);
-    box-shadow: var(--shadow); border: 1px solid var(--border);
+.docflow-step {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-width: 0; flex: 1; text-align: center;
 }
-.photo-preview-item img { width: 100%; height: 100px; object-fit: cover; }
-.photo-preview-name { font-size: 11px; padding: 6px 8px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.photo-preview-time { font-size: 10px; padding: 0 8px 6px; color: var(--text-light); }
+.docflow-icon { flex-shrink: 0; }
+.docflow-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-light); letter-spacing: 0.3px; }
+.docflow-value { font-size: 11px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+.docflow-auto { color: var(--primary); font-style: italic; }
+.docflow-arrow { color: var(--border); font-size: 16px; font-weight: 700; flex-shrink: 0; }
+.docflow-done .docflow-label { color: var(--success); }
+.docflow-processing .docflow-label { color: var(--primary); }
+.docflow-waiting .docflow-label { color: #C4C4C4; }
+.docflow-waiting .docflow-value { color: #C4C4C4; }
 
 /* UoM Section */
 .uom-section { padding: 0 24px 16px; }
@@ -184,14 +194,14 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .uom-table { width: 100%; max-width: 600px; }
 
 /* Tables */
-.tables-section { padding: 0 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+.tables-section { padding: 0 24px 16px; }
 .table-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .table-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
 .table-header h3 { font-size: 15px; font-weight: 600; }
-.table-actions { display: flex; gap: 8px; }
 .btn {
     padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 600;
     text-decoration: none; border: none; cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 4px;
 }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: #0A5C2E; }
@@ -209,7 +219,6 @@ tbody tr:hover { background: #F8FAFD; }
 .driver-name { font-size: 11px; color: var(--text-light); }
 
 /* Sales order row highlights */
-.so-row-received { }
 .so-row-confirmed td:first-child { border-left: 3px solid #107E3E; }
 .so-row-scheduled td:first-child { border-left: 3px solid #0891B2; }
 .so-row-delivered td:first-child { border-left: 3px solid #2E7D32; }
@@ -218,11 +227,15 @@ tbody tr:hover { background: #F8FAFD; }
 
 /* Badges */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.badge-draft { background: #E8E8E8; color: #555; }
+.badge-submitted { background: #E3F2FD; color: #0D47A1; }
 .badge-received { background: #E8F0FE; color: #0070F2; }
 .badge-confirmed { background: #D4EDDA; color: #155724; }
 .badge-scheduled { background: #E0F7FA; color: #006064; }
+.badge-inprogress { background: #E3F2FD; color: #0D47A1; }
 .badge-in_delivery { background: #FFE0B2; color: #E65100; }
 .badge-delivered { background: #C8E6C9; color: #1B5E20; }
+.badge-completed { background: #A5D6A7; color: #1B5E20; }
 .badge-invoiced { background: #E1BEE7; color: #6A1B9A; }
 .badge-closed { background: #E8E8E8; color: #555; }
 .badge-cancelled { background: #FFCDD2; color: #BB0000; }
@@ -234,72 +247,57 @@ tbody tr:hover { background: #F8FAFD; }
 /* Footer */
 .app-footer { text-align: center; padding: 16px; color: var(--text-light); font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px; }
 
-/* ===== Responsive — Mobile/Tablet for Delivery Crew ===== */
+/* ═══ Responsive — Mobile/Tablet for Delivery Crew ═══ */
 @media (max-width: 1200px) {
     .kpi-section { grid-template-columns: repeat(2, 1fr); }
-    .ticket-grid { grid-template-columns: repeat(2, 1fr); }
+    .delivery-grid { grid-template-columns: repeat(2, 1fr); }
     .pipeline { flex-wrap: wrap; gap: 8px; }
     .pipeline-arrow { display: none; }
 }
 
 @media (max-width: 768px) {
-    /* Header stacks vertically on mobile */
     .app-header { flex-direction: column; gap: 8px; text-align: center; padding: 12px 16px; }
     .header-right { flex-wrap: wrap; justify-content: center; }
     .nav-link { font-size: 11px; padding: 3px 8px; }
-
-    /* KPIs single column */
     .kpi-section { grid-template-columns: 1fr; padding: 12px 16px; }
-
-    /* Pipeline wraps */
     .pipeline-stage { min-width: 80px; padding: 12px 8px; }
 
-    /* Tickets single column — primary delivery crew view */
-    .ticket-section { padding: 0 12px 12px; }
-    .ticket-grid { grid-template-columns: 1fr; gap: 10px; }
-    .ticket-card { padding: 14px; }
-    .ticket-detail-row { padding: 4px 0; }
+    /* Delivery cards — single column, larger touch targets */
+    .delivery-section { padding: 0 12px 12px; }
+    .delivery-grid { grid-template-columns: 1fr; gap: 12px; }
+    .delivery-card-header { padding: 12px 14px 10px; }
+    .delivery-order-num { font-size: 15px; }
+    .detail-row { padding: 5px 0; }
     .detail-label { font-size: 13px; }
     .detail-value { font-size: 13px; }
+    .detail-value-lg { font-size: 16px; }
 
-    /* Photo upload — larger touch targets */
-    .photo-section { padding: 0 12px 12px; }
-    .photo-upload-area {
-        flex-direction: column; text-align: center; padding: 24px 16px;
-        margin: 12px;
-    }
-    .btn-large { padding: 16px 32px; font-size: 16px; width: 100%; }
-    .photo-preview-grid { grid-template-columns: repeat(2, 1fr); padding: 12px; }
-    .photo-preview-item img { height: 80px; }
+    /* Bigger buttons for touch */
+    .btn-sign { padding: 10px 20px; font-size: 14px; }
+    .btn-photo { padding: 10px 16px; font-size: 13px; }
+    .photo-thumb { width: 48px; height: 48px; }
 
-    /* Workflow stacks */
+    /* Document flow stacks vertically on small screens */
+    .delivery-card-docflow { flex-direction: column; gap: 6px; padding: 12px 16px; }
+    .docflow-step { flex-direction: row; gap: 8px; text-align: left; align-items: center; }
+    .docflow-arrow { transform: rotate(90deg); font-size: 14px; }
+    .docflow-value { max-width: none; }
+
     .workflow-section { padding: 0 12px 12px; }
     .workflow-step { padding: 12px 16px; }
-
-    /* Tables scroll horizontally */
     .tables-section { padding: 0 12px 12px; }
     table { font-size: 12px; }
     th, td { padding: 8px 10px; }
-
-    /* Sections padding */
     .pipeline-section { padding: 16px 12px 8px; }
     .uom-section { padding: 0 12px 12px; }
     .section-title { font-size: 14px; }
-    .section-desc { font-size: 11px; }
 }
 
-/* Extra small — phone in portrait */
 @media (max-width: 480px) {
     .header-left { flex-direction: column; gap: 4px; }
     .side-badge { font-size: 10px; }
     .persona-select { max-width: 100%; font-size: 13px; padding: 6px 10px; }
-
-    .ticket-card { padding: 12px; }
-    .ticket-number { font-size: 13px; }
-    .ticket-footer { flex-direction: column; gap: 6px; align-items: flex-start; }
-
-    .photo-upload-text strong { font-size: 14px; }
-    .photo-preview-grid { grid-template-columns: 1fr 1fr; }
-
-    .btn-large { padding: 14px 20px; font-size: 15px; }
+    .delivery-card-header { flex-direction: column; gap: 6px; }
+    .btn-sign { width: 100%; justify-content: center; padding: 12px; font-size: 15px; }
+    .btn-photo { width: 100%; justify-content: center; padding: 10px; font-size: 14px; }
 }

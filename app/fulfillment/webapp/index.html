@@ -24,7 +24,7 @@
             <a href="/invoicing/index.html" class="nav-link">Step 4: Invoicing</a>
             <select id="personaSelector" class="persona-select">
                 <option value="all">All Roles</option>
-                <option value="supplier">Supplier Planner (HQ, pipeline management)</option>
+                <option value="supplier">Supplier Planner (HQ, pipeline mgmt)</option>
                 <option value="delivery">Delivery Crew (On-site, mobile/tablet)</option>
             </select>
             <span class="datetime" id="datetime"></span>
@@ -41,45 +41,35 @@
                 <div class="stage-label">Received</div>
                 <div class="stage-desc">New from airline</div>
             </div>
-            <div class="pipeline-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="pipeline-stage" data-status="CONFIRMED">
                 <div class="stage-count" id="countConfirmed">0</div>
                 <div class="stage-label">Confirmed</div>
-                <div class="stage-desc">Qty & price agreed</div>
+                <div class="stage-desc">Qty &amp; price agreed</div>
             </div>
-            <div class="pipeline-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="pipeline-stage" data-status="SCHEDULED">
                 <div class="stage-count" id="countScheduled">0</div>
                 <div class="stage-label">Scheduled</div>
                 <div class="stage-desc">Vehicle assigned</div>
             </div>
-            <div class="pipeline-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="pipeline-stage" data-status="DELIVERED">
                 <div class="stage-count" id="countDelivered">0</div>
                 <div class="stage-label">Delivered</div>
                 <div class="stage-desc">Ticket signed</div>
             </div>
-            <div class="pipeline-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="pipeline-stage" data-status="INVOICED">
                 <div class="stage-count" id="countInvoiced">0</div>
                 <div class="stage-label">Invoiced</div>
                 <div class="stage-desc">Invoice submitted</div>
             </div>
-            <div class="pipeline-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="pipeline-stage" data-status="CLOSED">
                 <div class="stage-count" id="countClosed">0</div>
                 <div class="stage-label">Closed</div>
-                <div class="stage-desc">Settled & complete</div>
+                <div class="stage-desc">Settled &amp; complete</div>
             </div>
         </div>
     </section>
@@ -91,99 +81,67 @@
             <div class="kpi-label">Active Orders</div>
         </div>
         <div class="kpi-card kpi-info">
-            <div class="kpi-value" id="kpiScheduled">--</div>
-            <div class="kpi-label">Deliveries Scheduled</div>
+            <div class="kpi-value" id="kpiAwaitingDelivery">--</div>
+            <div class="kpi-label">Awaiting Delivery</div>
         </div>
         <div class="kpi-card kpi-warning">
             <div class="kpi-value" id="kpiTicketsPending">--</div>
-            <div class="kpi-label">Tickets Pending</div>
+            <div class="kpi-label">Pending Signature</div>
         </div>
         <div class="kpi-card kpi-success">
             <div class="kpi-value" id="kpiCompleted">--</div>
-            <div class="kpi-label">Completed Deliveries</div>
+            <div class="kpi-label">Tickets Created</div>
         </div>
     </section>
 
     <!-- Delivery Workflow — who does what when -->
     <section class="workflow-section" id="workflowSection">
-        <h2 class="section-title">Delivery Workflow</h2>
+        <h2 class="section-title">Fulfillment Workflow — Trigger Chain</h2>
         <div class="workflow-steps">
             <div class="workflow-step">
-                <div class="workflow-step-number">1</div>
+                <div class="workflow-step-number">A</div>
                 <div class="workflow-step-body">
-                    <div class="workflow-step-title">Receive Sales Order</div>
-                    <div class="workflow-step-role">Supplier Planner (HQ)</div>
-                    <div class="workflow-step-desc">Order flows from airline's fuel plan. Planner reviews quantity, product type, and delivery window.</div>
+                    <div class="workflow-step-title">Fuel Order Received</div>
+                    <div class="workflow-step-role">From Planning App (Airline / Buyer Side)</div>
+                    <div class="workflow-step-desc">Airline fuel planner creates a fuel order. It flows to the supplier as a delivery request with flight, station, quantity, and delivery window.</div>
                 </div>
             </div>
-            <div class="workflow-arrow">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </div>
-            <div class="workflow-step">
-                <div class="workflow-step-number">2</div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <div class="workflow-step workflow-step-active">
+                <div class="workflow-step-number">B</div>
                 <div class="workflow-step-body">
-                    <div class="workflow-step-title">Confirm & Schedule</div>
-                    <div class="workflow-step-role">Supplier Planner (HQ)</div>
-                    <div class="workflow-step-desc">Confirm quantity and price. Assign bowser vehicle and driver for the delivery window.</div>
+                    <div class="workflow-step-title">Delivery Crew Captures ePOD</div>
+                    <div class="workflow-step-role">Delivery Crew (On-site, mobile/tablet)</div>
+                    <div class="workflow-step-desc">Crew selects the fuel order, records meter readings (start/end), temperature, density. Uploads delivery evidence photos and captures pilot signature on device.</div>
                 </div>
             </div>
-            <div class="workflow-arrow">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
             <div class="workflow-step">
-                <div class="workflow-step-number">3</div>
+                <div class="workflow-step-number">C</div>
                 <div class="workflow-step-body">
-                    <div class="workflow-step-title">Deliver & Capture ePOD</div>
-                    <div class="workflow-step-role">Delivery Crew (On-site)</div>
-                    <div class="workflow-step-desc">Deliver fuel, record meter readings, temperature, density. Capture pilot signature and delivery photos.</div>
+                    <div class="workflow-step-title">Fuel Ticket Auto-Created</div>
+                    <div class="workflow-step-role">System (automatic on signature)</div>
+                    <div class="workflow-step-desc">Once pilot signs, system automatically generates a fuel ticket under the fuel order with all ePOD data, quantity, density, and timestamps.</div>
                 </div>
             </div>
-            <div class="workflow-arrow">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
             <div class="workflow-step">
-                <div class="workflow-step-number">4</div>
+                <div class="workflow-step-number">D</div>
                 <div class="workflow-step-body">
-                    <div class="workflow-step-title">Generate Fuel Ticket</div>
-                    <div class="workflow-step-role">Delivery Crew (On-site)</div>
-                    <div class="workflow-step-desc">Create fuel ticket from ePOD data. Ticket is verified by ops manager and posted for invoicing.</div>
+                    <div class="workflow-step-title">SAP Document Flow Triggered</div>
+                    <div class="workflow-step-role">System (automatic on ticket creation)</div>
+                    <div class="workflow-step-desc">Fuel ticket triggers SAP: Sales Order → Delivery Note → Billing Document (Invoice). All subsequent SAP documents are auto-created via S/4HANA integration.</div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Fuel Ticket & ePOD Section — Delivery Crew primary view -->
-    <section class="ticket-section" id="ticketSection">
-        <h2 class="section-title">Fuel Tickets &amp; ePOD</h2>
-        <p class="section-desc">Delivery records with electronic Proof of Delivery. Delivery crew captures meter readings, temperature, density, and pilot signature.</p>
-        <div class="ticket-grid" id="ticketGrid">
-            <div class="loading">Loading delivery records...</div>
-        </div>
-    </section>
-
-    <!-- Photo & Evidence Upload — Delivery Crew -->
-    <section class="photo-section" id="photoSection">
-        <div class="table-card">
-            <div class="table-header">
-                <h3>Delivery Evidence — Photo Upload</h3>
-                <span class="table-filter-note">Delivery Crew — On-site capture</span>
-            </div>
-            <div class="photo-upload-area" id="photoUploadArea">
-                <div class="photo-upload-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" fill="#107E3E"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="#107E3E"/></svg>
-                </div>
-                <div class="photo-upload-text">
-                    <strong>Capture Delivery Evidence</strong>
-                    <span>Take photos of meter readings, fuel connections, pilot signature pad, and delivery completion.</span>
-                    <span class="photo-mobile-hint">On mobile: tap to open camera directly</span>
-                </div>
-                <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none" multiple>
-                <button class="btn btn-primary btn-large" id="photoCaptureBtn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="3.2" fill="#fff"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="#fff"/></svg>
-                    Take Photo
-                </button>
-            </div>
-            <div class="photo-preview-grid" id="photoPreviewGrid"></div>
+    <!-- Delivery Crew: Fuel Orders Assigned for Delivery -->
+    <section class="delivery-section" id="deliverySection">
+        <h2 class="section-title">Fuel Orders — Assigned for Delivery</h2>
+        <p class="section-desc">Select a fuel order to capture ePOD data: meter readings, temperature, density, photos, and pilot signature. On signature, ticket &amp; SAP docs are auto-created.</p>
+        <div class="delivery-grid" id="deliveryGrid">
+            <div class="loading">Loading fuel orders...</div>
         </div>
     </section>
 
@@ -197,12 +155,7 @@
         <div class="uom-table-wrap">
             <table class="uom-table">
                 <thead>
-                    <tr>
-                        <th>Unit</th>
-                        <th>Conversion Factor</th>
-                        <th>Base Unit</th>
-                        <th>Status</th>
-                    </tr>
+                    <tr><th>Unit</th><th>Conversion Factor</th><th>Base Unit</th><th>Status</th></tr>
                 </thead>
                 <tbody>
                     <tr><td>KG</td><td>1.000</td><td>KG</td><td><span class="badge badge-match-ok">BASE</span></td></tr>
@@ -219,9 +172,7 @@
         <div class="table-card">
             <div class="table-header">
                 <h3>Sales Orders — Supplier View</h3>
-                <div class="table-actions">
-                    <span class="table-filter-note">Orders received from airline fuel plans</span>
-                </div>
+                <span class="table-filter-note">Orders received from airline fuel plans</span>
             </div>
             <table id="salesOrdersTable">
                 <thead>
