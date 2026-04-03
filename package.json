@@ -85,6 +85,14 @@
     "features": {
       "fetch_csrf": true,
       "fiori_preview": true
+    },
+    "fiori": {
+      "preview": {
+        "ui5": {
+          "theme": "sap_horizon",
+          "version": "1.121.0"
+        }
+      }
     }
   },
   "engines": {
