@@ -377,17 +377,17 @@
         }
     }
 
-    // ═══ Actions: ePOD capture, Photo upload, Signature ═══
+    // ═══ Actions: ePOD modal, Photo upload, Signature ═══
     function initActions() {
         document.addEventListener('click', function(e) {
-            // Capture ePOD button (for orders without delivery)
+            // Capture ePOD button → open Fiori modal
             var captureBtn = e.target.closest('.btn-capture-epod');
             if (captureBtn) {
-                captureEpod(captureBtn);
+                openEpodModal(captureBtn);
                 return;
             }
 
-            // Photo upload button
+            // Photo upload button (on card)
             var photoBtn = e.target.closest('.btn-photo');
             if (photoBtn) {
                 var orderId = photoBtn.getAttribute('data-order-id');
@@ -399,88 +399,233 @@
             // Signature capture button
             var signBtn = e.target.closest('.btn-sign');
             if (signBtn) {
-                captureSignature(signBtn.getAttribute('data-order-id'), signBtn.getAttribute('data-order-num'));
+                openEpodModalForSignature(signBtn);
                 return;
             }
         });
 
-        // Photo file change
+        // Photo file change (card-level)
         document.addEventListener('change', function(e) {
             if (!e.target.classList.contains('photo-input')) return;
             var orderId = e.target.getAttribute('data-order-id');
             var thumbs = document.querySelector('.photo-thumbs[data-order-id="' + orderId + '"]');
             if (!thumbs || !e.target.files.length) return;
-            for (var i = 0; i < e.target.files.length; i++) {
-                var file = e.target.files[i];
-                if (!file.type.startsWith('image/')) continue;
-                var reader = new FileReader();
-                reader.onload = (function(f) {
-                    return function(ev) {
-                        var img = document.createElement('img');
-                        img.src = ev.target.result;
-                        img.alt = f.name;
-                        img.className = 'photo-thumb';
-                        img.title = f.name + ' — ' + new Date().toLocaleTimeString();
-                        thumbs.appendChild(img);
-                    };
-                })(file);
-                reader.readAsDataURL(file);
-            }
+            addPhotoThumbs(e.target.files, thumbs);
         });
     }
 
-    function captureEpod(btn) {
+    function addPhotoThumbs(files, container) {
+        for (var i = 0; i < files.length; i++) {
+            var file = files[i];
+            if (!file.type.startsWith('image/')) continue;
+            var reader = new FileReader();
+            reader.onload = (function(f) {
+                return function(ev) {
+                    var img = document.createElement('img');
+                    img.src = ev.target.result;
+                    img.alt = f.name;
+                    img.className = 'photo-thumb';
+                    img.title = f.name + ' — ' + new Date().toLocaleTimeString();
+                    container.appendChild(img);
+                };
+            })(file);
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // ═══ ePOD Fiori Modal ═══
+    function initEpodModal() {
+        var modal = document.getElementById('epodModal');
+        var closeBtn = document.getElementById('epodModalClose');
+        var cancelBtn = document.getElementById('epodCancelBtn');
+        var saveBtn = document.getElementById('epodSaveBtn');
+        var photoBtn = document.getElementById('epodPhotoBtn');
+        var photoInput = document.getElementById('epodPhotoInput');
+        var meterStart = document.getElementById('epodMeterStart');
+        var meterEnd = document.getElementById('epodMeterEnd');
+        var density = document.getElementById('epodDensity');
+        if (!modal) return;
+
+        function closeModal() { modal.style.display = 'none'; }
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+
+        // Auto-calculate volume and kg when meter readings change
+        function recalculate() {
+            var start = parseFloat(meterStart.value) || 0;
+            var end = parseFloat(meterEnd.value) || 0;
+            var d = parseFloat(density.value) || 0;
+            var volume = Math.max(0, end - start);
+            var kg = Math.round(volume * d);
+            document.getElementById('epodVolume').value = volume > 0 ? fmt(volume) + ' L' : '';
+            document.getElementById('epodDeliveredKg').value = kg > 0 ? fmt(kg) + ' kg' : '';
+        }
+        meterStart.addEventListener('input', recalculate);
+        meterEnd.addEventListener('input', recalculate);
+        density.addEventListener('input', recalculate);
+
+        // Photo in modal
+        photoBtn.addEventListener('click', function() { photoInput.click(); });
+        photoInput.addEventListener('change', function() {
+            var thumbs = document.getElementById('epodPhotoThumbs');
+            if (photoInput.files.length && thumbs) addPhotoThumbs(photoInput.files, thumbs);
+        });
+
+        // Save
+        saveBtn.addEventListener('click', function() {
+            var validation = validateEpodForm();
+            var validationEl = document.getElementById('epodValidation');
+            if (validation.length > 0) {
+                validationEl.innerHTML = validation.map(function(m) { return '<div class="form-error-item">' + m + '</div>'; }).join('');
+                validationEl.style.display = 'block';
+                return;
+            }
+            validationEl.style.display = 'none';
+
+            var orderId = document.getElementById('epodOrderId').value;
+            var orderNum = document.getElementById('epodOrderNum').value;
+            var start = parseFloat(meterStart.value);
+            var end = parseFloat(meterEnd.value);
+            var d = parseFloat(density.value);
+            var volume = end - start;
+            var kg = Math.round(volume * d);
+
+            // Show success — in production this would POST to OData
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+
+            setTimeout(function() {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#fff"/></svg> Save ePOD';
+
+                var validationEl2 = document.getElementById('epodValidation');
+                validationEl2.innerHTML = '<div class="form-success-item">' +
+                    '<strong>ePOD saved for ' + orderNum + '</strong><br>' +
+                    'Delivered: ' + fmt(kg) + ' kg (' + fmt(volume) + ' L × ' + d + ' kg/L)<br>' +
+                    'Vehicle: ' + document.getElementById('epodVehicle').value + '<br>' +
+                    'Pilot: ' + document.getElementById('epodPilot').value + '<br><br>' +
+                    'Next: Pilot signature on the delivery card → Fuel Ticket auto-created → SAP documents triggered.' +
+                '</div>';
+                validationEl2.style.display = 'block';
+
+                setTimeout(function() { closeModal(); loadDashboard(); }, 3000);
+            }, 800);
+        });
+    }
+
+    function validateEpodForm() {
+        var errors = [];
+        var start = document.getElementById('epodMeterStart').value;
+        var end = document.getElementById('epodMeterEnd').value;
+        var temp = document.getElementById('epodTemp').value;
+        var density = document.getElementById('epodDensity').value;
+        var vehicle = document.getElementById('epodVehicle').value;
+        var driver = document.getElementById('epodDriver').value;
+        var pilot = document.getElementById('epodPilot').value;
+
+        if (!start) errors.push('Meter Start is required.');
+        if (!end) errors.push('Meter End is required.');
+        if (start && end && parseFloat(end) <= parseFloat(start)) errors.push('Meter End must be greater than Meter Start.');
+        if (!temp) errors.push('Temperature is required.');
+        if (temp && (parseFloat(temp) < -40 || parseFloat(temp) > 50)) errors.push('Temperature must be between -40 and +50 °C.');
+        if (!density) errors.push('Density is required.');
+        if (density && (parseFloat(density) < 0.775 || parseFloat(density) > 0.840)) errors.push('Density must be between 0.775 and 0.840 kg/L.');
+        if (!vehicle) errors.push('Vehicle ID is required.');
+        if (!driver) errors.push('Driver Name is required.');
+        if (!pilot) errors.push('Pilot Name is required.');
+        return errors;
+    }
+
+    function openEpodModal(btn) {
+        var modal = document.getElementById('epodModal');
         var orderNum = btn.getAttribute('data-order-num');
         var flight = btn.getAttribute('data-flight');
         var station = btn.getAttribute('data-station');
         var qty = btn.getAttribute('data-qty');
+        var orderId = btn.getAttribute('data-order-id');
 
-        var deliveredQty = prompt(
-            'Capture ePOD for ' + orderNum + '\n' +
-            'Flight: ' + flight + ' @ ' + station + '\n' +
-            'Ordered: ' + fmt(Number(qty)) + ' kg\n\n' +
-            'Enter delivered quantity (kg):', qty
-        );
-        if (!deliveredQty || Number(deliveredQty) <= 0) return;
+        // Populate read-only fields
+        document.getElementById('epodModalSubtitle').textContent = flight + ' @ ' + station;
+        document.getElementById('epodOrderId').value = orderId;
+        document.getElementById('epodOrderNum').value = orderNum;
+        document.getElementById('epodRefOrder').value = orderNum;
+        document.getElementById('epodRefFlight').value = flight + ' @ ' + station;
+        document.getElementById('epodRefQty').value = fmt(Number(qty)) + ' kg';
 
-        var density = prompt('Enter density (kg/L):\n(Standard range: 0.775 - 0.840)', '0.802');
-        if (!density) return;
+        // Clear form
+        document.getElementById('epodMeterStart').value = '';
+        document.getElementById('epodMeterEnd').value = '';
+        document.getElementById('epodTemp').value = '';
+        document.getElementById('epodDensity').value = '';
+        document.getElementById('epodVolume').value = '';
+        document.getElementById('epodDeliveredKg').value = '';
+        document.getElementById('epodVehicle').value = '';
+        document.getElementById('epodDriver').value = '';
+        document.getElementById('epodPilot').value = '';
+        document.getElementById('epodNotes').value = '';
+        document.getElementById('epodPhotoThumbs').innerHTML = '';
+        document.getElementById('epodValidation').style.display = 'none';
 
-        var temp = prompt('Enter temperature (°C):', '15.0');
-        if (temp === null) return;
-
-        alert(
-            'ePOD Captured for ' + orderNum + ':\n\n' +
-            'Delivered: ' + fmt(Number(deliveredQty)) + ' kg\n' +
-            'Density: ' + density + ' kg/L\n' +
-            'Temperature: ' + temp + ' °C\n\n' +
-            'Next: Upload delivery photos and capture pilot signature.\n' +
-            'On signature → Fuel Ticket auto-created → SAP SO + Delivery + Invoice triggered.'
-        );
+        modal.style.display = 'flex';
     }
 
-    function captureSignature(orderId, orderNum) {
-        var pilotName = prompt('Pilot Signature for ' + orderNum + '\n\nEnter pilot name to confirm signature:');
-        if (!pilotName || !pilotName.trim()) {
-            alert('Signature cancelled. Pilot name is required.');
-            return;
-        }
+    // Open modal pre-filled for signature capture (order already has delivery)
+    function openEpodModalForSignature(btn) {
+        var orderId = btn.getAttribute('data-order-id');
+        var orderNum = btn.getAttribute('data-order-num');
 
-        alert(
-            'Signature captured for ' + orderNum + ' by ' + pilotName.trim() + '.\n\n' +
-            'Trigger chain:\n' +
-            '1. Fuel Ticket → auto-created\n' +
-            '2. SAP Sales Order → auto-created\n' +
-            '3. SAP Delivery Note → auto-created\n' +
-            '4. SAP Billing Document (Invoice) → auto-created\n\n' +
-            'In production: touch signature canvas on mobile/tablet device.'
-        );
+        // Find delivery data
+        var delivery = _deliveries.find(function(d) { return d.order_ID === orderId; });
+        var order = _fuelOrders.find(function(o) { return o.ID === orderId; });
+        if (!order) return;
+
+        var flight = getFlightFromOrder(order);
+        var station = order.station_code || '--';
+
+        var modal = document.getElementById('epodModal');
+        document.getElementById('epodModalSubtitle').textContent = flight + ' @ ' + station + ' — Signature';
+        document.getElementById('epodOrderId').value = orderId;
+        document.getElementById('epodOrderNum').value = orderNum;
+        document.getElementById('epodRefOrder').value = orderNum;
+        document.getElementById('epodRefFlight').value = flight + ' @ ' + station;
+        document.getElementById('epodRefQty').value = fmt(order.ordered_quantity) + ' kg';
+
+        // Pre-fill delivery data if available
+        if (delivery) {
+            var vol = delivery.delivered_quantity && delivery.density ? Math.round(delivery.delivered_quantity / delivery.density) : '';
+            document.getElementById('epodMeterStart').value = '';
+            document.getElementById('epodMeterEnd').value = '';
+            document.getElementById('epodVolume').value = vol ? fmt(vol) + ' L' : '';
+            document.getElementById('epodDeliveredKg').value = delivery.delivered_quantity ? fmt(delivery.delivered_quantity) + ' kg' : '';
+            document.getElementById('epodTemp').value = delivery.temperature || '';
+            document.getElementById('epodDensity').value = delivery.density || '';
+            document.getElementById('epodVehicle').value = delivery.vehicle_id || '';
+            document.getElementById('epodDriver').value = delivery.driver_name || '';
+            document.getElementById('epodPilot').value = delivery.pilot_name || '';
+        } else {
+            document.getElementById('epodMeterStart').value = '';
+            document.getElementById('epodMeterEnd').value = '';
+            document.getElementById('epodTemp').value = '';
+            document.getElementById('epodDensity').value = '';
+            document.getElementById('epodVolume').value = '';
+            document.getElementById('epodDeliveredKg').value = '';
+            document.getElementById('epodVehicle').value = '';
+            document.getElementById('epodDriver').value = '';
+            document.getElementById('epodPilot').value = '';
+        }
+        document.getElementById('epodNotes').value = '';
+        document.getElementById('epodPhotoThumbs').innerHTML = '';
+        document.getElementById('epodValidation').style.display = 'none';
+
+        modal.style.display = 'flex';
     }
 
     function init() {
         loadDashboard();
         initPersona();
         initActions();
+        initEpodModal();
     }
 
     if (document.readyState === 'loading') {

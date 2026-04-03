@@ -248,6 +248,85 @@ tbody tr:hover { background: #F8FAFD; }
 .badge-pending { background: #FFF3CD; color: #856404; }
 .badge-posted { background: #C8E6C9; color: #1B5E20; }
 
+/* ═══ ePOD Capture Modal — SAP Fiori Dialog ═══ */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px 20px; overflow-y: auto;
+}
+.modal-dialog {
+    background: var(--card-bg); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    width: 100%; max-width: 800px; max-height: 90vh; overflow-y: auto;
+}
+.modal-lg { max-width: 860px; }
+.modal-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, var(--accent) 0%, #0A5C2E 100%);
+    border-radius: 12px 12px 0 0; color: #fff;
+}
+.modal-header-left { display: flex; flex-direction: column; gap: 4px; }
+.modal-title { font-size: 18px; font-weight: 700; }
+.modal-subtitle { font-size: 13px; opacity: 0.85; }
+.modal-close {
+    background: none; border: none; color: #fff; font-size: 24px; cursor: pointer;
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; opacity: 0.8;
+}
+.modal-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+
+.modal-body { padding: 20px 24px; }
+
+/* Form Sections */
+.form-section { margin-bottom: 20px; }
+.form-section-title {
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
+    border-bottom: 2px solid #E8F5E9;
+}
+.form-row { display: flex; gap: 16px; }
+.form-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.form-row-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text-light); }
+.form-required { color: var(--error); }
+.form-input {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px;
+    font-size: 14px; font-family: inherit; color: var(--text);
+    transition: border-color 0.15s;
+}
+.form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(16,126,62,0.15); }
+.form-readonly { background: #F5F6F7; color: var(--text-light); border-color: #E0E0E0; }
+.form-input-lg { font-size: 18px; font-weight: 700; color: var(--text); padding: 10px 12px; }
+.form-hint { font-size: 11px; color: var(--text-light); }
+.form-textarea { resize: vertical; min-height: 60px; }
+
+/* Form Photo Area */
+.form-photo-area { display: flex; flex-direction: column; gap: 8px; }
+.form-photo-thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Validation */
+.form-validation { margin-top: 12px; }
+.form-error-item {
+    padding: 6px 12px; background: #FFEBEE; border: 1px solid #FFCDD2;
+    border-radius: 4px; color: var(--error); font-size: 12px; margin-bottom: 4px;
+}
+.form-success-item {
+    padding: 12px 16px; background: #E8F5E9; border: 1px solid #A5D6A7;
+    border-radius: 4px; color: #1B5E20; font-size: 13px; line-height: 1.6;
+}
+
+/* Modal Footer */
+.modal-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px; border-top: 1px solid var(--border); background: #FAFBFC;
+    border-radius: 0 0 12px 12px; gap: 16px;
+}
+.modal-footer-info { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; color: var(--text-light); flex: 1; }
+.modal-footer-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn-lg { padding: 10px 24px; font-size: 14px; }
+
 /* Footer */
 .app-footer { text-align: center; padding: 16px; color: var(--text-light); font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px; }
 
@@ -265,6 +344,17 @@ tbody tr:hover { background: #F8FAFD; }
     .nav-link { font-size: 11px; padding: 3px 8px; }
     .kpi-section { grid-template-columns: 1fr; padding: 12px 16px; }
     .pipeline-stage { min-width: 80px; padding: 12px 8px; }
+
+    /* Modal responsive */
+    .modal-overlay { padding: 16px 8px; }
+    .modal-dialog { max-height: 95vh; }
+    .modal-body { padding: 16px; }
+    .form-row-3 { grid-template-columns: 1fr; gap: 12px; }
+    .form-row-2 { grid-template-columns: 1fr; gap: 12px; }
+    .modal-footer { flex-direction: column; align-items: stretch; }
+    .modal-footer-actions { justify-content: stretch; }
+    .modal-footer-actions .btn { flex: 1; justify-content: center; }
+    .btn-lg { padding: 14px 20px; font-size: 16px; }
 
     /* Delivery cards — single column, larger touch targets */
     .delivery-section { padding: 0 12px 12px; }

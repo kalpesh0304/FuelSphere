@@ -197,6 +197,147 @@
         </div>
     </section>
 
+    <!-- ═══ ePOD Capture Modal — SAP Fiori-style Dialog ═══ -->
+    <div class="modal-overlay" id="epodModal" style="display:none">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <h2 class="modal-title">Capture ePOD</h2>
+                    <span class="modal-subtitle" id="epodModalSubtitle"></span>
+                </div>
+                <button class="modal-close" id="epodModalClose">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <input type="hidden" id="epodOrderId">
+                <input type="hidden" id="epodOrderNum">
+
+                <!-- Order Reference (read-only) -->
+                <div class="form-section">
+                    <div class="form-section-title">Order Reference</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Fuel Order</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefOrder" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Flight</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefFlight" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Ordered Qty (kg)</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefQty" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Meter Readings -->
+                <div class="form-section">
+                    <div class="form-section-title">Meter Readings</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Meter Start (litres) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodMeterStart" placeholder="e.g. 125000" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Meter End (litres) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodMeterEnd" placeholder="e.g. 206250" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Volume Delivered (litres)</label>
+                            <input type="text" class="form-input form-readonly" id="epodVolume" readonly placeholder="Auto-calculated">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quality Data -->
+                <div class="form-section">
+                    <div class="form-section-title">Quality Data</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Temperature (°C) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodTemp" placeholder="e.g. 15.0" step="0.1" min="-40" max="50">
+                            <span class="form-hint">Range: -40 to +50 °C</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Density at 15°C (kg/L) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodDensity" placeholder="e.g. 0.802" step="0.001" min="0.775" max="0.840">
+                            <span class="form-hint">Spec: 0.775 — 0.840 kg/L</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Delivered Qty (kg)</label>
+                            <input type="text" class="form-input form-readonly form-input-lg" id="epodDeliveredKg" readonly placeholder="Auto-calculated">
+                            <span class="form-hint">= Volume × Density</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vehicle & Crew -->
+                <div class="form-section">
+                    <div class="form-section-title">Vehicle &amp; Crew</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Vehicle ID <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodVehicle" placeholder="e.g. BW-YYZ-012">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Driver Name <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodDriver" placeholder="e.g. Mike Thompson">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Product</label>
+                            <select class="form-input" id="epodProduct">
+                                <option value="JET-A1">JET A-1</option>
+                                <option value="AVGAS-100LL">AVGAS 100LL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delivery Evidence -->
+                <div class="form-section">
+                    <div class="form-section-title">Delivery Evidence</div>
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label class="form-label">Photos</label>
+                            <div class="form-photo-area" id="epodPhotoArea">
+                                <input type="file" id="epodPhotoInput" accept="image/*" capture="environment" multiple style="display:none">
+                                <button type="button" class="btn btn-secondary" id="epodPhotoBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" fill="#107E3E"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="#107E3E"/></svg>
+                                    Take / Upload Photo
+                                </button>
+                                <div class="form-photo-thumbs" id="epodPhotoThumbs"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Pilot Name <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodPilot" placeholder="e.g. Capt. R. Leblanc">
+                            <label class="form-label" style="margin-top:12px">Notes</label>
+                            <textarea class="form-input form-textarea" id="epodNotes" rows="3" placeholder="Optional delivery notes..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation Messages -->
+                <div class="form-validation" id="epodValidation" style="display:none"></div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#0070F2"/></svg>
+                    <span>On save: ePOD recorded. After pilot signature → Fuel Ticket auto-created → SAP SO + Delivery + Invoice triggered.</span>
+                </div>
+                <div class="modal-footer-actions">
+                    <button class="btn btn-secondary" id="epodCancelBtn">Cancel</button>
+                    <button class="btn btn-primary btn-lg" id="epodSaveBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#fff"/></svg>
+                        Save ePOD
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <footer class="app-footer">
         <span>FuelSphere v2.0 — Step 2: Fulfillment &amp; Delivery (Seller Side) | SAP CAP + HANA Cloud</span>
     </footer>
