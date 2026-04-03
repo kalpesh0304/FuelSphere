@@ -138,7 +138,8 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .epod-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .epod-title { font-weight: 700; font-size: 13px; color: var(--primary); }
 .epod-empty-msg { font-weight: 600; font-size: 14px; color: var(--warning); margin-bottom: 6px; }
-.epod-empty-hint { font-size: 12px; color: var(--text-light); line-height: 1.5; }
+.epod-empty-hint { font-size: 12px; color: var(--text-light); line-height: 1.5; margin-bottom: 12px; }
+.btn-capture-epod { padding: 12px 24px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
 
 .detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #F5F5F5; }
 .detail-row:last-child { border-bottom: none; }
@@ -154,6 +155,9 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .delivery-card-sig-done { color: var(--success); background: #F1F8E9; }
 .delivery-card-sig-pending { color: var(--warning); background: #FFF8E1; }
 .btn-sign { margin-left: auto; }
+.sig-locked { margin-left: auto; font-size: 10px; color: var(--text-light); background: #E8E8E8; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; }
+.link-epod { color: var(--primary); font-weight: 600; text-decoration: none; cursor: pointer; }
+.link-epod:hover { text-decoration: underline; }
 
 /* Photo area inside card */
 .delivery-card-photo {
