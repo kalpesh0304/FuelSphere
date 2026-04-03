@@ -282,43 +282,192 @@
         });
     }
 
-    // Cockpit crew confirm/adjust handlers
+    // Cockpit crew — open modal instead of prompts
     function initCockpitActions() {
         document.addEventListener('click', function(e) {
             var confirmBtn = e.target.closest('.btn-confirm');
             var adjustBtn = e.target.closest('.btn-adjust');
 
-            if (confirmBtn) {
-                var orderId = confirmBtn.getAttribute('data-order-id');
-                var flightNum = confirmBtn.getAttribute('data-flight');
-                if (confirm('Confirm fuel quantity for ' + flightNum + ' as planned?')) {
-                    patchCrewReview(orderId, 'CONFIRMED', null, null, flightNum);
-                }
-            }
-
-            if (adjustBtn) {
-                var orderId2 = adjustBtn.getAttribute('data-order-id');
-                var flightNum2 = adjustBtn.getAttribute('data-flight');
-                var currentQty = adjustBtn.getAttribute('data-qty');
-                var newQty = prompt('Adjust fuel quantity for ' + flightNum2 + ' (current: ' + fmt(Number(currentQty)) + ' kg).\nEnter new quantity in kg:', currentQty);
-                if (newQty !== null && newQty !== '' && Number(newQty) > 0) {
-                    var reason = prompt('Mandatory: Provide reason for adjustment:');
-                    if (reason && reason.trim()) {
-                        patchCrewReview(orderId2, 'ADJUSTED', Number(newQty), reason.trim(), flightNum2);
-                    } else {
-                        alert('Adjustment reason is mandatory. Cancelled.');
-                    }
-                }
+            if (confirmBtn || adjustBtn) {
+                var btn = confirmBtn || adjustBtn;
+                openCrewAdjustModal(btn, !!adjustBtn);
             }
         });
     }
 
-    function patchCrewReview(orderId, status, adjustedQty, reason, flightNum) {
+    function openCrewAdjustModal(btn, startInAdjustMode) {
+        var modal = document.getElementById('crewAdjustModal');
+        if (!modal) return;
+
+        var orderId = btn.getAttribute('data-order-id');
+        var flightNum = btn.getAttribute('data-flight');
+        var currentQty = Number(btn.getAttribute('data-qty')) || 0;
+
+        // Find order for route info
+        var compRow = btn.closest('.comparison-row, .comparison-row-adjusted, .comparison-row-review');
+        var routeText = '';
+        if (compRow) {
+            var routeEl = compRow.querySelector('.flight-route');
+            if (routeEl) routeText = routeEl.textContent;
+        }
+
+        // Find dispatch and ROB values from the row
+        var dispatchQty = '', robQty = '';
+        if (compRow) {
+            var cells = compRow.querySelectorAll('.qty-cell');
+            if (cells.length >= 5) {
+                dispatchQty = cells[0].textContent;
+                robQty = cells[4].textContent;
+            }
+        }
+
+        // Populate modal
+        document.getElementById('crewOrderId').value = orderId;
+        document.getElementById('crewRefFlight').value = flightNum;
+        document.getElementById('crewRefRoute').value = routeText;
+        document.getElementById('crewRefStatus').value = 'AWAITING_REVIEW';
+        document.getElementById('crewQtyDispatch').value = dispatchQty;
+        document.getElementById('crewQtyPlanner').value = fmt(currentQty);
+        document.getElementById('crewQtyRob').value = robQty;
+        document.getElementById('crewAdjustSubtitle').textContent = flightNum + (routeText ? ' — ' + routeText : '');
+
+        // Reset state
+        document.getElementById('crewAdjustFields').style.display = 'none';
+        document.getElementById('crewNewQty').value = currentQty;
+        document.getElementById('crewReasonSelect').value = '';
+        document.getElementById('crewCustomReason').value = '';
+        document.getElementById('crewCustomReasonRow').style.display = 'none';
+        document.getElementById('crewNotes').value = '';
+        document.getElementById('crewValidation').style.display = 'none';
+        document.getElementById('crewQtyDiff').textContent = '';
+
+        var submitBtn = document.getElementById('crewSubmitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submit Review';
+
+        // Remove active state from action buttons
+        document.getElementById('crewActionConfirm').classList.remove('crew-action-selected');
+        document.getElementById('crewActionAdjust').classList.remove('crew-action-selected');
+
+        // Auto-select adjust mode if opened from Adjust button
+        if (startInAdjustMode) {
+            selectCrewAction('adjust');
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    var _crewAction = null;
+
+    function selectCrewAction(action) {
+        _crewAction = action;
+        var confirmBtn = document.getElementById('crewActionConfirm');
+        var adjustBtn = document.getElementById('crewActionAdjust');
+        var adjustFields = document.getElementById('crewAdjustFields');
+        var submitBtn = document.getElementById('crewSubmitBtn');
+
+        confirmBtn.classList.remove('crew-action-selected');
+        adjustBtn.classList.remove('crew-action-selected');
+
+        if (action === 'confirm') {
+            confirmBtn.classList.add('crew-action-selected');
+            adjustFields.style.display = 'none';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Confirm as Planned';
+        } else {
+            adjustBtn.classList.add('crew-action-selected');
+            adjustFields.style.display = '';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Adjustment';
+            document.getElementById('crewNewQty').focus();
+        }
+    }
+
+    function initCrewAdjustModal() {
+        var modal = document.getElementById('crewAdjustModal');
+        if (!modal) return;
+
+        var closeBtn = document.getElementById('crewAdjustClose');
+        var cancelBtn = document.getElementById('crewCancelBtn');
+        var submitBtn = document.getElementById('crewSubmitBtn');
+        var confirmAction = document.getElementById('crewActionConfirm');
+        var adjustAction = document.getElementById('crewActionAdjust');
+        var reasonSelect = document.getElementById('crewReasonSelect');
+        var newQtyInput = document.getElementById('crewNewQty');
+
+        function closeModal() { modal.style.display = 'none'; _crewAction = null; }
+        closeBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+
+        confirmAction.addEventListener('click', function() { selectCrewAction('confirm'); });
+        adjustAction.addEventListener('click', function() { selectCrewAction('adjust'); });
+
+        // Show/hide custom reason field
+        reasonSelect.addEventListener('change', function() {
+            document.getElementById('crewCustomReasonRow').style.display = reasonSelect.value === 'other' ? '' : 'none';
+        });
+
+        // Show diff when qty changes
+        newQtyInput.addEventListener('input', function() {
+            var plannerQty = parseInt(document.getElementById('crewQtyPlanner').value.replace(/,/g, '')) || 0;
+            var newQty = parseInt(newQtyInput.value) || 0;
+            var diff = newQty - plannerQty;
+            var diffEl = document.getElementById('crewQtyDiff');
+            if (diff !== 0 && newQty > 0) {
+                diffEl.textContent = (diff > 0 ? '+' : '') + fmt(diff) + ' kg from planner';
+                diffEl.className = 'crew-qty-diff ' + (diff > 0 ? 'crew-qty-diff-up' : 'crew-qty-diff-down');
+            } else {
+                diffEl.textContent = '';
+            }
+        });
+
+        // Submit
+        submitBtn.addEventListener('click', function() {
+            var orderId = document.getElementById('crewOrderId').value;
+            var flightNum = document.getElementById('crewRefFlight').value;
+            var validationEl = document.getElementById('crewValidation');
+
+            if (_crewAction === 'confirm') {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+                patchCrewReview(orderId, 'CONFIRMED', null, null, flightNum, function() {
+                    closeModal();
+                });
+            } else if (_crewAction === 'adjust') {
+                var newQty = Number(newQtyInput.value);
+                var reason = reasonSelect.value === 'other' ? document.getElementById('crewCustomReason').value.trim() : reasonSelect.value;
+                var notes = document.getElementById('crewNotes').value.trim();
+
+                // Validate
+                var errors = [];
+                if (!newQty || newQty <= 0) errors.push('New quantity must be greater than 0.');
+                if (!reason) errors.push('Reason for adjustment is mandatory.');
+                if (reasonSelect.value === 'other' && !document.getElementById('crewCustomReason').value.trim()) errors.push('Please specify the custom reason.');
+
+                if (errors.length > 0) {
+                    validationEl.innerHTML = errors.map(function(e) { return '<div class="crew-error">' + e + '</div>'; }).join('');
+                    validationEl.style.display = 'block';
+                    return;
+                }
+                validationEl.style.display = 'none';
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+                patchCrewReview(orderId, 'ADJUSTED', newQty, reason, flightNum, function() {
+                    closeModal();
+                }, notes);
+            }
+        });
+    }
+
+    function patchCrewReview(orderId, status, adjustedQty, reason, flightNum, onSuccess, notes) {
         var payload = { crew_review_status: status };
         if (status === 'ADJUSTED') {
             payload.crew_adjusted_quantity = adjustedQty;
             payload.crew_adjustment_reason = reason;
         }
+        if (notes) payload.crew_notes = notes;
         payload.crew_reviewed_by = 'Cockpit Crew';
         payload.crew_reviewed_at = new Date().toISOString();
 
@@ -328,15 +477,29 @@
         })
         .then(function(res) {
             if (res.ok) {
-                alert(flightNum + ': Crew review ' + status.toLowerCase() + ' successfully.');
+                if (onSuccess) onSuccess();
                 loadDashboard();
             } else {
                 return res.json().then(function(data) {
-                    alert('Failed: ' + ((data.error && data.error.message) || 'Unknown error'));
+                    var validationEl = document.getElementById('crewValidation');
+                    if (validationEl) {
+                        validationEl.innerHTML = '<div class="crew-error">Failed: ' + ((data.error && data.error.message) || 'Unknown error') + '</div>';
+                        validationEl.style.display = 'block';
+                    }
+                    document.getElementById('crewSubmitBtn').disabled = false;
+                    document.getElementById('crewSubmitBtn').textContent = 'Submit Review';
                 });
             }
         })
-        .catch(function(err) { alert('Network error: ' + err.message); });
+        .catch(function(err) {
+            var validationEl = document.getElementById('crewValidation');
+            if (validationEl) {
+                validationEl.innerHTML = '<div class="crew-error">Network error: ' + err.message + '</div>';
+                validationEl.style.display = 'block';
+            }
+            document.getElementById('crewSubmitBtn').disabled = false;
+            document.getElementById('crewSubmitBtn').textContent = 'Submit Review';
+        });
     }
 
     // Upload handlers
@@ -472,6 +635,7 @@
     function init() {
         loadDashboard();
         initEnrichModal();
+        initCrewAdjustModal();
         initUploads();
         initPersona();
         initCockpitActions();

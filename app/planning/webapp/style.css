@@ -252,6 +252,60 @@ tbody tr:hover { background: #F8FAFD; }
 .enrich-status.status-error { background: #FFEBEE; color: #B71C1C; }
 .enrich-status.status-loading { background: #E3F2FD; color: #0D47A1; }
 
+/* ═══ Crew Adjustment Modal ═══ */
+.modal-crew-adjust { width: 640px; max-width: 95vw; }
+.modal-header-crew {
+    background: linear-gradient(135deg, #354A5F 0%, #1B2D3E 100%); color: #fff;
+    border-radius: 12px 12px 0 0; padding: 18px 20px;
+}
+.modal-header-crew h3 { color: #fff; }
+.modal-header-crew .modal-close { color: rgba(255,255,255,0.7); }
+.modal-header-crew .modal-close:hover { color: #fff; }
+.modal-subtitle { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+
+.crew-form-section { margin-bottom: 18px; }
+.crew-form-section-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--accent); margin-bottom: 10px; padding-bottom: 4px;
+    border-bottom: 2px solid #E8EAF6;
+}
+.form-row-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.form-label-sm { font-size: 11px; font-weight: 600; color: var(--text-light); margin-bottom: 3px; }
+.form-input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-family: inherit; color: var(--text); }
+.form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(123,104,238,0.15); }
+.form-input-readonly { background: #F5F6F7; color: var(--text-light); border-color: #E0E0E0; }
+.form-required { color: #BB0000; }
+
+/* Crew quantity highlights */
+.crew-qty-dispatch { border-left: 3px solid #0070F2; }
+.crew-qty-planner { border-left: 3px solid #7B68EE; }
+.crew-qty-input { font-size: 18px; font-weight: 700; padding: 10px 12px; }
+.crew-qty-input:focus { border-color: #E9730C; box-shadow: 0 0 0 2px rgba(233,115,12,0.2); }
+.crew-qty-diff { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.crew-qty-diff-up { color: #BB0000; }
+.crew-qty-diff-down { color: #107E3E; }
+
+/* Action buttons — Confirm vs Adjust */
+.crew-action-buttons { display: flex; gap: 12px; }
+.crew-action-btn {
+    flex: 1; padding: 14px 16px; font-size: 14px; font-weight: 600; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; transition: all 0.2s; border: 2px solid var(--border); background: var(--card-bg);
+    color: var(--text);
+}
+.crew-action-btn:hover { border-color: var(--text-light); }
+.crew-action-confirm.crew-action-selected { border-color: #107E3E; background: #E8F5E9; color: #1B5E20; }
+.crew-action-adjust.crew-action-selected { border-color: #E9730C; background: #FFF3E0; color: #E65100; }
+
+/* Adjust fields */
+.crew-adjust-fields { background: #FFFDE7; border: 1px solid #FFF9C4; border-radius: 8px; padding: 16px; margin-top: 8px; }
+
+/* Validation */
+.crew-validation { margin-top: 8px; }
+.crew-error { padding: 6px 12px; background: #FFEBEE; border: 1px solid #FFCDD2; border-radius: 4px; color: #BB0000; font-size: 12px; margin-bottom: 4px; }
+
+.btn-lg { padding: 10px 24px; font-size: 14px; }
+
 /* Footer */
 .app-footer { text-align: center; padding: 16px; color: var(--text-light); font-size: 12px; border-top: 1px solid var(--border); margin-top: 16px; }
 

@@ -247,6 +247,123 @@
                 </div>
             </div>
         </div>
+
+        <!-- Crew Quantity Adjustment Modal — Fiori-style -->
+        <div class="modal-overlay" id="crewAdjustModal" style="display:none">
+            <div class="modal-content modal-crew-adjust">
+                <div class="modal-header modal-header-crew">
+                    <div>
+                        <h3>Cockpit Crew — Fuel Quantity Review</h3>
+                        <span class="modal-subtitle" id="crewAdjustSubtitle"></span>
+                    </div>
+                    <button class="modal-close" id="crewAdjustClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="crewOrderId">
+
+                    <!-- Order Reference (read-only) -->
+                    <div class="crew-form-section">
+                        <div class="crew-form-section-title">Flight &amp; Order Reference</div>
+                        <div class="form-row form-row-3col">
+                            <div class="form-group">
+                                <label class="form-label-sm">Flight</label>
+                                <input type="text" class="form-input form-input-readonly" id="crewRefFlight" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label-sm">Route</label>
+                                <input type="text" class="form-input form-input-readonly" id="crewRefRoute" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label-sm">Status</label>
+                                <input type="text" class="form-input form-input-readonly" id="crewRefStatus" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3-Figure Comparison (read-only) -->
+                    <div class="crew-form-section">
+                        <div class="crew-form-section-title">Current Quantities (kg)</div>
+                        <div class="form-row form-row-3col">
+                            <div class="form-group">
+                                <label class="form-label-sm">Dispatch Qty</label>
+                                <input type="text" class="form-input form-input-readonly crew-qty-dispatch" id="crewQtyDispatch" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label-sm">Planner Qty</label>
+                                <input type="text" class="form-input form-input-readonly crew-qty-planner" id="crewQtyPlanner" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label-sm">ROB (kg)</label>
+                                <input type="text" class="form-input form-input-readonly" id="crewQtyRob" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Selection -->
+                    <div class="crew-form-section">
+                        <div class="crew-form-section-title">Captain's Decision</div>
+                        <div class="crew-action-buttons">
+                            <button class="btn crew-action-btn crew-action-confirm" id="crewActionConfirm" type="button">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#107E3E"/></svg>
+                                Confirm as Planned
+                            </button>
+                            <button class="btn crew-action-btn crew-action-adjust" id="crewActionAdjust" type="button">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#E9730C"/></svg>
+                                Adjust Quantity
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Adjustment Fields (shown only when Adjust selected) -->
+                    <div class="crew-form-section crew-adjust-fields" id="crewAdjustFields" style="display:none">
+                        <div class="crew-form-section-title">Adjustment Details</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label-sm">New Quantity (kg) <span class="form-required">*</span></label>
+                                <input type="number" class="form-input crew-qty-input" id="crewNewQty" placeholder="Enter adjusted quantity" step="100">
+                                <span class="crew-qty-diff" id="crewQtyDiff"></span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label class="form-label-sm">Reason for Adjustment <span class="form-required">*</span></label>
+                                <select class="form-input" id="crewReasonSelect">
+                                    <option value="">-- Select reason --</option>
+                                    <option value="Weather - headwinds forecast">Weather — headwinds forecast</option>
+                                    <option value="Weather - tailwinds forecast">Weather — tailwinds forecast</option>
+                                    <option value="Weather - turbulence reroute">Weather — turbulence reroute</option>
+                                    <option value="Payload change - passenger count">Payload change — passenger count</option>
+                                    <option value="Payload change - cargo load">Payload change — cargo load</option>
+                                    <option value="Alternate airport change">Alternate airport change</option>
+                                    <option value="Maintenance requirement">Maintenance requirement</option>
+                                    <option value="Operational discretion">Operational discretion</option>
+                                    <option value="other">Other (specify below)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row" id="crewCustomReasonRow" style="display:none">
+                            <div class="form-group" style="flex:1">
+                                <label class="form-label-sm">Custom Reason <span class="form-required">*</span></label>
+                                <input type="text" class="form-input" id="crewCustomReason" placeholder="Specify reason for adjustment...">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label class="form-label-sm">Additional Notes</label>
+                                <textarea class="form-input" id="crewNotes" rows="2" placeholder="Optional notes for ops manager..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Validation -->
+                    <div class="crew-validation" id="crewValidation" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="crewCancelBtn">Cancel</button>
+                    <button class="btn btn-primary btn-lg" id="crewSubmitBtn" disabled>Submit Review</button>
+                </div>
+            </div>
+        </div>
     </section>
 
     <footer class="app-footer">
