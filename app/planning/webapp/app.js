@@ -84,6 +84,11 @@
 
         // KPIs
         var flightsWithOrders = new Set(allOrders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
+        // Build flight → order number lookup
+        var flightOrderMap = {};
+        allOrders.forEach(function(o) {
+            if (o.flight_ID && o.order_number) flightOrderMap[o.flight_ID] = o.order_number;
+        });
 
         // "Flights Needing Fuel Plan" = SCHEDULED flights that have NO fuel order yet
         var scheduledNoOrder = filteredFlights.filter(function(f) {
@@ -192,7 +197,7 @@
                         '<td>' + (f.aircraft_type || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
                         '<td>' + (f.aircraft_reg || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
                         '<td>' + statusBadge(f.status) + '</td>' +
-                        '<td>' + (hasOrder ? '<span class="badge badge-confirmed">YES</span>' : '<span class="badge badge-pending">NO</span>') + '</td>' +
+                        '<td>' + (hasOrder ? '<span class="badge badge-confirmed">' + (flightOrderMap[f.ID] || 'YES') + '</span>' : '<span class="badge badge-pending">—</span>') + '</td>' +
                         (showEnrich ?
                             '<td><button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
                             'data-flight-number="' + f.flight_number + '" ' +
