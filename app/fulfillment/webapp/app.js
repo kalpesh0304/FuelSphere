@@ -4,7 +4,13 @@
 
     var REFUELER_SVC = '/odata/v4/refueler';
     var ORDER_SVC = '/odata/v4/orders';
+    var FUEL_ORDER_APP = 'https://glcmjmynl0mfp4nx.launchpad.cfapps.eu10.hana.ondemand.com/91d3cd79-fbcd-42e1-bb4b-591d8070935e.comfuelspherefuelorders.comfuelspherefuelorders-0.0.1/index.html';
     var currentPersona = 'all';
+
+    function fuelOrderLink(orderNum, orderId) {
+        if (!orderNum || !orderId) return '--';
+        return '<a href="' + FUEL_ORDER_APP + '#/FuelOrders(ID=' + orderId + ',IsActiveEntity=true)" target="_blank" class="fo-link">' + orderNum + '</a>';
+    }
 
     // Cache for cross-referencing
     var _fuelOrders = [];
@@ -145,7 +151,7 @@
             // Header
             html += '<div class="delivery-card-header">' +
                 '<div class="delivery-card-ref">' +
-                    '<span class="delivery-order-num">' + orderNum + '</span>' +
+                    '<span class="delivery-order-num">' + fuelOrderLink(orderNum, order.ID) + '</span>' +
                     '<span class="delivery-flight">' + (flight ? flight + ' @ ' + station : station) + '</span>' +
                 '</div>' +
                 '<div>' + statusBadge(order.status) + '</div>' +
@@ -306,7 +312,7 @@
                     return fo.ID === o.purchase_order_ID;
                 });
             }
-            var foNum = fuelOrder ? fuelOrder.order_number : '--';
+            var foNum = fuelOrder ? fuelOrderLink(fuelOrder.order_number, fuelOrder.ID) : '--';
 
             // Find delivery for this fuel order
             var delivery = fuelOrder ? deliveries.find(function(d) { return d.order_ID === fuelOrder.ID; }) : null;

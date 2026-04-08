@@ -4,6 +4,12 @@
 
     var ORDER_SVC = '/odata/v4/orders';
     var BURN_SVC = '/odata/v4/burn';
+    var FUEL_ORDER_APP = 'https://glcmjmynl0mfp4nx.launchpad.cfapps.eu10.hana.ondemand.com/91d3cd79-fbcd-42e1-bb4b-591d8070935e.comfuelspherefuelorders.comfuelspherefuelorders-0.0.1/index.html';
+
+    function fuelOrderLink(orderNum, orderId) {
+        if (!orderNum || !orderId) return '--';
+        return '<a href="' + FUEL_ORDER_APP + '#/FuelOrders(ID=' + orderId + ',IsActiveEntity=true)" target="_blank" class="fo-link">' + orderNum + '</a>';
+    }
 
     function fmt(n) { return n == null ? '--' : Number(n).toLocaleString(); }
 
@@ -174,7 +180,7 @@
                     var flightNum = flight ? flight.flight_number : '--';
                     var step = journeyStep(o);
                     return '<tr>' +
-                        '<td><strong>' + (o.order_number || '--') + '</strong></td>' +
+                        '<td><strong>' + fuelOrderLink(o.order_number, o.ID) + '</strong></td>' +
                         '<td>' + flightNum + '</td>' +
                         '<td>' + route + '</td>' +
                         '<td>' + (o.requested_date || '--') + '</td>' +

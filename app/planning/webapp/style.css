@@ -1,4 +1,7 @@
 /* FuelSphere Planning App — SAP Fiori-inspired Design */
+.fo-link { color: #0070F2; text-decoration: none; font-weight: 600; cursor: pointer; }
+.fo-link:hover { text-decoration: underline; color: #0054B6; }
+
 :root {
     --primary: #0070F2;
     --primary-dark: #0054B6;
