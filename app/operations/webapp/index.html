@@ -15,6 +15,7 @@
                 <span class="app-title">FuelSphere</span>
             </div>
             <span class="app-subtitle">Operations Dashboard</span>
+            <span class="side-badge">Step 3: Day-of-Flight Execution</span>
         </div>
         <div class="header-right">
             <a href="/admin/index.html" class="nav-link">Admin</a>
@@ -23,161 +24,63 @@
             <a href="/invoicing/index.html" class="nav-link">Step 4: Invoicing</a>
             <select id="personaSelector" class="persona-select">
                 <option value="all">All Roles</option>
+                <option value="ops">Operations Manager</option>
                 <option value="dispatch">Dispatch Team</option>
-                <option value="ops">Ops Manager</option>
+                <option value="planning">Fuel Planning Manager</option>
+                <option value="finance">Finance Controller</option>
             </select>
             <span class="datetime" id="datetime"></span>
         </div>
     </header>
 
-    <!-- D-Minus Timeline -->
-    <section class="dminus-section">
-        <h2 class="section-title">D-Minus Timeline</h2>
-        <div class="dminus-timeline">
-            <div class="dminus-card" data-day="D-3">
-                <div class="dminus-header">D-3</div>
-                <div class="dminus-label">Flight Created</div>
-                <div class="dminus-desc">Schedule ingested, no tail assigned</div>
-                <div class="dminus-count" id="dMinus3Count">--</div>
-            </div>
-            <div class="dminus-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="dminus-card" data-day="D-2">
-                <div class="dminus-header">D-2</div>
-                <div class="dminus-label">Flight Enriched</div>
-                <div class="dminus-desc">Tail + aircraft type assigned</div>
-                <div class="dminus-count" id="dMinus2Count">--</div>
-            </div>
-            <div class="dminus-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="dminus-card" data-day="D-1">
-                <div class="dminus-header">D-1</div>
-                <div class="dminus-label">Dispatch Complete</div>
-                <div class="dminus-desc">Quantities confirmed, crew review</div>
-                <div class="dminus-count" id="dMinus1Count">--</div>
-            </div>
-            <div class="dminus-arrow">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <div class="dminus-card active" data-day="D-0">
-                <div class="dminus-header">D-0</div>
-                <div class="dminus-label">Day of Flight</div>
-                <div class="dminus-desc">Refueling, tickets, invoicing</div>
-                <div class="dminus-count" id="dMinus0Count">--</div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Flight Cycle Events -->
-    <section class="cycle-section">
-        <h2 class="section-title">Flight Cycle Events</h2>
-        <div class="cycle-timeline">
-            <div class="cycle-event" data-event="landing">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2.5 19h19v2h-19v-2zm19.57-9.36c-.21-.8-1.04-1.28-1.84-1.06L14.92 10 8.02 3.57 6.09 4.08l4.14 7.17-5.34 1.43-2.11-1.66-1.36.37L3.1 13.8l.01.01 10.59-2.83 8.54-2.29c.81-.22 1.28-1.05 1.07-1.86z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Landing</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="taxi-in">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Taxi In</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="chocks-on">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/><circle cx="12" cy="12" r="5" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Chocks On</div>
-            </div>
-            <div class="cycle-connector active"></div>
-            <div class="cycle-event highlight" data-event="refueling">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33a2.5 2.5 0 002.5 2.5c.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5a2.5 2.5 0 005 0V9c0-.69-.28-1.32-.73-1.77zM12 10H6V5h6v5z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Refueling</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="chocks-off">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Chocks Off</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="taxi-out">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Taxi Out</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="takeoff">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2.5 19h19v2h-19v-2zm7.18-5.73l4.35 1.16 5.31 1.42c.8.21 1.62-.26 1.84-1.06.21-.8-.26-1.62-1.06-1.84l-5.31-1.42-2.76-9.02L10.12 2v8.28L5.15 8.95l-.93-2.32-1.45-.39v5.17l1.97.53 4.94 1.33z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Takeoff</div>
-            </div>
-            <div class="cycle-connector"></div>
-            <div class="cycle-event" data-event="airborne">
-                <div class="cycle-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="currentColor"/></svg></div>
-                <div class="cycle-label">Airborne</div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Journey Timeline (original 7-step) -->
-    <section class="journey-section">
+    <!-- Journey Progress — 7-Step Pipeline (all personas) -->
+    <section class="journey-section" id="journeySection">
         <h2 class="section-title">Fuel Order Journey — 7-Step Progressive Flow</h2>
         <div class="journey-timeline" id="journeyTimeline">
             <div class="journey-step" data-step="1">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-1"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" fill="currentColor"/></svg></div>
                 <div class="step-label">Flight Created</div>
-                <div class="step-detail">T-3 days</div>
+                <div class="step-detail">Schedule imported</div>
                 <div class="step-count" id="step1Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step" data-step="2">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-2"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/></svg></div>
                 <div class="step-label">Flight Enriched</div>
-                <div class="step-detail">Tail assigned</div>
+                <div class="step-detail">Tail + aircraft assigned</div>
                 <div class="step-count" id="step2Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step" data-step="3">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-3"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" fill="currentColor"/></svg></div>
                 <div class="step-label">Dispatch Complete</div>
                 <div class="step-detail">Quantities confirmed</div>
                 <div class="step-count" id="step3Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step" data-step="4">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-4"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg></div>
                 <div class="step-label">Crew Review</div>
                 <div class="step-detail">Captain confirms</div>
                 <div class="step-count" id="step4Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step" data-step="5">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33a2.5 2.5 0 002.5 2.5c.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5a2.5 2.5 0 005 0V9c0-.69-.28-1.32-.73-1.77zM12 10H6V5h6v5z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-5"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33a2.5 2.5 0 002.5 2.5c.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5a2.5 2.5 0 005 0V9c0-.69-.28-1.32-.73-1.77zM12 10H6V5h6v5z" fill="currentColor"/></svg></div>
                 <div class="step-label">Refueling</div>
                 <div class="step-detail">Fuel delivered</div>
                 <div class="step-count" id="step5Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step" data-step="6">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-6"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" fill="currentColor"/></svg></div>
                 <div class="step-label">Ticket Signed</div>
                 <div class="step-detail">ePOD + PO/GR</div>
                 <div class="step-count" id="step6Count">--</div>
             </div>
             <div class="step-connector"></div>
             <div class="journey-step completed" data-step="7">
-                <div class="step-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/></svg>
-                </div>
+                <div class="step-icon step-icon-7"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/></svg></div>
                 <div class="step-label">Invoice Settled</div>
                 <div class="step-detail">Three-way match</div>
                 <div class="step-count" id="step7Count">--</div>
@@ -185,8 +88,8 @@
         </div>
     </section>
 
-    <!-- KPI Cards -->
-    <section class="kpi-section">
+    <!-- KPI Cards (all personas, contextual) -->
+    <section class="kpi-section" id="kpiSection">
         <div class="kpi-card">
             <div class="kpi-value" id="kpiActiveOrders">--</div>
             <div class="kpi-label">Active Orders</div>
@@ -205,69 +108,14 @@
         </div>
     </section>
 
-    <!-- Burn Analysis Tiles -->
-    <section class="burn-section">
-        <h2 class="section-title">Fuel Burn Analysis</h2>
-        <div class="burn-tiles">
-            <div class="burn-tile">
-                <div class="burn-tile-header">Total Burn (kg)</div>
-                <div class="burn-tile-value" id="burnTotal">--</div>
-            </div>
-            <div class="burn-tile">
-                <div class="burn-tile-header">Avg Burn / Flight</div>
-                <div class="burn-tile-value" id="burnAvg">--</div>
-            </div>
-            <div class="burn-tile">
-                <div class="burn-tile-header">Total Uplift (kg)</div>
-                <div class="burn-tile-value" id="burnUplift">--</div>
-            </div>
-            <div class="burn-tile">
-                <div class="burn-tile-header">Variance Records</div>
-                <div class="burn-tile-value" id="burnVariance">--</div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Data Tables -->
-    <section class="tables-section">
-
-        <!-- FLIGHT SCHEDULE -->
+    <!-- Fuel Order Lifecycle Table (all personas) -->
+    <section class="orders-section" id="ordersSection">
         <div class="table-card">
             <div class="table-header">
-                <h3>Flight Schedule</h3>
+                <h3>Fuel Order Lifecycle — End-to-End Tracker</h3>
                 <div class="table-actions">
-                    <a href="/planning/index.html" class="btn btn-primary">Open Planning App</a>
-                    <a href="/$fiori-preview/PlanningService/FlightSchedule#preview-app" target="_blank" class="btn btn-secondary">Open in Fiori</a>
-                </div>
-            </div>
-            <table id="flightsTable">
-                <thead>
-                    <tr>
-                        <th>Flight #</th>
-                        <th>Date</th>
-                        <th>Route</th>
-                        <th>Aircraft</th>
-                        <th>Tail #</th>
-                        <th>Terminal</th>
-                        <th>Gate</th>
-                        <th>Status</th>
-                        <th>D-Minus</th>
-                        <th>Has Order</th>
-                    </tr>
-                </thead>
-                <tbody id="flightsBody">
-                    <tr><td colspan="10" class="loading">Loading flights...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- FUEL ORDERS -->
-        <div class="table-card">
-            <div class="table-header">
-                <h3>Fuel Orders</h3>
-                <div class="table-actions">
-                    <a href="/$fiori-preview/FuelOrderService/FuelOrders#preview-app" target="_blank" class="btn btn-secondary">Open in Fiori</a>
-                    <a href="/$fiori-preview/FuelOrderService/CrewReviewQueue#preview-app" target="_blank" class="btn btn-primary">Crew Review Queue</a>
+                    <a href="/planning/index.html" class="btn btn-secondary">Open Planning</a>
+                    <a href="/fulfillment/index.html" class="btn btn-secondary">Open Fulfillment</a>
                 </div>
             </div>
             <table id="ordersTable">
@@ -276,45 +124,165 @@
                         <th>Order #</th>
                         <th>Flight</th>
                         <th>Route</th>
-                        <th>Date</th>
-                        <th>Qty (kg)</th>
+                        <th>Station</th>
+                        <th>Ordered (kg)</th>
+                        <th>Delivered (kg)</th>
+                        <th>Variance</th>
                         <th>Status</th>
                         <th>Crew Review</th>
                         <th>Journey Step</th>
                     </tr>
                 </thead>
                 <tbody id="ordersBody">
-                    <tr><td colspan="8" class="loading">Loading orders...</td></tr>
+                    <tr><td colspan="10" class="loading">Loading orders...</td></tr>
                 </tbody>
             </table>
         </div>
     </section>
 
-    <!-- Quick Links — Lifecycle Sequence -->
-    <section class="links-section">
-        <h3>Lifecycle Navigation</h3>
-        <div class="link-cards">
-            <a href="/admin/index.html" class="link-card">
-                <div class="link-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="#354A5F"/></svg></div>
-                <div class="link-title">Admin Portal</div>
-            </a>
-            <a href="/planning/index.html" class="link-card">
-                <div class="link-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" fill="#7B68EE"/></svg></div>
-                <div class="link-title">Step 1: Planning</div>
-            </a>
-            <a href="/fulfillment/index.html" class="link-card">
-                <div class="link-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33a2.5 2.5 0 002.5 2.5c.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5a2.5 2.5 0 005 0V9c0-.69-.28-1.32-.73-1.77zM12 10H6V5h6v5z" fill="#107E3E"/></svg></div>
-                <div class="link-title">Step 2: Fulfillment</div>
-            </a>
-            <a href="/invoicing/index.html" class="link-card">
-                <div class="link-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="#E9730C"/></svg></div>
-                <div class="link-title">Step 4: Invoicing</div>
-            </a>
+    <!-- Burn Analysis (Ops Manager + Planning Manager) -->
+    <section class="burn-section" id="burnSection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Fuel Burn Analysis — Planned vs Actual</h3>
+                <div class="table-actions">
+                    <span class="section-note">Data Source: ACARS | Variance threshold: &plusmn;5%</span>
+                </div>
+            </div>
+            <!-- Burn KPI tiles -->
+            <div class="burn-kpi-row">
+                <div class="burn-kpi"><div class="burn-kpi-value" id="burnTotalKg">--</div><div class="burn-kpi-label">Total Burn (kg)</div></div>
+                <div class="burn-kpi"><div class="burn-kpi-value" id="burnAvgFlight">--</div><div class="burn-kpi-label">Avg Burn / Flight</div></div>
+                <div class="burn-kpi"><div class="burn-kpi-value" id="burnTotalUplift">--</div><div class="burn-kpi-label">Total Uplift (kg)</div></div>
+                <div class="burn-kpi burn-kpi-accent"><div class="burn-kpi-value" id="burnVarianceCount">--</div><div class="burn-kpi-label">Variance Records (&gt;2%)</div></div>
+            </div>
+            <table id="burnTable">
+                <thead>
+                    <tr>
+                        <th>Flight</th>
+                        <th>Route</th>
+                        <th>Aircraft</th>
+                        <th>Tail #</th>
+                        <th>Date</th>
+                        <th>Planned (kg)</th>
+                        <th>Actual (kg)</th>
+                        <th>Variance (kg)</th>
+                        <th>Variance %</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="burnBody">
+                    <tr><td colspan="11" class="loading">Loading burn data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ROB Fleet Dashboard (Ops Manager) -->
+    <section class="rob-section" id="robSection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>ROB Fleet Dashboard — Remaining on Board</h3>
+                <div class="table-actions">
+                    <span class="section-note">Formula: ROB = Opening + Uplift &minus; Burn + Adjustment</span>
+                </div>
+            </div>
+            <table id="robTable">
+                <thead>
+                    <tr>
+                        <th>Tail #</th>
+                        <th>Aircraft</th>
+                        <th>Last Airport</th>
+                        <th>Entry Type</th>
+                        <th>Opening (kg)</th>
+                        <th>Uplift (kg)</th>
+                        <th>Burn (kg)</th>
+                        <th>Closing ROB (kg)</th>
+                        <th>Capacity (kg)</th>
+                        <th>ROB %</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="robBody">
+                    <tr><td colspan="11" class="loading">Loading ROB data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Delivery Tracker (Dispatch + Ops Manager) -->
+    <section class="delivery-section" id="deliverySection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Delivery Tracker — ePOD &amp; Fuel Tickets</h3>
+                <div class="table-actions">
+                    <a href="/fulfillment/index.html" class="btn btn-secondary">Open Fulfillment</a>
+                </div>
+            </div>
+            <table id="deliveryTable">
+                <thead>
+                    <tr>
+                        <th>Delivery #</th>
+                        <th>Fuel Order</th>
+                        <th>Flight</th>
+                        <th>Station</th>
+                        <th>Delivered (kg)</th>
+                        <th>Density</th>
+                        <th>Temp (°C)</th>
+                        <th>Vehicle</th>
+                        <th>Pilot Signed</th>
+                        <th>Fuel Ticket</th>
+                        <th>S/4 GR</th>
+                    </tr>
+                </thead>
+                <tbody id="deliveryBody">
+                    <tr><td colspan="11" class="loading">Loading deliveries...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Finance Summary (Finance Controller) -->
+    <section class="finance-section" id="financeSection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Finance Summary — Cost &amp; S/4HANA Posting</h3>
+                <div class="table-actions">
+                    <a href="/invoicing/index.html" class="btn btn-secondary">Open Invoicing</a>
+                </div>
+            </div>
+            <!-- Finance KPIs -->
+            <div class="finance-kpi-row">
+                <div class="finance-kpi"><div class="finance-kpi-value" id="finTotalValue">--</div><div class="finance-kpi-label">Total Fuel Value</div></div>
+                <div class="finance-kpi"><div class="finance-kpi-value" id="finDeliveredValue">--</div><div class="finance-kpi-label">Delivered Value</div></div>
+                <div class="finance-kpi"><div class="finance-kpi-value" id="finPostedCount">--</div><div class="finance-kpi-label">S/4 POs Posted</div></div>
+                <div class="finance-kpi"><div class="finance-kpi-value" id="finPendingCount">--</div><div class="finance-kpi-label">Pending Posting</div></div>
+            </div>
+            <table id="financeTable">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Flight</th>
+                        <th>Station</th>
+                        <th>Qty (kg)</th>
+                        <th>Unit Price</th>
+                        <th>Total Amount</th>
+                        <th>Currency</th>
+                        <th>S/4 PO #</th>
+                        <th>Status</th>
+                        <th>Posting</th>
+                    </tr>
+                </thead>
+                <tbody id="financeBody">
+                    <tr><td colspan="10" class="loading">Loading finance data...</td></tr>
+                </tbody>
+            </table>
         </div>
     </section>
 
     <footer class="app-footer">
-        <span>FuelSphere v2.0 — Operations | SAP CAP + HANA Cloud</span>
+        <span>FuelSphere v2.0 — Step 3: Operations (Day-of-Flight Execution) | SAP CAP + HANA Cloud</span>
     </footer>
 
     <script src="app.js"></script>
