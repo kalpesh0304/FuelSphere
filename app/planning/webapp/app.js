@@ -7,9 +7,9 @@
     var FUEL_ORDER_APP = 'https://glcmjmynl0mfp4nx.launchpad.cfapps.eu10.hana.ondemand.com/91d3cd79-fbcd-42e1-bb4b-591d8070935e.comfuelspherefuelorders.comfuelspherefuelorders-0.0.1/index.html';
     var currentPersona = 'all';
 
-    function fuelOrderLink(orderNum, orderId) {
-        if (!orderNum || !orderId) return '--';
-        return '<a href="' + FUEL_ORDER_APP + '#/FuelOrders(ID=' + orderId + ',IsActiveEntity=true)" target="_blank" class="fo-link">' + orderNum + '</a>';
+    function fuelOrderLink(orderNum) {
+        if (!orderNum) return '--';
+        return '<a href="' + FUEL_ORDER_APP + '" target="_blank" class="fo-link" title="Open in Fuel Orders app">' + orderNum + '</a>';
     }
 
     function fmt(n) { return n == null ? '--' : Number(n).toLocaleString(); }
@@ -90,10 +90,10 @@
 
         // KPIs
         var flightsWithOrders = new Set(allOrders.filter(function(o) { return o.flight_ID; }).map(function(o) { return o.flight_ID; }));
-        // Build flight → order lookup (number + ID for deep link)
+        // Build flight → order number lookup
         var flightOrderMap = {};
         allOrders.forEach(function(o) {
-            if (o.flight_ID && o.order_number) flightOrderMap[o.flight_ID] = { num: o.order_number, id: o.ID };
+            if (o.flight_ID && o.order_number) flightOrderMap[o.flight_ID] = o.order_number;
         });
 
         // "Flights Needing Fuel Plan" = SCHEDULED flights that have NO fuel order yet
@@ -203,7 +203,7 @@
                         '<td>' + (f.aircraft_type || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
                         '<td>' + (f.aircraft_reg || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
                         '<td>' + statusBadge(f.status) + '</td>' +
-                        '<td>' + (hasOrder ? fuelOrderLink(flightOrderMap[f.ID].num, flightOrderMap[f.ID].id) : '<span class="badge badge-pending">—</span>') + '</td>' +
+                        '<td>' + (hasOrder ? fuelOrderLink(flightOrderMap[f.ID]) : '<span class="badge badge-pending">—</span>') + '</td>' +
                         (showEnrich ?
                             '<td><button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
                             'data-flight-number="' + f.flight_number + '" ' +
