@@ -25,7 +25,7 @@
             <select id="personaSelector" class="persona-select">
                 <option value="all">All Roles</option>
                 <option value="dispatch">Dispatch Team (Local, per airport)</option>
-                <option value="planner">Fuel Planner (HQ, network-wide)</option>
+                <option value="planner">Procurement Planner (HQ, network-wide)</option>
                 <option value="cockpit">Cockpit Crew (Final, per flight)</option>
             </select>
             <span class="datetime" id="datetime"></span>
@@ -54,15 +54,15 @@
 
     <!-- 3-Figure Comparison (with inline override reason) -->
     <section class="comparison-section">
-        <h2 class="section-title">Fuel Quantity — 3-Figure Comparison</h2>
-        <p class="section-desc">Dispatch, Planner, and Cockpit each independently calculate fuel. When quantities differ, a mandatory pilot override reason is shown inline.</p>
+        <h2 class="section-title">Fuel Quantity — 3-Figure Comparison (Airline Internal)</h2>
+        <p class="section-desc">Dispatch, Planner, and Cockpit each independently calculate fuel. When quantities differ, a mandatory pilot override reason is shown inline. <strong>Net Uplift = Cockpit Confirmed Qty &minus; ROB</strong> — this is the only figure sent to the supplier.</p>
         <div class="comparison-header-row">
             <div class="comparison-col-header">Flight</div>
             <div class="comparison-col-header col-dispatch">Dispatch Qty (kg)</div>
             <div class="comparison-col-header col-planner">Planner Qty (kg)</div>
             <div class="comparison-col-header col-cockpit">Cockpit Qty (kg)</div>
-            <div class="comparison-col-header">Net Uplift (kg)</div>
             <div class="comparison-col-header">ROB (kg)</div>
+            <div class="comparison-col-header col-uplift">Net Uplift &rarr; Supplier (kg)</div>
             <div class="comparison-col-header">Status</div>
         </div>
         <div id="comparisonBody" class="comparison-body">
@@ -161,6 +161,46 @@
                 </div>
             </div>
 
+            <!-- Filter Bar — Airport / Airline / Supplier / Time / Search -->
+            <div class="filter-bar" id="flightFilterBar">
+                <div class="filter-group">
+                    <label class="filter-label">Airport</label>
+                    <select id="filterAirport" class="filter-input">
+                        <option value="">All Airports</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Airline</label>
+                    <select id="filterAirline" class="filter-input">
+                        <option value="">All Airlines</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Fuel Supplier</label>
+                    <select id="filterSupplier" class="filter-input">
+                        <option value="">All Suppliers</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Time Window</label>
+                    <select id="filterTimeWindow" class="filter-input">
+                        <option value="">All upcoming</option>
+                        <option value="1h">Next 1 hour</option>
+                        <option value="4h">Next 4 hours</option>
+                        <option value="8h">Next 8 hours (shift)</option>
+                        <option value="24h">Next 24 hours</option>
+                    </select>
+                </div>
+                <div class="filter-group filter-group-search">
+                    <label class="filter-label">Search Flight</label>
+                    <input type="text" id="filterFlightSearch" class="filter-input" placeholder="Flight # (e.g. AC101)">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">&nbsp;</label>
+                    <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
+                </div>
+            </div>
+
             <!-- Schedule Upload — inside flight table card for planner -->
             <div class="upload-section" id="scheduleUploadWrap">
                 <div class="upload-area" id="uploadArea">
@@ -169,7 +209,7 @@
                     </div>
                     <div class="upload-text">
                         <strong>Step A: Upload Flight Schedule</strong>
-                        <span>Schedule Ops / SSIM — Excel or CSV</span>
+                        <span>Schedule Ops / SSIM — Excel or CSV (or real-time via API in production)</span>
                     </div>
                     <input type="file" id="scheduleFile" accept=".xlsx,.xls,.csv" style="display:none">
                     <button class="btn btn-primary" id="browseBtn">Browse</button>
@@ -180,24 +220,31 @@
                 <div class="upload-message" id="uploadMessage"></div>
             </div>
 
-            <!-- Flight Schedule Table -->
-            <table id="flightsTable">
-                <thead>
-                    <tr>
-                        <th>Flight #</th>
-                        <th>Date</th>
-                        <th>Route</th>
-                        <th>Aircraft</th>
-                        <th>Tail #</th>
-                        <th>Status</th>
-                        <th>Fuel Order #</th>
-                        <th>Enrich (Step B)</th>
-                    </tr>
-                </thead>
-                <tbody id="flightsBody">
-                    <tr><td colspan="8" class="loading">Loading flights...</td></tr>
-                </tbody>
-            </table>
+            <!-- Flight Schedule Table — Updated with industry-standard terminology -->
+            <div class="table-scroll-wrap">
+                <table id="flightsTable" class="flight-table">
+                    <thead>
+                        <tr>
+                            <th>Flight #</th>
+                            <th>Date</th>
+                            <th>Sector</th>
+                            <th>ETD</th>
+                            <th>ETA</th>
+                            <th>Aircraft Type</th>
+                            <th>Aircraft Reg #</th>
+                            <th>Booked PAX</th>
+                            <th>Boarded PAX</th>
+                            <th>Cargo (kg)</th>
+                            <th>Status</th>
+                            <th>Fuel Order #</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flightsBody">
+                        <tr><td colspan="13" class="loading">Loading flights...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Enrich Flight Modal -->
@@ -249,6 +296,86 @@
         </div>
 
     </section>
+
+    <!-- Flight Detail Drill-Down Modal — Fiori-style -->
+    <div class="modal-overlay" id="flightDetailModal" style="display:none">
+        <div class="modal-content modal-flight-detail">
+            <div class="modal-header modal-header-detail">
+                <div>
+                    <h3 id="flightDetailTitle">Flight Detail</h3>
+                    <span class="modal-subtitle" id="flightDetailSubtitle"></span>
+                </div>
+                <button class="modal-close" id="flightDetailClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Flight Identity -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Flight Identity</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Flight #</span><span class="detail-val" id="dtlFlightNum">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Date</span><span class="detail-val" id="dtlFlightDate">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Status</span><span class="detail-val" id="dtlFlightStatus">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Airline</span><span class="detail-val" id="dtlAirline">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Service Type</span><span class="detail-val" id="dtlServiceType">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Flight Nature</span><span class="detail-val" id="dtlFlightNature">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Sector -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Sector &amp; Schedule</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Sector</span><span class="detail-val detail-val-large" id="dtlSector">--</span></div>
+                        <div class="detail-field"><span class="detail-key">ETD (Departure)</span><span class="detail-val" id="dtlETD">--</span></div>
+                        <div class="detail-field"><span class="detail-key">ETA (Arrival)</span><span class="detail-val" id="dtlETA">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Block Time</span><span class="detail-val" id="dtlBlockTime">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Departure Terminal</span><span class="detail-val" id="dtlDepTerm">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Arrival Terminal</span><span class="detail-val" id="dtlArrTerm">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Gate</span><span class="detail-val" id="dtlGate">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Stand</span><span class="detail-val" id="dtlStand">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Linked Flight</span><span class="detail-val" id="dtlLinked">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Aircraft -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Aircraft</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Aircraft Type</span><span class="detail-val" id="dtlAircraftType">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Aircraft Registration #</span><span class="detail-val" id="dtlAircraftReg">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Captain</span><span class="detail-val" id="dtlCaptain">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Payload -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Payload (Demand Drivers)</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Booked PAX</span><span class="detail-val detail-val-large" id="dtlBookedPax">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Boarded PAX</span><span class="detail-val detail-val-large" id="dtlBoardedPax">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Cargo (kg)</span><span class="detail-val detail-val-large" id="dtlCargo">--</span></div>
+                    </div>
+                    <p class="detail-note">PAX boarded is final value from Departure Control System (DCS) recorded ~30 min before door close. Until then, only Booked count is available and continuously refreshed.</p>
+                </div>
+
+                <!-- Fuel Order -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Fuel Order</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Order Number</span><span class="detail-val" id="dtlOrderNum">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Order Status</span><span class="detail-val" id="dtlOrderStatus">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Ordered Qty (kg)</span><span class="detail-val" id="dtlOrderQty">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Crew Review</span><span class="detail-val" id="dtlCrewReview">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Adjusted Qty (kg)</span><span class="detail-val" id="dtlAdjQty">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Supplier</span><span class="detail-val" id="dtlSupplier">--</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="flightDetailCloseBtn">Close</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Crew Quantity Adjustment Modal — Fiori-style (outside sections so persona hiding doesn't affect it) -->
     <div class="modal-overlay" id="crewAdjustModal" style="display:none">

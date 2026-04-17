@@ -587,6 +587,12 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         delay_code          : String(10);               // IATA delay code
         delay_minutes       : Integer;                  // Delay duration in minutes
         cancellation_reason : String(200);              // Reason if status=CANCELLED
+
+        // Payload (passengers + cargo) — input to fuel demand calculation
+        booked_passengers   : Integer;                  // PAX booked (refreshed continuously from booking system)
+        boarded_passengers  : Integer;                  // PAX boarded (final, from DCS at door-close ~30 min before departure)
+        cargo_kg            : Decimal(10,2);            // Cargo load in kg
+        captain_name        : String(100);              // Pilot in command (assigned closer to flight)
 }
 
 // ============================================================================

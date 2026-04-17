@@ -4,8 +4,34 @@
 
     var ORDER_SVC = '/odata/v4/orders';
     var PLANNING_SVC = '/odata/v4/planning';
+    var MASTER_SVC = '/odata/v4/master';
     var FUEL_ORDER_APP = 'https://glcmjmynl0mfp4nx.launchpad.cfapps.eu10.hana.ondemand.com/91d3cd79-fbcd-42e1-bb4b-591d8070935e.comfuelspherefuelorders.comfuelspherefuelorders-0.0.1/index.html';
     var currentPersona = 'all';
+
+    // Cached datasets for filtering and drill-down
+    var _flights = [];
+    var _orders = [];
+    var _dispatches = [];
+    var _suppliers = [];
+    var _filters = { airport: '', airline: '', supplier: '', timeWindow: '', search: '' };
+
+    function sectorIATA(origin, destination) {
+        if (!origin && !destination) return '--';
+        return (origin || '???') + '-' + (destination || '???');
+    }
+
+    function fmtTime(t) {
+        if (!t) return '--';
+        // Time format from OData is HH:MM:SS — show HH:MM
+        return String(t).substring(0, 5);
+    }
+
+    function fmtBlockMins(mins) {
+        if (!mins) return '--';
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+    }
 
     function fuelOrderLink(orderNum) {
         if (!orderNum) return '--';
@@ -75,13 +101,23 @@
     }
 
     async function loadDashboard() {
-        var [orders, flights, dispatches] = await Promise.all([
+        var [orders, flights, dispatches, suppliers] = await Promise.all([
             odata(ORDER_SVC + '/FuelOrders?$orderby=requested_date desc'),
             odata(ORDER_SVC + '/FlightSchedule?$orderby=flight_date desc,scheduled_departure asc'),
-            odata(ORDER_SVC + '/FlightDispatches?$top=500')
+            odata(ORDER_SVC + '/FlightDispatches?$top=500'),
+            odata(MASTER_SVC + '/Suppliers?$top=200')
         ]);
 
+        // Cache for filters / drill-down
+        _flights = flights;
+        _orders = orders;
+        _dispatches = dispatches;
+        _suppliers = suppliers;
+
         var filteredFlights = flights.filter(function(f) { return !isPRFlight(f); });
+
+        // Populate filter dropdowns once
+        populateFilterDropdowns(filteredFlights, orders, suppliers);
         var allOrders = orders.filter(function(o) {
             var flight = flights.find(function(f) { return f.ID === o.flight_ID; });
             if (!flight) return true;
@@ -138,6 +174,7 @@
                     var plannerQty = o.ordered_quantity || 0;
                     var cockpitQty = o.crew_review_status === 'ADJUSTED' ? (o.crew_adjusted_quantity || plannerQty) : plannerQty;
                     var robKg = dispatch ? (dispatch.rob_departure_kg || 0) : 0;
+                    // Net Uplift = Cockpit Confirmed Qty - ROB (this is the only figure sent to supplier)
                     var netUplift = Math.max(0, cockpitQty - robKg);
 
                     var crewStatus = getCrewStatusLabel(o);
@@ -154,12 +191,12 @@
                     }
 
                     html += '<div class="comparison-row' + (isAdjusted ? ' comparison-row-adjusted' : '') + (isAwaitingReview && currentPersona === 'cockpit' ? ' comparison-row-review' : '') + '">' +
-                        '<div class="flight-info"><span class="flight-number">' + flightNum + '</span><span class="flight-route">' + route + '</span></div>' +
+                        '<div class="flight-info"><span class="flight-number">' + flightNum + '</span><span class="flight-route"><span class="sector-iata">' + (route || '').replace(' \u2192 ', '-') + '</span></span></div>' +
                         '<div class="qty-cell qty-dispatch">' + fmt(Math.round(dispatchQty)) + '</div>' +
                         '<div class="qty-cell qty-planner">' + fmt(Math.round(plannerQty)) + '</div>' +
                         '<div class="qty-cell qty-cockpit">' + fmt(Math.round(cockpitQty)) + '</div>' +
-                        '<div class="qty-cell qty-uplift">' + fmt(Math.round(netUplift)) + '</div>' +
                         '<div class="qty-cell qty-rob">' + fmt(Math.round(robKg)) + '</div>' +
+                        '<div class="qty-cell qty-uplift" title="Net Uplift = Cockpit - ROB. This is the figure sent to the supplier.">' + fmt(Math.round(netUplift)) + '</div>' +
                         '<div>' + statusBadge(crewStatus) + cockpitActions + '</div>' +
                         '</div>';
 
@@ -184,45 +221,254 @@
             }
         }
 
-        // Flights table — only SCHEDULED
+        // Flights table — only SCHEDULED, then apply user filters
         var scheduledFlights = filteredFlights.filter(function(f) { return f.status === 'SCHEDULED'; });
-        var flightsBody = document.getElementById('flightsBody');
-        if (flightsBody) {
-            if (scheduledFlights.length === 0) {
-                flightsBody.innerHTML = '<tr><td colspan="8" class="loading">No scheduled flights found</td></tr>';
-            } else {
-                // Show/hide enrich column based on persona
-                var showEnrich = (currentPersona === 'all' || currentPersona === 'planner');
-                flightsBody.innerHTML = scheduledFlights.map(function(f) {
-                    var hasOrder = flightsWithOrders.has(f.ID);
-                    var needsEnrich = !f.aircraft_type || !f.aircraft_reg;
-                    return '<tr>' +
-                        '<td><strong>' + f.flight_number + '</strong></td>' +
-                        '<td>' + f.flight_date + '</td>' +
-                        '<td>' + (f.origin_airport || '--') + ' \u2192 ' + (f.destination_airport || '--') + '</td>' +
-                        '<td>' + (f.aircraft_type || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
-                        '<td>' + (f.aircraft_reg || '<span class="badge badge-draft">Not Set</span>') + '</td>' +
-                        '<td>' + statusBadge(f.status) + '</td>' +
-                        '<td>' + (hasOrder ? fuelOrderLink(flightOrderMap[f.ID]) : '<span class="badge badge-pending">—</span>') + '</td>' +
-                        (showEnrich ?
-                            '<td><button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
-                            'data-flight-number="' + f.flight_number + '" ' +
-                            'data-flight-date="' + f.flight_date + '" ' +
-                            'data-aircraft-type="' + (f.aircraft_type || '') + '" ' +
-                            'data-aircraft-reg="' + (f.aircraft_reg || '') + '" ' +
-                            'data-dep-terminal="' + (f.departure_terminal || '') + '" ' +
-                            'data-arr-terminal="' + (f.arrival_terminal || '') + '" ' +
-                            'data-gate="' + (f.gate_number || '') + '" ' +
-                            'data-stand="' + (f.stand_number || '') + '"' +
-                            '>' + (needsEnrich ? 'Enrich Now' : 'Edit') + '</button></td>' :
-                            '<td>--</td>') +
-                        '</tr>';
-                }).join('');
-            }
-        }
+        renderFlightsTable(scheduledFlights, flightOrderMap, flightsWithOrders);
 
         // Apply persona visibility after data loads
         applyPersona(currentPersona);
+    }
+
+    // ═══ Flight Table Rendering with Filter Support ═══
+    function renderFlightsTable(scheduledFlights, flightOrderMap, flightsWithOrders) {
+        var flightsBody = document.getElementById('flightsBody');
+        if (!flightsBody) return;
+
+        // Apply user filters
+        var filtered = applyFlightFilters(scheduledFlights);
+
+        if (filtered.length === 0) {
+            flightsBody.innerHTML = '<tr><td colspan="13" class="loading">No flights match the current filters</td></tr>';
+            return;
+        }
+
+        var showEnrich = (currentPersona === 'all' || currentPersona === 'planner');
+        flightsBody.innerHTML = filtered.map(function(f) {
+            var hasOrder = flightsWithOrders.has(f.ID);
+            var needsEnrich = !f.aircraft_type || !f.aircraft_reg;
+            var aircraftCell = f.aircraft_type ?
+                f.aircraft_type :
+                '<span class="badge badge-draft">Not Set</span>';
+            var regCell = f.aircraft_reg ?
+                f.aircraft_reg :
+                '<span class="badge badge-draft">Not Set</span>';
+            var bookedCell = f.booked_passengers != null ? Number(f.booked_passengers).toLocaleString() : '<span class="text-muted">--</span>';
+            var boardedCell = f.boarded_passengers != null ?
+                '<span class="text-success">' + Number(f.boarded_passengers).toLocaleString() + '</span>' :
+                '<span class="text-muted" title="Available ~30 min before departure">--</span>';
+            var cargoCell = f.cargo_kg != null ? Number(f.cargo_kg).toLocaleString() : '<span class="text-muted">--</span>';
+
+            // Make flight number clickable for drill-down
+            var flightCell = '<button class="flight-link" data-flight-id="' + f.ID + '" type="button">' + f.flight_number + '</button>';
+
+            var actionCell = showEnrich ?
+                '<button class="btn-enrich' + (needsEnrich ? ' btn-enrich-needed' : '') + '" data-flight-id="' + f.ID + '" ' +
+                'data-flight-number="' + f.flight_number + '" ' +
+                'data-flight-date="' + f.flight_date + '" ' +
+                'data-aircraft-type="' + (f.aircraft_type || '') + '" ' +
+                'data-aircraft-reg="' + (f.aircraft_reg || '') + '" ' +
+                'data-dep-terminal="' + (f.departure_terminal || '') + '" ' +
+                'data-arr-terminal="' + (f.arrival_terminal || '') + '" ' +
+                'data-gate="' + (f.gate_number || '') + '" ' +
+                'data-stand="' + (f.stand_number || '') + '"' +
+                '>' + (needsEnrich ? 'Enrich Now' : 'Edit') + '</button>' :
+                '<span class="text-muted">--</span>';
+
+            return '<tr>' +
+                '<td>' + flightCell + '</td>' +
+                '<td>' + f.flight_date + '</td>' +
+                '<td><span class="sector-iata">' + sectorIATA(f.origin_airport, f.destination_airport) + '</span></td>' +
+                '<td>' + fmtTime(f.scheduled_departure) + '</td>' +
+                '<td>' + fmtTime(f.scheduled_arrival) + '</td>' +
+                '<td>' + aircraftCell + '</td>' +
+                '<td>' + regCell + '</td>' +
+                '<td class="num-cell">' + bookedCell + '</td>' +
+                '<td class="num-cell">' + boardedCell + '</td>' +
+                '<td class="num-cell">' + cargoCell + '</td>' +
+                '<td>' + statusBadge(f.status) + '</td>' +
+                '<td>' + (hasOrder ? fuelOrderLink(flightOrderMap[f.ID]) : '<span class="badge badge-pending">—</span>') + '</td>' +
+                '<td>' + actionCell + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function applyFlightFilters(flights) {
+        return flights.filter(function(f) {
+            if (_filters.airport && f.origin_airport !== _filters.airport && f.destination_airport !== _filters.airport) return false;
+            if (_filters.airline && f.airline_code !== _filters.airline) return false;
+            if (_filters.search) {
+                var s = _filters.search.toUpperCase();
+                if (f.flight_number.toUpperCase().indexOf(s) === -1) return false;
+            }
+            if (_filters.supplier) {
+                // Match supplier via the linked fuel order
+                var order = _orders.find(function(o) { return o.flight_ID === f.ID; });
+                if (!order || order.supplier_ID !== _filters.supplier) return false;
+            }
+            if (_filters.timeWindow) {
+                var hours = parseInt(_filters.timeWindow);
+                if (!isNaN(hours)) {
+                    var now = new Date();
+                    var depTime = parseFlightDateTime(f);
+                    if (!depTime) return false;
+                    var diffH = (depTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+                    if (diffH < 0 || diffH > hours) return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    function parseFlightDateTime(f) {
+        if (!f.flight_date) return null;
+        var t = f.scheduled_departure || '00:00:00';
+        try {
+            return new Date(f.flight_date + 'T' + t + 'Z');
+        } catch (e) { return null; }
+    }
+
+    function populateFilterDropdowns(flights, orders, suppliers) {
+        // Airport: union of origins + destinations
+        var airports = new Set();
+        flights.forEach(function(f) {
+            if (f.origin_airport) airports.add(f.origin_airport);
+            if (f.destination_airport) airports.add(f.destination_airport);
+        });
+        // Airline
+        var airlines = new Set();
+        flights.forEach(function(f) { if (f.airline_code) airlines.add(f.airline_code); });
+
+        fillSelect('filterAirport', Array.from(airports).sort(), 'All Airports');
+        fillSelect('filterAirline', Array.from(airlines).sort(), 'All Airlines');
+
+        // Suppliers — use ID as value, name as label
+        var supSel = document.getElementById('filterSupplier');
+        if (supSel && supSel.options.length <= 1) {
+            (suppliers || []).forEach(function(s) {
+                if (!s.is_active && s.is_active !== undefined) return;
+                var opt = document.createElement('option');
+                opt.value = s.ID;
+                opt.textContent = s.supplier_name || s.supplier_code || s.ID;
+                supSel.appendChild(opt);
+            });
+        }
+    }
+
+    function fillSelect(id, values, defaultLabel) {
+        var el = document.getElementById(id);
+        if (!el || el.options.length > 1) return; // already populated
+        // Keep first "All ..." option
+        values.forEach(function(v) {
+            var opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            el.appendChild(opt);
+        });
+    }
+
+    function initFilters() {
+        var ids = ['filterAirport', 'filterAirline', 'filterSupplier', 'filterTimeWindow'];
+        ids.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('change', function() {
+                _filters[id.replace('filter', '').charAt(0).toLowerCase() + id.replace('filter', '').slice(1)] = el.value;
+                loadDashboard();
+            });
+        });
+        var search = document.getElementById('filterFlightSearch');
+        if (search) {
+            var debounce;
+            search.addEventListener('input', function() {
+                clearTimeout(debounce);
+                debounce = setTimeout(function() {
+                    _filters.search = search.value.trim();
+                    loadDashboard();
+                }, 250);
+            });
+        }
+        var resetBtn = document.getElementById('filterReset');
+        if (resetBtn) resetBtn.addEventListener('click', function() {
+            _filters = { airport: '', airline: '', supplier: '', timeWindow: '', search: '' };
+            ['filterAirport', 'filterAirline', 'filterSupplier', 'filterTimeWindow'].forEach(function(id) {
+                var el = document.getElementById(id); if (el) el.value = '';
+            });
+            var s = document.getElementById('filterFlightSearch'); if (s) s.value = '';
+            loadDashboard();
+        });
+    }
+
+    // ═══ Flight Detail Drill-Down ═══
+    function initFlightDetail() {
+        var modal = document.getElementById('flightDetailModal');
+        if (!modal) return;
+        var closeBtn = document.getElementById('flightDetailClose');
+        var closeBtn2 = document.getElementById('flightDetailCloseBtn');
+        function close() { modal.style.display = 'none'; }
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        if (closeBtn2) closeBtn2.addEventListener('click', close);
+        modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.flight-link');
+            if (!btn) return;
+            openFlightDetail(btn.getAttribute('data-flight-id'));
+        });
+    }
+
+    function openFlightDetail(flightId) {
+        var flight = _flights.find(function(f) { return f.ID === flightId; });
+        if (!flight) return;
+        var order = _orders.find(function(o) { return o.flight_ID === flightId; });
+        var supplier = order ? _suppliers.find(function(s) { return s.ID === order.supplier_ID; }) : null;
+
+        var setVal = function(id, val) {
+            var el = document.getElementById(id);
+            if (el) el.innerHTML = val != null && val !== '' ? val : '<span class="text-muted">--</span>';
+        };
+
+        document.getElementById('flightDetailTitle').textContent = 'Flight ' + flight.flight_number;
+        document.getElementById('flightDetailSubtitle').textContent =
+            sectorIATA(flight.origin_airport, flight.destination_airport) + ' \u2014 ' + flight.flight_date;
+
+        // Identity
+        setVal('dtlFlightNum', '<strong>' + flight.flight_number + '</strong>');
+        setVal('dtlFlightDate', flight.flight_date);
+        setVal('dtlFlightStatus', statusBadge(flight.status));
+        setVal('dtlAirline', flight.airline_code || '');
+        setVal('dtlServiceType', flight.service_type || '');
+        setVal('dtlFlightNature', flight.flight_nature || '');
+
+        // Sector
+        setVal('dtlSector', '<strong>' + sectorIATA(flight.origin_airport, flight.destination_airport) + '</strong>');
+        setVal('dtlETD', fmtTime(flight.scheduled_departure));
+        setVal('dtlETA', fmtTime(flight.scheduled_arrival));
+        setVal('dtlBlockTime', fmtBlockMins(flight.planned_block_mins));
+        setVal('dtlDepTerm', flight.departure_terminal);
+        setVal('dtlArrTerm', flight.arrival_terminal);
+        setVal('dtlGate', flight.gate_number);
+        setVal('dtlStand', flight.stand_number);
+        setVal('dtlLinked', flight.linked_flight_number ? flight.linked_flight_number + ' (' + (flight.linked_flight_date || '') + ')' : '');
+
+        // Aircraft
+        setVal('dtlAircraftType', flight.aircraft_type);
+        setVal('dtlAircraftReg', flight.aircraft_reg);
+        setVal('dtlCaptain', flight.captain_name);
+
+        // Payload
+        setVal('dtlBookedPax', flight.booked_passengers != null ? Number(flight.booked_passengers).toLocaleString() : '');
+        setVal('dtlBoardedPax', flight.boarded_passengers != null ?
+            '<span class="text-success">' + Number(flight.boarded_passengers).toLocaleString() + '</span>' :
+            '<span class="text-muted">Pending DCS</span>');
+        setVal('dtlCargo', flight.cargo_kg != null ? Number(flight.cargo_kg).toLocaleString() + ' kg' : '');
+
+        // Fuel Order
+        setVal('dtlOrderNum', order ? fuelOrderLink(order.order_number) : '');
+        setVal('dtlOrderStatus', order ? statusBadge(order.status) : '');
+        setVal('dtlOrderQty', order && order.ordered_quantity != null ? Number(order.ordered_quantity).toLocaleString() : '');
+        setVal('dtlCrewReview', order && order.crew_review_status ? statusBadge(order.crew_review_status) : '<span class="text-muted">Pending</span>');
+        setVal('dtlAdjQty', order && order.crew_adjusted_quantity != null ? Number(order.crew_adjusted_quantity).toLocaleString() : '');
+        setVal('dtlSupplier', supplier ? supplier.supplier_name : '');
+
+        document.getElementById('flightDetailModal').style.display = 'flex';
     }
 
     // Enrich modal
@@ -650,6 +896,8 @@
         initUploads();
         initPersona();
         initCockpitActions();
+        initFilters();
+        initFlightDetail();
     }
 
     if (document.readyState === 'loading') {

@@ -324,3 +324,115 @@ tbody tr:hover { background: #F8FAFD; }
     .comparison-header-row, .comparison-row { grid-template-columns: 1fr; }
     .comparison-header-row { display: none; }
 }
+
+/* ═══ Filter Bar ═══ */
+.filter-bar {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1.4fr 1.2fr 1.4fr auto;
+    gap: 12px;
+    padding: 14px 20px;
+    background: #FAFBFC;
+    border-bottom: 1px solid var(--border, #E5E5E5);
+    align-items: end;
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-label {
+    font-size: 11px; font-weight: 600; color: #6A6D70;
+    text-transform: uppercase; letter-spacing: 0.4px;
+}
+.filter-input {
+    padding: 6px 10px; border: 1px solid #D5D7DA; border-radius: 4px;
+    font-size: 13px; font-family: inherit; background: #fff;
+    height: 32px;
+}
+.filter-input:focus {
+    outline: none; border-color: #0070F2;
+    box-shadow: 0 0 0 2px rgba(0,112,242,0.15);
+}
+.filter-group-search { min-width: 160px; }
+
+@media (max-width: 1200px) {
+    .filter-bar { grid-template-columns: 1fr 1fr 1fr; }
+}
+@media (max-width: 768px) {
+    .filter-bar { grid-template-columns: 1fr; padding: 12px; }
+}
+
+/* ═══ IATA Sector Format ═══ */
+.sector-iata {
+    display: inline-block;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-weight: 700;
+    color: #0054B6;
+    background: #E8F0FE;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+}
+
+/* ═══ Flight Number as Drill-Down Button ═══ */
+.flight-link {
+    background: none; border: none; padding: 0;
+    color: #0070F2; font-weight: 700;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+    text-decoration: none;
+}
+.flight-link:hover { text-decoration: underline; color: #0054B6; }
+
+/* ═══ Table additions ═══ */
+.table-scroll-wrap { width: 100%; overflow-x: auto; }
+.flight-table { min-width: 1100px; }
+.flight-table th, .flight-table td { white-space: nowrap; }
+.flight-table .num-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.text-muted { color: #B0B0B0; }
+.text-success { color: #107E3E; font-weight: 600; }
+
+/* ═══ Comparison: Net Uplift emphasis ═══ */
+.comparison-col-header.col-uplift {
+    color: #107E3E; font-weight: 700;
+}
+.qty-cell.qty-uplift {
+    background: #E8F5E9 !important;
+    color: #107E3E; font-weight: 700;
+    border-left: 3px solid #107E3E;
+}
+
+/* ═══ Flight Detail Drill-Down Modal ═══ */
+.modal-flight-detail { width: 760px; max-width: 95vw; }
+.modal-header-detail {
+    background: linear-gradient(135deg, #354A5F 0%, #1B2D3E 100%);
+    color: #fff;
+}
+.modal-header-detail h3 { color: #fff; }
+.modal-header-detail .modal-subtitle { color: rgba(255,255,255,0.85); font-size: 12px; }
+.modal-header-detail .modal-close { color: #fff; }
+
+.detail-section {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #F0F0F0;
+}
+.detail-section:last-child { border-bottom: none; margin-bottom: 0; }
+.detail-section-title {
+    font-size: 12px; font-weight: 700; color: #0070F2;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #E5E5E5;
+}
+.detail-grid-3 {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px;
+}
+.detail-field { display: flex; flex-direction: column; gap: 2px; }
+.detail-key { font-size: 11px; color: #6A6D70; text-transform: uppercase; letter-spacing: 0.3px; }
+.detail-val { font-size: 13px; color: #32363A; font-weight: 600; }
+.detail-val-large { font-size: 16px; font-weight: 700; color: #0054B6; }
+.detail-note {
+    margin-top: 8px; padding: 8px 10px;
+    background: #FFF8E1; border-left: 3px solid #E9730C;
+    color: #856404; font-size: 11px; font-style: italic; border-radius: 3px;
+}
+
+@media (max-width: 768px) {
+    .detail-grid-3 { grid-template-columns: 1fr; }
+}
+
