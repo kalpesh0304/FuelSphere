@@ -326,6 +326,11 @@ tbody tr:hover { background: #F8FAFD; }
 }
 
 /* ═══ Filter Bar ═══ */
+.global-filter-section {
+    padding: 12px 24px 0;
+    background: var(--bg, #F5F6F7);
+    position: sticky; top: 0; z-index: 10;
+}
 .filter-bar {
     display: grid;
     grid-template-columns: 1.4fr 1fr 1.4fr 1.2fr 1.4fr auto;
@@ -334,6 +339,16 @@ tbody tr:hover { background: #F8FAFD; }
     background: #FAFBFC;
     border-bottom: 1px solid var(--border, #E5E5E5);
     align-items: end;
+}
+.filter-bar-global {
+    background: #fff;
+    border: 1px solid #E5E5E5;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.filter-bar-active {
+    border-color: #0070F2;
+    box-shadow: 0 2px 8px rgba(0,112,242,0.15);
 }
 .filter-group { display: flex; flex-direction: column; gap: 4px; }
 .filter-label {

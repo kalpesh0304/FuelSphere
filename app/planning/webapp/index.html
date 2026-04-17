@@ -32,6 +32,48 @@
         </div>
     </header>
 
+    <!-- Global Filter Bar — applies to KPIs, comparison, and flight table -->
+    <section class="global-filter-section">
+        <div class="filter-bar filter-bar-global" id="globalFilterBar">
+            <div class="filter-group">
+                <label class="filter-label">Airport</label>
+                <select id="filterAirport" class="filter-input">
+                    <option value="">All Airports</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Airline</label>
+                <select id="filterAirline" class="filter-input">
+                    <option value="">All Airlines</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Fuel Supplier</label>
+                <select id="filterSupplier" class="filter-input">
+                    <option value="">All Suppliers</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Time Window</label>
+                <select id="filterTimeWindow" class="filter-input">
+                    <option value="">All upcoming</option>
+                    <option value="1h">Next 1 hour</option>
+                    <option value="4h">Next 4 hours</option>
+                    <option value="8h">Next 8 hours (shift)</option>
+                    <option value="24h">Next 24 hours</option>
+                </select>
+            </div>
+            <div class="filter-group filter-group-search">
+                <label class="filter-label">Search Flight</label>
+                <input type="text" id="filterFlightSearch" class="filter-input" placeholder="Flight # (e.g. AC101)">
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">&nbsp;</label>
+                <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
+            </div>
+        </div>
+    </section>
+
     <!-- Planning KPIs -->
     <section class="kpi-section">
         <div class="kpi-card">
@@ -158,46 +200,6 @@
                 <h3>Upcoming Flights — Ready for Planning</h3>
                 <div class="table-actions">
                     <span class="table-filter-note">Showing only SCHEDULED flights (ARRIVED / DEPARTED are in Operations)</span>
-                </div>
-            </div>
-
-            <!-- Filter Bar — Airport / Airline / Supplier / Time / Search -->
-            <div class="filter-bar" id="flightFilterBar">
-                <div class="filter-group">
-                    <label class="filter-label">Airport</label>
-                    <select id="filterAirport" class="filter-input">
-                        <option value="">All Airports</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Airline</label>
-                    <select id="filterAirline" class="filter-input">
-                        <option value="">All Airlines</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Fuel Supplier</label>
-                    <select id="filterSupplier" class="filter-input">
-                        <option value="">All Suppliers</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Time Window</label>
-                    <select id="filterTimeWindow" class="filter-input">
-                        <option value="">All upcoming</option>
-                        <option value="1h">Next 1 hour</option>
-                        <option value="4h">Next 4 hours</option>
-                        <option value="8h">Next 8 hours (shift)</option>
-                        <option value="24h">Next 24 hours</option>
-                    </select>
-                </div>
-                <div class="filter-group filter-group-search">
-                    <label class="filter-label">Search Flight</label>
-                    <input type="text" id="filterFlightSearch" class="filter-input" placeholder="Flight # (e.g. AC101)">
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">&nbsp;</label>
-                    <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
                 </div>
             </div>
 

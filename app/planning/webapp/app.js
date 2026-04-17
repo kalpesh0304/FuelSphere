@@ -114,14 +114,22 @@
         _dispatches = dispatches;
         _suppliers = suppliers;
 
-        var filteredFlights = flights.filter(function(f) { return !isPRFlight(f); });
+        var baseFlights = flights.filter(function(f) { return !isPRFlight(f); });
 
-        // Populate filter dropdowns once
-        populateFilterDropdowns(filteredFlights, orders, suppliers);
+        // Populate filter dropdowns once (use unfiltered set so options stay stable)
+        populateFilterDropdowns(baseFlights, orders, suppliers);
+
+        // Apply global filters to flights AND derive filtered orders
+        var filteredFlights = applyFlightFilters(baseFlights);
+        var filteredFlightIDs = new Set(filteredFlights.map(function(f) { return f.ID; }));
         var allOrders = orders.filter(function(o) {
             var flight = flights.find(function(f) { return f.ID === o.flight_ID; });
-            if (!flight) return true;
-            return !isPRFlight(flight);
+            if (flight && isPRFlight(flight)) return false;
+            // If a flight filter set is active, only keep orders linked to those flights
+            if (hasActiveFilters() && o.flight_ID && !filteredFlightIDs.has(o.flight_ID)) return false;
+            // Supplier filter without flight context
+            if (_filters.supplier && o.supplier_ID !== _filters.supplier) return false;
+            return true;
         });
 
         // KPIs
@@ -132,7 +140,7 @@
             if (o.flight_ID && o.order_number) flightOrderMap[o.flight_ID] = o.order_number;
         });
 
-        // "Flights Needing Fuel Plan" = SCHEDULED flights that have NO fuel order yet
+        // "Flights Needing Fuel Plan" = SCHEDULED flights (filtered) that have NO fuel order yet
         var scheduledNoOrder = filteredFlights.filter(function(f) {
             return !flightsWithOrders.has(f.ID) && f.status === 'SCHEDULED';
         });
@@ -221,29 +229,29 @@
             }
         }
 
-        // Flights table — only SCHEDULED, then apply user filters
+        // Flights table — only SCHEDULED (filters already applied at top of loadDashboard)
         var scheduledFlights = filteredFlights.filter(function(f) { return f.status === 'SCHEDULED'; });
         renderFlightsTable(scheduledFlights, flightOrderMap, flightsWithOrders);
+        updateFilterChips();
 
         // Apply persona visibility after data loads
         applyPersona(currentPersona);
     }
 
-    // ═══ Flight Table Rendering with Filter Support ═══
+    // ═══ Flight Table Rendering (filters already applied upstream) ═══
     function renderFlightsTable(scheduledFlights, flightOrderMap, flightsWithOrders) {
         var flightsBody = document.getElementById('flightsBody');
         if (!flightsBody) return;
 
-        // Apply user filters
-        var filtered = applyFlightFilters(scheduledFlights);
-
-        if (filtered.length === 0) {
-            flightsBody.innerHTML = '<tr><td colspan="13" class="loading">No flights match the current filters</td></tr>';
+        if (scheduledFlights.length === 0) {
+            flightsBody.innerHTML = '<tr><td colspan="13" class="loading">' +
+                (hasActiveFilters() ? 'No flights match the current filters' : 'No scheduled flights found') +
+                '</td></tr>';
             return;
         }
 
         var showEnrich = (currentPersona === 'all' || currentPersona === 'planner');
-        flightsBody.innerHTML = filtered.map(function(f) {
+        flightsBody.innerHTML = scheduledFlights.map(function(f) {
             var hasOrder = flightsWithOrders.has(f.ID);
             var needsEnrich = !f.aircraft_type || !f.aircraft_reg;
             var aircraftCell = f.aircraft_type ?
@@ -290,6 +298,18 @@
                 '<td>' + actionCell + '</td>' +
                 '</tr>';
         }).join('');
+    }
+
+    function hasActiveFilters() {
+        return !!(_filters.airport || _filters.airline || _filters.supplier || _filters.timeWindow || _filters.search);
+    }
+
+    function updateFilterChips() {
+        // Show a small visual indicator on the filter bar when filters are active
+        var bar = document.getElementById('globalFilterBar');
+        if (!bar) return;
+        if (hasActiveFilters()) bar.classList.add('filter-bar-active');
+        else bar.classList.remove('filter-bar-active');
     }
 
     function applyFlightFilters(flights) {
@@ -366,11 +386,16 @@
     }
 
     function initFilters() {
-        var ids = ['filterAirport', 'filterAirline', 'filterSupplier', 'filterTimeWindow'];
-        ids.forEach(function(id) {
+        var fieldMap = {
+            filterAirport: 'airport',
+            filterAirline: 'airline',
+            filterSupplier: 'supplier',
+            filterTimeWindow: 'timeWindow'
+        };
+        Object.keys(fieldMap).forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.addEventListener('change', function() {
-                _filters[id.replace('filter', '').charAt(0).toLowerCase() + id.replace('filter', '').slice(1)] = el.value;
+                _filters[fieldMap[id]] = el.value;
                 loadDashboard();
             });
         });
