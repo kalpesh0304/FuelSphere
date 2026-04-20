@@ -48,6 +48,53 @@ body { font-family: '72', 'Segoe UI', Arial, sans-serif; background: var(--bg); 
 .persona-select option { color: #333; background: #fff; }
 .datetime { opacity: 0.8; font-size: 12px; }
 
+/* ═══ Global Filter Bar ═══ */
+.global-filter-section {
+    padding: 12px 24px 0;
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+}
+.filter-bar {
+    display: grid;
+    grid-template-columns: 1.2fr 1.2fr 1fr 1fr 1.4fr auto;
+    gap: 12px;
+    padding: 14px 20px;
+    align-items: end;
+}
+.filter-bar-global {
+    background: #fff;
+    border: 1px solid #E5E5E5;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.filter-bar-active {
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(16,126,62,0.18);
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-label {
+    font-size: 11px; font-weight: 600; color: #6A6D70;
+    text-transform: uppercase; letter-spacing: 0.4px;
+}
+.filter-input {
+    padding: 6px 10px; border: 1px solid #D5D7DA; border-radius: 4px;
+    font-size: 13px; font-family: inherit; background: #fff;
+    height: 32px;
+}
+.filter-input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(16,126,62,0.15);
+}
+.filter-group-search { min-width: 150px; }
+
+@media (max-width: 1200px) {
+    .filter-bar { grid-template-columns: 1fr 1fr 1fr; }
+}
+@media (max-width: 768px) {
+    .filter-bar { grid-template-columns: 1fr; padding: 12px; }
+    .global-filter-section { padding: 8px 12px 0; }
+}
+
 /* Section titles */
 .section-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
 .section-desc { font-size: 12px; color: var(--text-light); margin-bottom: 16px; }

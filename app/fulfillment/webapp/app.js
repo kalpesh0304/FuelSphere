@@ -6,6 +6,8 @@
     var ORDER_SVC = '/odata/v4/orders';
     var FUEL_ORDER_APP = 'https://glcmjmynl0mfp4nx.launchpad.cfapps.eu10.hana.ondemand.com/91d3cd79-fbcd-42e1-bb4b-591d8070935e.comfuelspherefuelorders.comfuelspherefuelorders-0.0.1/index.html';
     var currentPersona = 'all';
+    var _filters = { station: '', airline: '', status: '', timeWindow: '', search: '' };
+    var _salesOrders = [];
 
     function fuelOrderLink(orderNum) {
         if (!orderNum) return '--';
@@ -77,11 +79,26 @@
         _fuelOrders = fuelOrders;
         _deliveries = deliveries;
         _tickets = tickets;
+        _salesOrders = salesOrders;
 
-        // Pipeline counts
+        populateFilterDropdowns(salesOrders, fuelOrders);
+
+        // Apply global filters
+        var filteredSO = applySOFilters(salesOrders);
+        var filteredFO = applyFOFilters(fuelOrders);
+        var filteredFOIDs = new Set(filteredFO.map(function(o) { return o.ID; }));
+        var filteredDeliveries = deliveries.filter(function(d) {
+            return !hasActiveFilters() || filteredFOIDs.has(d.order_ID);
+        });
+        var filteredDeliveryIDs = new Set(filteredDeliveries.map(function(d) { return d.ID; }));
+        var filteredTickets = tickets.filter(function(t) {
+            return !hasActiveFilters() || filteredDeliveryIDs.has(t.delivery_ID);
+        });
+
+        // Pipeline counts (from filtered sales orders)
         var counts = {};
         pipelineStatuses.forEach(function(s) { counts[s] = 0; });
-        salesOrders.forEach(function(o) { if (counts.hasOwnProperty(o.status)) counts[o.status]++; });
+        filteredSO.forEach(function(o) { if (counts.hasOwnProperty(o.status)) counts[o.status]++; });
         setText('countReceived', counts['RECEIVED']);
         setText('countConfirmed', counts['CONFIRMED']);
         setText('countScheduled', counts['SCHEDULED']);
@@ -89,28 +106,148 @@
         setText('countInvoiced', counts['INVOICED']);
         setText('countClosed', counts['CLOSED']);
 
-        // KPIs
-        var active = salesOrders.filter(function(o) {
+        // KPIs (from filtered data)
+        var active = filteredSO.filter(function(o) {
             return o.status !== 'INVOICED' && o.status !== 'CLOSED' && o.status !== 'CANCELLED';
         }).length;
-        var awaitingDelivery = fuelOrders.filter(function(o) {
+        var awaitingDelivery = filteredFO.filter(function(o) {
             return o.status === 'Confirmed' || o.status === 'InProgress';
         }).length;
-        var pendingSig = deliveries.filter(function(d) { return !d.signature_timestamp; }).length;
-        var ticketsCreated = tickets.length;
+        var pendingSig = filteredDeliveries.filter(function(d) { return !d.signature_timestamp; }).length;
+        var ticketsCreated = filteredTickets.length;
 
         setText('kpiOrders', active);
         setText('kpiAwaitingDelivery', awaitingDelivery);
         setText('kpiTicketsPending', pendingSig);
         setText('kpiCompleted', ticketsCreated);
 
-        // Delivery crew cards — fuel order centric
-        renderDeliveryCards(fuelOrders, deliveries, tickets);
+        // Delivery crew cards — filtered fuel orders
+        renderDeliveryCards(filteredFO, filteredDeliveries, filteredTickets);
 
-        // Sales orders table — with fuel order + delivery cross-refs
-        renderSalesOrders(salesOrders, fuelOrders, deliveries, tickets);
+        // Sales orders table — filtered
+        renderSalesOrders(filteredSO, filteredFO, filteredDeliveries, filteredTickets);
 
+        updateFilterChips();
         applyPersona(currentPersona);
+    }
+
+    // ═══ Global Filter Logic ═══
+    function hasActiveFilters() {
+        return !!(_filters.station || _filters.airline || _filters.status || _filters.timeWindow || _filters.search);
+    }
+
+    function updateFilterChips() {
+        var bar = document.getElementById('globalFilterBar');
+        if (!bar) return;
+        if (hasActiveFilters()) bar.classList.add('filter-bar-active');
+        else bar.classList.remove('filter-bar-active');
+    }
+
+    function applySOFilters(salesOrders) {
+        return salesOrders.filter(function(o) {
+            if (_filters.station && o.station_code !== _filters.station) return false;
+            if (_filters.airline && o.customer_airline !== _filters.airline) return false;
+            if (_filters.status && o.status !== _filters.status) return false;
+            if (_filters.search) {
+                var s = _filters.search.toUpperCase();
+                var fields = [o.sales_order_number, o.customer_order_number, o.flight_number].filter(Boolean);
+                if (!fields.some(function(f) { return f.toUpperCase().indexOf(s) !== -1; })) return false;
+            }
+            if (_filters.timeWindow) {
+                var hours = parseInt(_filters.timeWindow);
+                if (!isNaN(hours) && o.scheduled_date) {
+                    var now = new Date();
+                    var t = o.scheduled_time || '00:00:00';
+                    var dt = new Date(o.scheduled_date + 'T' + t + 'Z');
+                    var diffH = (dt.getTime() - now.getTime()) / (1000 * 60 * 60);
+                    if (diffH < 0 || diffH > hours) return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    function applyFOFilters(fuelOrders) {
+        return fuelOrders.filter(function(o) {
+            if (_filters.station && o.station_code !== _filters.station) return false;
+            if (_filters.search) {
+                var s = _filters.search.toUpperCase();
+                var num = o.order_number || '';
+                var flight = getFlightFromOrder(o) || '';
+                if (num.toUpperCase().indexOf(s) === -1 && flight.toUpperCase().indexOf(s) === -1) return false;
+            }
+            if (_filters.timeWindow) {
+                var hours = parseInt(_filters.timeWindow);
+                if (!isNaN(hours) && o.requested_date) {
+                    var now = new Date();
+                    var t = o.requested_time || '00:00:00';
+                    var dt = new Date(o.requested_date + 'T' + t + 'Z');
+                    var diffH = (dt.getTime() - now.getTime()) / (1000 * 60 * 60);
+                    if (diffH < 0 || diffH > hours) return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    function populateFilterDropdowns(salesOrders, fuelOrders) {
+        var stations = new Set();
+        var airlines = new Set();
+        salesOrders.forEach(function(o) {
+            if (o.station_code) stations.add(o.station_code);
+            if (o.customer_airline) airlines.add(o.customer_airline);
+        });
+        fuelOrders.forEach(function(o) {
+            if (o.station_code) stations.add(o.station_code);
+        });
+        fillSelect('filterStation', Array.from(stations).sort(), 'All Stations');
+        fillSelect('filterAirline', Array.from(airlines).sort(), 'All Airlines');
+    }
+
+    function fillSelect(id, values, defaultLabel) {
+        var el = document.getElementById(id);
+        if (!el || el.options.length > 1) return;
+        values.forEach(function(v) {
+            var opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            el.appendChild(opt);
+        });
+    }
+
+    function initFilters() {
+        var fieldMap = {
+            filterStation: 'station',
+            filterAirline: 'airline',
+            filterStatus: 'status',
+            filterTimeWindow: 'timeWindow'
+        };
+        Object.keys(fieldMap).forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('change', function() {
+                _filters[fieldMap[id]] = el.value;
+                loadDashboard();
+            });
+        });
+        var search = document.getElementById('filterSearch');
+        if (search) {
+            var debounce;
+            search.addEventListener('input', function() {
+                clearTimeout(debounce);
+                debounce = setTimeout(function() {
+                    _filters.search = search.value.trim();
+                    loadDashboard();
+                }, 250);
+            });
+        }
+        var resetBtn = document.getElementById('filterReset');
+        if (resetBtn) resetBtn.addEventListener('click', function() {
+            _filters = { station: '', airline: '', status: '', timeWindow: '', search: '' };
+            ['filterStation', 'filterAirline', 'filterStatus', 'filterTimeWindow'].forEach(function(id) {
+                var el = document.getElementById(id); if (el) el.value = '';
+            });
+            var s = document.getElementById('filterSearch'); if (s) s.value = '';
+            loadDashboard();
+        });
     }
 
     // ═══ Delivery Cards (Delivery Crew view) ═══
@@ -630,6 +767,7 @@
     function init() {
         loadDashboard();
         initPersona();
+        initFilters();
         initActions();
         initEpodModal();
     }

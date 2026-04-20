@@ -31,6 +31,54 @@
         </div>
     </header>
 
+    <!-- Global Filter Bar — applies to Pipeline, KPIs, Delivery Cards, and Sales Orders -->
+    <section class="global-filter-section">
+        <div class="filter-bar filter-bar-global" id="globalFilterBar">
+            <div class="filter-group">
+                <label class="filter-label">Station</label>
+                <select id="filterStation" class="filter-input">
+                    <option value="">All Stations</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Airline Customer</label>
+                <select id="filterAirline" class="filter-input">
+                    <option value="">All Airlines</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Status</label>
+                <select id="filterStatus" class="filter-input">
+                    <option value="">All Statuses</option>
+                    <option value="RECEIVED">Received</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="SCHEDULED">Scheduled</option>
+                    <option value="DELIVERED">Delivered</option>
+                    <option value="INVOICED">Invoiced</option>
+                    <option value="CLOSED">Closed</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Time Window</label>
+                <select id="filterTimeWindow" class="filter-input">
+                    <option value="">All upcoming</option>
+                    <option value="1h">Next 1 hour</option>
+                    <option value="4h">Next 4 hours</option>
+                    <option value="8h">Next 8 hours (shift)</option>
+                    <option value="24h">Next 24 hours</option>
+                </select>
+            </div>
+            <div class="filter-group filter-group-search">
+                <label class="filter-label">Search</label>
+                <input type="text" id="filterSearch" class="filter-input" placeholder="SO#, Order#, Flight#">
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">&nbsp;</label>
+                <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
+            </div>
+        </div>
+    </section>
+
     <!-- Fulfillment Pipeline — Supplier Planner view -->
     <section class="pipeline-section" id="pipelineSection">
         <h2 class="section-title">Fulfillment Pipeline</h2>
