@@ -19,8 +19,8 @@ modules:
     path: app
     parameters:
       buildpack: nodejs_buildpack
-      memory: 256M
-      disk-quota: 512M
+      memory: 1024M
+      disk-quota: 2048M
     build-parameters:
       builder: custom
       commands:
