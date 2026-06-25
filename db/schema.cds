@@ -1374,7 +1374,7 @@ type ToleranceType : String(20) enum {
  * - S/4HANA FI posting on approval
  */
 entity INVOICES : cuid, AuditTrail {
-        invoice_number      : String(20) @mandatory;      // Supplier invoice number (unique per supplier)
+        invoice_number      : String(30) @mandatory;      // Supplier invoice number (unique per supplier)
         internal_number     : String(25);                 // INV-{SUPPLIER}-{DATE}-{SEQ}
 
         // Supplier
