@@ -11,6 +11,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
+const XLSX = require('xlsx');
 
 const _id = (params) => {
     const p = params[0];
@@ -612,6 +613,517 @@ module.exports = class BurnService extends cds.ApplicationService {
                 }
             }
             return latest;
+        });
+
+        // ====================================================================
+        // IMPORT FUEL BURN FROM EXCEL
+        // ====================================================================
+
+        this.on('importFuelBurnExcel', async (req) => {
+            const { fileContent, fileName } = req.data;
+            const errors = [];
+            let burnsProcessed = 0, burnsCreated = 0, burnsSkipped = 0;
+
+            // Validate & parse
+            if (!fileContent) return req.error(400, 'FB401: File content is required.');
+            const ext = (fileName || '').toLowerCase();
+            if (ext && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.csv'))
+                return req.error(400, 'FB401: Invalid file format. Only .xlsx, .xls and .csv files are supported.');
+
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `FB401: Failed to parse file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) return req.error(400, 'FB401: File contains no sheets.');
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) return req.error(400, 'FB402: Sheet is empty.');
+
+            // Validate required columns
+            const requiredCols = ['Flight Number', 'Aircraft Tail', 'Departure Airport\n(IATA)',
+                'Arrival Airport\n(IATA)', 'Burn Date\n(YYYY-MM-DD)', 'Actual Burn (Kg)', 'Data Source'];
+            // Also try simpler column names
+            const headers = Object.keys(rows[0]);
+            const _col = (name) => {
+                const found = headers.find(h => h.replace(/\n/g, ' ').trim().toLowerCase().startsWith(name.toLowerCase()));
+                return found || null;
+            };
+            const colFlightNumber = _col('Flight Number');
+            const colAircraftTail = _col('Aircraft Tail');
+            const colDepAirport = _col('Departure Airport');
+            const colArrAirport = _col('Arrival Airport');
+            const colBurnDate = _col('Burn Date');
+            const colBlockOff = _col('Block-Off Time') || _col('Block Off Time');
+            const colBlockOn = _col('Block-On Time') || _col('Block On Time');
+            const colActualBurn = _col('Actual Burn');
+            const colDataSource = _col('Data Source');
+            const colPlannedBurn = _col('Planned Burn');
+            const colRemarks = _col('Remarks');
+
+            const missing = [];
+            if (!colFlightNumber) missing.push('Flight Number');
+            if (!colAircraftTail) missing.push('Aircraft Tail');
+            if (!colDepAirport) missing.push('Departure Airport');
+            if (!colArrAirport) missing.push('Arrival Airport');
+            if (!colBurnDate) missing.push('Burn Date');
+            if (!colActualBurn) missing.push('Actual Burn (Kg)');
+            if (!colDataSource) missing.push('Data Source');
+            if (missing.length > 0)
+                return req.error(400, `FB402: Missing required columns: ${missing.join(', ')}`);
+
+            // Pre-fetch reference data
+            const { FLIGHT_SCHEDULE, AIRCRAFT_MASTER, MASTER_AIRPORTS, FUEL_BURNS } = cds.entities('fuelsphere');
+
+            const aircraftRows = await SELECT.from(AIRCRAFT_MASTER).columns('ID', 'type_code');
+            const airportRows = await SELECT.from(MASTER_AIRPORTS).columns('ID', 'iata_code');
+            const airportMap = new Map(airportRows.map(a => [a.iata_code, a.ID]));
+            const flightRows = await SELECT.from(FLIGHT_SCHEDULE).columns('ID', 'flight_number', 'flight_date', 'aircraft_type');
+            const flightMap = new Map(flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, f]));
+            const existingBurns = await SELECT.from(FUEL_BURNS).columns('tail_number', 'burn_date');
+            const existingBurnSet = new Set(existingBurns.map(b => `${b.tail_number}|${b.burn_date}`));
+
+            // Date helpers
+            const _normalizeDate = (val) => {
+                if (typeof val === 'number') {
+                    const p = XLSX.SSF.parse_date_code(val);
+                    if (p) return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+                return s;
+            };
+
+            // Process rows
+            const burnsToInsert = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2;
+                burnsProcessed++;
+
+                const flightNumber = String(row[colFlightNumber] || '').trim();
+                const tailNumber = String(row[colAircraftTail] || '').trim();
+                const depAirport = String(row[colDepAirport] || '').trim().toUpperCase();
+                const arrAirport = String(row[colArrAirport] || '').trim().toUpperCase();
+                const burnDate = _normalizeDate(row[colBurnDate]);
+                const blockOff = colBlockOff ? String(row[colBlockOff] || '').trim() : '';
+                const blockOn = colBlockOn ? String(row[colBlockOn] || '').trim() : '';
+                const actualBurn = parseFloat(row[colActualBurn]);
+                const dataSource = String(row[colDataSource] || '').trim().toUpperCase();
+                const plannedBurn = colPlannedBurn && row[colPlannedBurn] !== '' ? parseFloat(row[colPlannedBurn]) : null;
+                const remarks = colRemarks ? String(row[colRemarks] || '').trim() : '';
+
+                // Skip empty rows
+                if (!flightNumber && !tailNumber) { burnsSkipped++; continue; }
+
+                // Validate required
+                if (!flightNumber) { errors.push({ row: rowNum, field: 'Flight Number', message: 'Flight number is required.', severity: 'ERROR' }); burnsSkipped++; continue; }
+                if (!tailNumber) { errors.push({ row: rowNum, field: 'Aircraft Tail', message: 'Aircraft tail is required.', severity: 'ERROR' }); burnsSkipped++; continue; }
+                if (!burnDate || !/^\d{4}-\d{2}-\d{2}$/.test(burnDate)) { errors.push({ row: rowNum, field: 'Burn Date', message: `Invalid burn date: '${row[colBurnDate]}'.`, severity: 'ERROR' }); burnsSkipped++; continue; }
+                if (isNaN(actualBurn) || actualBurn <= 0) { errors.push({ row: rowNum, field: 'Actual Burn (Kg)', message: 'FB401: Actual burn must be > 0.', severity: 'ERROR' }); burnsSkipped++; continue; }
+
+                const validSources = ['ACARS', 'EFB', 'MANUAL', 'JEFFERSON'];
+                if (!validSources.includes(dataSource)) { errors.push({ row: rowNum, field: 'Data Source', message: `Invalid data source '${dataSource}'. Valid: ${validSources.join(', ')}`, severity: 'ERROR' }); burnsSkipped++; continue; }
+
+                // Validate airports
+                if (!airportMap.has(depAirport)) { errors.push({ row: rowNum, field: 'Departure Airport', message: `Airport '${depAirport}' not found.`, severity: 'ERROR' }); burnsSkipped++; continue; }
+                if (!airportMap.has(arrAirport)) { errors.push({ row: rowNum, field: 'Arrival Airport', message: `Airport '${arrAirport}' not found.`, severity: 'ERROR' }); burnsSkipped++; continue; }
+
+                // Duplicate detection
+                const dupKey = `${tailNumber}|${burnDate}`;
+                if (existingBurnSet.has(dupKey)) {
+                    errors.push({ row: rowNum, field: 'Flight Number', message: `FB403: Duplicate burn for ${tailNumber} on ${burnDate}.`, severity: 'WARNING' });
+                    burnsSkipped++; continue;
+                }
+
+                // Calculate variance
+                let varianceKg = null, variancePct = null, varianceStatus = 'NORMAL';
+                let requiresReview = false;
+                if (plannedBurn && plannedBurn > 0) {
+                    varianceKg = actualBurn - plannedBurn;
+                    variancePct = parseFloat(((varianceKg / plannedBurn) * 100).toFixed(2));
+                    const absPct = Math.abs(variancePct);
+                    if (absPct > 20) { varianceStatus = 'CRITICAL'; requiresReview = true; }
+                    else if (absPct > 10) { varianceStatus = 'EXCEPTION'; requiresReview = true; }
+                    else if (absPct > 5) { varianceStatus = 'WARNING'; }
+                    else { varianceStatus = 'NORMAL'; }
+                }
+
+                // Calculate flight duration from block times
+                let flightDurationMins = null;
+                let blockOffTime = null, blockOnTime = null;
+                if (blockOff && blockOn) {
+                    const offMatch = blockOff.match(/^(\d{1,2}):(\d{2})$/);
+                    const onMatch = blockOn.match(/^(\d{1,2}):(\d{2})$/);
+                    if (offMatch && onMatch) {
+                        blockOffTime = `${burnDate}T${offMatch[1].padStart(2,'0')}:${offMatch[2]}:00Z`;
+                        blockOnTime = `${burnDate}T${onMatch[1].padStart(2,'0')}:${onMatch[2]}:00Z`;
+                        let offMins = parseInt(offMatch[1]) * 60 + parseInt(offMatch[2]);
+                        let onMins = parseInt(onMatch[1]) * 60 + parseInt(onMatch[2]);
+                        if (onMins < offMins) onMins += 1440; // next day
+                        flightDurationMins = onMins - offMins;
+                    }
+                }
+
+                // Lookup flight
+                const flightKey = `${flightNumber}|${burnDate}`;
+                const flightRecord = flightMap.get(flightKey);
+
+                burnsToInsert.push({
+                    ID: cds.utils.uuid(),
+                    flight_ID: flightRecord ? flightRecord.ID : null,
+                    aircraft_type_code: flightRecord ? flightRecord.aircraft_type : null,
+                    tail_number: tailNumber,
+                    origin_airport_iata_code: depAirport,
+                    destination_airport_iata_code: arrAirport,
+                    burn_date: burnDate,
+                    block_off_time: blockOffTime,
+                    block_on_time: blockOnTime,
+                    flight_duration_mins: flightDurationMins,
+                    actual_burn_kg: actualBurn,
+                    planned_burn_kg: plannedBurn,
+                    variance_kg: varianceKg,
+                    variance_pct: variancePct,
+                    variance_status: varianceStatus,
+                    data_source: dataSource,
+                    status: 'PRELIMINARY',
+                    requires_review: requiresReview,
+                    review_notes: remarks || null
+                });
+
+                existingBurnSet.add(dupKey);
+            }
+
+            // Bulk INSERT
+            if (burnsToInsert.length > 0) {
+                try {
+                    await INSERT.into(FUEL_BURNS).entries(burnsToInsert);
+                    burnsCreated = burnsToInsert.length;
+                } catch (e) {
+                    return req.error(500, `FB500: Failed to insert burn records: ${e.message}`);
+                }
+            }
+
+            const hasErrors = errors.some(e => e.severity === 'ERROR');
+            return {
+                success: !hasErrors && burnsCreated > 0,
+                fileName: fileName || 'unknown',
+                burnsProcessed, burnsCreated, burnsSkipped, errors,
+                message: burnsCreated > 0
+                    ? `Imported ${burnsCreated} burn record(s).${burnsSkipped > 0 ? ` ${burnsSkipped} skipped.` : ''}`
+                    : `No records imported. ${burnsSkipped} skipped.`
+            };
+        });
+
+        // ====================================================================
+        // IMPORT ROB INITIAL LOAD FROM EXCEL
+        // ====================================================================
+
+        this.on('importROBInitialExcel', async (req) => {
+            const { fileContent, fileName } = req.data;
+            const errors = [];
+            let entriesProcessed = 0, entriesCreated = 0, entriesSkipped = 0;
+
+            if (!fileContent) return req.error(400, 'FB401: File content is required.');
+
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `FB401: Failed to parse file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) return req.error(400, 'FB401: File contains no sheets.');
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) return req.error(400, 'FB402: Sheet is empty.');
+
+            const headers = Object.keys(rows[0]);
+            const _col = (name) => headers.find(h => h.replace(/\n/g, ' ').trim().toLowerCase().startsWith(name.toLowerCase())) || null;
+
+            const colTail = _col('Aircraft Tail');
+            const colType = _col('Aircraft Type');
+            const colDate = _col('Record Date');
+            const colTime = _col('Record Time');
+            const colAirport = _col('Airport');
+            const colFlight = _col('Flight Number');
+            const colOpenROB = _col('Opening ROB');
+            const colUplift = _col('Uplift');
+            const colBurn = _col('Burn');
+            const colAdj = _col('Adjustment');
+            const colMaxCap = _col('Max Capacity');
+            const colNotes = _col('Notes');
+
+            const missing = [];
+            if (!colTail) missing.push('Aircraft Tail');
+            if (!colDate) missing.push('Record Date');
+            if (!colTime) missing.push('Record Time');
+            if (!colAirport) missing.push('Airport');
+            if (!colOpenROB) missing.push('Opening ROB (Kg)');
+            if (!colMaxCap) missing.push('Max Capacity (Kg)');
+            if (missing.length > 0)
+                return req.error(400, `FB402: Missing required columns: ${missing.join(', ')}`);
+
+            const { AIRCRAFT_MASTER, MASTER_AIRPORTS, ROB_LEDGER, FLIGHT_SCHEDULE } = cds.entities('fuelsphere');
+            const airportRows = await SELECT.from(MASTER_AIRPORTS).columns('ID', 'iata_code');
+            const airportMap = new Map(airportRows.map(a => [a.iata_code, a.ID]));
+            const aircraftRows = await SELECT.from(AIRCRAFT_MASTER).columns('ID', 'type_code');
+            const aircraftMap = new Map(aircraftRows.map(a => [a.type_code, a.ID]));
+
+            // Track sequence per aircraft+date
+            const seqCounters = {};
+
+            const _normalizeDate = (val) => {
+                if (typeof val === 'number') {
+                    const p = XLSX.SSF.parse_date_code(val);
+                    if (p) return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+                return s;
+            };
+
+            const entriesToInsert = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2;
+                entriesProcessed++;
+
+                const tailNumber = String(row[colTail] || '').trim();
+                const aircraftType = colType ? String(row[colType] || '').trim() : '';
+                const recordDate = _normalizeDate(row[colDate]);
+                const recordTime = String(row[colTime] || '').trim();
+                const airportCode = String(row[colAirport] || '').trim().toUpperCase();
+                const flightNumber = colFlight ? String(row[colFlight] || '').trim() : '';
+                const openingROB = parseFloat(row[colOpenROB]);
+                const uplift = row[colUplift] !== '' ? parseFloat(row[colUplift]) : 0;
+                const burn = row[colBurn] !== '' ? parseFloat(row[colBurn]) : 0;
+                const adj = row[colAdj] !== '' ? parseFloat(row[colAdj]) : 0;
+                const maxCapacity = parseFloat(row[colMaxCap]);
+                const notes = colNotes ? String(row[colNotes] || '').trim() : '';
+
+                if (!tailNumber) { entriesSkipped++; continue; }
+
+                if (!recordDate || !/^\d{4}-\d{2}-\d{2}$/.test(recordDate)) {
+                    errors.push({ row: rowNum, field: 'Record Date', message: `Invalid date: '${row[colDate]}'.`, severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+                if (!recordTime) {
+                    errors.push({ row: rowNum, field: 'Record Time', message: 'Record time is required.', severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+                if (!airportMap.has(airportCode)) {
+                    errors.push({ row: rowNum, field: 'Airport', message: `Airport '${airportCode}' not found.`, severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+                if (isNaN(openingROB)) {
+                    errors.push({ row: rowNum, field: 'Opening ROB', message: 'Opening ROB is required.', severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+                if (isNaN(maxCapacity) || maxCapacity <= 0) {
+                    errors.push({ row: rowNum, field: 'Max Capacity', message: 'Max capacity is required and must be > 0.', severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+
+                // Calculate closing ROB
+                const closingROB = openingROB + uplift - burn + adj;
+                if (closingROB < 0) {
+                    errors.push({ row: rowNum, field: 'Closing ROB', message: `FB402: Closing ROB would be negative (${closingROB.toFixed(2)} kg).`, severity: 'ERROR' }); entriesSkipped++; continue;
+                }
+
+                const robPct = parseFloat(((closingROB / maxCapacity) * 100).toFixed(2));
+
+                // Determine entry type
+                let entryType = 'INITIAL';
+                if (burn > 0) entryType = 'FLIGHT';
+                else if (uplift > 0) entryType = 'UPLIFT';
+                else if (adj !== 0) entryType = 'ADJUSTMENT';
+
+                // Auto-increment sequence
+                const seqKey = `${tailNumber}|${recordDate}`;
+                seqCounters[seqKey] = (seqCounters[seqKey] || 0) + 1;
+
+                // Normalize time (HH:MM → HH:MM:SS)
+                let normalizedTime = recordTime;
+                if (/^\d{1,2}:\d{2}$/.test(recordTime)) {
+                    normalizedTime = recordTime.padStart(5, '0') + ':00';
+                }
+
+                entriesToInsert.push({
+                    ID: cds.utils.uuid(),
+                    aircraft_ID: aircraftMap.get(aircraftType) || null,
+                    tail_number: tailNumber,
+                    record_date: recordDate,
+                    record_time: normalizedTime,
+                    sequence: seqCounters[seqKey],
+                    airport_ID: airportMap.get(airportCode),
+                    airport_code: airportCode,
+                    entry_type: entryType,
+                    opening_rob_kg: openingROB,
+                    uplift_kg: uplift,
+                    burn_kg: burn,
+                    adjustment_kg: adj,
+                    closing_rob_kg: closingROB,
+                    max_capacity_kg: maxCapacity,
+                    rob_percentage: robPct,
+                    adjustment_reason: notes || null,
+                    data_source: 'MANUAL',
+                    is_estimated: false
+                });
+            }
+
+            if (entriesToInsert.length > 0) {
+                try {
+                    await INSERT.into(ROB_LEDGER).entries(entriesToInsert);
+                    entriesCreated = entriesToInsert.length;
+                } catch (e) {
+                    return req.error(500, `FB500: Failed to insert ROB entries: ${e.message}`);
+                }
+            }
+
+            const hasErrors = errors.some(e => e.severity === 'ERROR');
+            return {
+                success: !hasErrors && entriesCreated > 0,
+                fileName: fileName || 'unknown',
+                entriesProcessed, entriesCreated, entriesSkipped, errors,
+                message: entriesCreated > 0
+                    ? `Imported ${entriesCreated} ROB entry/entries.${entriesSkipped > 0 ? ` ${entriesSkipped} skipped.` : ''}`
+                    : `No entries imported. ${entriesSkipped} skipped.`
+            };
+        });
+
+        // ====================================================================
+        // IMPORT PLANNED BURN DATA FROM EXCEL
+        // ====================================================================
+
+        this.on('importPlannedBurnExcel', async (req) => {
+            const { fileContent, fileName } = req.data;
+            const errors = [];
+            let plansProcessed = 0, plansCreated = 0, plansUpdated = 0, plansSkipped = 0;
+
+            if (!fileContent) return req.error(400, 'FB401: File content is required.');
+
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `FB401: Failed to parse file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) return req.error(400, 'FB401: File contains no sheets.');
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) return req.error(400, 'FB402: Sheet is empty.');
+
+            const headers = Object.keys(rows[0]);
+            const _col = (name) => headers.find(h => h.replace(/\n/g, ' ').trim().toLowerCase().startsWith(name.toLowerCase())) || null;
+
+            const colFlight = _col('Flight Number');
+            const colAcType = _col('Aircraft Type');
+            const colDep = _col('Departure Airport');
+            const colArr = _col('Arrival Airport');
+            const colPlanned = _col('Planned Burn');
+            const colTaxi = _col('Taxi Fuel');
+            const colSource = _col('Source');
+            const colFrom = _col('Valid From');
+            const colTo = _col('Valid To');
+            const colNotes = _col('Notes');
+
+            const missing = [];
+            if (!colFlight) missing.push('Flight Number');
+            if (!colAcType) missing.push('Aircraft Type');
+            if (!colDep) missing.push('Departure Airport');
+            if (!colArr) missing.push('Arrival Airport');
+            if (!colPlanned) missing.push('Planned Burn (Kg)');
+            if (!colSource) missing.push('Source');
+            if (!colFrom) missing.push('Valid From');
+            if (!colTo) missing.push('Valid To');
+            if (missing.length > 0)
+                return req.error(400, `FB402: Missing required columns: ${missing.join(', ')}`);
+
+            const { AIRCRAFT_MASTER, MASTER_AIRPORTS, FUEL_BURNS } = cds.entities('fuelsphere');
+            const aircraftRows = await SELECT.from(AIRCRAFT_MASTER).columns('type_code');
+            const aircraftSet = new Set(aircraftRows.map(a => a.type_code));
+            const airportRows = await SELECT.from(MASTER_AIRPORTS).columns('iata_code');
+            const airportSet = new Set(airportRows.map(a => a.iata_code));
+
+            const _normalizeDate = (val) => {
+                if (typeof val === 'number') {
+                    const p = XLSX.SSF.parse_date_code(val);
+                    if (p) return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                if (/^\d{8}$/.test(s)) return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+                return s;
+            };
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2;
+                plansProcessed++;
+
+                const flightNumber = String(row[colFlight] || '').trim();
+                const aircraftType = String(row[colAcType] || '').trim();
+                const depAirport = String(row[colDep] || '').trim().toUpperCase();
+                const arrAirport = String(row[colArr] || '').trim().toUpperCase();
+                const plannedBurn = parseFloat(row[colPlanned]);
+                const taxiFuel = colTaxi && row[colTaxi] !== '' ? parseFloat(row[colTaxi]) : 0;
+                const source = String(row[colSource] || '').trim();
+                const validFrom = _normalizeDate(row[colFrom]);
+                const validTo = _normalizeDate(row[colTo]);
+
+                if (!flightNumber) { plansSkipped++; continue; }
+                if (isNaN(plannedBurn) || plannedBurn <= 0) { errors.push({ row: rowNum, field: 'Planned Burn (Kg)', message: 'Planned burn must be > 0.', severity: 'ERROR' }); plansSkipped++; continue; }
+                if (aircraftType && !aircraftSet.has(aircraftType)) { errors.push({ row: rowNum, field: 'Aircraft Type', message: `Aircraft type '${aircraftType}' not found.`, severity: 'WARNING' }); }
+                if (!airportSet.has(depAirport)) { errors.push({ row: rowNum, field: 'Departure Airport', message: `Airport '${depAirport}' not found.`, severity: 'ERROR' }); plansSkipped++; continue; }
+                if (!airportSet.has(arrAirport)) { errors.push({ row: rowNum, field: 'Arrival Airport', message: `Airport '${arrAirport}' not found.`, severity: 'ERROR' }); plansSkipped++; continue; }
+
+                const totalPlanned = plannedBurn + taxiFuel;
+
+                // Try to find existing burn records for this flight within date range to update
+                const existingBurns = await SELECT.from(FUEL_BURNS)
+                    .where({ origin_airport_iata_code: depAirport, destination_airport_iata_code: arrAirport,
+                             burn_date: { '>=': validFrom, '<=': validTo }, planned_burn_kg: null });
+
+                if (existingBurns.length > 0) {
+                    for (const burn of existingBurns) {
+                        await UPDATE(FUEL_BURNS).set({
+                            planned_burn_kg: totalPlanned,
+                            taxi_out_kg: taxiFuel,
+                            variance_kg: burn.actual_burn_kg ? burn.actual_burn_kg - totalPlanned : null,
+                            variance_pct: burn.actual_burn_kg && totalPlanned > 0
+                                ? parseFloat((((burn.actual_burn_kg - totalPlanned) / totalPlanned) * 100).toFixed(2))
+                                : null
+                        }).where({ ID: burn.ID });
+                        plansUpdated++;
+                    }
+                } else {
+                    // Create a skeleton record with just planned data
+                    await INSERT.into(FUEL_BURNS).entries({
+                        ID: cds.utils.uuid(),
+                        origin_airport_iata_code: depAirport,
+                        destination_airport_iata_code: arrAirport,
+                        burn_date: validFrom,
+                        planned_burn_kg: totalPlanned,
+                        taxi_out_kg: taxiFuel,
+                        data_source: source.toUpperCase() || 'JEFFERSON',
+                        status: 'PRELIMINARY',
+                        aircraft_type_code: aircraftType || null
+                    });
+                    plansCreated++;
+                }
+            }
+
+            const hasErrors = errors.some(e => e.severity === 'ERROR');
+            return {
+                success: !hasErrors && (plansCreated > 0 || plansUpdated > 0),
+                fileName: fileName || 'unknown',
+                plansProcessed, plansCreated, plansUpdated, plansSkipped, errors,
+                message: `Processed ${plansProcessed} planned burn entries. Created: ${plansCreated}, Updated: ${plansUpdated}, Skipped: ${plansSkipped}.`
+            };
         });
 
         await super.init();

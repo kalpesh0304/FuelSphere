@@ -232,12 +232,23 @@ annotate FuelOrderService.FuelTickets actions {
 };
 
 // ----------------------------------------------------------------------------
+// Flight Dispatches - Dispatch data from external systems
+// ----------------------------------------------------------------------------
+
+annotate FuelOrderService.FlightDispatches with @(restrict: [
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: 'CREATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    { grant: 'UPDATE', to: ['FuelOrderCreate', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
 // Reference Data - Read-only in Order Service
 // ----------------------------------------------------------------------------
 
 // All reference entities are read-only in order service context
 // Read access granted to anyone with order-related scopes
-annotate FuelOrderService.Flights with @(restrict: [
+annotate FuelOrderService.FlightSchedule with @(restrict: [
     { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess', 'any'] }
 ]);
 
@@ -285,7 +296,6 @@ annotate FuelOrderService.UnitsOfMeasure with @(restrict: [
 // Service-level Functions
 // ----------------------------------------------------------------------------
 
-annotate FuelOrderService.importFlightScheduleExcel with @(requires: ['FuelOrderCreate', 'AdminAccess', 'any']);
 annotate FuelOrderService.generateOrderNumber with @(requires: ['FuelOrderCreate', 'any']);
 annotate FuelOrderService.generateDeliveryNumber with @(requires: ['ePODCapture', 'any']);
 annotate FuelOrderService.getOrdersByStation with @(requires: ['FuelOrderCreate', 'FuelOrderApprove', 'ReportView', 'AdminAccess', 'any']);
@@ -341,3 +351,50 @@ annotate TicketService.Suppliers with @(restrict: [
 annotate TicketService.generateTicketNumber with @(requires: ['ePODCapture', 'any']);
 annotate TicketService.getTicketsByOrder with @(requires: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess', 'any']);
 annotate TicketService.getUnattachedTickets with @(requires: ['ePODCapture', 'ePODApprove', 'AdminAccess', 'any']);
+
+// ============================================================================
+// BURN SERVICE - Authorization (Fuel Burn & ROB Tracking)
+// ============================================================================
+
+using BurnService from './burn-service';
+
+// Service-level: Require authenticated user
+annotate BurnService with @(requires: 'authenticated-user');
+
+// ----------------------------------------------------------------------------
+// FuelBurns - Actual burn records from ACARS/EFB/Manual/Jefferson
+// ----------------------------------------------------------------------------
+
+annotate BurnService.FuelBurns with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// ROBLedger - Remaining On Board tracking
+// ----------------------------------------------------------------------------
+
+annotate BurnService.ROBLedger with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// FuelBurnExceptions - Variance exception records
+// ----------------------------------------------------------------------------
+
+annotate BurnService.FuelBurnExceptions with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess', 'any'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess', 'any'] },
+    { grant: 'DELETE', to: ['AdminAccess', 'any'] }
+]);
+
+// ----------------------------------------------------------------------------
+// BurnService Actions - Upload permissions
+// ----------------------------------------------------------------------------
+
+annotate BurnService.importFuelBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);
+annotate BurnService.importROBInitialExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);
+annotate BurnService.importPlannedBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess', 'any']);

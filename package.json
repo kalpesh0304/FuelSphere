@@ -83,7 +83,21 @@
       }
     },
     "features": {
-      "fetch_csrf": true
+      "fetch_csrf": true,
+      "fiori_preview": true
+    },
+    "fiori": {
+      "preview": {
+        "ui5": {
+          "theme": {
+            "light": "sap_horizon",
+            "dark": "sap_horizon_dark",
+            "switch": true
+          },
+          "host": "https://ui5.sap.com/",
+          "version": ""
+        }
+      }
     }
   },
   "engines": {

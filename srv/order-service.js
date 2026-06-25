@@ -10,7 +10,6 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
-
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -19,7 +18,7 @@ const _id = (params) => {
 
 module.exports = class FuelOrderService extends cds.ApplicationService {
     async init() {
-        const { FuelOrders, FuelDeliveries, FuelTickets, Flights } = this.entities;
+        const { FuelOrders, FuelDeliveries, FuelTickets, FlightSchedule } = this.entities;
 
         // ====================================================================
         // VIRTUAL ELEMENTS
@@ -191,6 +190,39 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             return SELECT.one.from(FuelOrders).where({ ID: order.ID });
         });
 
+        // ================================================================
+        // COCKPIT CREW REVIEW (Step 4 of 7-step journey)
+        // ================================================================
+        this.on('crewReview', FuelOrders, async (req) => {
+            const { captainName, adjustedQuantity, adjustmentReason, notes } = req.data;
+            const orderID = _id(req.params);
+
+            const order = await SELECT.one.from(FuelOrders).where({ ID: orderID });
+            if (!order) return req.error(404, 'Fuel order not found.');
+            if (order.status !== 'Confirmed') {
+                return req.error(400, `Crew review requires order status 'Confirmed'. Current status: '${order.status}'.`);
+            }
+
+            const updateData = {
+                crew_reviewed_by: captainName || req.user.id,
+                crew_reviewed_at: new Date().toISOString(),
+                crew_notes: notes || null
+            };
+
+            if (adjustedQuantity && adjustedQuantity !== order.ordered_quantity) {
+                updateData.crew_review_status = 'ADJUSTED';
+                updateData.crew_adjusted_quantity = adjustedQuantity;
+                updateData.crew_adjustment_reason = adjustmentReason || 'Quantity adjusted by cockpit crew';
+            } else {
+                updateData.crew_review_status = 'CONFIRMED';
+                updateData.crew_adjusted_quantity = order.ordered_quantity;
+            }
+
+            await UPDATE(FuelOrders).where({ ID: orderID }).set(updateData);
+
+            return SELECT.one.from(FuelOrders).where({ ID: orderID });
+        });
+
         // ====================================================================
         // CREATE ORDER FROM FLIGHT (Service-level action)
         // ====================================================================
@@ -199,7 +231,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const { flightId, supplierId, contractId, productId, orderedQuantity, unitPrice, currencyCode, priority, notes } = req.data;
 
             // Look up the flight
-            const flight = await SELECT.one.from(Flights).where({ ID: flightId });
+            const flight = await SELECT.one.from(FlightSchedule).where({ ID: flightId });
             if (!flight) return req.error(404, 'Flight not found');
 
             const stationCode = flight.origin_airport;
@@ -499,339 +531,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         });
 
         // ====================================================================
-        // IMPORT FLIGHT SCHEDULE FROM EXCEL
-        // ====================================================================
-
-        this.on('importFlightScheduleExcel', async (req) => {
-            const { fileContent, fileName } = req.data;
-
-            const errors = [];
-            let flightsProcessed = 0, flightsCreated = 0, flightsUpdated = 0, flightsSkipped = 0;
-            let ordersCreated = 0, ordersFailed = 0;
-
-            // Validate file
-            if (!fileContent) {
-                return req.error(400, 'IMP401: File content is required.');
-            }
-            const ext = (fileName || '').toLowerCase();
-            if (ext && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
-                return req.error(400, 'IMP401: Invalid file format. Only .xlsx and .xls files are supported.');
-            }
-
-            // Parse Excel
-            let workbook;
-            try {
-                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
-                workbook = XLSX.read(buf, { type: 'buffer' });
-            } catch (e) {
-                return req.error(400, `IMP401: Failed to parse Excel file: ${e.message}`);
-            }
-
-            const sheetName = workbook.SheetNames[0];
-            if (!sheetName) {
-                return req.error(400, 'IMP401: Excel file contains no sheets.');
-            }
-
-            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-            if (rows.length === 0) {
-                return req.error(400, 'IMP402: Excel sheet is empty.');
-            }
-
-            // Validate required columns (flight + order dimensions)
-            const requiredCols = [
-                'flight_number', 'flight_date', 'origin_airport', 'destination_airport',
-                'supplier_code', 'product_code', 'ordered_quantity', 'unit_price'
-            ];
-            const headers = Object.keys(rows[0]);
-            const missingCols = requiredCols.filter(c => !headers.includes(c));
-            if (missingCols.length > 0) {
-                return req.error(400, `IMP402: Missing required columns: ${missingCols.join(', ')}`);
-            }
-
-            // Pre-fetch reference data for validation and ID lookup
-            const { MASTER_AIRPORTS, AIRCRAFT_MASTER, FLIGHT_SCHEDULE, MASTER_SUPPLIERS, MASTER_PRODUCTS, MASTER_CONTRACTS } = cds.entities('fuelsphere');
-
-            const airportRows = await SELECT.from(MASTER_AIRPORTS).columns('ID', 'iata_code');
-            const airportMap = new Map(airportRows.map(a => [a.iata_code, a.ID]));
-
-            const aircraftRows = await SELECT.from(AIRCRAFT_MASTER).columns('ID', 'type_code');
-            const aircraftSet = new Set(aircraftRows.map(a => a.type_code));
-
-            const supplierRows = await SELECT.from(MASTER_SUPPLIERS).columns('ID', 'supplier_code');
-            const supplierMap = new Map(supplierRows.map(s => [s.supplier_code, s.ID]));
-
-            const productRows = await SELECT.from(MASTER_PRODUCTS).columns('ID', 'product_code');
-            const productMap = new Map(productRows.map(p => [p.product_code, p.ID]));
-
-            const contractRows = await SELECT.from(MASTER_CONTRACTS).columns('ID', 'contract_number');
-            const contractMap = new Map(contractRows.map(c => [c.contract_number, c.ID]));
-
-            // Existing flights for duplicate detection
-            const existingFlights = await SELECT.from(FLIGHT_SCHEDULE).columns('ID', 'flight_number', 'flight_date');
-            const existingFlightMap = new Map(existingFlights.map(f => [`${f.flight_number}|${f.flight_date}`, f.ID]));
-
-            // Track order number sequences per station-date (in-memory to avoid collisions in bulk)
-            const seqCounters = {};
-            const _getNextOrderNumber = async (stationCode, dateStr) => {
-                const key = `${stationCode}-${dateStr}`;
-                if (!(key in seqCounters)) {
-                    const pattern = `FO-${stationCode}-${dateStr}-%`;
-                    const lastOrder = await SELECT.one.from(FuelOrders)
-                        .columns('order_number')
-                        .where({ order_number: { like: pattern } })
-                        .orderBy('order_number desc');
-                    seqCounters[key] = lastOrder ? parseInt(lastOrder.order_number.split('-').pop()) : 0;
-                }
-                seqCounters[key]++;
-                return `FO-${stationCode}-${dateStr}-${String(seqCounters[key]).padStart(3, '0')}`;
-            };
-
-            // Helper: normalize Excel date (may be serial number or string)
-            const _normalizeDate = (val) => {
-                if (typeof val === 'number') {
-                    // Excel serial date
-                    const parsed = XLSX.SSF.parse_date_code(val);
-                    if (parsed) {
-                        return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
-                    }
-                }
-                const s = String(val).trim();
-                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
-                    const parts = s.split('/');
-                    return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-                }
-                if (/^\d{8}$/.test(s)) {
-                    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-                }
-                return s; // Return as-is, will fail validation downstream if invalid
-            };
-
-            // Process rows - collect flights and orders
-            const flightsToInsert = [];
-            const flightsToUpdate = [];
-            const ordersToInsert = [];
-            const batchFlightKeys = new Set();
-
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                const rowNum = i + 2; // Excel row number (header=1)
-                flightsProcessed++;
-
-                // --- Extract flight fields ---
-                const flightNumber = String(row.flight_number || '').trim();
-                const rawDate = row.flight_date;
-                const originAirport = String(row.origin_airport || '').trim().toUpperCase();
-                const destAirport = String(row.destination_airport || '').trim().toUpperCase();
-                const aircraftType = String(row.aircraft_type || '').trim();
-                const aircraftReg = String(row.aircraft_reg || '').trim();
-                const depTime = String(row.departure_time || '').trim();
-                const arrTime = String(row.arrival_time || '').trim();
-
-                // --- Extract order fields ---
-                const supplierCode = String(row.supplier_code || '').trim();
-                const contractNumber = String(row.contract_number || '').trim();
-                const productCode = String(row.product_code || '').trim();
-                const orderedQty = parseFloat(row.ordered_quantity);
-                const unitPrice = parseFloat(row.unit_price);
-                const currencyCode = String(row.currency_code || 'USD').trim().toUpperCase();
-                const priority = String(row.priority || 'Normal').trim();
-                const notes = String(row.notes || '').trim();
-
-                // --- Validate required flight fields ---
-                if (!flightNumber) {
-                    errors.push({ row: rowNum, field: 'flight_number', message: 'Flight number is required.', severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                const flightDate = _normalizeDate(rawDate);
-                if (!flightDate || !/^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
-                    errors.push({ row: rowNum, field: 'flight_date', message: `Invalid or missing flight date: '${rawDate}'.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                // Validate airports
-                if (!airportMap.has(originAirport)) {
-                    errors.push({ row: rowNum, field: 'origin_airport', message: `IMP403: Airport '${originAirport}' not found in master data.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-                if (!airportMap.has(destAirport)) {
-                    errors.push({ row: rowNum, field: 'destination_airport', message: `IMP403: Airport '${destAirport}' not found in master data.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                // Validate aircraft type (optional)
-                if (aircraftType && !aircraftSet.has(aircraftType)) {
-                    errors.push({ row: rowNum, field: 'aircraft_type', message: `IMP404: Aircraft type '${aircraftType}' not found in master data.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                // --- Validate required order fields ---
-                const supplierID = supplierMap.get(supplierCode);
-                if (!supplierID) {
-                    errors.push({ row: rowNum, field: 'supplier_code', message: `IMP406: Supplier '${supplierCode}' not found in master data.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                const productID = productMap.get(productCode);
-                if (!productID) {
-                    errors.push({ row: rowNum, field: 'product_code', message: `IMP407: Product '${productCode}' not found in master data.`, severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                // Contract is optional
-                let contractID = null;
-                if (contractNumber) {
-                    contractID = contractMap.get(contractNumber);
-                    if (!contractID) {
-                        errors.push({ row: rowNum, field: 'contract_number', message: `IMP408: Contract '${contractNumber}' not found in master data.`, severity: 'ERROR' });
-                        ordersFailed++;
-                        continue;
-                    }
-                }
-
-                if (isNaN(orderedQty) || orderedQty <= 0) {
-                    errors.push({ row: rowNum, field: 'ordered_quantity', message: 'Ordered quantity must be a positive number.', severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                if (isNaN(unitPrice) || unitPrice < 0) {
-                    errors.push({ row: rowNum, field: 'unit_price', message: 'Unit price must be a non-negative number.', severity: 'ERROR' });
-                    ordersFailed++;
-                    continue;
-                }
-
-                // --- Handle flight schedule (upsert) ---
-                const flightKey = `${flightNumber}|${flightDate}`;
-                let flightId;
-
-                if (existingFlightMap.has(flightKey)) {
-                    // Flight exists — update it
-                    flightId = existingFlightMap.get(flightKey);
-                    flightsToUpdate.push({
-                        ID: flightId,
-                        aircraft_type: aircraftType || undefined,
-                        aircraft_reg: aircraftReg || undefined,
-                        origin_airport: originAirport,
-                        destination_airport: destAirport,
-                        scheduled_departure: depTime || undefined,
-                        scheduled_arrival: arrTime || undefined
-                    });
-                    flightsUpdated++;
-                } else if (batchFlightKeys.has(flightKey)) {
-                    // Already being created in this batch — reuse the ID
-                    const existing = flightsToInsert.find(f => f.flight_number === flightNumber && f.flight_date === flightDate);
-                    flightId = existing.ID;
-                } else {
-                    // New flight — create it
-                    flightId = cds.utils.uuid();
-                    flightsToInsert.push({
-                        ID: flightId,
-                        flight_number: flightNumber,
-                        flight_date: flightDate,
-                        aircraft_type: aircraftType || null,
-                        aircraft_reg: aircraftReg || null,
-                        origin_airport: originAirport,
-                        destination_airport: destAirport,
-                        scheduled_departure: depTime || null,
-                        scheduled_arrival: arrTime || null,
-                        status: 'SCHEDULED'
-                    });
-                    existingFlightMap.set(flightKey, flightId);
-                    batchFlightKeys.add(flightKey);
-                    flightsCreated++;
-                }
-
-                // --- Create fuel order ---
-                const dateStr = flightDate.replace(/-/g, '');
-                const orderNumber = await _getNextOrderNumber(originAirport, dateStr);
-                const totalAmount = Number((orderedQty * unitPrice).toFixed(2));
-                const airportID = airportMap.get(originAirport);
-
-                ordersToInsert.push({
-                    ID: cds.utils.uuid(),
-                    order_number: orderNumber,
-                    flight_ID: flightId,
-                    airport_ID: airportID,
-                    station_code: originAirport,
-                    supplier_ID: supplierID,
-                    contract_ID: contractID,
-                    product_ID: productID,
-                    uom_code: 'KG',
-                    ordered_quantity: orderedQty,
-                    unit_price: unitPrice,
-                    total_amount: totalAmount,
-                    currency_code: currencyCode || 'USD',
-                    requested_date: flightDate,
-                    priority: ['Normal', 'High', 'Urgent'].includes(priority) ? priority : 'Normal',
-                    status: 'Created',
-                    notes: notes || `Fuel order for flight ${flightNumber} ${originAirport}-${destAirport} (Excel import)`
-                });
-                ordersCreated++;
-            }
-
-            // Bulk insert flight schedules
-            if (flightsToInsert.length > 0) {
-                try {
-                    await INSERT.into(FLIGHT_SCHEDULE).entries(flightsToInsert);
-                } catch (e) {
-                    return req.error(500, `Failed to insert flight schedules: ${e.message}`);
-                }
-            }
-
-            // Bulk update existing flights
-            for (const upd of flightsToUpdate) {
-                const { ID, ...fields } = upd;
-                // Remove undefined fields
-                const setFields = {};
-                for (const [k, v] of Object.entries(fields)) {
-                    if (v !== undefined) setFields[k] = v;
-                }
-                if (Object.keys(setFields).length > 0) {
-                    await UPDATE(FLIGHT_SCHEDULE).where({ ID }).set(setFields);
-                }
-            }
-
-            // Bulk insert fuel orders
-            if (ordersToInsert.length > 0) {
-                try {
-                    await INSERT.into(FuelOrders).entries(ordersToInsert);
-                } catch (e) {
-                    return req.error(500, `Failed to insert fuel orders: ${e.message}`);
-                }
-            }
-
-            const success = ordersFailed === 0;
-            const msg = `Processed ${flightsProcessed} rows. ` +
-                `Flights: ${flightsCreated} created, ${flightsUpdated} updated. ` +
-                `Orders: ${ordersCreated} created.` +
-                (ordersFailed > 0 ? ` ${ordersFailed} failed.` : '');
-
-            req.info(200, msg);
-
-            return {
-                success,
-                fileName: fileName || '',
-                flightsProcessed,
-                flightsCreated,
-                flightsUpdated,
-                flightsSkipped,
-                ordersCreated,
-                ordersFailed,
-                errors,
-                message: msg
-            };
-        });
-
-        // ====================================================================
         // SERVICE-LEVEL FUNCTIONS
         // ====================================================================
 
@@ -865,6 +564,302 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 nextSeq = parseInt(lastDelivery.delivery_number.split('-').pop()) + 1;
             }
             return `EPD-${stn}-${dateStr}-${String(nextSeq).padStart(3, '0')}`;
+        });
+
+        // ====================================================================
+        // IMPORT FLIGHT DISPATCH FROM EXCEL
+        // ====================================================================
+
+        this.on('importFlightDispatchExcel', async (req) => {
+            const { fileContent, fileName } = req.data;
+
+            const errors = [];
+            let dispatchesProcessed = 0, dispatchesCreated = 0, dispatchesSkipped = 0, ordersUpdated = 0;
+
+            // --- Validate file ---
+            if (!fileContent) {
+                return req.error(400, 'DSP401: File content is required.');
+            }
+            const ext = (fileName || '').toLowerCase();
+            if (ext && !ext.endsWith('.xlsx') && !ext.endsWith('.xls') && !ext.endsWith('.csv')) {
+                return req.error(400, 'DSP401: Invalid file format. Only .xlsx, .xls and .csv files are supported.');
+            }
+
+            // --- Parse Excel ---
+            let workbook;
+            try {
+                const buf = Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent, 'base64');
+                workbook = XLSX.read(buf, { type: 'buffer' });
+            } catch (e) {
+                return req.error(400, `DSP401: Failed to parse file: ${e.message}`);
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            if (!sheetName) {
+                return req.error(400, 'DSP401: File contains no sheets.');
+            }
+
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+            if (rows.length === 0) {
+                return req.error(400, 'DSP402: Sheet is empty.');
+            }
+
+            // --- Validate required columns ---
+            const requiredCols = [
+                'FUEL_ORDER_ID', 'FLIGHT_NUMBER', 'FLIGHT_DATE', 'TAIL_NUMBER',
+                'ATD', 'DISPATCH_QTY_KG', 'ROB_DEPARTURE_KG', 'PAYLOAD_KG',
+                'CAPTAIN_ID', 'DISPATCHER_ID', 'DISPATCH_TIMESTAMP', 'DISPATCH_SOURCE'
+            ];
+            const headers = Object.keys(rows[0]);
+            const missingCols = requiredCols.filter(c => !headers.includes(c));
+            if (missingCols.length > 0) {
+                return req.error(400, `DSP402: Missing required columns: ${missingCols.join(', ')}`);
+            }
+
+            // --- Pre-fetch reference data ---
+            const { FLIGHT_SCHEDULE, FUEL_ORDERS, FLIGHT_DISPATCH } = cds.entities('fuelsphere');
+
+            // Build flight lookup map: "flight_number|flight_date" → { ID, fuel_order_ID }
+            const flightRows = await SELECT.from(FLIGHT_SCHEDULE)
+                .columns('ID', 'flight_number', 'flight_date');
+
+            // Build reverse lookup from FUEL_ORDERS: flight_ID → fuel order ID
+            const fuelOrderRows = await SELECT.from(FUEL_ORDERS)
+                .columns('ID', 'flight_ID')
+                .where({ flight_ID: { '!=': null } });
+            const flightToFuelOrder = new Map(
+                fuelOrderRows.map(fo => [fo.flight_ID, fo.ID])
+            );
+
+            const flightMap = new Map(
+                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, { ID: f.ID, fuel_order_ID: flightToFuelOrder.get(f.ID) || null }])
+            );
+
+            // Existing dispatches for duplicate detection
+            const existingDispatches = await SELECT.from(FLIGHT_DISPATCH)
+                .columns('dispatch_order_id', 'flight_number', 'flight_date');
+            const existingDispatchSet = new Set(
+                existingDispatches.map(d => `${d.dispatch_order_id}|${d.flight_number}|${d.flight_date}`)
+            );
+
+            // --- Date/DateTime normalization helpers ---
+            const _normalizeDate = (val) => {
+                if (typeof val === 'number') {
+                    const parsed = XLSX.SSF.parse_date_code(val);
+                    if (parsed) {
+                        return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+                    }
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+                    const parts = s.split('/');
+                    return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                }
+                if (/^\d{8}$/.test(s)) {
+                    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+                }
+                return s;
+            };
+
+            const _normalizeDateTime = (val) => {
+                if (!val && val !== 0) return null;
+                if (typeof val === 'number') {
+                    const parsed = XLSX.SSF.parse_date_code(val);
+                    if (parsed) {
+                        return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}T` +
+                               `${String(parsed.H).padStart(2, '0')}:${String(parsed.M).padStart(2, '0')}:${String(parsed.S).padStart(2, '0')}Z`;
+                    }
+                }
+                const s = String(val).trim();
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s;
+                return s || null;
+            };
+
+            // --- Process rows ---
+            const dispatchesToInsert = [];
+            const ordersToUpdate = new Map(); // fuel_order_ID → dispatch_order_id
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowNum = i + 2; // Excel row (1-based header + 1)
+                dispatchesProcessed++;
+
+                // Extract fields
+                const fuelOrderId = String(row.FUEL_ORDER_ID || '').trim();
+                const flightNumber = String(row.FLIGHT_NUMBER || '').trim();
+                const rawDate = row.FLIGHT_DATE;
+                const tailNumber = String(row.TAIL_NUMBER || '').trim();
+                const atd = _normalizeDateTime(row.ATD);
+                const ata = _normalizeDateTime(row.ATA);
+                const dispatchQtyKg = row.DISPATCH_QTY_KG !== '' ? parseFloat(row.DISPATCH_QTY_KG) : null;
+                const robDepartureKg = row.ROB_DEPARTURE_KG !== '' ? parseFloat(row.ROB_DEPARTURE_KG) : null;
+                const payloadKg = row.PAYLOAD_KG !== '' ? parseFloat(row.PAYLOAD_KG) : null;
+                const flightLevel = row.FLIGHT_LEVEL !== '' ? parseInt(row.FLIGHT_LEVEL) : null;
+                const windComponent = row.WIND_COMPONENT !== '' ? parseFloat(row.WIND_COMPONENT) : null;
+                const alternateAirport = String(row.ALTERNATE_AIRPORT || '').trim().toUpperCase();
+                const captainId = String(row.CAPTAIN_ID || '').trim();
+                const dispatcherId = String(row.DISPATCHER_ID || '').trim();
+                const dispatchTimestamp = _normalizeDateTime(row.DISPATCH_TIMESTAMP);
+                const ofplanReference = String(row.OFPLAN_REFERENCE || '').trim();
+                const dispatchSource = String(row.DISPATCH_SOURCE || '').trim().toUpperCase();
+                const remarks = String(row.REMARKS || '').trim();
+
+                // --- Validate required fields ---
+                if (!fuelOrderId) {
+                    errors.push({ row: rowNum, field: 'FUEL_ORDER_ID', message: 'Fuel Order ID is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+                if (!flightNumber) {
+                    errors.push({ row: rowNum, field: 'FLIGHT_NUMBER', message: 'Flight number is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                const flightDate = _normalizeDate(rawDate);
+                if (!flightDate || !/^\d{4}-\d{2}-\d{2}$/.test(flightDate)) {
+                    errors.push({ row: rowNum, field: 'FLIGHT_DATE', message: `Invalid or missing flight date: '${rawDate}'.`, severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (!tailNumber) {
+                    errors.push({ row: rowNum, field: 'TAIL_NUMBER', message: 'Tail number is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (!atd) {
+                    errors.push({ row: rowNum, field: 'ATD', message: 'Actual Time of Departure is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (dispatchQtyKg === null || isNaN(dispatchQtyKg)) {
+                    errors.push({ row: rowNum, field: 'DISPATCH_QTY_KG', message: 'Dispatch quantity is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (robDepartureKg === null || isNaN(robDepartureKg)) {
+                    errors.push({ row: rowNum, field: 'ROB_DEPARTURE_KG', message: 'ROB at departure is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (payloadKg === null || isNaN(payloadKg)) {
+                    errors.push({ row: rowNum, field: 'PAYLOAD_KG', message: 'Payload weight is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (!captainId) {
+                    errors.push({ row: rowNum, field: 'CAPTAIN_ID', message: 'Captain ID is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (!dispatcherId) {
+                    errors.push({ row: rowNum, field: 'DISPATCHER_ID', message: 'Dispatcher ID is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                if (!dispatchTimestamp) {
+                    errors.push({ row: rowNum, field: 'DISPATCH_TIMESTAMP', message: 'Dispatch timestamp is required.', severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                // Validate dispatch source
+                const validSources = ['TRIPRECORD', 'MANUAL', 'SMARTDOC'];
+                if (!dispatchSource || !validSources.includes(dispatchSource)) {
+                    errors.push({ row: rowNum, field: 'DISPATCH_SOURCE', message: `Invalid dispatch source '${dispatchSource}'. Valid: ${validSources.join(', ')}`, severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                // --- Match to flight schedule ---
+                const flightKey = `${flightNumber}|${flightDate}`;
+                if (!flightMap.has(flightKey)) {
+                    errors.push({ row: rowNum, field: 'FLIGHT_NUMBER/FLIGHT_DATE',
+                        message: `No flight schedule found for ${flightNumber} on ${flightDate}. Upload flight schedule first.`, severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
+                // --- Check for duplicates ---
+                const dupKey = `${fuelOrderId}|${flightNumber}|${flightDate}`;
+                if (existingDispatchSet.has(dupKey)) {
+                    errors.push({ row: rowNum, field: 'FUEL_ORDER_ID',
+                        message: `Duplicate dispatch: ${fuelOrderId} for ${flightNumber} on ${flightDate} already exists.`, severity: 'WARNING' });
+                    dispatchesSkipped++; continue;
+                }
+
+                const flightRecord = flightMap.get(flightKey);
+
+                // Build dispatch record
+                dispatchesToInsert.push({
+                    ID: cds.utils.uuid(),
+                    dispatch_order_id: fuelOrderId,
+                    flight_number: flightNumber,
+                    flight_date: flightDate,
+                    flight_schedule_ID: flightRecord.ID,
+                    fuel_order_ID: flightRecord.fuel_order_ID || null,
+                    tail_number: tailNumber,
+                    captain_id: captainId,
+                    dispatcher_id: dispatcherId,
+                    atd: atd,
+                    ata: ata || null,
+                    dispatch_timestamp: dispatchTimestamp,
+                    dispatch_qty_kg: dispatchQtyKg,
+                    rob_departure_kg: robDepartureKg,
+                    payload_kg: payloadKg,
+                    flight_level: flightLevel,
+                    wind_component: windComponent,
+                    alternate_airport: alternateAirport || null,
+                    dispatch_source: dispatchSource,
+                    ofplan_reference: ofplanReference || null,
+                    remarks: remarks || null
+                });
+
+                // Track fuel order update
+                if (flightRecord.fuel_order_ID) {
+                    ordersToUpdate.set(flightRecord.fuel_order_ID, fuelOrderId);
+                }
+
+                // Add to duplicate set to prevent duplicates within same upload
+                existingDispatchSet.add(dupKey);
+            }
+
+            // --- Bulk INSERT dispatches ---
+            if (dispatchesToInsert.length > 0) {
+                try {
+                    await INSERT.into(FLIGHT_DISPATCH).entries(dispatchesToInsert);
+                    dispatchesCreated = dispatchesToInsert.length;
+                } catch (e) {
+                    return req.error(500, `DSP500: Failed to insert dispatch records: ${e.message}`);
+                }
+            }
+
+            // --- Bulk UPDATE fuel orders with dispatch_fuel_order_id ---
+            for (const [fuelOrderID, dispatchFuelOrderId] of ordersToUpdate) {
+                try {
+                    await UPDATE(FUEL_ORDERS)
+                        .set({ dispatch_fuel_order_id: dispatchFuelOrderId })
+                        .where({ ID: fuelOrderID });
+                    ordersUpdated++;
+                } catch (e) {
+                    errors.push({ row: 0, field: 'FUEL_ORDER_ID',
+                        message: `Failed to update fuel order ${fuelOrderID}: ${e.message}`, severity: 'WARNING' });
+                }
+            }
+
+            // --- Build response ---
+            const hasErrors = errors.some(e => e.severity === 'ERROR');
+            const message = dispatchesCreated > 0
+                ? `Successfully imported ${dispatchesCreated} dispatch record(s). ${ordersUpdated} fuel order(s) updated.` +
+                  (dispatchesSkipped > 0 ? ` ${dispatchesSkipped} skipped.` : '')
+                : `No dispatch records imported. ${dispatchesSkipped} skipped due to errors.`;
+
+            return {
+                success: !hasErrors && dispatchesCreated > 0,
+                fileName: fileName || 'unknown',
+                dispatchesProcessed,
+                dispatchesCreated,
+                dispatchesSkipped,
+                ordersUpdated,
+                errors,
+                message
+            };
         });
 
         await super.init();

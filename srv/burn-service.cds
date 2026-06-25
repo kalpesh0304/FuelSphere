@@ -36,7 +36,7 @@ service BurnService {
     @odata.draft.enabled
     entity FuelBurns as projection on db.FUEL_BURNS {
         *,
-        flight              : redirected to Flights,
+        flight              : redirected to FlightSchedule,
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
         destination_airport : redirected to Airports
@@ -93,7 +93,7 @@ service BurnService {
         *,
         aircraft        : redirected to Aircraft,
         airport         : redirected to Airports,
-        flight          : redirected to Flights,
+        flight          : redirected to FlightSchedule,
         fuel_burn       : redirected to FuelBurns,
         fuel_delivery   : redirected to FuelDeliveries
     } actions {
@@ -153,7 +153,7 @@ service BurnService {
     // ========================================================================
 
     @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
@@ -251,6 +251,57 @@ service BurnService {
      * Confirm multiple preliminary records
      */
     action batchConfirm(burnIds: array of UUID) returns BatchConfirmResult;
+
+    // ========================================================================
+    // EXCEL UPLOAD ACTIONS (UAT & Manual Data Loading)
+    // ========================================================================
+
+    /**
+     * Import fuel burn records from Excel
+     * Sheet: "Fuel Burn Upload" from FS-QA-FDD08-UPLOAD_v1.0
+     *
+     * Required columns: Flight Number, Aircraft Tail, Departure Airport (IATA),
+     *                   Arrival Airport (IATA), Burn Date (YYYY-MM-DD),
+     *                   Block-Off Time (HH:MM UTC), Block-On Time (HH:MM UTC),
+     *                   Actual Burn (Kg), Data Source
+     * Optional columns: Planned Burn (Kg), Remarks / Pilot Notes
+     * Calculated:       Variance (Kg), Variance %, Status
+     */
+    action importFuelBurnExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns BurnImportResult;
+
+    /**
+     * Import ROB initial load from Excel
+     * Sheet: "ROB Initial Load" from FS-QA-FDD08-UPLOAD_v1.0
+     *
+     * Required columns: Aircraft Tail, Record Date (YYYY-MM-DD),
+     *                   Record Time (HH:MM UTC), Airport (IATA),
+     *                   Opening ROB (Kg), Max Capacity (Kg)
+     * Optional columns: Aircraft Type, Flight Number, Uplift (Kg),
+     *                   Burn (Kg), Adjustment (Kg), Notes
+     * Calculated:       Closing ROB (Kg), ROB % of Capacity
+     */
+    action importROBInitialExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns ROBImportResult;
+
+    /**
+     * Import planned burn data from Excel
+     * Sheet: "Planned Burn Data" from FS-QA-FDD08-UPLOAD_v1.0
+     *
+     * Required columns: Flight Number, Aircraft Type, Departure Airport (IATA),
+     *                   Arrival Airport (IATA), Planned Burn (Kg), Source,
+     *                   Valid From (YYYY-MM-DD), Valid To (YYYY-MM-DD)
+     * Optional columns: Route Distance (NM), Taxi Fuel (Kg), Notes
+     * Calculated:       Total Planned (Kg) = Planned Burn + Taxi Fuel
+     */
+    action importPlannedBurnExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns PlannedBurnImportResult;
 
     // ========================================================================
     // SERVICE-LEVEL FUNCTIONS
@@ -546,6 +597,48 @@ service BurnService {
         standardDeviation   : Decimal(12,2);
         minHistorical       : Decimal(12,2);
         maxHistorical       : Decimal(12,2);
+    };
+
+    // ========================================================================
+    // IMPORT RESULT TYPES
+    // ========================================================================
+
+    type BurnImportResult {
+        success              : Boolean;
+        fileName             : String(255);
+        burnsProcessed       : Integer;
+        burnsCreated         : Integer;
+        burnsSkipped         : Integer;
+        errors               : array of BurnImportError;
+        message              : String(500);
+    };
+
+    type ROBImportResult {
+        success              : Boolean;
+        fileName             : String(255);
+        entriesProcessed     : Integer;
+        entriesCreated       : Integer;
+        entriesSkipped       : Integer;
+        errors               : array of BurnImportError;
+        message              : String(500);
+    };
+
+    type PlannedBurnImportResult {
+        success              : Boolean;
+        fileName             : String(255);
+        plansProcessed       : Integer;
+        plansCreated         : Integer;
+        plansUpdated         : Integer;
+        plansSkipped         : Integer;
+        errors               : array of BurnImportError;
+        message              : String(500);
+    };
+
+    type BurnImportError {
+        row      : Integer;
+        field    : String(50);
+        message  : String(500);
+        severity : String(10);   // ERROR / WARNING
     };
 
     // ========================================================================

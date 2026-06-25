@@ -117,7 +117,7 @@ service PlanningService {
     entity DemandCalculations as projection on db.DEMAND_CALCULATION {
         *,
         version         : redirected to PlanningVersions,
-        flight_schedule : redirected to Flights,
+        flight_schedule : redirected to FlightSchedule,
         route           : redirected to Routes,
         aircraft_type   : redirected to Aircraft,
         matrix_used     : redirected to RouteAircraftMatrix
@@ -207,12 +207,35 @@ service PlanningService {
     // REFERENCE DATA (Read-only from Master Data)
     // ========================================================================
 
-    @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    /**
+     * FlightSchedule - Flight schedule management
+     * Primary entity for flight schedule data, Excel import, and planning integration
+     */
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        fuel_order  : redirected to FuelOrders
+    };
+
+    /**
+     * FuelOrders - Read-only reference to fuel orders linked to flight schedules
+     */
+    @readonly
+    entity FuelOrders as projection on db.FUEL_ORDERS {
+        key ID,
+        order_number,
+        flight : redirected to FlightSchedule,
+        status,
+        station_code,
+        ordered_quantity,
+        unit_price,
+        total_amount,
+        currency_code,
+        requested_date,
+        priority,
+        notes
     };
 
     @readonly
@@ -314,6 +337,39 @@ service PlanningService {
         fromDate: Date,
         toDate: Date
     ) returns array of PriceForecastResult;
+
+    /**
+     * Import flight schedule from Excel.
+     * Auto-creates a Draft Fuel Order for each new flight schedule.
+     *
+     * Required columns: flight_number, flight_date, origin_airport, destination_airport
+     * Optional columns: aircraft_type, aircraft_reg, departure_time, arrival_time,
+     *                   airline_code, flight_suffix, service_type,
+     *                   sobt, sibt, departure_terminal, arrival_terminal,
+     *                   gate_number, stand_number, planned_block_mins,
+     *                   flight_nature, linked_flight_number, codeshare_flights
+     */
+    action importFlightScheduleExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns FlightExcelImportResult;
+
+    /**
+     * Enrich existing flight schedule records with tail numbers, aircraft types,
+     * and operational data (Step 2 of 7-step journey: "Flight Enriched").
+     *
+     * Matches by flight_number + flight_date, then updates:
+     *   aircraft_reg (tail number), aircraft_type, departure_terminal,
+     *   arrival_terminal, gate_number, stand_number
+     *
+     * Required columns: flight_number, flight_date
+     * Enrichment columns (at least one required): aircraft_reg, aircraft_type,
+     *   departure_terminal, arrival_terminal, gate_number, stand_number
+     */
+    action enrichFlightScheduleExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns FlightEnrichmentResult;
 
     /**
      * Import SSIM flight schedule
@@ -452,6 +508,41 @@ service PlanningService {
         fileSize            : Integer;
         downloadUrl         : String(500);
         message             : String(500);
+    };
+
+    // ========================================================================
+    // FLIGHT SCHEDULE IMPORT TYPES
+    // ========================================================================
+
+    type FlightExcelImportResult {
+        success          : Boolean;
+        fileName         : String(255);
+        flightsProcessed : Integer;
+        flightsCreated   : Integer;
+        flightsUpdated   : Integer;
+        flightsSkipped   : Integer;
+        ordersCreated    : Integer;
+        ordersFailed     : Integer;
+        errors           : array of FlightImportError;
+        message          : String(500);
+    };
+
+    type FlightImportError {
+        row      : Integer;
+        field    : String(50);
+        message  : String(500);
+        severity : String(10);  // ERROR / WARNING
+    };
+
+    type FlightEnrichmentResult {
+        success           : Boolean;
+        fileName          : String(255);
+        flightsProcessed  : Integer;
+        flightsEnriched   : Integer;
+        flightsNotFound   : Integer;
+        flightsSkipped    : Integer;
+        errors            : array of FlightImportError;
+        message           : String(500);
     };
 
     // ========================================================================

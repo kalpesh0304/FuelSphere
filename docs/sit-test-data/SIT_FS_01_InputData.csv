@@ -1,26 +1,24 @@
-Step;API Endpoint;HTTP Method;Input Parameter;Input Value;Validation Rule;Expected HTTP Status;Expected Error Code
-1;/odata/v4/orders/FuelOrders/FuelOrderService.createOrderFromFlight;POST;flightScheduleID;e5f6a7b8-5555-4000-8000-000000000101;Valid UUID referencing FLIGHT_SCHEDULE;201;
-2;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000101);GET;;;status=Draft orderNumber like FO-MNL-*;200;
-3;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000101)/FuelOrderService.submitOrder;POST;;;status must be Draft/Created;200;
-4;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000102)/FuelOrderService.confirmOrder;POST;;;status must be Submitted;200;
-5;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000103)/FuelOrderService.startDelivery;POST;;;status must be Confirmed;200;
-6;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000104)/FuelOrderService.cancelOrder;POST;reason;Flight schedule changed;reason is mandatory;200;
-7;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000101)/FuelOrderService.captureSignatures;POST;pilotName|groundCrewName|pilotSignature|groundCrewSignature;Capt. Ahmed|John Smith|base64data|base64data;All 4 fields required;200;
-8;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000105)?$expand=deliveries;GET;;;s4_po_number and s4_gr_number populated;200;
-9;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000101)/FuelOrderService.verifyDeliveryQuantity;POST;deliveredQuantity;4800;Within 5% of ordered 5000 (-4%);200;
-10;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000102)/FuelOrderService.verifyDeliveryQuantity;POST;deliveredQuantity;4000;Exceeds 5% of ordered 5000 (-20%);400;EPD401
-11;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000103)/FuelOrderService.validateDelivery;POST;temperature|density|quantity;15.0|0.800|5000;temp in [-40 50] density in [0.775 0.840];200;
-12;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000103)/FuelOrderService.validateDelivery;POST;temperature|density|quantity;55.0|0.800|5000;temp 55 > 50 upper limit;400;EPD403
-13;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000103)/FuelOrderService.validateDelivery;POST;temperature|density|quantity;15.0|0.900|5000;density 0.900 > 0.840 upper limit;400;EPD404
-14;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000104)/FuelOrderService.correctTemperature;POST;observedVolume|observedTemp|observedDensity;5000|25.0|0.810;ASTM D1250 correction to 15C;200;
-15;/odata/v4/orders/FuelTickets;POST;ticketNumber|deliveryID|supplier_ID|meterStart|meterEnd|quantity;FT-2026-001|a7b8c9d0-7777-4000-8000-000000000101|b2c3d4e5-2222-4000-8000-000000000001|10000|15000|5000;meter diff = quantity;201;
-16;/odata/v4/orders/FuelTickets(b8c9d0e1-8888-4000-8000-000000000101)/FuelOrderService.verifyTicket;POST;;;15000-10000=5000 matches qty 5000;200;
-17;/odata/v4/orders/FuelTickets(b8c9d0e1-8888-4000-8000-000000000102)/FuelOrderService.verifyTicket;POST;;;15000-10000=5000 does NOT match qty 4500;400;EPD411
-18;/odata/v4/burn/BurnService.ingestAcarsBurnData;POST;flightNumber|registration|departureAirport|arrivalAirport|burnQuantity|fuelOnBoard|messageID;PR604|RP-C8773|SIN|MNL|7850|31500|ACARS-SIT-2026021601;Valid ACARS data;201;
-19;/odata/v4/burn/FuelBurns(550e8400-e29b-41d4-a716-446655441603)/BurnService.confirmBurn;POST;;;status must be PRELIMINARY;200;
-20;/odata/v4/burn/ROBLedger?$filter=tail_number eq 'RP-C8773'&$orderby=sequence desc;GET;;;closing_rob_kg=31500 sequence=4;200;
-21;/odata/v4/burn/BurnService.getFleetROBSummary();GET;;;Array with RP-C9903(9650) RP-C8773(31500) RP-C3502(62500);200;
-22;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000102)/FuelOrderService.submitOrder;POST;;;status=Submitted cannot re-submit;400;
-23;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-8000-000000000101)/FuelOrderService.confirmOrder;POST;;;status=Draft cannot confirm;400;
-24;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-8000-000000000101)/FuelOrderService.captureSignatures;POST;pilotName|groundCrewName;null|John Smith;pilotName is mandatory;400;EPD402
-25;/odata/v4/burn/BurnService.ingestAcarsBurnData;POST;messageID;ACARS-SIT-2026021601;Duplicate messageID already exists;409;
+Step;Scenario;API Endpoint;HTTP Method;Input Parameter;Input Value;Validation Rule;Expected HTTP Status;Expected Error Code
+A1;In-Plane;/odata/v4/orders/importFlightScheduleExcel;POST;fileContent|fileName;base64(Excel with PR701 row)|SIT_InPlane_PR701.xlsx;Required columns present: flight_number flight_date origin_airport destination_airport supplier_code product_code ordered_quantity unit_price;200;
+A2;In-Plane;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-A000-000000000001)?$expand=flight,airport,supplier,product;GET;;;status=Created order_number=FO-MNL-20260322-001 total_amount=4125.00;200;
+A3;In-Plane;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-A000-000000000001)/FuelOrderService.submit;POST;;;status must be Created;200;
+A4;In-Plane;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-A000-000000000001)/FuelOrderService.confirm;POST;;;status must be Submitted;200;
+A5;In-Plane;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-A000-000000000001)/FuelOrderService.startDelivery;POST;;;status must be Confirmed;200;
+A6;In-Plane;/odata/v4/orders/FuelTickets;POST;ticket_number|order_ID|aircraft_reg|flight_number|quantity|delivery_timestamp|supplier_ticket_ref;SHELL-MNL-2026032201|f6a7b8c9-6666-4000-A000-000000000001|RP-C9903|PR701|4900.00|2026-03-22T05:45:00Z|SHL-PH-00701001;Valid order_ID quantity>0;201;
+A7;In-Plane;/odata/v4/orders/FuelDeliveries;POST;order_ID|delivery_number|delivery_date|delivery_time|delivered_quantity|temperature|density|vehicle_id|driver_name;f6a7b8c9-6666-4000-A000-000000000001|EPD-MNL-20260322-001|2026-03-22|05:50:00|4900.00|28.5|0.8050|TRK-MNL-012|Juan Santos;temp in [-40 50] density in [0.775 0.840];201;
+A8;In-Plane;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-A000-000000000001)/FuelOrderService.captureSignatures;POST;pilotName|groundCrewName|signatureLocation;Capt. Miguel Reyes|Juan Santos|MNL Gate 14;pilotName and groundCrewName required;200;
+A9;In-Plane;/odata/v4/orders/FuelTickets(b8c9d0e1-8888-4000-A000-000000000001)/FuelOrderService.verify;POST;;;status must be Open or Attached;200;
+A10;In-Plane;/odata/v4/burn/BurnService.ingestAcarsBurnData;POST;flightNumber|registration|departureAirport|arrivalAirport|burnQuantity|plannedBurn|fuelOnBoard|messageID;PR701|RP-C9903|MNL|CEB|3200|3100|10500|ACARS-PR701-20260322;Valid ACARS data no duplicate messageID;201;
+A11;In-Plane;/odata/v4/burn/FuelBurns(550e8400-e29b-41d4-A000-000000000001)/BurnService.confirm;POST;;;status must be PRELIMINARY;200;
+A12;In-Plane;/odata/v4/burn/ROBLedger?$filter=tail_number eq 'RP-C9903'&$orderby=sequence asc;GET;;;3 entries: INITIAL(8800) UPLIFT(+4900=13700) FLIGHT(-3200=10500);200;
+B1;In-Tank;/odata/v4/orders/FuelOrders;POST;station_code|supplier_ID|contract_ID|product_ID|ordered_quantity|unit_price|currency_code|priority|notes;MNL|b2c3d4e5-2222-4000-8000-000000000003|d4e5f6a7-4444-4000-8000-000000000002|c3d4e5f6-3333-4000-8000-000000000001|50000.00|42.50|PHP|Normal|MNL tank farm replenishment;All required fields present;201;
+B2;In-Tank;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-B000-000000000001)/FuelOrderService.submit + confirm;POST (2 calls);;;Submit: status=Created → Submitted. Confirm: status=Submitted → Confirmed;200;
+B3;In-Tank;/odata/v4/orders/FuelOrders(f6a7b8c9-6666-4000-B000-000000000001)/FuelOrderService.startDelivery;POST;;;status must be Confirmed;200;
+B4;In-Tank;/odata/v4/orders/FuelTickets;POST;ticket_number|order_ID|quantity|delivery_timestamp|supplier_ticket_ref;PETRON-MNL-2026032201|f6a7b8c9-6666-4000-B000-000000000001|49800.00|2026-03-22T08:30:00Z|PTN-PH-00801001;Valid order_ID quantity>0;201;
+B5;In-Tank;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-B000-000000000001)/FuelOrderService.captureSignatures;POST;pilotName|groundCrewName|signatureLocation;Ground Supervisor Ramon Cruz|Carlos Mendez|MNL Tank Farm;Both names required;200;
+B6;In-Tank;/odata/v4/orders/FuelTickets(b8c9d0e1-8888-4000-B000-000000000001)/FuelOrderService.verify;POST;;;status must be Open or Attached;200;
+B7;In-Tank;/odata/v4/orders/FuelOrders;POST;flight_ID|station_code|supplier_ID|contract_ID|product_ID|ordered_quantity|unit_price|currency_code|priority;e5f6a7b8-5555-4000-B000-000000000001|CEB|b2c3d4e5-2222-4000-8000-000000000003|d4e5f6a7-4444-4000-8000-000000000002|c3d4e5f6-3333-4000-8000-000000000001|4500.00|42.50|PHP|Normal;flight_ID references PR702 CEB→MNL;201;
+B8;In-Tank;/odata/v4/orders/FuelDeliveries(a7b8c9d0-7777-4000-B000-000000000002)/FuelOrderService.captureSignatures;POST;pilotName|groundCrewName|signatureLocation;Capt. Miguel Reyes|CEB Ground Crew|CEB Gate 3;Both names required;200;
+B9;In-Tank;/odata/v4/burn/BurnService.ingestAcarsBurnData;POST;flightNumber|registration|departureAirport|arrivalAirport|burnQuantity|plannedBurn|fuelOnBoard|messageID;PR702|RP-C9903|CEB|MNL|3050|3100|11950|ACARS-PR702-20260322;Valid ACARS data;201;
+B10;In-Tank;/odata/v4/burn/FuelBurns(550e8400-e29b-41d4-B000-000000000001)/BurnService.confirm;POST;;;status must be PRELIMINARY;200;
+B11;In-Tank;/odata/v4/burn/ROBLedger?$filter=tail_number eq 'RP-C9903'&$orderby=sequence asc;GET;;;5 entries: INITIAL(8800) UPLIFT(+4900=13700) FLIGHT(-3200=10500) UPLIFT(+4500=15000) FLIGHT(-3050=11950);200;

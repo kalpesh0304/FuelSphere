@@ -545,9 +545,97 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         origin_airport      : String(3) @mandatory;     // Departure airport IATA
         destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
         destination_airport : String(3) @mandatory;     // Arrival airport IATA
-        scheduled_departure : Time;                     // Scheduled departure time
-        scheduled_arrival   : Time;                     // Scheduled arrival time
-        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED
+        scheduled_departure : Time;                     // Scheduled departure time (backward compat)
+        scheduled_arrival   : Time;                     // Scheduled arrival time (backward compat)
+        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED/DIVERTED/DELAYED/RETURNED
+
+        // Fuel Order linkage (auto-created as Draft on upload)
+        fuel_order          : Association to FUEL_ORDERS on fuel_order.flight = $self;
+        fuel_order_number   : String(25);               // Denormalized for display
+
+        // OPS-ESB ICD-inspired fields
+        airline_code        : String(3);                // IATA airline designator (e.g., PR, EY)
+        flight_suffix       : String(2);                // Operational suffix
+        service_type        : String(1);                // IATA service type: J=sched pax, F=freight, C=charter, G=ferry
+
+        departure_terminal  : String(10);               // Departure terminal
+        arrival_terminal    : String(10);               // Arrival terminal
+        gate_number         : String(10);               // Departure/arrival gate
+        stand_number        : String(10);               // Aircraft stand/bay number
+
+        // Operational timestamps (UTC)
+        sobt                : DateTime;                 // Scheduled Off Block Time
+        sibt                : DateTime;                 // Scheduled In Block Time
+        eobt                : DateTime;                 // Estimated Off Block Time
+        eibt                : DateTime;                 // Estimated In Block Time
+        aobt                : DateTime;                 // Actual Off Block Time
+        aibt                : DateTime;                 // Actual In Block Time
+        atot                : DateTime;                 // Actual Take Off Time
+        aldt                : DateTime;                 // Actual Landing Time
+
+        // Block hours
+        planned_block_mins  : Integer;                  // Planned block time in minutes
+        actual_block_mins   : Integer;                  // Actual block time in minutes
+
+        // Flight nature & linked flights
+        flight_nature       : String(10);               // PAX, FRY (ferry), AMB, TRN
+        linked_flight_number: String(10);               // Previous/next leg flight number
+        linked_flight_date  : Date;                     // Linked flight date
+
+        // Codeshare & delays
+        codeshare_flights   : String(100);              // Comma-separated codeshare flight numbers
+        delay_code          : String(10);               // IATA delay code
+        delay_minutes       : Integer;                  // Delay duration in minutes
+        cancellation_reason : String(200);              // Reason if status=CANCELLED
+
+        // Payload (passengers + cargo) — input to fuel demand calculation
+        booked_passengers   : Integer;                  // PAX booked (refreshed continuously from booking system)
+        boarded_passengers  : Integer;                  // PAX boarded (final, from DCS at door-close ~30 min before departure)
+        cargo_kg            : Decimal(10,2);            // Cargo load in kg
+        captain_name        : String(100);              // Pilot in command (assigned closer to flight)
+}
+
+// ============================================================================
+// FLIGHT CYCLE EVENTS (Operations App — D-0 tracking)
+// ============================================================================
+
+/**
+ * Flight Cycle Event Types
+ * Landing → Taxi In → Chocks On → Refueling → Chocks Off → Taxi Out → Takeoff → Airborne
+ */
+type FlightCycleEventType : String(20) enum {
+    LANDING     = 'LANDING';
+    TAXI_IN     = 'TAXI_IN';
+    CHOCKS_ON   = 'CHOCKS_ON';
+    REFUELING   = 'REFUELING';
+    CHOCKS_OFF  = 'CHOCKS_OFF';
+    TAXI_OUT    = 'TAXI_OUT';
+    TAKEOFF     = 'TAKEOFF';
+    AIRBORNE    = 'AIRBORNE';
+}
+
+/**
+ * FLIGHT_CYCLE_EVENTS
+ * Tracks real-time flight turnaround events for D-0 operations monitoring.
+ * Each event represents a milestone in the ground handling cycle.
+ */
+entity FLIGHT_CYCLE_EVENTS : cuid, AuditTrail {
+    flight              : Association to FLIGHT_SCHEDULE @mandatory;
+    fuel_order          : Association to FUEL_ORDERS;      // Optional link to fuel order
+    event_type          : FlightCycleEventType @mandatory;
+    event_timestamp     : Timestamp @mandatory;            // When the event occurred
+    recorded_by         : String(50);                      // User/system that recorded
+    source_system       : String(30);                      // ACARS, AMS, Manual, etc.
+    latitude            : Decimal(10,7);                   // GPS latitude
+    longitude           : Decimal(10,7);                   // GPS longitude
+    remarks             : String(500);                     // Free-text notes
+    // Refueling-specific fields (populated when event_type = REFUELING)
+    uplift_kg           : Decimal(12,2);                   // Fuel uplifted during refueling
+    density_kg_l        : Decimal(6,4);                    // Fuel density at delivery
+    temperature_c       : Decimal(5,1);                    // Fuel temperature
+    bowser_id           : String(20);                      // Refueling vehicle identifier
+    // Computed
+    sequence_number     : Integer;                         // Auto-assigned order within flight
 }
 
 // ============================================================================
@@ -556,7 +644,7 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
 
 /**
  * Order Status Enumeration
- * Draft → Submitted → Confirmed → InProgress → Delivered → Cancelled
+ * Draft → Submitted → Confirmed → InProgress → Delivered → Completed → Cancelled
  */
 type OrderStatus : String(20) enum {
     Draft       = 'Draft';
@@ -564,6 +652,7 @@ type OrderStatus : String(20) enum {
     Confirmed   = 'Confirmed';
     InProgress  = 'InProgress';
     Delivered   = 'Delivered';
+    Completed   = 'Completed';
     Cancelled   = 'Cancelled';
 }
 
@@ -594,6 +683,30 @@ type TicketStatus : String(20) enum {
     Attached  = 'Attached';
     Verified  = 'Verified';
     Closed    = 'Closed';
+}
+
+/**
+ * Cockpit Crew Review Status (Step 4 of 7-step journey)
+ */
+type CrewReviewStatus : String(20) enum {
+    Pending   = 'PENDING';
+    Confirmed = 'CONFIRMED';
+    Adjusted  = 'ADJUSTED';
+    Skipped   = 'SKIPPED';
+}
+
+/**
+ * Sales Order Status (Supplier/Refueler Perspective)
+ */
+type SalesOrderStatus : String(20) enum {
+    Received    = 'RECEIVED';
+    Confirmed   = 'CONFIRMED';
+    Scheduled   = 'SCHEDULED';
+    InDelivery  = 'IN_DELIVERY';
+    Delivered   = 'DELIVERED';
+    Invoiced    = 'INVOICED';
+    Closed      = 'CLOSED';
+    Cancelled   = 'CANCELLED';
 }
 
 /**
@@ -645,6 +758,17 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         s4_po_number        : String(10);               // S/4HANA Purchase Order Number
         s4_po_item          : String(5);                // PO Line Item
 
+        // Dispatch System Reference
+        dispatch_fuel_order_id : String(20);            // Fuel Order ID from dispatch system (e.g. Legate TripRecord)
+
+        // Cockpit Crew Review (Step 4 of 7-step journey)
+        crew_review_status      : CrewReviewStatus;              // Crew review outcome
+        crew_reviewed_by        : String(100);                   // Captain name/ID
+        crew_reviewed_at        : DateTime;                      // Review timestamp
+        crew_adjusted_quantity  : Decimal(12,2);                 // Crew-adjusted fuel qty (if different)
+        crew_adjustment_reason  : String(500);                   // Reason for adjustment
+        crew_notes              : String(1000);                  // Crew operational notes
+
         // Notes & Comments
         notes               : String(1000);             // Order notes/special instructions
 
@@ -671,6 +795,7 @@ entity FUEL_ORDERS : cuid, AuditTrail {
  */
 entity FUEL_DELIVERIES : cuid, AuditTrail {
         order               : Association to FUEL_ORDERS @mandatory;
+        sales_order         : Association to FUEL_SALES_ORDERS;  // Link to supplier's sales order
         delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
 
         // Delivery Details
@@ -747,6 +872,131 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // Verification
         verified_by         : String(100);              // User who verified
         verified_at         : DateTime;                 // Verification timestamp
+}
+
+// ============================================================================
+// FUEL SALES ORDERS (Supplier/Refueler Perspective - Scenario B)
+// ============================================================================
+
+/**
+ * FUEL_SALES_ORDERS - Supplier-side sales order entity
+ * Represents the same fuel transaction from the refueler/supplier perspective.
+ * Has its own lifecycle independent from the airline's FUEL_ORDERS.
+ *
+ * Sales Order Format: SO-{STATION}-{YYYYMMDD}-{SEQ}
+ * Example: SO-YYZ-20260325-001
+ */
+entity FUEL_SALES_ORDERS : cuid, AuditTrail {
+        // Sales Order Identity
+        sales_order_number   : String(25) @mandatory;    // SO-{STATION}-{YYYYMMDD}-{SEQ}
+
+        // Link to airline's purchase order (if exists)
+        purchase_order       : Association to FUEL_ORDERS;
+        customer_order_number: String(25);               // Airline's FO number
+
+        // Customer (the airline buying fuel)
+        customer_airline     : String(100) @mandatory;   // e.g., "Air Canada"
+        customer_airline_code: String(3);                // IATA code (e.g., AC)
+
+        // Flight Reference
+        flight               : Association to FLIGHT_SCHEDULE;
+        flight_number        : String(10);
+        flight_date          : Date;
+
+        // Station (Delivery Location)
+        airport              : Association to MASTER_AIRPORTS;
+        station_code         : String(3) @mandatory;
+
+        // Supplier (self - the refueling company)
+        supplier             : Association to MASTER_SUPPLIERS;
+        contract             : Association to MASTER_CONTRACTS;
+
+        // Product
+        product              : Association to MASTER_PRODUCTS;
+        uom_code             : String(3) default 'KG';
+
+        // Quantities (progressive enrichment)
+        estimated_quantity   : Decimal(12,2);             // Historical/estimated uplift
+        requested_quantity   : Decimal(12,2);             // From airline PO (if received)
+        crew_confirmed_qty   : Decimal(12,2);             // Cockpit crew confirmed
+        delivered_quantity   : Decimal(12,2);             // Actual delivered
+
+        // Pricing & Revenue
+        unit_price           : Decimal(15,4);
+        total_amount         : Decimal(15,2);
+        currency_code        : String(3) default 'USD';
+
+        // Delivery Planning
+        scheduled_date       : Date;
+        scheduled_time       : Time;
+        vehicle_id           : String(20);               // Bowser/tanker ID
+        driver_name          : String(100);
+
+        // Status & Timing
+        status               : SalesOrderStatus default 'RECEIVED';
+        confirmed_at         : DateTime;
+        delivered_at         : DateTime;
+        invoiced_at          : DateTime;
+
+        // Invoice Reference (supplier invoices the airline)
+        invoice_number       : String(25);
+        invoice_date         : Date;
+        invoice_amount       : Decimal(15,2);
+
+        // Notes
+        notes                : String(1000);
+
+        // Compositions
+        delivery_records     : Composition of many FUEL_DELIVERIES
+                               on delivery_records.sales_order = $self;
+}
+
+// ============================================================================
+// FLIGHT DISPATCH (FDD-04 - Dispatch Data from External Systems)
+// ============================================================================
+
+/**
+ * FLIGHT_DISPATCH - Dispatch data from external systems
+ * Source: Legate TripRecord, Manual, SmartDoc
+ * Volume: ~200,000/year
+ *
+ * Matched to FLIGHT_SCHEDULE by flight_number + flight_date
+ * Updates FUEL_ORDERS.dispatch_fuel_order_id on upload
+ */
+entity FLIGHT_DISPATCH : cuid, AuditTrail {
+        // Match Keys
+        dispatch_order_id       : String(20) @mandatory;    // External dispatch system's Fuel Order ID (e.g. FO-2026-00101)
+        flight_number           : String(10) @mandatory;    // Must match FLIGHT_SCHEDULE
+        flight_date             : Date @mandatory;          // Must match FLIGHT_SCHEDULE
+
+        // Associations
+        flight_schedule         : Association to FLIGHT_SCHEDULE;
+        fuel_order              : Association to FUEL_ORDERS;
+
+        // Aircraft & Crew
+        tail_number             : String(10);               // Aircraft registration at dispatch (e.g. A6-EGD)
+        captain_id              : String(20);               // Captain employee or license ID (e.g. CAP-10234)
+        dispatcher_id           : String(20);               // Dispatcher employee ID (e.g. DSP-00456)
+
+        // Timing
+        atd                     : DateTime;                 // Actual Time of Departure (UTC)
+        ata                     : DateTime;                 // Actual Time of Arrival (UTC)
+        dispatch_timestamp      : DateTime;                 // When dispatch was officially released (UTC)
+
+        // Quantities
+        dispatch_qty_kg         : Decimal(10,2);            // Dispatcher-confirmed uplift quantity (kg)
+        rob_departure_kg        : Decimal(10,2);            // Remaining On Board at chocks-off (kg)
+        payload_kg              : Decimal(10,2);            // Actual payload weight (kg) - for Jeppesen burn calc
+
+        // Flight Data
+        flight_level            : Integer;                  // Planned cruise flight level (e.g. 350)
+        wind_component          : Decimal(5,1);             // Average wind component in knots (+headwind/-tailwind)
+        alternate_airport       : String(3);                // IATA code of alternate airport
+
+        // Source & References
+        dispatch_source         : String(15);               // TRIPRECORD | MANUAL | SMARTDOC
+        ofplan_reference        : String(30);               // Operational Flight Plan reference (e.g. OFP-EK001-20260316)
+        remarks                 : String(200);              // Operational notes (e.g. Extra fuel for EDTO)
 }
 
 // ============================================================================
@@ -1115,7 +1365,7 @@ type ToleranceType : String(20) enum {
  * Volume: ~50,000/year
  *
  * Invoice Number Format: INV-{SUPPLIER_CODE}-{YYYYMMDD}-{SEQ}
- * Example: INV-SHELL-20260117-001
+ * Example: INV-WFS-20260117-001
  *
  * Key Features:
  * - Three-way matching: PO ↔ GR (ePOD) ↔ Invoice

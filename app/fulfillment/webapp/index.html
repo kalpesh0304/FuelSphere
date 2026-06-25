@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuelSphere — Fulfillment &amp; Delivery</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2"/><path d="M12 6v6l4 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="app-title">FuelSphere</span>
+            </div>
+            <span class="app-subtitle">Fulfillment &amp; Delivery</span>
+            <span class="side-badge">Supplier Roles (Seller Side)</span>
+        </div>
+        <div class="header-right">
+            <a href="/admin/index.html" class="nav-link">Admin</a>
+            <a href="/planning/index.html" class="nav-link">Step 1: Planning</a>
+            <a href="/operations/index.html" class="nav-link">Step 3: Operations</a>
+            <a href="/invoicing/index.html" class="nav-link">Step 4: Invoicing</a>
+            <select id="personaSelector" class="persona-select">
+                <option value="all">All Roles</option>
+                <option value="supplier">Supplier Planner (HQ, pipeline mgmt)</option>
+                <option value="delivery">Delivery Crew (On-site, mobile/tablet)</option>
+            </select>
+            <span class="datetime" id="datetime"></span>
+        </div>
+    </header>
+
+    <!-- Global Filter Bar — applies to Pipeline, KPIs, Delivery Cards, and Sales Orders -->
+    <section class="global-filter-section">
+        <div class="filter-bar filter-bar-global" id="globalFilterBar">
+            <div class="filter-group">
+                <label class="filter-label">Station</label>
+                <select id="filterStation" class="filter-input">
+                    <option value="">All Stations</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Airline Customer</label>
+                <select id="filterAirline" class="filter-input">
+                    <option value="">All Airlines</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Status</label>
+                <select id="filterStatus" class="filter-input">
+                    <option value="">All Statuses</option>
+                    <option value="RECEIVED">Received</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="SCHEDULED">Scheduled</option>
+                    <option value="DELIVERED">Delivered</option>
+                    <option value="INVOICED">Invoiced</option>
+                    <option value="CLOSED">Closed</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Time Window</label>
+                <select id="filterTimeWindow" class="filter-input">
+                    <option value="">All upcoming</option>
+                    <option value="1h">Next 1 hour</option>
+                    <option value="4h">Next 4 hours</option>
+                    <option value="8h">Next 8 hours (shift)</option>
+                    <option value="24h">Next 24 hours</option>
+                </select>
+            </div>
+            <div class="filter-group filter-group-search">
+                <label class="filter-label">Search</label>
+                <input type="text" id="filterSearch" class="filter-input" placeholder="SO#, Order#, Flight#">
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">&nbsp;</label>
+                <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Fulfillment Pipeline — Supplier Planner view -->
+    <section class="pipeline-section" id="pipelineSection">
+        <h2 class="section-title">Fulfillment Pipeline</h2>
+        <p class="section-desc">Sales orders flow from Planning. Each stage shows how many orders are at that point in the fulfillment lifecycle.</p>
+        <div class="pipeline" id="pipeline">
+            <div class="pipeline-stage" data-status="RECEIVED">
+                <div class="stage-count" id="countReceived">0</div>
+                <div class="stage-label">Received</div>
+                <div class="stage-desc">New from airline</div>
+            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="pipeline-stage" data-status="CONFIRMED">
+                <div class="stage-count" id="countConfirmed">0</div>
+                <div class="stage-label">Confirmed</div>
+                <div class="stage-desc">Qty &amp; price agreed</div>
+            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="pipeline-stage" data-status="SCHEDULED">
+                <div class="stage-count" id="countScheduled">0</div>
+                <div class="stage-label">Scheduled</div>
+                <div class="stage-desc">Vehicle assigned</div>
+            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="pipeline-stage" data-status="DELIVERED">
+                <div class="stage-count" id="countDelivered">0</div>
+                <div class="stage-label">Delivered</div>
+                <div class="stage-desc">Ticket signed</div>
+            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="pipeline-stage" data-status="INVOICED">
+                <div class="stage-count" id="countInvoiced">0</div>
+                <div class="stage-label">Invoiced</div>
+                <div class="stage-desc">Invoice submitted</div>
+            </div>
+            <div class="pipeline-arrow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="pipeline-stage" data-status="CLOSED">
+                <div class="stage-count" id="countClosed">0</div>
+                <div class="stage-label">Closed</div>
+                <div class="stage-desc">Settled &amp; complete</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- KPIs — Supplier Planner view -->
+    <section class="kpi-section" id="kpiSection">
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiOrders">--</div>
+            <div class="kpi-label">Active Orders</div>
+        </div>
+        <div class="kpi-card kpi-info">
+            <div class="kpi-value" id="kpiAwaitingDelivery">--</div>
+            <div class="kpi-label">Awaiting Delivery</div>
+        </div>
+        <div class="kpi-card kpi-warning">
+            <div class="kpi-value" id="kpiTicketsPending">--</div>
+            <div class="kpi-label">Pending Signature</div>
+        </div>
+        <div class="kpi-card kpi-success">
+            <div class="kpi-value" id="kpiCompleted">--</div>
+            <div class="kpi-label">Tickets Created</div>
+        </div>
+    </section>
+
+    <!-- Delivery Workflow — who does what when -->
+    <section class="workflow-section" id="workflowSection">
+        <h2 class="section-title">Fulfillment Workflow — Trigger Chain</h2>
+        <div class="workflow-steps">
+            <div class="workflow-step">
+                <div class="workflow-step-number">A</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Fuel Order Received</div>
+                    <div class="workflow-step-role">From Planning App (Airline / Buyer Side)</div>
+                    <div class="workflow-step-desc">Airline fuel planner creates a fuel order. It flows to the supplier as a delivery request with flight, station, quantity, and delivery window.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <div class="workflow-step workflow-step-active">
+                <div class="workflow-step-number">B</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Delivery Crew Captures ePOD</div>
+                    <div class="workflow-step-role">Delivery Crew (On-site, mobile/tablet)</div>
+                    <div class="workflow-step-desc">Crew selects the fuel order, records meter readings (start/end), temperature, density. Uploads delivery evidence photos and captures pilot signature on device.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <div class="workflow-step">
+                <div class="workflow-step-number">C</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Fuel Ticket Auto-Created</div>
+                    <div class="workflow-step-role">System (automatic on signature)</div>
+                    <div class="workflow-step-desc">Once pilot signs, system automatically generates a fuel ticket under the fuel order with all ePOD data, quantity, density, and timestamps.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+            <div class="workflow-step">
+                <div class="workflow-step-number">D</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">SAP Document Flow Triggered</div>
+                    <div class="workflow-step-role">System (automatic on ticket creation)</div>
+                    <div class="workflow-step-desc">Fuel ticket triggers SAP: Sales Order → Delivery Note → Billing Document (Invoice). All subsequent SAP documents are auto-created via S/4HANA integration.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Delivery Crew: Fuel Orders Assigned for Delivery -->
+    <section class="delivery-section" id="deliverySection">
+        <h2 class="section-title">Fuel Orders — Assigned for Delivery</h2>
+        <p class="section-desc">Select a fuel order to capture ePOD data: meter readings, temperature, density, photos, and pilot signature. On signature, ticket &amp; SAP docs are auto-created.</p>
+        <div class="delivery-grid" id="deliveryGrid">
+            <div class="loading">Loading fuel orders...</div>
+        </div>
+    </section>
+
+    <!-- UoM Cross-Validation — Supplier Planner -->
+    <section class="uom-section" id="uomSection">
+        <h2 class="section-title">UoM Cross-Validation</h2>
+        <div class="uom-info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#0070F2"/></svg>
+            <span>Fuel quantities validated across KG, LTR, GAL, and USG. Density range: 0.775 — 0.840 kg/L per IATA Fuel Quality standards.</span>
+        </div>
+        <div class="uom-table-wrap">
+            <table class="uom-table">
+                <thead>
+                    <tr><th>Unit</th><th>Conversion Factor</th><th>Base Unit</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>KG</td><td>1.000</td><td>KG</td><td><span class="badge badge-match-ok">BASE</span></td></tr>
+                    <tr><td>LTR</td><td>0.800 (avg density)</td><td>KG</td><td><span class="badge badge-match-ok">VALID</span></td></tr>
+                    <tr><td>GAL</td><td>3.028 (avg density)</td><td>KG</td><td><span class="badge badge-match-ok">VALID</span></td></tr>
+                    <tr><td>USG</td><td>2.987 (avg density)</td><td>KG</td><td><span class="badge badge-match-ok">VALID</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Sales Orders Table — Supplier Planner -->
+    <section class="tables-section" id="salesOrderSection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Sales Orders — Supplier View</h3>
+                <span class="table-filter-note">Orders received from airline fuel plans</span>
+            </div>
+            <table id="salesOrdersTable">
+                <thead>
+                    <tr>
+                        <th>SO #</th>
+                        <th>Fuel Order</th>
+                        <th>Airline</th>
+                        <th>Flight</th>
+                        <th>Station</th>
+                        <th>Est. Qty (kg)</th>
+                        <th>Delivered Qty (kg)</th>
+                        <th>Status</th>
+                        <th>ePOD / Ticket</th>
+                        <th>Scheduled</th>
+                        <th>Vehicle / Driver</th>
+                    </tr>
+                </thead>
+                <tbody id="salesOrdersBody">
+                    <tr><td colspan="11" class="loading">Loading sales orders...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ═══ ePOD Capture Modal — SAP Fiori-style Dialog ═══ -->
+    <div class="modal-overlay" id="epodModal" style="display:none">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-header">
+                <div class="modal-header-left">
+                    <h2 class="modal-title">Capture ePOD</h2>
+                    <span class="modal-subtitle" id="epodModalSubtitle"></span>
+                </div>
+                <button class="modal-close" id="epodModalClose">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <input type="hidden" id="epodOrderId">
+                <input type="hidden" id="epodOrderNum">
+
+                <!-- Order Reference (read-only) -->
+                <div class="form-section">
+                    <div class="form-section-title">Order Reference</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Fuel Order</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefOrder" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Flight</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefFlight" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Ordered Qty (kg)</label>
+                            <input type="text" class="form-input form-readonly" id="epodRefQty" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Meter Readings -->
+                <div class="form-section">
+                    <div class="form-section-title">Meter Readings</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Meter Start (litres) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodMeterStart" placeholder="e.g. 125000" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Meter End (litres) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodMeterEnd" placeholder="e.g. 206250" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Volume Delivered (litres)</label>
+                            <input type="text" class="form-input form-readonly" id="epodVolume" readonly placeholder="Auto-calculated">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quality Data -->
+                <div class="form-section">
+                    <div class="form-section-title">Quality Data</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Temperature (°C) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodTemp" placeholder="e.g. 15.0" step="0.1" min="-40" max="50">
+                            <span class="form-hint">Range: -40 to +50 °C</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Density at 15°C (kg/L) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input" id="epodDensity" placeholder="e.g. 0.802" step="0.001" min="0.775" max="0.840">
+                            <span class="form-hint">Spec: 0.775 — 0.840 kg/L</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Delivered Qty (kg)</label>
+                            <input type="text" class="form-input form-readonly form-input-lg" id="epodDeliveredKg" readonly placeholder="Auto-calculated">
+                            <span class="form-hint">= Volume × Density</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vehicle & Crew -->
+                <div class="form-section">
+                    <div class="form-section-title">Vehicle &amp; Crew</div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label">Vehicle ID <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodVehicle" placeholder="e.g. BW-YYZ-012">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Driver Name <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodDriver" placeholder="e.g. Mike Thompson">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Product</label>
+                            <select class="form-input" id="epodProduct">
+                                <option value="JET-A1">JET A-1</option>
+                                <option value="AVGAS-100LL">AVGAS 100LL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delivery Evidence -->
+                <div class="form-section">
+                    <div class="form-section-title">Delivery Evidence</div>
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label class="form-label">Photos</label>
+                            <div class="form-photo-area" id="epodPhotoArea">
+                                <input type="file" id="epodPhotoInput" accept="image/*" capture="environment" multiple style="display:none">
+                                <button type="button" class="btn btn-secondary" id="epodPhotoBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" fill="#107E3E"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="#107E3E"/></svg>
+                                    Take / Upload Photo
+                                </button>
+                                <div class="form-photo-thumbs" id="epodPhotoThumbs"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Pilot Name <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="epodPilot" placeholder="e.g. Capt. R. Leblanc">
+                            <label class="form-label" style="margin-top:12px">Notes</label>
+                            <textarea class="form-input form-textarea" id="epodNotes" rows="3" placeholder="Optional delivery notes..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation Messages -->
+                <div class="form-validation" id="epodValidation" style="display:none"></div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#0070F2"/></svg>
+                    <span>On save: ePOD recorded. After pilot signature → Fuel Ticket auto-created → SAP SO + Delivery + Invoice triggered.</span>
+                </div>
+                <div class="modal-footer-actions">
+                    <button class="btn btn-secondary" id="epodCancelBtn">Cancel</button>
+                    <button class="btn btn-primary btn-lg" id="epodSaveBtn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#fff"/></svg>
+                        Save ePOD
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="app-footer">
+        <span>FuelSphere v2.0 — Step 2: Fulfillment &amp; Delivery (Seller Side) | SAP CAP + HANA Cloud</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

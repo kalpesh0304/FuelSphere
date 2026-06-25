@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuelSphere — Fuel Planning</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2"/><path d="M12 6v6l4 2" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="app-title">FuelSphere</span>
+            </div>
+            <span class="app-subtitle">Fuel Planning</span>
+            <span class="side-badge">Airline Roles (Buyer Side)</span>
+        </div>
+        <div class="header-right">
+            <a href="/admin/index.html" class="nav-link">Admin</a>
+            <a href="/fulfillment/index.html" class="nav-link">Step 2: Fulfillment</a>
+            <a href="/operations/index.html" class="nav-link">Step 3: Operations</a>
+            <a href="/invoicing/index.html" class="nav-link">Step 4: Invoicing</a>
+            <select id="personaSelector" class="persona-select">
+                <option value="all">All Roles</option>
+                <option value="dispatch">Dispatch Team (Local, per airport)</option>
+                <option value="planner">Procurement Planner (HQ, network-wide)</option>
+                <option value="cockpit">Cockpit Crew (Final, per flight)</option>
+            </select>
+            <span class="datetime" id="datetime"></span>
+        </div>
+    </header>
+
+    <!-- Global Filter Bar — applies to KPIs, comparison, and flight table -->
+    <section class="global-filter-section">
+        <div class="filter-bar filter-bar-global" id="globalFilterBar">
+            <div class="filter-group">
+                <label class="filter-label">Airport</label>
+                <select id="filterAirport" class="filter-input">
+                    <option value="">All Airports</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Airline</label>
+                <select id="filterAirline" class="filter-input">
+                    <option value="">All Airlines</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Fuel Supplier</label>
+                <select id="filterSupplier" class="filter-input">
+                    <option value="">All Suppliers</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Time Window</label>
+                <select id="filterTimeWindow" class="filter-input">
+                    <option value="">All upcoming</option>
+                    <option value="1h">Next 1 hour</option>
+                    <option value="4h">Next 4 hours</option>
+                    <option value="8h">Next 8 hours (shift)</option>
+                    <option value="24h">Next 24 hours</option>
+                </select>
+            </div>
+            <div class="filter-group filter-group-search">
+                <label class="filter-label">Search Flight</label>
+                <input type="text" id="filterFlightSearch" class="filter-input" placeholder="Flight # (e.g. AC101)">
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">&nbsp;</label>
+                <button class="btn btn-secondary" id="filterReset" type="button">Reset</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Planning KPIs -->
+    <section class="kpi-section">
+        <div class="kpi-card">
+            <div class="kpi-value" id="kpiFlightsToday">--</div>
+            <div class="kpi-label">Flights Needing Fuel Plan</div>
+        </div>
+        <div class="kpi-card kpi-warning">
+            <div class="kpi-value" id="kpiPendingReview">--</div>
+            <div class="kpi-label">Pending Crew Review</div>
+        </div>
+        <div class="kpi-card kpi-info">
+            <div class="kpi-value" id="kpiOverrides">--</div>
+            <div class="kpi-label">Pilot Overrides</div>
+        </div>
+        <div class="kpi-card kpi-success">
+            <div class="kpi-value" id="kpiConfirmed">--</div>
+            <div class="kpi-label">Plans Confirmed</div>
+        </div>
+    </section>
+
+    <!-- 3-Figure Comparison (with inline override reason) -->
+    <section class="comparison-section">
+        <h2 class="section-title">Fuel Quantity — 3-Figure Comparison (Airline Internal)</h2>
+        <p class="section-desc">Dispatch, Planner, and Cockpit each independently calculate fuel. When quantities differ, a mandatory pilot override reason is shown inline. <strong>Net Uplift = Cockpit Confirmed Qty &minus; ROB</strong> — this is the only figure sent to the supplier.</p>
+        <div class="comparison-header-row">
+            <div class="comparison-col-header">Flight</div>
+            <div class="comparison-col-header col-dispatch">Dispatch Qty (kg)</div>
+            <div class="comparison-col-header col-planner">Planner Qty (kg)</div>
+            <div class="comparison-col-header col-cockpit">Cockpit Qty (kg)</div>
+            <div class="comparison-col-header">ROB (kg)</div>
+            <div class="comparison-col-header col-uplift">Net Uplift &rarr; Supplier (kg)</div>
+            <div class="comparison-col-header">Status</div>
+        </div>
+        <div id="comparisonBody" class="comparison-body">
+            <div class="comparison-loading">Loading fuel plans...</div>
+        </div>
+    </section>
+
+    <!-- Planning Workflow — Clear steps with roles -->
+    <section class="workflow-section">
+        <h2 class="section-title">Planning Workflow</h2>
+        <div class="workflow-steps">
+            <div class="workflow-step">
+                <div class="workflow-step-number">A</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Upload Flight Schedule</div>
+                    <div class="workflow-step-role">Schedule Ops / System (SSIM import)</div>
+                    <div class="workflow-step-when">D-3 (3 days before departure)</div>
+                    <div class="workflow-step-desc">Flight schedule from SSIM or airline scheduling system is loaded. Creates bare flight records without aircraft assignment.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-step-number">B</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Enrich Flights</div>
+                    <div class="workflow-step-role">Fuel Planner (HQ)</div>
+                    <div class="workflow-step-when">D-2 (2 days before departure)</div>
+                    <div class="workflow-step-desc">Assign aircraft type, tail number, terminal, gate, and stand. Click "Enrich" button on any SCHEDULED flight below.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-step-number">C</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Upload Dispatch Data</div>
+                    <div class="workflow-step-role">Dispatch Team (Local, per airport)</div>
+                    <div class="workflow-step-when">D-1 (1 day before departure)</div>
+                    <div class="workflow-step-desc">Dispatch team uploads fuel calculation from Legate/TripRecord. This provides the dispatch quantity, ROB, payload, and alternate airport data.</div>
+                </div>
+            </div>
+            <div class="workflow-arrow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m0 0l6-6m-6 6l-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-step-number">D</div>
+                <div class="workflow-step-body">
+                    <div class="workflow-step-title">Cockpit Crew Review</div>
+                    <div class="workflow-step-role">Cockpit Crew (Captain, per flight)</div>
+                    <div class="workflow-step-when">D-0 (Day of flight, pre-departure)</div>
+                    <div class="workflow-step-desc">Captain reviews the 3-figure comparison above and either confirms or adjusts the fuel quantity. Adjustments require a mandatory reason.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dispatch Upload — standalone for dispatch persona -->
+    <section class="dispatch-upload-section" id="dispatchUploadSection">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Step C: Upload Dispatch Data</h3>
+                <div class="table-actions">
+                    <span class="table-filter-note">Dispatch Team — Legate / TripRecord</span>
+                </div>
+            </div>
+            <div class="upload-section">
+                <div class="upload-area" id="dispatchArea">
+                    <div class="upload-icon dispatch-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 14l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" fill="currentColor"/></svg>
+                    </div>
+                    <div class="upload-text">
+                        <strong>Upload Dispatch Data</strong>
+                        <span>Drag & drop Excel/CSV from Legate/TripRecord, or click to browse</span>
+                    </div>
+                    <input type="file" id="dispatchFile" accept=".xlsx,.xls,.csv" style="display:none">
+                    <button class="btn btn-primary" id="dispatchBrowseBtn">Browse Files</button>
+                </div>
+                <div class="upload-status" id="dispatchUploadStatus" style="display:none">
+                    <div class="upload-progress" id="dispatchUploadProgress"></div>
+                    <div class="upload-message" id="dispatchUploadMessage"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Flight Schedule Table (only SCHEDULED flights) — Planner only -->
+    <section class="tables-section">
+        <div class="table-card">
+            <div class="table-header">
+                <h3>Upcoming Flights — Ready for Planning</h3>
+                <div class="table-actions">
+                    <span class="table-filter-note">Showing only SCHEDULED flights (ARRIVED / DEPARTED are in Operations)</span>
+                </div>
+            </div>
+
+            <!-- Schedule Upload — inside flight table card for planner -->
+            <div class="upload-section" id="scheduleUploadWrap">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" fill="currentColor"/></svg>
+                    </div>
+                    <div class="upload-text">
+                        <strong>Step A: Upload Flight Schedule</strong>
+                        <span>Schedule Ops / SSIM — Excel or CSV (or real-time via API in production)</span>
+                    </div>
+                    <input type="file" id="scheduleFile" accept=".xlsx,.xls,.csv" style="display:none">
+                    <button class="btn btn-primary" id="browseBtn">Browse</button>
+                </div>
+            </div>
+            <div class="upload-status" id="uploadStatus" style="display:none">
+                <div class="upload-progress" id="uploadProgress"></div>
+                <div class="upload-message" id="uploadMessage"></div>
+            </div>
+
+            <!-- Flight Schedule Table — Updated with industry-standard terminology -->
+            <div class="table-scroll-wrap">
+                <table id="flightsTable" class="flight-table">
+                    <thead>
+                        <tr>
+                            <th>Flight #</th>
+                            <th>Date</th>
+                            <th>Sector</th>
+                            <th>ETD</th>
+                            <th>ETA</th>
+                            <th>Aircraft Type</th>
+                            <th>Aircraft Reg #</th>
+                            <th>Booked PAX</th>
+                            <th>Boarded PAX</th>
+                            <th>Cargo (kg)</th>
+                            <th>Status</th>
+                            <th>Fuel Order #</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flightsBody">
+                        <tr><td colspan="13" class="loading">Loading flights...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Enrich Flight Modal -->
+        <div class="modal-overlay" id="enrichModal" style="display:none">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Enrich Flight — <span id="enrichFlightTitle"></span></h3>
+                    <button class="modal-close" id="enrichModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="enrichFlightId">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichAircraftType">Aircraft Type</label>
+                            <input type="text" id="enrichAircraftType" placeholder="e.g., B787, A330">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichAircraftReg">Tail # (Registration)</label>
+                            <input type="text" id="enrichAircraftReg" placeholder="e.g., C-GHPQ">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichDepTerminal">Departure Terminal</label>
+                            <input type="text" id="enrichDepTerminal" placeholder="e.g., T1">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichArrTerminal">Arrival Terminal</label>
+                            <input type="text" id="enrichArrTerminal" placeholder="e.g., T3">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="enrichGate">Gate Number</label>
+                            <input type="text" id="enrichGate" placeholder="e.g., B42">
+                        </div>
+                        <div class="form-group">
+                            <label for="enrichStand">Stand Number</label>
+                            <input type="text" id="enrichStand" placeholder="e.g., 105">
+                        </div>
+                    </div>
+                    <div class="enrich-status" id="enrichSaveStatus" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="enrichCancelBtn">Cancel</button>
+                    <button class="btn btn-primary" id="enrichSaveBtn">Save Enrichment</button>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- Flight Detail Drill-Down Modal — Fiori-style -->
+    <div class="modal-overlay" id="flightDetailModal" style="display:none">
+        <div class="modal-content modal-flight-detail">
+            <div class="modal-header modal-header-detail">
+                <div>
+                    <h3 id="flightDetailTitle">Flight Detail</h3>
+                    <span class="modal-subtitle" id="flightDetailSubtitle"></span>
+                </div>
+                <button class="modal-close" id="flightDetailClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Flight Identity -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Flight Identity</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Flight #</span><span class="detail-val" id="dtlFlightNum">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Date</span><span class="detail-val" id="dtlFlightDate">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Status</span><span class="detail-val" id="dtlFlightStatus">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Airline</span><span class="detail-val" id="dtlAirline">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Service Type</span><span class="detail-val" id="dtlServiceType">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Flight Nature</span><span class="detail-val" id="dtlFlightNature">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Sector -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Sector &amp; Schedule</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Sector</span><span class="detail-val detail-val-large" id="dtlSector">--</span></div>
+                        <div class="detail-field"><span class="detail-key">ETD (Departure)</span><span class="detail-val" id="dtlETD">--</span></div>
+                        <div class="detail-field"><span class="detail-key">ETA (Arrival)</span><span class="detail-val" id="dtlETA">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Block Time</span><span class="detail-val" id="dtlBlockTime">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Departure Terminal</span><span class="detail-val" id="dtlDepTerm">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Arrival Terminal</span><span class="detail-val" id="dtlArrTerm">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Gate</span><span class="detail-val" id="dtlGate">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Stand</span><span class="detail-val" id="dtlStand">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Linked Flight</span><span class="detail-val" id="dtlLinked">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Aircraft -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Aircraft</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Aircraft Type</span><span class="detail-val" id="dtlAircraftType">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Aircraft Registration #</span><span class="detail-val" id="dtlAircraftReg">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Captain</span><span class="detail-val" id="dtlCaptain">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Payload -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Payload (Demand Drivers)</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Booked PAX</span><span class="detail-val detail-val-large" id="dtlBookedPax">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Boarded PAX</span><span class="detail-val detail-val-large" id="dtlBoardedPax">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Cargo (kg)</span><span class="detail-val detail-val-large" id="dtlCargo">--</span></div>
+                    </div>
+                    <p class="detail-note">PAX boarded is final value from Departure Control System (DCS) recorded ~30 min before door close. Until then, only Booked count is available and continuously refreshed.</p>
+                </div>
+
+                <!-- Fuel Order -->
+                <div class="detail-section">
+                    <div class="detail-section-title">Fuel Order</div>
+                    <div class="detail-grid-3">
+                        <div class="detail-field"><span class="detail-key">Order Number</span><span class="detail-val" id="dtlOrderNum">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Order Status</span><span class="detail-val" id="dtlOrderStatus">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Ordered Qty (kg)</span><span class="detail-val" id="dtlOrderQty">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Crew Review</span><span class="detail-val" id="dtlCrewReview">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Adjusted Qty (kg)</span><span class="detail-val" id="dtlAdjQty">--</span></div>
+                        <div class="detail-field"><span class="detail-key">Supplier</span><span class="detail-val" id="dtlSupplier">--</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="flightDetailCloseBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crew Quantity Adjustment Modal — Fiori-style (outside sections so persona hiding doesn't affect it) -->
+    <div class="modal-overlay" id="crewAdjustModal" style="display:none">
+        <div class="modal-content modal-crew-adjust">
+            <div class="modal-header modal-header-crew">
+                <div>
+                    <h3>Cockpit Crew — Fuel Quantity Review</h3>
+                    <span class="modal-subtitle" id="crewAdjustSubtitle"></span>
+                </div>
+                <button class="modal-close" id="crewAdjustClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="crewOrderId">
+
+                <!-- Order Reference (read-only) -->
+                <div class="crew-form-section">
+                    <div class="crew-form-section-title">Flight &amp; Order Reference</div>
+                    <div class="form-row form-row-3col">
+                        <div class="form-group">
+                            <label class="form-label-sm">Flight</label>
+                            <input type="text" class="form-input form-input-readonly" id="crewRefFlight" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label-sm">Route</label>
+                            <input type="text" class="form-input form-input-readonly" id="crewRefRoute" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label-sm">Status</label>
+                            <input type="text" class="form-input form-input-readonly" id="crewRefStatus" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3-Figure Comparison (read-only) -->
+                <div class="crew-form-section">
+                    <div class="crew-form-section-title">Current Quantities (kg)</div>
+                    <div class="form-row form-row-3col">
+                        <div class="form-group">
+                            <label class="form-label-sm">Dispatch Qty</label>
+                            <input type="text" class="form-input form-input-readonly crew-qty-dispatch" id="crewQtyDispatch" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label-sm">Planner Qty</label>
+                            <input type="text" class="form-input form-input-readonly crew-qty-planner" id="crewQtyPlanner" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label-sm">ROB (kg)</label>
+                            <input type="text" class="form-input form-input-readonly" id="crewQtyRob" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Selection -->
+                <div class="crew-form-section">
+                    <div class="crew-form-section-title">Captain's Decision</div>
+                    <div class="crew-action-buttons">
+                        <button class="btn crew-action-btn crew-action-confirm" id="crewActionConfirm" type="button">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="#107E3E"/></svg>
+                            Confirm as Planned
+                        </button>
+                        <button class="btn crew-action-btn crew-action-adjust" id="crewActionAdjust" type="button">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#E9730C"/></svg>
+                            Adjust Quantity
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Adjustment Fields (shown only when Adjust selected) -->
+                <div class="crew-form-section crew-adjust-fields" id="crewAdjustFields" style="display:none">
+                    <div class="crew-form-section-title">Adjustment Details</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label-sm">New Quantity (kg) <span class="form-required">*</span></label>
+                            <input type="number" class="form-input crew-qty-input" id="crewNewQty" placeholder="Enter adjusted quantity" step="100">
+                            <span class="crew-qty-diff" id="crewQtyDiff"></span>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label class="form-label-sm">Reason for Adjustment <span class="form-required">*</span></label>
+                            <select class="form-input" id="crewReasonSelect">
+                                <option value="">-- Select reason --</option>
+                                <option value="Weather - headwinds forecast">Weather — headwinds forecast</option>
+                                <option value="Weather - tailwinds forecast">Weather — tailwinds forecast</option>
+                                <option value="Weather - turbulence reroute">Weather — turbulence reroute</option>
+                                <option value="Payload change - passenger count">Payload change — passenger count</option>
+                                <option value="Payload change - cargo load">Payload change — cargo load</option>
+                                <option value="Alternate airport change">Alternate airport change</option>
+                                <option value="Maintenance requirement">Maintenance requirement</option>
+                                <option value="Operational discretion">Operational discretion</option>
+                                <option value="other">Other (specify below)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row" id="crewCustomReasonRow" style="display:none">
+                        <div class="form-group" style="flex:1">
+                            <label class="form-label-sm">Custom Reason <span class="form-required">*</span></label>
+                            <input type="text" class="form-input" id="crewCustomReason" placeholder="Specify reason for adjustment...">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label class="form-label-sm">Additional Notes</label>
+                            <textarea class="form-input" id="crewNotes" rows="2" placeholder="Optional notes for ops manager..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validation -->
+                <div class="crew-validation" id="crewValidation" style="display:none"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="crewCancelBtn">Cancel</button>
+                <button class="btn btn-primary btn-lg" id="crewSubmitBtn" disabled>Submit Review</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="app-footer">
+        <span>FuelSphere v2.0 — Step 1: Planning (Buyer / Airline Side) | SAP CAP + HANA Cloud</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

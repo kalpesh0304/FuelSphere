@@ -36,7 +36,7 @@ service FuelOrderService {
     @odata.draft.enabled
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
-        flight      : redirected to Flights,
+        flight      : redirected to FlightSchedule,
         airport     : redirected to Airports,
         supplier    : redirected to Suppliers,
         contract    : redirected to Contracts,
@@ -78,6 +78,17 @@ service FuelOrderService {
          * Requires reason for non-draft orders
          */
         action cancel(reason: String) returns FuelOrders;
+
+        /**
+         * Cockpit crew review of fuel quantity (Step 4 of 7-step journey)
+         * Captain confirms or adjusts dispatch quantity before refueling
+         */
+        action crewReview(
+            captainName      : String,
+            adjustedQuantity : Decimal,
+            adjustmentReason : String,
+            notes            : String
+        ) returns FuelOrders;
 
         /**
          * Calculate pricing from CPE
@@ -175,16 +186,61 @@ service FuelOrderService {
     // ========================================================================
 
     /**
-     * Flights - Read-only access to flight schedule
+     * FlightSchedule - Read-only access to flight schedule
      * Used for linking orders to specific flights
      */
     @readonly
-    entity Flights as projection on db.FLIGHT_SCHEDULE {
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+        fuel_order  : redirected to FuelOrders
     };
+
+    // ========================================================================
+    // FLIGHT DISPATCH (Dispatch Data from External Systems)
+    // ========================================================================
+
+    /**
+     * FlightDispatches - Dispatch data from external systems
+     * Matched to flight schedule by flight_number + flight_date
+     * Updates FUEL_ORDERS.dispatch_fuel_order_id on upload
+     */
+    entity FlightDispatches as projection on db.FLIGHT_DISPATCH {
+        *,
+        flight_schedule : redirected to FlightSchedule,
+        fuel_order      : redirected to FuelOrders
+    };
+
+    // ========================================================================
+    // FLIGHT CYCLE EVENTS (D-0 Operations Tracking)
+    // ========================================================================
+
+    /**
+     * FlightCycleEvents - Real-time flight turnaround events
+     * Landing → Taxi In → Chocks On → Refueling → Chocks Off → Taxi Out → Takeoff → Airborne
+     */
+    entity FlightCycleEvents as projection on db.FLIGHT_CYCLE_EVENTS {
+        *,
+        flight     : redirected to FlightSchedule,
+        fuel_order : redirected to FuelOrders
+    };
+
+    // ========================================================================
+    // CREW REVIEW QUEUE (Step 4 - Cockpit Crew Work Queue)
+    // ========================================================================
+
+    /**
+     * CrewReviewQueue - Fuel orders pending cockpit crew review
+     * Shows orders that have dispatch data but crew hasn't reviewed yet
+     */
+    @readonly
+    entity CrewReviewQueue as select from db.FUEL_ORDERS {
+        *,
+        flight : redirected to FlightSchedule
+    } where status = 'Confirmed'
+      and (crew_review_status is null or crew_review_status = 'PENDING');
 
     // ========================================================================
     // REFERENCE DATA (Read-only from Master Data)
@@ -282,19 +338,6 @@ service FuelOrderService {
     ) returns FuelOrders;
 
     /**
-     * Import flight schedule from Excel and create fuel orders
-     * All dimensions are columns in the Excel file:
-     * Flight: flight_number, flight_date, aircraft_type, aircraft_reg,
-     *         origin_airport, destination_airport, departure_time, arrival_time
-     * Order:  supplier_code, contract_number, product_code, ordered_quantity,
-     *         unit_price, currency_code, priority, notes
-     */
-    action importFlightScheduleExcel(
-        fileContent : LargeBinary,
-        fileName    : String(255)
-    ) returns FlightExcelImportResult;
-
-    /**
      * Generate next order number for a station
      * Format: FO-{STATION}-{YYYYMMDD}-{SEQ}
      */
@@ -315,6 +358,22 @@ service FuelOrderService {
      * Get orders by supplier with summary statistics
      */
     function getOrdersBySupplier(supplierId: UUID, fromDate: Date, toDate: Date) returns OrderSummary;
+
+    /**
+     * Import flight dispatch data from Excel
+     * Maps dispatch records to existing fuel orders via flight_number + flight_date
+     * Updates FUEL_ORDERS.dispatch_fuel_order_id with external dispatch ID
+     *
+     * Required columns: FUEL_ORDER_ID, FLIGHT_NUMBER, FLIGHT_DATE, TAIL_NUMBER,
+     *                   ATD, DISPATCH_QTY_KG, ROB_DEPARTURE_KG, PAYLOAD_KG,
+     *                   CAPTAIN_ID, DISPATCHER_ID, DISPATCH_TIMESTAMP, DISPATCH_SOURCE
+     * Optional columns: ATA, FLIGHT_LEVEL, WIND_COMPONENT, ALTERNATE_AIRPORT,
+     *                   OFPLAN_REFERENCE, REMARKS
+     */
+    action importFlightDispatchExcel(
+        fileContent : LargeBinary,
+        fileName    : String(255)
+    ) returns DispatchImportResult;
 
     // ========================================================================
     // TYPE DEFINITIONS
@@ -391,24 +450,25 @@ service FuelOrderService {
         severity    : String(10);   // ERROR / WARNING
     };
 
-    type FlightExcelImportResult {
-        success          : Boolean;
-        fileName         : String(255);
-        flightsProcessed : Integer;
-        flightsCreated   : Integer;
-        flightsUpdated   : Integer;
-        flightsSkipped   : Integer;
-        ordersCreated    : Integer;
-        ordersFailed     : Integer;
-        errors           : array of FlightImportError;
-        message          : String(500);
+    /**
+     * Flight Dispatch Import Result
+     */
+    type DispatchImportResult {
+        success              : Boolean;
+        fileName             : String(255);
+        dispatchesProcessed  : Integer;
+        dispatchesCreated    : Integer;
+        dispatchesSkipped    : Integer;
+        ordersUpdated        : Integer;
+        errors               : array of DispatchImportError;
+        message              : String(500);
     };
 
-    type FlightImportError {
+    type DispatchImportError {
         row      : Integer;
         field    : String(50);
         message  : String(500);
-        severity : String(10);  // ERROR / WARNING
+        severity : String(10);   // ERROR / WARNING
     };
 
     // ========================================================================
@@ -422,7 +482,7 @@ service FuelOrderService {
     // EPD411 - Meter reading does not match ticket quantity
     // INT401 - S/4HANA PO creation failed
     // INT402 - S/4HANA GR posting failed
-    // INT403 - Shell Skypad communication timeout
+    // INT403 - External supplier system communication timeout
     // INT404 - Object Store PDF upload failed
     //
     // Flight Schedule Excel Import

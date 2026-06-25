@@ -216,6 +216,56 @@
         "CompanyCode",
         "Plant"
       ]
+    },
+    {
+      "name": "DispatchTeam",
+      "description": "Dispatch Team - Flight schedule management, fuel order creation, dispatch data upload",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.FuelOrderCreate",
+        "$XSAPPNAME.PlanningAccess",
+        "$XSAPPNAME.BurnDataView"
+      ],
+      "attribute-references": [
+        "Plant"
+      ]
+    },
+    {
+      "name": "CockpitCrew",
+      "description": "Cockpit Crew - Crew review queue, fuel quantity confirmation/override",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.FuelOrderCreate",
+        "$XSAPPNAME.BurnDataView"
+      ],
+      "attribute-references": [
+        "Plant"
+      ]
+    },
+    {
+      "name": "SupplierPlanner",
+      "description": "Supplier Planner - Sales order management, delivery scheduling, pricing",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.FuelOrderApprove",
+        "$XSAPPNAME.ReportView"
+      ],
+      "attribute-references": [
+        "CompanyCode",
+        "Plant"
+      ]
+    },
+    {
+      "name": "FulfillmentCrew",
+      "description": "Fulfillment/Delivery Crew - ePOD capture, fuel ticket generation, delivery confirmation",
+      "scope-references": [
+        "$XSAPPNAME.MasterDataRead",
+        "$XSAPPNAME.ePODCapture",
+        "$XSAPPNAME.FuelOrderCreate"
+      ],
+      "attribute-references": [
+        "Plant"
+      ]
     }
   ],
 
@@ -281,6 +331,34 @@
       "description": "Viewer role collection",
       "role-template-references": [
         "$XSAPPNAME.Viewer"
+      ]
+    },
+    {
+      "name": "FuelSphere_DispatchTeam",
+      "description": "Dispatch Team role collection",
+      "role-template-references": [
+        "$XSAPPNAME.DispatchTeam"
+      ]
+    },
+    {
+      "name": "FuelSphere_CockpitCrew",
+      "description": "Cockpit Crew role collection",
+      "role-template-references": [
+        "$XSAPPNAME.CockpitCrew"
+      ]
+    },
+    {
+      "name": "FuelSphere_SupplierPlanner",
+      "description": "Supplier Planner role collection",
+      "role-template-references": [
+        "$XSAPPNAME.SupplierPlanner"
+      ]
+    },
+    {
+      "name": "FuelSphere_FulfillmentCrew",
+      "description": "Fulfillment/Delivery Crew role collection",
+      "role-template-references": [
+        "$XSAPPNAME.FulfillmentCrew"
       ]
     }
   ],

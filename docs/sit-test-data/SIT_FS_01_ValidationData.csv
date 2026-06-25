@@ -1,36 +1,67 @@
-Step;Validation Type;Field;Expected Value;Calculation/Rule;Tolerance
-9;Quantity Variance;variance_percentage;-4.00%;(4800-5000)/5000 * 100;Within +/-5%
-9;Quantity Variance;variance_kg;-200.00;4800 - 5000;
-9;Quantity Variance;variance_flag;false;abs(-4%) <= 5%;
-10;Quantity Variance;variance_percentage;-20.00%;(4000-5000)/5000 * 100;Exceeds +/-5%
-10;Quantity Variance;variance_flag;true;abs(-20%) > 5%;
-11;Temperature Check;temperature;15.0;Range: -40 to +50;PASS
-11;Density Check;density;0.800;Range: 0.775 to 0.840;PASS
-12;Temperature Check;temperature;55.0;Range: -40 to +50;FAIL (55 > 50)
-13;Density Check;density;0.900;Range: 0.775 to 0.840;FAIL (0.900 > 0.840)
-14;ASTM D1250 Correction;observedVolume;5000.00;Input;
-14;ASTM D1250 Correction;observedTemp;25.0;Input (above 15C standard);
-14;ASTM D1250 Correction;observedDensity;0.810;Input;
-14;ASTM D1250 Correction;correctedVolume;<5000;Volume contracts when temp > 15C;Approx factor 0.992-0.995
-14;ASTM D1250 Correction;standardTemp;15.0;ISO reference temperature;
-16;Meter Verification;meterStart;10000;Input;
-16;Meter Verification;meterEnd;15000;Input;
-16;Meter Verification;meterDifference;5000;15000 - 10000;
-16;Meter Verification;ticketQuantity;5000;Must equal meterDifference;MATCH
-17;Meter Verification;meterStart;10000;Input;
-17;Meter Verification;meterEnd;15000;Input;
-17;Meter Verification;meterDifference;5000;15000 - 10000;
-17;Meter Verification;ticketQuantity;4500;Does NOT equal meterDifference;MISMATCH (EPD411)
-19;Burn Variance;planned_burn_kg;7100.00;From flight plan;
-19;Burn Variance;actual_burn_kg;7850.00;From ACARS;
-19;Burn Variance;variance_kg;750.00;7850 - 7100;
-19;Burn Variance;variance_pct;10.56%;750/7100 * 100;EXCEPTION (>5%)
-20;ROB Calculation;opening_rob_kg;39350.00;Previous closing balance (uplift at SIN);
-20;ROB Calculation;uplift_kg;0.00;No uplift during flight;
-20;ROB Calculation;burn_kg;7850.00;Actual burn from ACARS;
-20;ROB Calculation;adjustment_kg;0.00;No adjustment;
-20;ROB Calculation;closing_rob_kg;31500.00;39350 + 0 - 7850 + 0;
-20;ROB Calculation;rob_percentage;32.30%;31500/97530 * 100;A330-300 capacity = 97530
-21;Fleet ROB Summary;RP-C9903 currentROB;9650.00;A321N last closing ROB;32.13% of 30030
-21;Fleet ROB Summary;RP-C8773 currentROB;31500.00;A330-300 last closing ROB;32.30% of 97530
-21;Fleet ROB Summary;RP-C3502 currentROB;62500.00;A350-900 last closing ROB;44.33% of 141000
+Step;Scenario;Validation Type;Field;Expected Value;Calculation/Rule;Tolerance
+A1;In-Plane;Excel Import Result;flightsCreated;1;1 flight row in Excel;
+A1;In-Plane;Excel Import Result;ordersCreated;1;1 order row in Excel;
+A1;In-Plane;Excel Import Result;success;true;No errors;
+A2;In-Plane;Order Fields;order_number;FO-MNL-20260322-001;Auto-generated: FO-{STN}-{YYYYMMDD}-{SEQ};
+A2;In-Plane;Order Fields;total_amount;4125.00;5000.00 × 0.8250;
+A2;In-Plane;Order Fields;status;Created;Default for new order;
+A2;In-Plane;Order Fields;flight_ID;e5f6a7b8-5555-4000-A000-000000000001;Linked to PR701;
+A3;In-Plane;Status Transition;status;Submitted;Created → Submitted;
+A4;In-Plane;Status Transition;status;Confirmed;Submitted → Confirmed;
+A5;In-Plane;Status Transition;status;InProgress;Confirmed → InProgress;
+A6;In-Plane;Ticket Creation;status;Open;Default for new ticket;
+A6;In-Plane;Ticket Creation;quantity;4900.00;Physical metered quantity;
+A7;In-Plane;Delivery Creation;delivered_quantity;4900.00;Actual fuel at gate;
+A7;In-Plane;Delivery Creation;temperature;28.5;Within range [-40, 50];PASS
+A7;In-Plane;Delivery Creation;density;0.8050;Within range [0.775, 0.840];PASS
+A8;In-Plane;Signature Capture;delivery_status;Posted;Signatures captured → Posted;
+A8;In-Plane;Signature Capture;order_status;Delivered;Parent order → Delivered;
+A8;In-Plane;Quantity Variance;variance_percentage;-2.00%;(4900-5000)/5000 × 100;Within ±5%
+A8;In-Plane;Quantity Variance;variance_kg;-100.00;4900 - 5000;
+A8;In-Plane;Quantity Variance;variance_flag;false;abs(-2%) ≤ 5%;
+A8;In-Plane;S/4HANA Integration;s4_po_number;Not null;PO number generated;
+A8;In-Plane;S/4HANA Integration;s4_gr_number;Not null;GR number generated;
+A9;In-Plane;Ticket Verification;status;Verified;Open/Attached → Verified;
+A10;In-Plane;Burn Record;status;PRELIMINARY;Initial ACARS ingest;
+A10;In-Plane;Burn Variance;actual_burn_kg;3200.00;From ACARS;
+A10;In-Plane;Burn Variance;planned_burn_kg;3100.00;From flight plan;
+A10;In-Plane;Burn Variance;variance_kg;100.00;3200 - 3100;
+A10;In-Plane;Burn Variance;variance_pct;3.23%;100/3100 × 100;
+A10;In-Plane;Burn Variance;variance_status;NORMAL;abs(3.23%) ≤ 5%;
+A11;In-Plane;Burn Confirmation;status;CONFIRMED;PRELIMINARY → CONFIRMED;
+A12;In-Plane;ROB Chain seq 1;entry_type;INITIAL;First ROB for aircraft;
+A12;In-Plane;ROB Chain seq 1;closing_rob_kg;8800.00;Initial fuel on board;
+A12;In-Plane;ROB Chain seq 2;entry_type;UPLIFT;From delivery A7;
+A12;In-Plane;ROB Chain seq 2;opening_rob_kg;8800.00;Previous closing;
+A12;In-Plane;ROB Chain seq 2;uplift_kg;4900.00;Delivered quantity;
+A12;In-Plane;ROB Chain seq 2;closing_rob_kg;13700.00;8800 + 4900;
+A12;In-Plane;ROB Chain seq 3;entry_type;FLIGHT;From burn PR701;
+A12;In-Plane;ROB Chain seq 3;opening_rob_kg;13700.00;Previous closing;
+A12;In-Plane;ROB Chain seq 3;burn_kg;3200.00;Actual burn;
+A12;In-Plane;ROB Chain seq 3;closing_rob_kg;10500.00;13700 - 3200;
+A12;In-Plane;ROB Chain seq 3;rob_percentage;34.97%;10500/30030 × 100;A321 capacity=30030
+B1;In-Tank;Order Fields;status;Created;No flight linkage;
+B1;In-Tank;Order Fields;flight_ID;null;Station stock order;
+B1;In-Tank;Order Fields;ordered_quantity;50000.00;Bulk tank order;
+B1;In-Tank;Order Fields;total_amount;2125000.00;50000 × 42.50;
+B5;In-Tank;Quantity Variance;variance_percentage;-0.40%;(49800-50000)/50000 × 100;Within ±5%
+B5;In-Tank;Quantity Variance;variance_flag;false;abs(-0.4%) ≤ 5%;
+B5;In-Tank;S/4HANA Integration;s4_po_number;Not null;PO for tank delivery;
+B8;In-Tank;Aircraft Uplift;delivered_quantity;4500.00;Uplift from CEB tank;
+B8;In-Tank;Quantity Variance;variance_percentage;0.00%;(4500-4500)/4500 × 100;Exact match
+B9;In-Tank;Burn Variance;actual_burn_kg;3050.00;From ACARS;
+B9;In-Tank;Burn Variance;planned_burn_kg;3100.00;From flight plan;
+B9;In-Tank;Burn Variance;variance_kg;-50.00;3050 - 3100;
+B9;In-Tank;Burn Variance;variance_pct;-1.61%;-50/3100 × 100;
+B9;In-Tank;Burn Variance;variance_status;NORMAL;abs(-1.61%) ≤ 5%;
+B10;In-Tank;Burn Confirmation;status;CONFIRMED;PRELIMINARY → CONFIRMED;
+B11;In-Tank;ROB Chain seq 4;entry_type;UPLIFT;CEB tank uplift;
+B11;In-Tank;ROB Chain seq 4;opening_rob_kg;10500.00;After PR701 burn;
+B11;In-Tank;ROB Chain seq 4;uplift_kg;4500.00;Aircraft uplift from tank;
+B11;In-Tank;ROB Chain seq 4;closing_rob_kg;15000.00;10500 + 4500;
+B11;In-Tank;ROB Chain seq 5;entry_type;FLIGHT;From burn PR702;
+B11;In-Tank;ROB Chain seq 5;opening_rob_kg;15000.00;After CEB uplift;
+B11;In-Tank;ROB Chain seq 5;burn_kg;3050.00;Actual burn;
+B11;In-Tank;ROB Chain seq 5;closing_rob_kg;11950.00;15000 - 3050;
+B11;In-Tank;ROB Chain seq 5;rob_percentage;39.79%;11950/30030 × 100;A321 capacity=30030
+B11;In-Tank;End-to-End ROB;total_calculation;11950.00;8800 + 4900 - 3200 + 4500 - 3050;Continuous chain
