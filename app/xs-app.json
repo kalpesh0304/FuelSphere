@@ -5,31 +5,31 @@
     "routes": [
         {
             "source": "^/admin/(.*)$",
-            "target": "/admin/$1",
+            "target": "/admin/webapp/$1",
             "localDir": ".",
             "authenticationType": "none"
         },
         {
             "source": "^/operations/(.*)$",
-            "target": "/operations/$1",
+            "target": "/operations/webapp/$1",
             "localDir": ".",
             "authenticationType": "none"
         },
         {
             "source": "^/planning/(.*)$",
-            "target": "/planning/$1",
+            "target": "/planning/webapp/$1",
             "localDir": ".",
             "authenticationType": "none"
         },
         {
             "source": "^/fulfillment/(.*)$",
-            "target": "/fulfillment/$1",
+            "target": "/fulfillment/webapp/$1",
             "localDir": ".",
             "authenticationType": "none"
         },
         {
             "source": "^/invoicing/(.*)$",
-            "target": "/invoicing/$1",
+            "target": "/invoicing/webapp/$1",
             "localDir": ".",
             "authenticationType": "none"
         },
