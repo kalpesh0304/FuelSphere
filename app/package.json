@@ -1,0 +1,14 @@
+{
+  "name": "fuelsphere-approuter",
+  "version": "1.0.0",
+  "description": "FuelSphere Application Router",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@sap/approuter": "^16"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  }
+}
