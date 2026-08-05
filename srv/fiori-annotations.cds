@@ -1309,7 +1309,7 @@ annotate service.Countries with @(
             // ----------------------------------------------------------------
             // {
             //     $Type             : 'UI.DataFieldForAction',
-            //     Action            : 'MasterDataService.S4_SyncCountries',
+            //     Action            : 'MasterDataService.EntityContainer/S4_SyncCountries',
             //     Label             : 'S4 Sync',
             //     IconUrl           : 'sap-icon://synchronize',
             //     ![@UI.Importance] : #High,
@@ -1380,7 +1380,7 @@ annotate service.Countries with {
         Common.SideEffects: {
             $Type          : 'Common.SideEffectsType',
             // This auto-refreshes the Countries table after sync without a manual F5
-            TargetEntities : ['Countries']   //['/MasterDataService/Countries']
+            TargetEntities : ['/MasterDataService.EntityContainer/Countries']
         }
     );
 
