@@ -981,12 +981,20 @@ entity FLIGHT_DISPATCH : cuid, AuditTrail {
         // Timing
         atd                     : DateTime;                 // Actual Time of Departure (UTC)
         ata                     : DateTime;                 // Actual Time of Arrival (UTC)
+        atd_local               : DateTime;                 // Actual Time of Departure (station local time)
+        ata_local               : DateTime;                 // Actual Time of Arrival (station local time)
+        std_gst                 : DateTime;                 // Scheduled Time of Departure (GST reference clock)
+        sta_gst                 : DateTime;                 // Scheduled Time of Arrival (GST reference clock)
+        atd_gst                 : DateTime;                 // Actual Time of Departure (GST reference clock)
+        ata_gst                 : DateTime;                 // Actual Time of Arrival (GST reference clock)
         dispatch_timestamp      : DateTime;                 // When dispatch was officially released (UTC)
 
         // Quantities
         dispatch_qty_kg         : Decimal(10,2);            // Dispatcher-confirmed uplift quantity (kg)
         rob_departure_kg        : Decimal(10,2);            // Remaining On Board at chocks-off (kg)
         payload_kg              : Decimal(10,2);            // Actual payload weight (kg) - for Jeppesen burn calc
+        payload_plan_kg         : Decimal(10,2);            // Planned payload from the flight plan, capped by MZFW
+        arrival_rob_plan_kg     : Decimal(12,2);            // Planned/estimated ROB at arrival, used to project the next sector's fuel needs
 
         // Flight Data
         flight_level            : Integer;                  // Planned cruise flight level (e.g. 350)
