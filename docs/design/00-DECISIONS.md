@@ -1,7 +1,7 @@
 # 00-DECISIONS.md
 
 **FuelSphere — merge decisions**
-Status: **Groups A, B, C, D, G2 and G3 closed. G1 awaits confirmation.** Phase 0 complete — six work packages run, seven defects closed, one withdrawn. See `Phase0_Closure_Record.md`. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
+Status: **All groups closed** — A, B, C, D, G1, G2, G3. Phase 0 complete — six work packages run, seven defects closed, one withdrawn. See `Phase0_Closure_Record.md`. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
 
 ---
 
@@ -545,7 +545,17 @@ Code values only. No structural change, no new entities. These make interfaces m
 | IATA-20 | Order state | `FuelOrderStateType` | preliminary, final |
 | IATA-21 | Rate type | `SubItemPricingUnitRateType` | UR, FF, P |
 
-**Decision on G1: _______________**
+**Decision on G1: ADOPT ALL 21.**
+
+Where the design already has an equivalent field, the industry code values replace the design's own. No new entities, no structural change, one new field.
+
+**IATA-12 is the exception** — `QuantityFlag: GR | NT` is a new field, not a value substitution. Net is temperature-corrected, gross is not. Without it no quantity in the system states which basis it is on.
+
+**IATA-17 and IATA-18 are master data, not enumerations** — 233 Platts and Argus assessment codes, and 29 fuel tax types. Both are currently designed as customer-configured free text. Load the standard lists.
+
+**Cost of adopting now is near zero. Cost of adopting later is a data migration**, since changing an enum after rows exist means converting them.
+
+**Where it lands:** each value takes effect in the work package that builds or touches the field. There is no separate adoption package — the target schema document carries the values, and packages pick them up as they go.
 
 ### G2 — Backlog, needs design work
 
@@ -711,8 +721,7 @@ Fifteen enum violations that appeared on no defect list: `PARTIAL` where the enu
 
 | # | Item |
 |---|---|
-| 1 | Decision on **G1** — adopt the 21 IATA code values |
-| 2 | `01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md`, `03-VALIDATION-RULES.md` — all three are placeholders |
-| 3 | Product owner and delivery lead sign-off above |
+| 1 | `01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md`, `03-VALIDATION-RULES.md` — all three are placeholders |
+| 2 | Product owner and delivery lead sign-off above |
 
 **Worth a small standalone pass at any time:** WP-02B (eleven bound action grants, deployment-blocking) and D24 (delete three dead CSVs). Both mechanical.
