@@ -460,7 +460,26 @@ No ETags, no version tokens. Status guards are read-then-write. Number generatio
 
 **Recommendation: YES, add.** `@odata.etag` on transactional entities; replace `max + 1` with a database sequence or CAP number range.
 
-**Decision: YES.** `@odata.etag` on transactional entities; replace `max + 1` with a database sequence or CAP number range. WP-04.
+**Decision on numbering: YES — DELIVERED under WP-04.** A shared allocator draws from a `NUMBER_RANGES` counter with an atomic increment inside the request transaction, replacing nine `max + 1` sites across five services. Sequence widened to four digits. D4 and D17 closed.
+
+**Decision on optimistic locking: AMENDED 16 Aug 2026. The stated approach does not work.**
+
+WP-04 implemented `@odata.etag`, measured it, and withdrew it. Two problems, both measured:
+
+**The carrier.** `@odata.etag` on `modified_at` rejects **every** conditional request with 412, including a token CAP itself issued moments earlier. Diagnosed by isolation: an Integer carrier returns 200; `created_at`, which is never auto-updated, still returns 412. **A DateTime field is unusable as an ETag carrier in this stack** — the annotation and `@cds.on.update` are both fine.
+
+**The coupling.** CAP ties `@odata.etag` to *requiring* `If-Match` on every modifying call. Every unconditional update becomes 428, which breaks `draftActivate` and the Planning app's PATCH. This is not additive — it is a breaking change for every existing client.
+
+**D5 remains open.** Two decisions sit behind a real fix, neither taken:
+
+| # | Question | Options |
+|---|---|---|
+| 1 | Which carrier | A dedicated integer version field, which needs increment behaviour written for each of the five entities — CAP has no built-in for this |
+| 2 | Is a missing token fatal | Accept the CAP coupling and require `If-Match` everywhere, with clients sending `If-Match: *` where they do not care — a small change touching every client. Or implement the check in handlers instead, comparing a version on write, which avoids the coupling but only protects paths that implement it |
+
+Recommendation on (2): accept the coupling. `If-Match: *` is trivial for a client to send, and handler-level checking protects nothing that a developer forgets to add. But it is a client migration, and that is a delivery decision rather than a design one.
+
+**Decision: numbering delivered; optimistic locking deferred pending the two questions above.**
 
 ---
 
