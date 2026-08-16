@@ -8,6 +8,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
+const { allocateDeliveryNumber, reportAllocationError } = require('./lib/number-range');
 
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
@@ -127,19 +128,16 @@ module.exports = class RefuelerService extends cds.ApplicationService {
                 ? Number((deliveredQuantity * order.unit_price).toFixed(2))
                 : order.total_amount;
 
-            // Generate delivery number
-            const stn = order.station_code || 'XXX';
-            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const pattern = `EPD-${stn}-${today}-%`;
-            const lastDelivery = await SELECT.one.from(FUEL_DELIVERIES)
-                .columns('delivery_number')
-                .where({ delivery_number: { like: pattern } })
-                .orderBy('delivery_number desc');
-            let nextSeq = 1;
-            if (lastDelivery) {
-                nextSeq = parseInt(lastDelivery.delivery_number.split('-').pop()) + 1;
+            // Generate delivery number from the shared atomic range, so this
+            // path cannot collide with a delivery numbered through
+            // FuelOrderService for the same station and day.
+            let deliveryNumber;
+            try {
+                deliveryNumber = await allocateDeliveryNumber(order.station_code);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
-            const deliveryNumber = `EPD-${stn}-${today}-${String(nextSeq).padStart(3, '0')}`;
 
             // Create delivery record
             await INSERT.into(FUEL_DELIVERIES).entries({

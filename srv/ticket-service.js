@@ -6,6 +6,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
+const { allocateTicketNumber, reportAllocationError } = require('./lib/number-range');
 
 const _id = (params) => {
     const p = params[0];
@@ -42,28 +43,27 @@ module.exports = class TicketService extends cds.ApplicationService {
 
         this.before('CREATE', FuelTickets, async (req) => {
             // Auto-generate internal number if not provided
-            if (!req.data.internal_number) {
-                const stationCode = req.data.aircraft_reg ? 'XXX' : 'XXX'; // Derive from context
-                const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            if (req.data.internal_number) return;
 
-                // Try to derive station from the order
-                if (req.data.order_ID) {
-                    const { FuelOrders } = this.entities;
-                    const order = await SELECT.one.from(FuelOrders).columns('station_code').where({ ID: req.data.order_ID });
-                    if (order) {
-                        const stn = order.station_code || 'XXX';
-                        const pattern = `FT-${stn}-${today}-%`;
-                        const last = await SELECT.one.from(FuelTickets)
-                            .columns('internal_number')
-                            .where({ internal_number: { like: pattern } })
-                            .orderBy('internal_number desc');
-                        let seq = 1;
-                        if (last) {
-                            seq = parseInt(last.internal_number.split('-').pop()) + 1;
-                        }
-                        req.data.internal_number = `FT-${stn}-${today}-${String(seq).padStart(3, '0')}`;
-                    }
-                }
+            // The station is derived from the parent order. Previously the
+            // fallback was 'XXX' — and the pre-order default was the constant
+            // expression `req.data.aircraft_reg ? 'XXX' : 'XXX'`, which yielded
+            // 'XXX' either way. Both are gone: a ticket that cannot be traced
+            // to a station is not numbered, it is rejected (D17).
+            let stationCode = null;
+            if (req.data.order_ID) {
+                const { FuelOrders } = this.entities;
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('station_code')
+                    .where({ ID: req.data.order_ID });
+                stationCode = order && order.station_code;
+            }
+
+            try {
+                req.data.internal_number = await allocateTicketNumber(stationCode);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
         });
 
@@ -141,18 +141,12 @@ module.exports = class TicketService extends cds.ApplicationService {
 
         this.on('generateTicketNumber', async (req) => {
             const { stationCode, ticketDate } = req.data;
-            const dateStr = (ticketDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-            const stn = stationCode || 'XXX';
-            const pattern = `FT-${stn}-${dateStr}-%`;
-            const last = await SELECT.one.from(FuelTickets)
-                .columns('internal_number')
-                .where({ internal_number: { like: pattern } })
-                .orderBy('internal_number desc');
-            let seq = 1;
-            if (last) {
-                seq = parseInt(last.internal_number.split('-').pop()) + 1;
+            try {
+                return await allocateTicketNumber(stationCode, ticketDate);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
-            return `FT-${stn}-${dateStr}-${String(seq).padStart(3, '0')}`;
         });
 
         this.on('getTicketsByOrder', async (req) => {
