@@ -4379,3 +4379,18 @@ entity INDEX_IMPORT_BATCHES : cuid, AuditTrail {
         verified_by         : String(100);
         verified_at         : DateTime;
 }
+
+// ============================================================================
+// NUMBER RANGES (WP-04 / D4)
+// Atomic allocation for the FO / EPD / FT number formats.
+//
+// One counter row per prefix + station + date, e.g. 'FO-MNL-20260316'.
+// A number is drawn with an atomic increment inside the request transaction,
+// replacing the client-side max+1 read that produced duplicates under
+// concurrent creation.
+// ============================================================================
+
+entity NUMBER_RANGES {
+    key range_key   : String(40);       // {PREFIX}-{STATION}-{YYYYMMDD}
+        last_number : Integer default 0; // Last number issued for that key
+}
