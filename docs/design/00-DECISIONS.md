@@ -353,7 +353,17 @@ The error **is** the finding. `FB402` carrying `computed = −340 kg` states exa
 
 **Exception payload:** tail, sequence, opening, uplift, burn, adjustment, computed closing, and references to the source burn and delivery events.
 
-**Where it lands:** `FUEL_BURN_EXCEPTIONS` already exists in the schema. `ERROR_LOGS` is also present and currently never written.
+**Where it lands — AMENDED 16 Aug 2026 after WP-03 measurement.** The original text named `FUEL_BURN_EXCEPTIONS`, with `ERROR_LOGS` as an alternative. **Neither fits.**
+
+`FUEL_BURN_EXCEPTIONS` carries burn-variance semantics — actual minus planned burn. Six of the nine required fields have nowhere to go, and `aircraft` and `variance_pct` are `@mandatory`. Writing a ledger imbalance into `variance_kg` would inject a wrong number into a different investigation queue.
+
+`ERROR_LOGS` and `EXCEPTION_ITEMS` are integration-monitoring shaped, with `integration_name`, `source_system` and `target_system` all `@mandatory`. A ledger chain break is neither an integration message nor a retryable transfer.
+
+**A second obstacle.** Raising `FB402` fails the request, and CAP rolls the request transaction back. An exception row written in the same handler rolls back with it. Persisting the record while still failing the request requires an independent root transaction — `cds.tx()` **without** `req`, which is distinct from the `cds.tx(req, …)` nesting trap measured under WP-01.
+
+**Interim position.** The chain break is visible in the `FB402` response, which carries the computed negative value and all four inputs, and in the absence of a ledger row. There is no durable queue. That is accepted for now.
+
+**The durable record is deferred to open point F14.** It needs a purpose-built entity and a transaction design, settled together.
 
 #### Subsequent entries are not blocked
 
@@ -622,6 +632,7 @@ Do these regardless.
 
 | # | Defect | Blocking |
 |---|---|---|
+| **D21** | **`aircraft_ID` written to `ROB_LEDGER` on two paths where no such element exists.** `burn-service.js:479` (`adjustROB`) and `:1071` (Excel ROB import). The association flattens to `aircraft_type_code`, so the aircraft reference is silently never set on rows created by those paths. Found during WP-03, outside its scope | |
 | D20 | A malformed S/4 response is reported as "0 records" rather than as a parse failure. Data-safe; the zero-row guard fires and no delete occurs. But an unrecognised payload is indistinguishable from an empty source, so a schema change at the S/4 end would be diagnosed as a data problem. Found during WP-01 measurement, outside its scope. Small — carry it with F12 or F13 | |
 | ~~D1~~ | **WITHDRAWN.** Measured under WP-01, 16 Aug 2026. CAP's ambient request transaction already makes delete and insert atomic; the commented-out wrapper was redundant, and restoring it silently discards writes while returning success. Nine of nine scenarios pass on unmodified code, verified on both in-memory and file-backed sqlite. Residual risk moved to open point F13 | — |
 | D2 | `'any'` on 93 authorisation grants | **Yes** |
