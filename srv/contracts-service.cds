@@ -173,7 +173,7 @@ service ContractsService {
      * calculatePrice - Core pricing calculation
      * Implements IPricingEngine.calculatePrice(contract, date): Price
      *
-     * Automatically selects engine based on PRICING_CONFIG:
+     * Automatically selects engine based on PRICING_CONFIGURATIONS:
      * - NATIVE: Uses PricingFormula elements
      * - CPE: Calls S/4HANA ZAPI_CPEFORMULA_SRV
      * - HYBRID: Runs both, compares, returns Native with variance
