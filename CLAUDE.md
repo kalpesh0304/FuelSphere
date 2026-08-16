@@ -1,14 +1,16 @@
-# FuelSphere — Claude Development Guide
+# CLAUDE.md
 
-**SAP CAP / CDS fuel management solution for airlines.**
+**FuelSphere — Claude Development Guide**
+
+> **Verified against the repository on 16 August 2026.** Every claim in sections 3, 5, 6 and 7 was checked against source. Where a figure appears without a source reference, treat it as unverified.
 
 ---
 
 ## 0. How to read this file
 
-The previous version described a **target state** in the present tense. Much of what it specified is a sound design the code has not yet reached. Read as current state, it caused an independent review to conclude the document was inaccurate — the real problem was tense, not content.
+The version before this described a **target state in the present tense**. Much of what it specified is a sound design the code has not reached. Read as current state, it caused an independent review to conclude the document was inaccurate — the fault was tense, not content.
 
-Every section is therefore marked:
+Every section is marked:
 
 | Marker | Meaning |
 |---|---|
@@ -29,9 +31,11 @@ Authoritative. Read before starting work.
 | `docs/design/00-DECISIONS.md` | Resolved merge decisions. **Non-negotiable.** An unfilled decision means stop and ask |
 | `docs/design/04-WORK-PACKAGES.md` | Bounded work packages with entry and exit criteria |
 | `docs/design/05-CONVENTIONS.md` | Naming, patterns, what not to touch |
-| `docs/as-built-baseline/` | Independent documentation of the code as it stands |
+| `docs/design/FuelSphere_Design_Workbook.xlsx` | Scenarios, validation rules, screens, IATA standards map |
 
-`01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md` and `03-VALIDATION-RULES.md` are not yet written. Stop and ask before schema or behaviour work.
+`01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md` and `03-VALIDATION-RULES.md` are placeholders. **Stop and ask** before schema or behaviour work.
+
+`docs/design/` also holds seven documents predating the merge reconciliation — `DESIGN_DECISIONS.md`, `MASTER_DATA_HLD.md`, `OVERALL_HLD.md`, `PERSONA_AUTHORIZATION_MATRIX.md`, `PROJECT_TRACKER.md`, `RACI.md`, `SESSION_CONTEXT.md`. **These are historical.** Where one conflicts with the authoritative set above, the authoritative set wins. `DESIGN_DECISIONS.md` in particular is superseded by `00-DECISIONS.md`.
 
 **Work only within a declared work package.**
 
@@ -43,106 +47,129 @@ Authoritative. Read before starting work.
 
 | Service | File | Lines | What works |
 |---|---|---|---|
-| Burn | `burn-service.js` | ~1177 | ACARS and EFB ingest, Excel import, variance ladder, ROB entries, confirm, reject, `adjustROB` |
-| Order | `order-service.js` | ~867 | Order lifecycle with status guards, ePOD capture, temperature correction, delivery validation |
-| Planning | `planning-service.js` | ~610 | Excel import of flight schedule and dispatch, auto-creation of draft orders |
-| Refueler | `refueler-service.js` | ~235 | Supplier-side sales order lifecycle |
-| Master data | `master-data-service.js` | ~227 | On-demand S/4 sync — countries, plants, suppliers |
-| Ticket | `ticket-service.js` | ~173 | Ticket creation with auto-numbering |
+| Burn | `burn-service.js` | 1177 | ACARS and EFB ingest, Excel import, variance ladder, ROB entries, confirm, reject, `adjustROB`. 24 `.on` handlers |
+| Order | `order-service.js` | 867 | Order lifecycle with status guards, ePOD capture, temperature correction, delivery validation. 16 `.on`, 2 `.before`, 3 `.after` |
+| Planning | `planning-service.js` | 610 | Excel import of flight schedule and dispatch, auto-creation of draft orders. 2 `.on`, 1 `.after` |
+| Refueler | `refueler-service.js` | 235 | Supplier-side sales order lifecycle. 5 `.on`, 2 `.after` |
+| Master data | `master-data-service.js` | 227 | On-demand S/4 sync — countries, plants, suppliers. 4 `.on`, 3 `.before`, 7 `.after` |
+| Ticket | `ticket-service.js` | 173 | Ticket creation with auto-numbering. 6 `.on` |
+
+3,289 lines of handler code. **57 `.on` handlers against 382 declared actions and functions.**
 
 ### Services declared with no implementation — DESIGNED
 
 Invoice · Pricing · Allocation · Compliance · Contracts · Analytics · Security · Integration · Admin
 
-Entities exist and are seeded. OData actions are declared. **Calling one returns CAP's default no-op, not an error.** Roughly 250 actions are declared; a handful have handlers.
+Entities exist and are seeded. OData actions are declared. **Calling one returns CAP's default no-op, not an error.**
 
 ### Simulated, inert or absent
 
 | Item | Reality |
 |---|---|
 | S/4 posting | `s4_po_number` and `s4_gr_number` are **randomly generated**. Nothing is posted |
-| ACARS variance | `planned_burn_kg` hardcoded `0`, so the `> 0` guard never fires. Every ACARS ingest stores `NORMAL` with zero variance |
+| ACARS variance | `planned_burn_kg` hardcoded `0`, so the `> 0` guard never fires. **Every ACARS ingest stores `NORMAL` with zero variance** |
 | Density | Demanded by the API (`EPD404`) then **not used**. Correction is temperature-only |
 | Three-way match | Declared. No logic |
 | Duplicate detection | Declared. No logic. No unique constraint on invoice number |
 | SOX controls | Documented in section 9. **None enforced** |
-| RBAC | Every grant includes pseudo-role `'any'`, 93 occurrences. Effectively open |
-| Row-level security | Zero `where:` clauses. Attributes declared, unused |
+| RBAC | 93 occurrences of `'any'` across **69 grants**. Effectively open |
+| Row-level security | **Zero `where:` clauses.** `CompanyCode`, `Plant`, `CostCenter` attributes declared and unused |
 | Scheduler | None. `derivation_schedule` and "daily sync" have no consumer |
-| Config tables | `TOLERANCE_RULES`, `SOD_RULES`, `ALLOCATION_RULES`, `INTEGRATION_CONFIGS` populated and read by nothing |
-| Effective dating | `valid_from`, `valid_to`, `priority` columns exist. No code resolves by date or priority |
+| Config tables | `TOLERANCE_RULES` (5 rows), `SOD_RULES` (7 rows), `ALLOCATION_RULES`, `INTEGRATION_CONFIGS` — populated, read by nothing |
+| Effective dating | `valid_from`, `valid_to`, `priority` columns exist. **No code resolves by date or priority** |
 | Aircraft register | **Does not exist.** `AIRCRAFT_MASTER` has key `type_code` — a *type* master. Individual aircraft are free-text strings |
-| Error logs | `ERROR_LOGS` and `EXCEPTION_ITEMS` empty, never written |
+| Error logs | `ERROR_LOGS` and `EXCEPTION_ITEMS` have **0 rows** and are never written |
 | Concurrency | No ETags. Number generation is non-atomic `max + 1` |
+| Build output | **No `gen/`, no `mta_archives/`, no `node_modules/`.** The project has not been installed or built in this workspace |
 
 ---
 
-## 3. Architecture
+## 3. Architecture — VERIFIED
 
-SAP CAP on Node.js, OData v4, `@sap/approuter`, HANA Cloud, XSUAA. Not ABAP — the equivalents are CDS entities in `db/schema.cds` under namespace `fuelsphere`.
+SAP CAP on Node.js, OData v4 (`.cdsrc.json` → `odata.version: v4`), `@sap/approuter` ^16 (declared in `app/package.json`, deployed as `mta.yaml` module `fuelsphere-approuter`, type `approuter.nodejs`), HANA Cloud and XSUAA on the production profile.
+
+Not ABAP — the equivalents are CDS entities in `db/schema.cds` under namespace `fuelsphere` (`db/schema.cds:13`).
 
 ```
 db/
-  schema.cds          97 entities, ~4400 lines
-  data/               79 seed CSVs, semicolon-delimited,
-                      named fuelsphere-<ENTITY>.csv
+  schema.cds          97 entities, 68 types, 2 aspects, 4381 lines
+  data/               79 seed CSVs, all semicolon-delimited.
+                      76 named fuelsphere-<UPPER_SNAKE>.csv;
+                      3 named in PascalCase — fuelsphere-Airports.csv,
+                      fuelsphere-FuelTypes.csv, fuelsphere-Suppliers.csv
 srv/
-  *-service.cds       15 service definitions, ~185 projections
-  *-service.js        6 implementations
-  authorization.cds   @restrict grants
-  config/             s4-sync-config.js
+  *-service.cds       15 service definition files, 15 service blocks,
+                      185 exposed definitions (182 as projection on,
+                      2 entity ... as select from, 1 view ... as select from),
+                      382 action/function declarations
+  *-service.js        6 implementations, 3289 lines total
+  server.js           23 lines
+  authorization.cds   69 to: grants, 93 occurrences of 'any', 0 where: clauses
+  external/s4-sync.cds  service S2A, 2 entities
+  config/             s4-sync-config.js, 159 lines
+  *-fiori-annotations.cds   7 files, 0 entity definitions
+  fiori-annotations.cds     0 entity definitions
 app/
   admin/ operations/ planning/ fulfillment/ invoicing/
+                      each webapp/ contains exactly app.js, index.html, style.css.
+                      No manifest.json, no Component.js anywhere under app/
+  package.json        approuter package
   xs-app.json         approuter routes
 docs/
-  design/             governing documents
-  as-built-baseline/  independent documentation of current code
+  design/             the merge design set plus seven historical documents
+  original/ figma/ data/ test-data/ sit-test-data/
 ```
 
-**No database views exist.** What earlier documentation called CDS views are OData service projections.
+**No view is defined in `db/`.** Zero `as select from` and zero `view` declarations there. Three view-shaped definitions exist in `srv/`: `order-service.cds:239` (`entity CrewReviewQueue as select from`), `order-service.cds:300` (`view StationLookup as select from`), `refueler-service.cds:93` (`entity UpliftHistory as select from`).
 
-**No secondary indexes are declared anywhere.**
+**A 16th service exists** — `S2A` in `srv/external/s4-sync.cds`, with 2 entities. It is not a `*-service.cds` file and is excluded from the counts above.
+
+**No secondary indexes are declared anywhere.** No `@sql.append`, no `technical configuration`, no `index` declaration, no `.hdbindex` or `.hdbtable` files, no `@assert.unique`.
+
+> **Open:** whether deployed HANA artefacts include SQL views. CAP normally materialises service-level projections as views, but no `gen/` exists in this workspace to confirm what this project emits.
 
 ---
 
 ## 4. The UI — BUILT, being replaced
 
-Five hand-coded freestyle HTML and JavaScript apps under `app/*/webapp/`. **Not UI5, not Fiori Elements** — no `manifest.json`, no component, no semantic objects.
+Five hand-coded freestyle apps under `app/*/webapp/`. Each contains exactly `app.js`, `index.html` and `style.css`. **No `manifest.json` and no `Component.js` anywhere under `app/`** — these are not UI5 or Fiori Elements applications.
 
-Four of five are read-only. Only Planning writes: a `PATCH` on flight schedule and two Excel imports. **Of roughly 250 declared OData actions, three imports and one PATCH are invoked.**
+Four of five are read-only. Only Planning writes: a `PATCH` on flight schedule and two Excel imports. **Of 382 declared actions, three imports and one PATCH are invoked by the shipped UI.**
 
-`$fiori-preview` generates list reports for around 40 entities, but annotations contain only `UI.LineItem` — no facets, header info or selection fields. Development flag, not routed.
+Eight annotation files define zero entities. `$fiori-preview` renders `UI.LineItem` only — no facets, no header info, no selection fields. A development flag, not routed.
 
 Being rebuilt on Fiori Elements as a separate track. **Do not invest in the freestyle apps.**
 
 ---
 
-## 5. Local development — BUILT
+## 5. Local development — VERIFIED
 
 ```bash
-# Standard start (port 4004)
 cds watch --port 4004
-
-# Or npm script (rebuilds first)
-npm run dev
-
-# Production build
-npm run build
+npm run dev          # rebuilds first
+npm run build        # production build
 ```
 
-### Test users (`.cdsrc.json`)
+### Test users — `.cdsrc.json`
 
-| User | Password | Roles | Attributes |
+Twelve named users. Roles are **scope names**, not persona names.
+
+| User | Roles | station | region |
 |---|---|---|---|
-| alice | any | FullAdmin | station=*, region=* |
-| kalpesh | any | FullAdmin | station=*, region=* |
-| planner | any | FuelPlanner | — |
-| ops | any | OperationsManager, StationCoordinator | station=MNL,CEB · region=APAC |
-| finance | any | FinanceManager, FinanceController | — |
-| analyst | any | Analyst | — |
-| * | any | authenticated-user | — |
+| alice | 16 roles: AdminAccess, FuelOrderCreate, FuelOrderApprove, ePODCapture, ePODApprove, InvoiceVerify, InvoiceApprove, FinancePost, MasterDataAdmin, MasterDataRead, MasterDataWrite, ContractManage, PlanningAccess, ReportView, IntegrationMonitor, BurnDataEdit | `*` | `*` |
+| kalpesh | identical to alice | `*` | `*` |
+| planner | FuelPlanner, MasterDataRead, FuelOrderCreate, PlanningAccess, ReportView | `*` | `*` |
+| dispatch | DispatchTeam, MasterDataRead, FuelOrderCreate, PlanningAccess, BurnDataView | YYZ, YVR, LHR | NAM, EUR |
+| cockpit | CockpitCrew, MasterDataRead, FuelOrderCreate, BurnDataView | `*` | `*` |
+| ops | OperationsManager, StationCoordinator, MasterDataRead, BurnDataView, BurnDataEdit, FuelOrderApprove, ePODApprove, ReportView | MNL, CEB, YYZ, YVR | APAC, NAM |
+| supplier | SupplierPlanner, MasterDataRead, FuelOrderApprove, ReportView | YYZ, YVR, LHR, CDG | NAM, EUR |
+| delivery | FulfillmentCrew, MasterDataRead, ePODCapture, FuelOrderCreate | YYZ, YVR | NAM |
+| refueler | FuelOrderApprove, ePODCapture, MasterDataRead | YYZ, YVR, LHR, CDG | NAM, EUR |
+| crew | FuelOrderCreate, MasterDataRead | `*` | `*` |
+| finance | FinanceController, MasterDataRead, InvoiceVerify, InvoiceApprove, FinancePost, ReportView | — | — |
+| analyst | MasterDataRead, ReportView, BurnDataView | — | — |
 
-**Note:** the `ops` user's station and region attributes are declared but **not enforced** — there are no `where:` clauses. Testing with `ops` will not reveal row-level security problems.
+**Station and region attributes are declared and NOT enforced.** There are zero `where:` clauses. Testing with `ops` or `dispatch` will not reveal row-level security problems.
 
 ### Testing URLs
 
@@ -155,59 +182,63 @@ http://localhost:4004/$fiori-preview/FuelOrderService/FuelOrders
 
 ---
 
-## 6. Build and deploy — BUILT
+## 6. Build and deploy — VERIFIED
 
 ```bash
 npm install
 npm run build
 mbt build
-
 cf login -a https://api.cf.<region>.hana.ondemand.com
 cf deploy mta_archives/fuelsphere_1.0.0.mtar
 ```
 
-### BTP services required
+### Node version
 
-| Service | Plan | Resource | Purpose |
-|---|---|---|---|
-| SAP HANA Cloud | hdi-shared | fuelsphere-db | Database |
-| XSUAA | application | fuelsphere-auth | Authentication |
-| Destination | lite | fuelsphere-destination | S/4 connectivity |
-| Application Logging | lite | fuelsphere-logging | Logs |
+**Node 22.x is required.** `package.json` `engines.node` is `"22.x"`, `.nvmrc` contains `22`, and `app/package.json` also declares `"22.x"`. `@sap/cds` is `^8`.
+
+```bash
+node --version
+nvm use 22
+npm rebuild        # after switching
+```
+
+### BTP services provisioned in `mta.yaml`
+
+| Service | Plan | Purpose |
+|---|---|---|
+| SAP HANA Cloud | hdi-shared | Database |
+| XSUAA | application | Authentication |
+| Destination | lite | S/4 connectivity |
+| Application Logging | lite | Logs |
+| **Connectivity** | lite | `fuelsphere-connectivity` |
 
 ---
 
-## 7. S/4HANA integration
+## 7. S/4HANA integration — DIVERGENT
 
-### Destinations — DIVERGENT
+### Destinations — a live defect
 
-| Documented | Reality |
+| Declared in `mta.yaml` | Referenced by code |
 |---|---|
-| `S4HC_TECHNICAL` — OAuth2ClientCredentials, batch jobs | **Only `S2A` exists** |
-| `S4HC_USER` — OAuth2SAMLBearerAssertion, user context | Not configured |
+| `S4HC_TECHNICAL` — OAuth2ClientCredentials | Nothing |
+| `S4HC_USER` — OAuth2SAMLBearerAssertion | Nothing |
+| — | **`S2A`** — required by `package.json` lines 49, 60, 79; used by `master-data-service.js:103-112` |
 
-The two-destination split is a sound target design. It is not what is deployed.
+**Defect D19: the destination the code uses is not provisioned, and neither provisioned destination is used.** Master data sync will fail on a fresh deployment. Not covered by any current work package.
+
+`package.json` `cds.requires` also defines `odata_api` as **`kind: odata-v2`** against `S2A`, in both default and production profiles — an OData v2 outbound channel alongside the v4 service layer.
 
 ### Communication scenarios — DESIGNED
 
-| Scenario | Purpose |
-|---|---|
-| SAP_COM_0008 | Business Partner |
-| SAP_COM_0009 | Product Master |
-| SAP_COM_0028 | Journal Entry |
-| SAP_COM_0053 | Purchase Contract |
-| SAP_COM_0164 | Purchase Order |
-| SAP_COM_0367 | Goods Receipt |
-
-None configured. Master sync uses `S2A` directly.
+SAP_COM_0008 Business Partner · 0009 Product Master · 0028 Journal Entry · 0053 Purchase Contract · 0164 Purchase Order · 0367 Goods Receipt. **None configured.**
 
 ---
 
 ## 8. Error codes
 
-Two sets — designed and implemented. **Both are valid.** New validations take a code from the appropriate prefix.
+Two sets — implemented and designed. **Both are valid.** New validations take a code from the appropriate prefix.
 
-### Implemented prefixes — BUILT
+### Implemented — BUILT
 
 | Prefix | Domain |
 |---|---|
@@ -229,15 +260,12 @@ Two sets — designed and implemented. **Both are valid.** New validations take 
 | EPD411 | Meter reading does not match ticket quantity | DESIGNED — **no meter field exists** |
 
 ### Integration — `INT4xx` — DESIGNED
-
 INT401 S/4 PO creation failed · INT402 S/4 GR posting failed · INT403 supplier communication timeout · INT404 object store upload failed
 
 ### Invoice — `INV4xx` — DESIGNED
-
 INV401 PO not found · INV402 GR not found · INV403 price variance exceeds tolerance · INV404 quantity variance exceeds tolerance · INV405 duplicate invoice · INV406 FI posting failed · INV407 invalid tax code for jurisdiction · INV408 posting period closed · INV409 approval limit exceeded · INV410 currency conversion error
 
 ### Planning — `PLN4xx` — DESIGNED
-
 PLN401 version not found · PLN402 version status invalid · PLN403 missing flight schedule · PLN404 route-aircraft matrix not found · PLN405 price assumption missing · PLN410 SSIM parsing error · PLN411 invalid SSIM record · PLN420 SAC connection failed · PLN421 SAC writeback failed · PLN422 SAC model not configured
 
 **Convention:** `4xx` business rule violation, `5xx` technical failure. New domains take a new prefix, documented here.
@@ -271,7 +299,7 @@ PLN401 version not found · PLN402 version status invalid · PLN403 missing flig
 | FPE-006 | Dual approval for high-value formulas |
 | FPE-007 | Hybrid variance threshold alerts |
 
-`SOD_RULES` is seeded with matching entries. **No check exists in any handler.**
+`SOD_RULES` holds 7 seeded rows. **No check exists in any handler.**
 
 ---
 
@@ -300,20 +328,24 @@ Seed data uses `Draft` and `Completed`, correctly following this specification. 
 ```
 Draft → Submitted → Three-Way Match → Verified → Approved → Posted
                           |
-                   Exception Queue
-                          |
-                Finance Manager Review
+                   Exception Queue → Finance Manager Review
 ```
 
 `InvoiceStatus` is missing the `Submitted` member this flow requires. Seed data contains `SUBMITTED`, correctly following the specification. **Add the enum member.**
 
-### ROB calculation — DIVERGENT
+### ROB calculation — DIVERGENT, with a complication
+
+`db/schema.cds:1985` states the formula:
 
 ```
-ROB_current = ROB_previous + Uplift − Burn + Adjustment
+closingROBKg = openingROBKg + upliftKg - burnKg + adjustmentKg
 ```
 
-**This is correct.** `burn-service.js:1145` computes `max(0, previous − burn)` — dropping uplift and adjustment, and clamping negatives. The running balance is wrong after every delivery.
+`ROB_LEDGER` carries all four components as separate fields, plus associations to `FUEL_BURNS`, `FUEL_DELIVERIES` and `FLIGHT_SCHEDULE` (`db/schema.cds:2001-2004`). **The model is correct.**
+
+`burn-service.js:1145` computes `max(0, previous - burn)` — dropping uplift and adjustment, and clamping negatives.
+
+**Complication:** `db/schema.cds:2014` carries `@assert.range: [0, null]` on `closing_rob_kg`. The clamp may exist to satisfy that assertion. Removing the clamp without addressing the assertion will move the failure from silently-wrong-data to a rejected insert.
 
 ### Fuel demand calculation — DESIGNED
 
@@ -332,15 +364,16 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | # | Defect |
 |---|---|
 | D1 | Master sync transaction wrapper commented out — data loss on mid-sync failure |
-| D2 | `'any'` on 93 authorisation grants |
+| D2 | 93 occurrences of `'any'` across 69 authorisation grants |
 | D3 | ROB formula drops uplift, clamps negatives |
 | D4 | Non-atomic `max + 1` number generation |
 | D5 | No optimistic locking; status guards read-then-write |
 | D11 | No aircraft register |
 | D13 | `captureSignatures` has no order status guard |
-| D14 | No row-level security |
+| D14 | No row-level security — zero `where:` clauses |
 | D15 | ROB ledger cannot be rebuilt; `recalculateROB` unimplemented |
-| D16 | Hardcoded 100,000 kg order guard blocks legitimate widebody orders |
+| D16 | Hardcoded 100,000 order guard blocks legitimate widebody orders |
+| **D19** | **`S2A` destination used by code, provisioned nowhere. Master data sync fails on a fresh deployment** |
 
 ---
 
@@ -348,13 +381,16 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 | Trap | Detail |
 |---|---|
-| **Two pricing families** | Singular (`PRICING_FORMULA`, `MARKET_INDEX`, `DERIVED_PRICE`, `PRICING_CONFIG`) and plural (`PRICING_FORMULAS`, `MARKET_INDICES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`). **Two services project the same name over different base tables.** Confirm which you are in before editing |
+| **Two pricing families** | Singular (`PRICING_FORMULA`, `MARKET_INDEX`, `DERIVED_PRICE`, `PRICING_CONFIG`) and plural (`PRICING_FORMULAS`, `MARKET_INDICES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`). **Two services project the same name over different base tables.** Confirm which family you are in before editing |
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
-| **Seed data follows the spec, code does not** | Where seed, this document and the code disagree, the code is usually the outlier. Check here before "fixing" data |
-| **Declared is not implemented** | See section 2. An action with no handler fails silently |
-| **Seed data is inadequate for testing** | 2 tickets, 3 deliveries, 4 burns, 7 orders. Being replaced from the design workbook's 151 scenarios |
-| **`'XXX'` station fallback** | Number generation substitutes `XXX` when the station is missing, producing a valid-looking number with no traceable station |
-| **Hardcoded thresholds implement documented rules** | −40/+50 °C and 0.775/0.840 kg/L are `EPD403` and `EPD404`. The rules are right; the values belong in `TOLERANCE_RULES` |
+| **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
+| **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
+| **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
+| **Seed data is inadequate for testing** | FUEL_TICKETS 2 rows, FUEL_DELIVERIES 3, FUEL_BURNS 4, FUEL_ORDERS 7, ROB_LEDGER 9. ERROR_LOGS and EXCEPTION_ITEMS 0 |
+| **Three CSVs break the naming pattern** | `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv` are PascalCase where the other 76 are UPPER_SNAKE |
+| **Hardcoded thresholds implement documented rules** | −40/+50 °C and 0.775/0.840 kg/L are `EPD403` and `EPD404`. Not arbitrary magic numbers. Move the values to `TOLERANCE_RULES` without changing them |
+| **Historical documents sit beside authoritative ones** | Seven pre-merge documents share `docs/design/`. See section 1 |
+| **Node 22 only** | `engines.node` is `"22.x"`. Run `npm rebuild` after switching versions |
 
 ---
 
@@ -362,12 +398,13 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 **Do not:**
 
-- Rewrite an implemented handler. Extend it
-- Change an entity or field name — embedded in ~185 projections and 79 seed files
+- Rewrite an implemented handler. Extend it, and correct it only where it diverges from this document
+- Change an entity or field name — embedded in 185 projections and 79 seed files
 - Normalise enum casing across modules
 - Combine work packages in one branch
 - Invent a decision. If `00-DECISIONS.md` is silent, stop and ask
 - Assume a DESIGNED item works
+- Add `where:` clauses outside WP-14
 
 **Always:**
 
@@ -376,6 +413,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 - Add a seed scenario exercising any behavioural change
 - Treat a derived value with a missing input as `null`, never `0`
 - Record which configuration row produced a resolved value
+- Check for a schema assertion before removing a defensive guard
 
 **Stop and raise when:**
 
@@ -402,16 +440,6 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 ## 15. Common issues
 
-### Node version
-
-CAP supports Node 18, 20, 22. **Not Node 24.**
-
-```bash
-node --version
-nvm use 20
-npm rebuild        # after switching
-```
-
 ### Fiori preview not loading
 
 1. `curl http://localhost:4004`
@@ -422,6 +450,7 @@ npm rebuild        # after switching
 ### CSV loading
 
 - Column headers must match CDS property names exactly
+- Semicolon-delimited
 - No trailing commas or whitespace
 - Dates as `YYYY-MM-DD`
 - UUID fields must hold a valid UUID or be empty
@@ -443,4 +472,6 @@ npm rebuild        # after switching
 
 ## 17. Related projects
 
-- **FuelSphere-UI** — Fiori applications, referenced as a separate repository. **Unverified.** An `app/` directory exists in this repository containing five freestyle apps, contradicting the "backend only" description. Confirm whether the separate repository exists before assuming UI work lives elsewhere
+**FuelSphere-UI does not exist in this repository.** No directory, no git submodule (`.gitmodules` absent), no path matching `*fuelsphere-ui*`. `app/package.json` is named `fuelsphere-approuter`, which is the approuter, not a UI project.
+
+Whether a separate repository exists elsewhere on GitHub has not been established. Do not assume UI work lives outside this repository.
