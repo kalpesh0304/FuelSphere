@@ -118,6 +118,18 @@ A ticket with no order, an uplift at an uncontracted station, a delivery exceedi
 
 Never at query date. A tolerance changed in March must not re-evaluate January's exceptions. Where a resolved value drives a status, record which configuration row produced it.
 
+### A guard that early-returns can suppress a derivation
+
+WP-05 found a validation guard using `req.error` then `return`, where the return also skipped a `total_amount` calculation later in the same handler. The rejected record ended up with no quantity and no total, and nothing indicated the second was a side effect of the first.
+
+Before adding or moving a guard, check what sits below it in the handler. Where a derivation follows, prefer flagging the record and continuing over an early return.
+
+### Verify the framework before adding a safety net
+
+D1 was recorded as a data-loss defect because a transaction wrapper was found commented out. Measurement showed it was commented out because CAP already provides the transaction. Restoring it would have broken the sync silently.
+
+An absent guard is not evidence of a missing guarantee. Check what the framework does before treating a gap as a defect — and before removing a guard, check whether a schema assertion or framework behaviour explains it.
+
 ### Every status has an owner and an exit
 
 A status that no code path sets, or that nothing moves out of, is a defect. `Completed` is in `OrderStatus`, appears in seed data, and no code writes it.
@@ -156,6 +168,7 @@ Where the code diverges from `CLAUDE.md`, the code is wrong. Correct it within a
 
 | Trap | Detail |
 |---|---|
+| **Never pass `req` to `cds.tx` inside a request handler** | CAP already wraps every inbound request in a managed transaction. `await cds.tx(req, …)` inside a handler nests onto it and the writes **never land**, while the action returns HTTP 200 with a success payload. Measured under WP-01 across all three master data feeds. Bare `await DELETE.from(...)` and `await INSERT.into(...)` are already atomic on the request path; `req.error(500, …)` rolls them back. **`cds.tx()` without `req` is different** — it opens an independent root transaction, which is the correct pattern where a record must survive a failed request, such as an audit or exception row. That case was not measured under WP-01; verify before relying on it |
 | **`CLAUDE.md` describes a target state** | Sections are marked BUILT, DESIGNED or DIVERGENT. An unmarked statement is not a guarantee. Verify against source |
 | **Seed data follows the specification; code does not** | Where seed data, `CLAUDE.md` and the code disagree, the code is usually the outlier. `FUEL_ORDERS.status` and `INVOICES.status = 'SUBMITTED'` were both reported as data violations. They are not — the enum is missing a member and the code writes a value that exists nowhere |
 | **Two pricing families** | Singular (`PRICING_FORMULA`, `MARKET_INDEX`, `DERIVED_PRICE`, `PRICING_CONFIG`) and plural (`PRICING_FORMULAS`, `MARKET_INDICES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`). **Two services project the same name over different base tables.** Confirm which family you are in before editing |
