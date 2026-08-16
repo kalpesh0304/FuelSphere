@@ -366,7 +366,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | ~~D1~~ | ~~Master sync transaction wrapper commented out~~ — **NOT A DEFECT.** Measured under WP-01 on 16 Aug 2026. CAP wraps every inbound request in a managed transaction; bare `DELETE`/`INSERT` dispatch onto it and `req.error(500)` rolls back. Delete and insert are already atomic on the request path. **Restoring the wrapper breaks the sync** — see trap below. Residual risk only if `_syncFromS4` is called outside a request context |
 | D2 | 93 occurrences of `'any'` across 69 authorisation grants |
 | D3 | ROB formula drops uplift, clamps negatives |
-| D4 | Non-atomic `max + 1` number generation |
+| ~~D4~~ | **CLOSED** under WP-04. Shared allocator with an atomic counter, nine sites across five services |
 | D5 | No optimistic locking; status guards read-then-write |
 | D11 | No aircraft register |
 | D13 | `captureSignatures` has no order status guard |
@@ -393,6 +393,9 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **Check CAP's defaults before adding a safety net** | D1 was recorded as a data-loss defect because a transaction wrapper was commented out. It was commented out because it was redundant. Verify what the framework already provides before treating an absence as a gap |
 | **`MASTER_SUPPLIERS` is `cuid`** | Its primary key is a generated UUID, so a duplicate `supplier_code` raises no constraint violation. Any test relying on a PK collision there will pass vacuously |
 | **Local development does not exercise authorisation at all** | Dev auth is `kind: 'dummy'`, which authorises every request as privileged. `@restrict` is never evaluated. The twelve test users in section 5 have no effect locally. To test authorisation you must override to `kind: 'mocked'` **and** supply the users map in the same override — replacing the auth block alone discards the users. This is why 93 `'any'` entries survived unnoticed |
+| **A DateTime field cannot carry an ETag** | `@odata.etag` on `modified_at` rejects every conditional request with 412, including a token CAP itself just issued. Measured under WP-04 and isolated: an Integer carrier returns 200, and `created_at`, which is never auto-updated, still returns 412. The annotation and `@cds.on.update` are not the cause |
+| **`@odata.etag` is not additive** | It makes `If-Match` **mandatory** on every modifying call for that entity. Every unconditional update becomes 428, breaking `draftActivate` and any existing client. Adding it is a breaking change, not an enhancement |
+| **A defect's stated scope may understate it** | WP-02 found `authorization.cds` covers 4 of 15 services. WP-04 found nine number-generation sites across five services where the defect named three. Survey before fixing — a partial fix on a distributed defect looks complete and is not |
 | **Bound actions need their own grant** | A grant of READ/CREATE/UPDATE/DELETE on an entity does not permit its bound actions. CAP looks for a grant naming the action; without one the call is refused before the action's own `@requires` is read. See D22 |
 | **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
 | **Seed data is inadequate for testing** | FUEL_TICKETS 2 rows, FUEL_DELIVERIES 3, FUEL_BURNS 4, FUEL_ORDERS 7, ROB_LEDGER 9. ERROR_LOGS and EXCEPTION_ITEMS 0 |
