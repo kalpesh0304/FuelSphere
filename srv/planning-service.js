@@ -7,6 +7,7 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
+const { allocateOrderNumber, reportAllocationError } = require('./lib/number-range');
 
 module.exports = class PlanningService extends cds.ApplicationService {
     async init() {
@@ -96,20 +97,10 @@ module.exports = class PlanningService extends cds.ApplicationService {
             const existingFlightMap = new Map(existingFlights.map(f => [`${f.flight_number}|${f.flight_date}`, f.ID]));
 
             // Track order number sequences per station-date
-            const seqCounters = {};
-            const _getNextOrderNumber = async (stationCode, dateStr) => {
-                const key = `${stationCode}-${dateStr}`;
-                if (!(key in seqCounters)) {
-                    const pattern = `FO-${stationCode}-${dateStr}-%`;
-                    const lastOrder = await SELECT.one.from(FUEL_ORDERS)
-                        .columns('order_number')
-                        .where({ order_number: { like: pattern } })
-                        .orderBy('order_number desc');
-                    seqCounters[key] = lastOrder ? parseInt(lastOrder.order_number.split('-').pop()) : 0;
-                }
-                seqCounters[key]++;
-                return `FO-${stationCode}-${dateStr}-${String(seqCounters[key]).padStart(3, '0')}`;
-            };
+            // Draws from the shared range so a bulk import cannot collide with
+            // an order created concurrently through FuelOrderService.
+            const _getNextOrderNumber = (stationCode, dateStr) =>
+                allocateOrderNumber(stationCode, dateStr);
 
             // Helper: normalize Excel date
             const _normalizeDate = (val) => {
@@ -576,14 +567,8 @@ module.exports = class PlanningService extends cds.ApplicationService {
         const stationCode = flight.origin_airport;
         const dateStr = (flight.flight_date || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
 
-        // Generate next order number
-        const pattern = `FO-${stationCode}-${dateStr}-%`;
-        const lastOrder = await SELECT.one.from(FUEL_ORDERS)
-            .columns('order_number')
-            .where({ order_number: { like: pattern } })
-            .orderBy('order_number desc');
-        let nextSeq = lastOrder ? parseInt(lastOrder.order_number.split('-').pop()) + 1 : 1;
-        const orderNumber = `FO-${stationCode}-${dateStr}-${String(nextSeq).padStart(3, '0')}`;
+        // Draw the next order number from the shared atomic range.
+        const orderNumber = await allocateOrderNumber(stationCode, dateStr);
 
         const airport = await SELECT.one.from(MASTER_AIRPORTS).where({ iata_code: stationCode });
 

@@ -10,6 +10,11 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
+const {
+    allocateOrderNumber,
+    allocateDeliveryNumber,
+    reportAllocationError
+} = require('./lib/number-range');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -81,20 +86,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         });
 
         this.before('CREATE', FuelOrders, async (req) => {
-            const { station_code } = req.data;
-            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const stn = station_code || 'XXX';
-            const pattern = `FO-${stn}-${today}-%`;
-            const lastOrder = await SELECT.one.from(FuelOrders)
-                .columns('order_number')
-                .where({ order_number: { like: pattern } })
-                .orderBy('order_number desc');
-            let nextSeq = 1;
-            if (lastOrder) {
-                nextSeq = parseInt(lastOrder.order_number.split('-').pop()) + 1;
-            }
-            req.data.order_number = `FO-${stn}-${today}-${String(nextSeq).padStart(3, '0')}`;
+            // Derivations that do not depend on the number come first, so the
+            // error path below cannot skip them (F16).
             req.data.status = 'Created';
+            try {
+                req.data.order_number = await allocateOrderNumber(req.data.station_code);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
+            }
         });
 
         // canSubmit virtual element
@@ -231,17 +231,13 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!flight) return req.error(404, 'Flight not found');
 
             const stationCode = flight.origin_airport;
-            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const pattern = `FO-${stationCode}-${today}-%`;
-            const lastOrder = await SELECT.one.from(FuelOrders)
-                .columns('order_number')
-                .where({ order_number: { like: pattern } })
-                .orderBy('order_number desc');
-            let nextSeq = 1;
-            if (lastOrder) {
-                nextSeq = parseInt(lastOrder.order_number.split('-').pop()) + 1;
+            let orderNumber;
+            try {
+                orderNumber = await allocateOrderNumber(stationCode);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
-            const orderNumber = `FO-${stationCode}-${today}-${String(nextSeq).padStart(3, '0')}`;
 
             const totalAmount = orderedQuantity && unitPrice ? Number((orderedQuantity * unitPrice).toFixed(2)) : 0;
 
@@ -541,34 +537,22 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
         this.on('generateOrderNumber', async (req) => {
             const { stationCode, orderDate } = req.data;
-            const dateStr = (orderDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-            const stn = stationCode || 'XXX';
-            const pattern = `FO-${stn}-${dateStr}-%`;
-            const lastOrder = await SELECT.one.from(FuelOrders)
-                .columns('order_number')
-                .where({ order_number: { like: pattern } })
-                .orderBy('order_number desc');
-            let nextSeq = 1;
-            if (lastOrder) {
-                nextSeq = parseInt(lastOrder.order_number.split('-').pop()) + 1;
+            try {
+                return await allocateOrderNumber(stationCode, orderDate);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
-            return `FO-${stn}-${dateStr}-${String(nextSeq).padStart(3, '0')}`;
         });
 
         this.on('generateDeliveryNumber', async (req) => {
             const { stationCode, deliveryDate } = req.data;
-            const dateStr = (deliveryDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-            const stn = stationCode || 'XXX';
-            const pattern = `EPD-${stn}-${dateStr}-%`;
-            const lastDelivery = await SELECT.one.from(FuelDeliveries)
-                .columns('delivery_number')
-                .where({ delivery_number: { like: pattern } })
-                .orderBy('delivery_number desc');
-            let nextSeq = 1;
-            if (lastDelivery) {
-                nextSeq = parseInt(lastDelivery.delivery_number.split('-').pop()) + 1;
+            try {
+                return await allocateDeliveryNumber(stationCode, deliveryDate);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
             }
-            return `EPD-${stn}-${dateStr}-${String(nextSeq).padStart(3, '0')}`;
         });
 
         // ====================================================================
