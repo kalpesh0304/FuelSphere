@@ -330,6 +330,45 @@ Only `delivered_quantity` exists. No meter-versus-gauge pair, so no delivery rec
 
 ---
 
+### B8. Negative closing balance on the fuel ledger
+
+`db/schema.cds:2014` carries `@assert.range: [0, null]` on `closing_rob_kg` — a database constraint forbidding a negative closing balance. The `max(0, ...)` clamp at `burn-service.js:1145` may exist to satisfy it.
+
+The tension: a correctly computed balance **can** go negative, and that is precisely the signal that an event is missing or mis-sequenced. But the assertion rejects the insert, so the record never lands and the problem stays invisible.
+
+**Decision: keep the assertion. Raise an error instead of writing the row.**
+
+```
+computed closing = opening + uplift − burn + adjustment
+
+  ≥ 0   → write the ledger row, chain intact
+  < 0   → no ledger row written
+          raise FB402 carrying the computed negative value
+          record the chain as broken from this point
+```
+
+**Why not the alternatives.** Removing the assertion would let incorrect data persist and weaken a statement that is physically true — a fuel balance cannot be negative. Clamping to zero and flagging separately leaves a wrong number in the ledger while the exception sits elsewhere.
+
+The error **is** the finding. `FB402` carrying `computed = −340 kg` states exactly what happened: the chain does not balance by 340 kg, so an event is missing or out of sequence.
+
+**Exception payload:** tail, sequence, opening, uplift, burn, adjustment, computed closing, and references to the source burn and delivery events.
+
+**Where it lands:** `FUEL_BURN_EXCEPTIONS` already exists in the schema. `ERROR_LOGS` is also present and currently never written.
+
+#### Subsequent entries are not blocked
+
+**Decision: subsequent fuel events for that tail continue to be recorded.**
+
+A broken chain must not stop the airline operating. The next entry restarts from the reported fuel on board, and the gap is recorded rather than propagated.
+
+`recalculateROB` becomes the repair tool: add the missing event, rebuild the chain, and the exception clears.
+
+> **Open point F11 — chain recovery mechanics.** How the restart is represented is not yet designed. Options include an explicit `ADJUSTMENT` entry closing the gap, an entry typed `CHAIN_RESTART`, or an opening balance flagged as unverified. Each has consequences for ledger closure reporting and for whether the gap is later reconcilable. Deferred; WP-03 raises the exception and permits continuation without deciding the representation.
+
+**Decision: keep the assertion, raise FB402, allow subsequent entries. Confirmed.**
+
+---
+
 ### B7. Enforce flight status as an enum
 
 Currently free `String(20)` with a comment listing values.
@@ -536,6 +575,7 @@ Raised and deliberately deferred. Not blocking.
 | F5 | **Into-plane pricing models** | Per litre at station level today. Volume-banded, per turn, aircraft-size and out-of-hours models are not supported | Contract terms across stations are known |
 | F6 | **Dispatch plan version gap rate** | Push-on-change with latest-only emission is confirmed. Gaps still occur under push. Whether a gap is a defect to chase or normal attrition determines how versions_skipped is interpreted | Observed gap rates are available |
 | F7 | **Aircraft type structure for a product** | Four code schemes plus a separate configuration table, or a flatter shape with alias resolution alone. Current design favours correctness of parameter resolution over setup simplicity | Two or three implementations have been observed |
+| F11 | **Fuel ledger chain recovery** | When a computed closing balance goes negative, the row is not written and FB402 is raised, but subsequent entries continue. How the restart is represented is undesigned — an explicit ADJUSTMENT closing the gap, a CHAIN_RESTART entry type, or an opening balance flagged unverified. Affects ledger closure reporting and whether the gap remains reconcilable later | Ledger closure is designed, WP-17 |
 | F10 | **Supplier-facing portal direction** | `RefuelerService` is implemented with a working sales order lifecycle, plus `FUEL_SALES_ORDERS`. Whether this is product direction or exploratory determines if it is maintained or retired | Product direction on a supplier or into-plane portal is settled |
 | F8 | **Mandatory criteria renumbering** | The MC series carries suffixed codes — MC-01a, MC-06a, MC-09a, MC-09b — from later additions. Reads as a drafting artefact | Before the specification goes to anyone external |
 
@@ -605,8 +645,10 @@ Do these regardless.
 
 | Role | Name | Date |
 |---|---|---|
-| Solution architect | | |
-| Product owner | | |
-| Delivery lead | | |
+| Solution architect | Ajesh | 2026-08-16 |
+| Product owner | Deferred to Phase 1 | — |
+| Delivery lead | Deferred to Phase 1 | — |
 
-No work package starts until Group A is closed and this section is signed.
+**Phase 0 authorised.** Groups A, B, C, D, G2 and G3 are closed. WP-01 to WP-06 are defect fixes requiring no product or delivery decision.
+
+Product owner and delivery lead sign-off is required before Phase 1 begins.
