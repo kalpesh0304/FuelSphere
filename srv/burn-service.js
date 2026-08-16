@@ -45,7 +45,19 @@ module.exports = class BurnService extends cds.ApplicationService {
             });
 
             // Create ROB ledger entry for this burn (FLIGHT entry)
-            await this._createROBEntryForBurn(burn, req.user.id);
+            const rob = await this._createROBEntryForBurn(burn, req.user.id);
+
+            // B8: a negative closing balance means the chain does not balance —
+            // an event is missing or out of sequence. No ledger row was written.
+            // The error carries the computed value, which is the finding itself.
+            if (!rob.written) {
+                return req.error(400,
+                    `FB402: Closing ROB would be negative (${rob.computedClosing} kg) for ${rob.tailNumber}. ` +
+                    `opening ${rob.opening} + uplift ${rob.uplift} - burn ${rob.burn} + adjustment ${rob.adjustment} ` +
+                    `= ${rob.computedClosing}. The fuel ledger chain does not balance by ` +
+                    `${Math.abs(rob.computedClosing)} kg; an event is missing or out of sequence. ` +
+                    `No ledger row written. Use recalculateROB once the missing event is added.`);
+            }
 
             req.info(200, `Burn record for ${burn.tail_number} flight confirmed. ROB ledger updated.`);
             return SELECT.one.from(FuelBurns).where({ ID: burn.ID });
@@ -521,6 +533,110 @@ module.exports = class BurnService extends cds.ApplicationService {
                 lastUpdateTime: entry.record_time,
                 lastAirport: entry.airport_code,
                 lastEntryType: entry.entry_type
+            };
+        });
+
+        // D15 — rebuild the ROB chain in sequence after out-of-order ingest.
+        //
+        // Each entry keeps its own uplift, burn and adjustment; only the opening
+        // and closing balances are re-derived, so the recorded physical events
+        // are never rewritten. Entries are chained in
+        // (record_date, record_time, sequence) order, seeded from the closing
+        // balance of the last entry before fromDate.
+        //
+        // Note: the declared signature takes aircraftId: UUID, but the ledger
+        // chain is per tail and AIRCRAFT_MASTER is keyed by type_code, not a
+        // UUID (defect D11 — there is no aircraft register). The parameter is
+        // therefore resolved against tail_number first, then aircraft_type_code.
+        // The .cds signature is left unchanged; correcting it belongs with D11.
+        this.on('recalculateROB', async (req) => {
+            const { aircraftId, fromDate } = req.data;
+            if (!aircraftId) return req.error(400, 'FB401: aircraftId is required.');
+
+            let entries = await SELECT.from(ROBLedger)
+                .where({ tail_number: aircraftId })
+                .orderBy('record_date asc', 'record_time asc', 'sequence asc');
+
+            if (entries.length === 0) {
+                entries = await SELECT.from(ROBLedger)
+                    .where({ aircraft_type_code: aircraftId })
+                    .orderBy('record_date asc', 'record_time asc', 'sequence asc');
+            }
+            if (entries.length === 0) {
+                return req.error(404, `FB401: No ROB ledger entries found for '${aircraftId}'.`);
+            }
+
+            const tailNumber = entries[0].tail_number;
+            const inScope = fromDate ? entries.filter(e => e.record_date >= fromDate) : entries;
+            if (inScope.length === 0) {
+                return req.error(404, `FB401: No ROB ledger entries for ${tailNumber} on or after ${fromDate}.`);
+            }
+
+            // Seed from the last entry before the window; the first entry in the
+            // ledger keeps its own opening balance as the origin of the chain.
+            const priorEntries = entries.filter(e => !inScope.some(s => s.ID === e.ID));
+            const prior = priorEntries.length ? priorEntries[priorEntries.length - 1] : null;
+            let runningOpening = prior ? Number(prior.closing_rob_kg) : Number(inScope[0].opening_rob_kg);
+
+            let discrepanciesFound = 0;
+            let entriesRecalculated = 0;
+
+            for (const e of inScope) {
+                const uplift     = Number(e.uplift_kg) || 0;
+                const burn       = Number(e.burn_kg) || 0;
+                const adjustment = Number(e.adjustment_kg) || 0;
+
+                // An INITIAL entry seeds the chain. Its closing balance is
+                // recorded fuel state, not a derived value — deriving it from
+                // its (zero) components would wipe the starting balance. Keep
+                // it as recorded and chain onward from it.
+                const isSeed = e.entry_type === 'INITIAL';
+                if (isSeed) runningOpening = Number(e.opening_rob_kg) || 0;
+
+                const closing = isSeed
+                    ? Number(e.closing_rob_kg)
+                    : Number((runningOpening + uplift - burn + adjustment).toFixed(2));
+
+                // B8 applies to the rebuild too: a negative balance is not
+                // written. Stop at the break, leaving later entries untouched.
+                if (closing < 0) {
+                    return req.error(400,
+                        `FB402: Rebuild stopped at ${e.record_date} ${e.record_time} seq ${e.sequence} for ${tailNumber}. ` +
+                        `opening ${runningOpening} + uplift ${uplift} - burn ${burn} + adjustment ${adjustment} = ${closing}. ` +
+                        `The chain does not balance by ${Math.abs(closing)} kg; an event is missing or out of sequence. ` +
+                        `${entriesRecalculated} entries were rebuilt before the break.`);
+                }
+
+                const openingChanged = Number(e.opening_rob_kg) !== runningOpening;
+                const closingChanged = Number(e.closing_rob_kg) !== closing;
+
+                if (openingChanged || closingChanged) {
+                    discrepanciesFound++;
+                    const maxCapacity = Number(e.max_capacity_kg) || 0;
+                    await UPDATE(ROBLedger).where({ ID: e.ID }).set({
+                        opening_rob_kg: runningOpening,
+                        closing_rob_kg: closing,
+                        rob_percentage: maxCapacity > 0
+                            ? Number(((closing / maxCapacity) * 100).toFixed(2))
+                            : 0,
+                        modified_at: new Date().toISOString(),
+                        modified_by: req.user.id
+                    });
+                }
+
+                entriesRecalculated++;
+                runningOpening = closing;
+            }
+
+            return {
+                success: true,
+                tailNumber,
+                fromDate: fromDate || inScope[0].record_date,
+                entriesRecalculated,
+                finalROBKg: runningOpening,
+                discrepanciesFound,
+                message: `Rebuilt ${entriesRecalculated} ROB entries for ${tailNumber}. ` +
+                         `${discrepanciesFound} corrected. Final ROB ${runningOpening} kg.`
             };
         });
 
@@ -1131,6 +1247,18 @@ module.exports = class BurnService extends cds.ApplicationService {
 
     /**
      * Create a FLIGHT entry in ROB ledger when a burn is confirmed
+     *
+     * Formula (db/schema.cds:1985, CLAUDE.md section 10):
+     *   closing_rob_kg = opening_rob_kg + uplift_kg - burn_kg + adjustment_kg
+     *
+     * Decision B8 — a negative closing balance is neither clamped nor written.
+     * The clamp this replaced destroyed the signal that an event is missing or
+     * mis-sequenced. On a negative result no row is written, and the caller
+     * raises FB402 carrying the computed value. @assert.range on
+     * closing_rob_kg is deliberately left intact; the error is the finding.
+     *
+     * Returns { written: true, ... } when the row was inserted, or
+     * { written: false, code: 'FB402', ... } carrying the chain-break payload.
      */
     async _createROBEntryForBurn(burn, userId) {
         const { ROBLedger } = this.entities;
@@ -1141,11 +1269,38 @@ module.exports = class BurnService extends cds.ApplicationService {
             .where({ tail_number: burn.tail_number })
             .orderBy('record_date desc', 'record_time desc', 'sequence desc');
 
-        const openingROB = lastEntry ? lastEntry.closing_rob_kg : 0;
-        const closingROB = Math.max(0, openingROB - burn.actual_burn_kg);
+        // A FLIGHT entry records consumption only. Uplift and adjustment arrive
+        // as their own ledger entries and reach this one through the opening
+        // balance, so both terms are zero here — but they are carried in the
+        // expression explicitly so it matches the documented formula.
+        const openingROB   = lastEntry ? Number(lastEntry.closing_rob_kg) : 0;
+        const upliftKg     = 0;
+        const burnKg       = Number(burn.actual_burn_kg) || 0;
+        const adjustmentKg = 0;
+        const closingROB   = Number((openingROB + upliftKg - burnKg + adjustmentKg).toFixed(2));
+
         const maxCapacity = lastEntry ? lastEntry.max_capacity_kg : 0;
         const robPct = maxCapacity > 0 ? Number(((closingROB / maxCapacity) * 100).toFixed(2)) : 0;
         const nextSeq = lastEntry && lastEntry.record_date === burn.burn_date ? lastEntry.sequence + 1 : 1;
+
+        // B8: withhold the row and report the break rather than clamping it away.
+        if (closingROB < 0) {
+            return {
+                written         : false,
+                code            : 'FB402',
+                tailNumber      : burn.tail_number,
+                sequence        : nextSeq,
+                opening         : openingROB,
+                uplift          : upliftKg,
+                burn            : burnKg,
+                adjustment      : adjustmentKg,
+                computedClosing : closingROB,
+                fuelBurnID      : burn.ID,
+                // Delivery behind the opening balance, where the chain carries one.
+                fuelDeliveryID  : lastEntry ? (lastEntry.fuel_delivery_ID || null) : null,
+                flightID        : burn.flight_ID || null
+            };
+        }
 
         // Destination airport
         const destAirport = burn.destination_airport_ID
@@ -1164,14 +1319,16 @@ module.exports = class BurnService extends cds.ApplicationService {
             fuel_burn_ID: burn.ID,
             entry_type: 'FLIGHT',
             opening_rob_kg: openingROB,
-            uplift_kg: 0,
-            burn_kg: burn.actual_burn_kg,
-            adjustment_kg: 0,
+            uplift_kg: upliftKg,
+            burn_kg: burnKg,
+            adjustment_kg: adjustmentKg,
             closing_rob_kg: closingROB,
             max_capacity_kg: maxCapacity,
             rob_percentage: robPct,
             data_source: burn.data_source,
             is_estimated: false
         });
+
+        return { written: true, sequence: nextSeq, closing: closingROB };
     }
 };
