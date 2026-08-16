@@ -363,7 +363,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 | # | Defect |
 |---|---|
-| D1 | Master sync transaction wrapper commented out — data loss on mid-sync failure |
+| ~~D1~~ | ~~Master sync transaction wrapper commented out~~ — **NOT A DEFECT.** Measured under WP-01 on 16 Aug 2026. CAP wraps every inbound request in a managed transaction; bare `DELETE`/`INSERT` dispatch onto it and `req.error(500)` rolls back. Delete and insert are already atomic on the request path. **Restoring the wrapper breaks the sync** — see trap below. Residual risk only if `_syncFromS4` is called outside a request context |
 | D2 | 93 occurrences of `'any'` across 69 authorisation grants |
 | D3 | ROB formula drops uplift, clamps negatives |
 | D4 | Non-atomic `max + 1` number generation |
@@ -374,6 +374,10 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | D15 | ROB ledger cannot be rebuilt; `recalculateROB` unimplemented |
 | D16 | Hardcoded 100,000 order guard blocks legitimate widebody orders |
 | **D19** | **`S2A` destination used by code, provisioned nowhere. Master data sync fails on a fresh deployment** |
+| **D22** | **Eleven bound actions are denied under real authorisation, for every user including one holding all scopes.** CAP checks a bound action against the entity's `@restrict` for a grant naming that action. `FuelDeliveries` and its peers grant only READ/CREATE/UPDATE/DELETE, so the action is refused before its own `@requires` is consulted. Pre-existing and unchanged by WP-02. **Masked locally by dummy auth; would surface on XSUAA.** Fix is mechanical — a `{ grant: '<action>', to: [...] }` entry per action mirroring its existing `@requires`, granting nothing new. See WP-02B |
+| **D23** | **Two implemented services have no authorisation of any kind.** `authorization.cds` covers 4 of 15 services. `PlanningService` (610 lines, live) and `RefuelerService` (235 lines, live) have no annotation block — not even a service-level `@requires`. `PlanningAccess` is defined as a scope and appears in no grant for that reason, which is a missing grant on working code rather than an unimplemented module |
+| **D21** | **`aircraft_ID` written to `ROB_LEDGER` where no such element exists** — `burn-service.js:479` and `:1071`. The association flattens to `aircraft_type_code`, so `adjustROB` and the Excel ROB import silently never set the aircraft reference |
+| **D20** | **A malformed S/4 response is reported to the caller as "0 records."** `master-data-service.js:130-135` — where the response matches none of the three expected shapes, the `throw` is commented out and the raw body logged. `s4Data` stays `[]`, so the zero-row guard fires. **Data-safe**, but a payload the code cannot parse is indistinguishable from an empty source. A schema change at the S/4 end would be chased as a data problem |
 
 ---
 
@@ -385,6 +389,11 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
 | **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
 | **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
+| **`cds.tx(req, …)` inside a request handler silently discards writes** | CAP already wraps every inbound request in a managed transaction. Passing `req` opens a nested one and the writes never land, **while the action still returns HTTP 200 with success: true**. Measured under WP-01 on all three master data feeds. `cds.tx()` **without** `req` is a different thing — an independent root transaction, correct where a record must survive a failed request. Unmeasured; verify before relying on it |
+| **Check CAP's defaults before adding a safety net** | D1 was recorded as a data-loss defect because a transaction wrapper was commented out. It was commented out because it was redundant. Verify what the framework already provides before treating an absence as a gap |
+| **`MASTER_SUPPLIERS` is `cuid`** | Its primary key is a generated UUID, so a duplicate `supplier_code` raises no constraint violation. Any test relying on a PK collision there will pass vacuously |
+| **Local development does not exercise authorisation at all** | Dev auth is `kind: 'dummy'`, which authorises every request as privileged. `@restrict` is never evaluated. The twelve test users in section 5 have no effect locally. To test authorisation you must override to `kind: 'mocked'` **and** supply the users map in the same override — replacing the auth block alone discards the users. This is why 93 `'any'` entries survived unnoticed |
+| **Bound actions need their own grant** | A grant of READ/CREATE/UPDATE/DELETE on an entity does not permit its bound actions. CAP looks for a grant naming the action; without one the call is refused before the action's own `@requires` is read. See D22 |
 | **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
 | **Seed data is inadequate for testing** | FUEL_TICKETS 2 rows, FUEL_DELIVERIES 3, FUEL_BURNS 4, FUEL_ORDERS 7, ROB_LEDGER 9. ERROR_LOGS and EXCEPTION_ITEMS 0 |
 | **Three CSVs break the naming pattern** | `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv` are PascalCase where the other 76 are UPPER_SNAKE |
