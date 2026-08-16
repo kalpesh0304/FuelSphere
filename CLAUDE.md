@@ -374,6 +374,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | D15 | ROB ledger cannot be rebuilt; `recalculateROB` unimplemented |
 | D16 | Hardcoded 100,000 order guard blocks legitimate widebody orders |
 | **D19** | **`S2A` destination used by code, provisioned nowhere. Master data sync fails on a fresh deployment** |
+| **D21** | **`aircraft_ID` written to `ROB_LEDGER` where no such element exists** — `burn-service.js:479` and `:1071`. The association flattens to `aircraft_type_code`, so `adjustROB` and the Excel ROB import silently never set the aircraft reference |
 | **D20** | **A malformed S/4 response is reported to the caller as "0 records."** `master-data-service.js:130-135` — where the response matches none of the three expected shapes, the `throw` is commented out and the raw body logged. `s4Data` stays `[]`, so the zero-row guard fires. **Data-safe**, but a payload the code cannot parse is indistinguishable from an empty source. A schema change at the S/4 end would be chased as a data problem |
 
 ---
@@ -386,7 +387,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
 | **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
 | **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
-| **`cds.tx(req, …)` inside a request handler silently discards writes** | CAP already wraps every inbound request in a managed transaction. Opening a nested one causes the writes never to land **while the action still returns HTTP 200 with success: true**. Measured under WP-01 on all three master data feeds. Do not add explicit transaction wrapping inside a handler — it is already there |
+| **`cds.tx(req, …)` inside a request handler silently discards writes** | CAP already wraps every inbound request in a managed transaction. Passing `req` opens a nested one and the writes never land, **while the action still returns HTTP 200 with success: true**. Measured under WP-01 on all three master data feeds. `cds.tx()` **without** `req` is a different thing — an independent root transaction, correct where a record must survive a failed request. Unmeasured; verify before relying on it |
 | **Check CAP's defaults before adding a safety net** | D1 was recorded as a data-loss defect because a transaction wrapper was commented out. It was commented out because it was redundant. Verify what the framework already provides before treating an absence as a gap |
 | **`MASTER_SUPPLIERS` is `cuid`** | Its primary key is a generated UUID, so a duplicate `supplier_code` raises no constraint violation. Any test relying on a PK collision there will pass vacuously |
 | **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
