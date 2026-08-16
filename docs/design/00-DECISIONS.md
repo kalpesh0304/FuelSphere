@@ -1,7 +1,7 @@
 # 00-DECISIONS.md
 
 **FuelSphere — merge decisions**
-Status: **DECIDED** — Groups A, B, C and D closed. Groups G and F await confirmation. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
+Status: **Groups A, B, C, D, G2 and G3 closed. G1 awaits confirmation.** Phase 0 complete — six work packages run, seven defects closed, one withdrawn. See `Phase0_Closure_Record.md`. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
 
 ---
 
@@ -650,28 +650,48 @@ Do these regardless.
 
 ## Defects — no decision needed, only sequencing
 
+### Closed under Phase 0
+
+| # | Defect | Closed by |
+|---|---|---|
+| ~~D2~~ | `'any'` on 93 authorisation grants across 69 grants | WP-02, PR #32 |
+| ~~D3~~ | ROB formula dropped uplift and clamped negatives | WP-03, PR #30 |
+| ~~D4~~ | Non-atomic `max + 1` number generation | WP-04, PR #33. Nine sites across five services, not the three named |
+| ~~D13~~ | `captureSignatures` had no order status guard | WP-02, PR #32 |
+| ~~D15~~ | `recalculateROB` unimplemented; ledger could not be rebuilt | WP-03, PR #30 |
+| ~~D16~~ | 100,000 order guard blocked legitimate widebody orders | WP-05, PR #31 |
+| ~~D17~~ | `'XXX'` fallback station code in number generation | WP-04, PR #33 |
+
+### Withdrawn
+
+| # | Defect | Why |
+|---|---|---|
+| ~~D1~~ | Master sync transaction wrapper commented out | **Not a defect.** Measured under WP-01, 16 Aug 2026. CAP's ambient request transaction already makes delete and insert atomic; the wrapper was redundant, and restoring it silently discards writes while returning HTTP 200 with success. Nine of nine scenarios pass on unmodified code, on both in-memory and file-backed sqlite. Residual risk moved to F13 |
+
+### Open
+
 | # | Defect | Blocking |
 |---|---|---|
-| **D21** | **`aircraft_ID` written to `ROB_LEDGER` on two paths where no such element exists.** `burn-service.js:479` (`adjustROB`) and `:1071` (Excel ROB import). The association flattens to `aircraft_type_code`, so the aircraft reference is silently never set on rows created by those paths. Found during WP-03, outside its scope | |
-| D20 | A malformed S/4 response is reported as "0 records" rather than as a parse failure. Data-safe; the zero-row guard fires and no delete occurs. But an unrecognised payload is indistinguishable from an empty source, so a schema change at the S/4 end would be diagnosed as a data problem. Found during WP-01 measurement, outside its scope. Small — carry it with F12 or F13 | |
-| ~~D1~~ | **WITHDRAWN.** Measured under WP-01, 16 Aug 2026. CAP's ambient request transaction already makes delete and insert atomic; the commented-out wrapper was redundant, and restoring it silently discards writes while returning success. Nine of nine scenarios pass on unmodified code, verified on both in-memory and file-backed sqlite. Residual risk moved to open point F13 | — |
-| D2 | `'any'` on 93 authorisation grants | **Yes** |
-| D3 | ROB formula drops uplift and clamps negatives | **Yes** |
-| D4 | Non-atomic `max + 1` number generation | **Yes** |
-| D5 | No optimistic locking | **Yes** |
-| D6 | Duplicate pricing entity families and config tables | |
-| D7 | Order status enum drift across enum, code and seed | |
+| **D22** | **Eleven bound actions denied under real authorisation, for every user including one holding all scopes.** CAP matches a bound action against the entity's `@restrict` for a grant naming that action; entity-level CRUD does not imply it. Pre-existing, unchanged by WP-02. **Masked locally by dummy auth.** Would surface on first XSUAA deployment. Fix is mechanical — see WP-02B | **Yes — deployment** |
+| **D19** | **`S2A` destination used by code, provisioned nowhere.** `mta.yaml` declares `S4HC_TECHNICAL` and `S4HC_USER`; neither is referenced by code. Master data sync fails on a fresh deployment | **Yes — deployment** |
+| **D23** | **Two implemented services have no authorisation of any kind.** `authorization.cds` covers 4 of 15 services. `PlanningService` (610 lines) and `RefuelerService` (235 lines) have no annotation block, not even a service-level `@requires` | **Yes** |
+| D5 | No optimistic locking. See C5 — the stated `@odata.etag` approach was measured and withdrawn; two questions remain open behind a real fix | **Yes** |
+| D11 | No aircraft register. `AIRCRAFT_MASTER` is keyed by `type_code` | **Yes** |
+| D14 | No row-level security. Zero `where:` clauses | **Yes** |
+| D6 | Duplicate pricing entity families and config tables. Decision A10 taken; retirement is WP-08 | |
+| D7 | Order status enum drift. **Narrowed by WP-06:** the seed data is correct, every value is in `OrderStatus`. The disagreement is code-side — `before CREATE` writes `'Created'` | |
 | D8 | `temperature_corrected_qty` implies density correction | |
 | D9 | Simulated S/4 document numbers | |
 | D10 | `planned_burn_kg` hardcoded to zero — ACARS reconciliation inert | |
-| D11 | No aircraft register | **Yes** |
 | D12 | Density required then ignored | |
-| D13 | `captureSignatures` has no order status guard | **Yes** |
-| D14 | No row-level security | **Yes** |
-| D15 | ROB ledger cannot be rebuilt | **Yes** |
-| D16 | 100,000 kg order guard blocks legitimate widebody orders | **Yes** |
-| D17 | `'XXX'` fallback station code in number generation | |
-| D18 | Flight status is unenforced free text | |
+| D18 | Flight status is unenforced free text. Decision B7 taken | |
+| **D21** | `aircraft_ID` written to `ROB_LEDGER` on two paths where no such element exists — `burn-service.js:479` and `:1071`. The association flattens to `aircraft_type_code`, so the reference is silently never set. Found during WP-03 | |
+| **D24** | **Three seed CSVs are dead, not misnamed.** `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv`. No matching entity exists under any name; headers are camelCase from a different design; CAP has never loaded them. **Delete, do not rename.** Small and standalone | |
+| D20 | A malformed S/4 response is reported as "0 records" rather than as a parse failure. Data-safe, but an unrecognised payload is indistinguishable from an empty source. Carry with F12 or F13 | |
+
+### Found by sweep, corrected under WP-06
+
+Fifteen enum violations that appeared on no defect list: `PARTIAL` where the enum says `PARTIAL_MATCH` (3 cells), `OK` where it says `NORMAL` (12 cells). Two of the three violations that *were* listed did not exist — `SECURITY_USERS.employment_status` is not enum-typed, and `FUEL_ORDERS.status` data already conformed.
 
 ---
 
@@ -683,6 +703,16 @@ Do these regardless.
 | Product owner | Deferred to Phase 1 | — |
 | Delivery lead | Deferred to Phase 1 | — |
 
-**Phase 0 authorised.** Groups A, B, C, D, G2 and G3 are closed. WP-01 to WP-06 are defect fixes requiring no product or delivery decision.
+**Phase 0 authorised and complete.** Groups A, B, C, D, G2 and G3 closed. WP-01 to WP-06 run: five merged, one closed as already-satisfied. Seven defects closed, one withdrawn, six new ones found.
 
-Product owner and delivery lead sign-off is required before Phase 1 begins.
+**Product owner and delivery lead sign-off is required before Phase 1 begins.** Phase 0 was defect fixes on your signature alone; Phase 1 changes the schema.
+
+**Still open before Phase 1 can start:**
+
+| # | Item |
+|---|---|
+| 1 | Decision on **G1** — adopt the 21 IATA code values |
+| 2 | `01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md`, `03-VALIDATION-RULES.md` — all three are placeholders |
+| 3 | Product owner and delivery lead sign-off above |
+
+**Worth a small standalone pass at any time:** WP-02B (eleven bound action grants, deployment-blocking) and D24 (delete three dead CSVs). Both mechanical.
