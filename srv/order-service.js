@@ -297,6 +297,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const order = await SELECT.one.from(FuelOrders).where({ ID: delivery.order_ID });
             if (!order) return req.error(404, 'Parent order not found');
 
+            // D13 — this action moves the order to Delivered, so it needs the
+            // same status guard every other transition in this file has.
+            // Delivered follows InProgress in the documented lifecycle:
+            // Draft -> Submitted -> Confirmed -> InProgress -> Delivered.
+            // Checked before any write, so a rejected call mutates nothing.
+            if (order.status !== 'InProgress') {
+                return req.error(409, `Cannot capture signatures for order in status "${order.status}". Order must be in "InProgress" status.`);
+            }
+
             // Simulate S/4HANA PO and GR number generation
             const poSeq = Math.floor(4500001000 + Math.random() * 9000);
             const grSeq = Math.floor(5000001000 + Math.random() * 9000);
