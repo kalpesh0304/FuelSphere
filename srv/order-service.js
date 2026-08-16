@@ -76,10 +76,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 const current = await SELECT.one.from(req.subject);
                 const quan = ordered_quantity ?? current.ordered_quantity ?? 0;
                 const unit = unit_price ?? current.unit_price ?? 0;
-                if (quan > 100000) {
-                    req.error(400, 'Large order detected. Please verify quantity.');
-                    return;
-                }
                 req.data.total_amount = Number((quan * unit).toFixed(2));
             }
         });
