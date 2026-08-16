@@ -83,6 +83,21 @@ No decisions required. Start here.
 
 ---
 
+### WP-02B · Grant bound actions their own authorisation entries
+
+**Entry:** WP-02 merged
+**Scope:** Add a `{ grant: '<action>', to: [...] }` entry for each of the eleven bound actions on restricted entities in `srv/authorization.cds`. Each mirrors the scope already declared on that action's own `@requires`, so nothing new is granted. Discovered under WP-02: CAP refuses a bound action unless a grant names it, and entity-level CRUD grants do not imply it. Currently every one of the eleven is denied under real authorisation, including for a user holding all scopes.
+**Out of scope:** Adding scopes to `xs-security.json`. Changing any action's `@requires`. Row-level security. Annotating the eleven unannotated services — that is D23.
+**Exit:**
+- Each of the eleven bound actions is callable under `mocked` auth by a user holding the scope on its `@requires`
+- The same call is refused for a user without that scope
+- No scope was added or widened
+- Defect D22 closed
+
+**Test note:** must run under `kind: 'mocked'` with the users map supplied in the same override. Under dummy auth every call passes and the test proves nothing.
+
+---
+
 ### WP-06 · Replace the seed data
 
 **Entry:** Decision D10 (Group D)
