@@ -1257,10 +1257,10 @@ entity PRICE_ASSUMPTION : cuid, AuditTrail {
         // Source
         price_source        : PriceSource @mandatory;     // DERIVED / MANUAL / CONTRACT
         source_contract     : Association to MASTER_CONTRACTS; // Source contract (if applicable)
-        source_formula      : Association to PRICING_FORMULA;  // Source formula (if derived)
+        source_formula      : Association to PRICING_FORMULAS; // Source formula (if derived) - WP-08
 
         // Index Reference (if derived)
-        base_index          : Association to MARKET_INDEX;     // Base index used
+        base_index          : Association to MARKET_INDICES;   // Base index used - WP-08
         index_value         : Decimal(15,4);              // Index value used
         index_date          : Date;                       // Index effective date
 
@@ -2146,7 +2146,7 @@ entity FLIGHT_COSTS : cuid, AuditTrail {
         // Pricing
         unit_price          : Decimal(15,4) @mandatory;   // Price per unit
         contract            : Association to MASTER_CONTRACTS; // Source contract
-        pricing_formula     : Association to PRICING_FORMULA;  // Pricing formula used
+        pricing_formula     : Association to PRICING_FORMULAS; // Pricing formula used - WP-08
 
         // Cost Components
         base_fuel_cost      : Decimal(15,2) @mandatory;   // Base fuel cost (qty x price)

@@ -63,28 +63,31 @@ service ContractsService {
      * PricingConfig - Engine Configuration per Company/Tenant
      * Access: integration-admin (CRUD), contracts-manager (View)
      */
-    entity PricingConfig as projection on db.PRICING_CONFIG;
+    entity PricingConfig as projection on db.PRICING_CONFIGURATIONS;
 
     /**
      * PricingFormulas - Native Engine Formula Definitions
      * Access: contracts-manager (CRUD), finance (View)
      */
-    entity PricingFormulas as projection on db.PRICING_FORMULA {
+    // WP-08: repointed to the retained plural family. PRICING_FORMULAS has no
+    // contract association, so that redirect is dropped rather than invented;
+    // 'elements' is named 'components' there.
+    entity PricingFormulas as projection on db.PRICING_FORMULAS {
         *,
-        contract : redirected to Contracts,
         currency : redirected to Currencies,
         uom : redirected to UnitsOfMeasure,
-        elements : redirected to FormulaElements
+        components : redirected to FormulaElements
     };
 
     /**
      * FormulaElements - Formula Component Elements
      * Access: contracts-manager (CRUD), finance (View)
      */
-    entity FormulaElements as projection on db.PRICING_FORMULA_ELEMENT {
+    // WP-08: 'market_index' is named 'lookup_index' on FORMULA_COMPONENTS.
+    entity FormulaElements as projection on db.FORMULA_COMPONENTS {
         *,
         formula : redirected to PricingFormulas,
-        market_index : redirected to MarketIndices
+        lookup_index : redirected to MarketIndices
     };
 
     // ========================================================================
@@ -95,20 +98,23 @@ service ContractsService {
      * MarketIndices - Market Index Definitions (Platts, Argus, etc.)
      * Access: contracts-manager (CRUD), finance (View)
      */
-    entity MarketIndices as projection on db.MARKET_INDEX {
+    // WP-08: MARKET_INDICES has no forward composition to its values — the
+    // plural family models that relationship from the child side only — so the
+    // 'values' redirect is dropped rather than invented.
+    entity MarketIndices as projection on db.MARKET_INDICES {
         *,
         currency : redirected to Currencies,
-        uom : redirected to UnitsOfMeasure,
-        values : redirected to IndexValues
+        uom : redirected to UnitsOfMeasure
     };
 
     /**
      * IndexValues - Historical Market Index Values
      * Access: integration-admin (Create), all (View)
      */
-    entity IndexValues as projection on db.INDEX_VALUE {
+    // WP-08: 'marketIndex' is named 'market_index' on MARKET_INDEX_VALUES.
+    entity IndexValues as projection on db.MARKET_INDEX_VALUES {
         *,
-        marketIndex : redirected to MarketIndices
+        market_index : redirected to MarketIndices
     };
 
     // ========================================================================
@@ -120,12 +126,12 @@ service ContractsService {
      * Access: finance-manager (View), contracts-manager (View)
      */
     @readonly
-    entity DerivedPrices as projection on db.DERIVED_PRICE {
+    // WP-08: DERIVED_PRICES carries no airport or product association, so
+    // those redirects are dropped rather than invented.
+    entity DerivedPrices as projection on db.DERIVED_PRICES {
         *,
         contract : redirected to Contracts,
-        formula : redirected to PricingFormulas,
-        airport : redirected to Airports,
-        product : redirected to Products
+        formula : redirected to PricingFormulas
     };
 
     // ========================================================================

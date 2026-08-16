@@ -235,7 +235,7 @@ service CostAllocationService {
     entity Contracts as projection on db.MASTER_CONTRACTS;
 
     @readonly
-    entity PricingFormulas as projection on db.PRICING_FORMULA;
+    entity PricingFormulas as projection on db.PRICING_FORMULAS;
 
     @readonly
     entity Currencies as projection on db.CURRENCY_MASTER;
