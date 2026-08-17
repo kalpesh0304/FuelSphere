@@ -275,10 +275,10 @@ service PlanningService {
     };
 
     @readonly
-    entity PricingFormulas as projection on db.PRICING_FORMULA;
+    entity PricingFormulas as projection on db.PRICING_FORMULAS;
 
     @readonly
-    entity MarketIndices as projection on db.MARKET_INDEX;
+    entity MarketIndices as projection on db.MARKET_INDICES;
 
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
