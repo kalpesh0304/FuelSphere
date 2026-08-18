@@ -33,6 +33,12 @@ service TicketService {
         action attachToDelivery(deliveryId: UUID) returns FuelTickets;
 
         /**
+         * Attach an unmatched ticket to an order - the matching workbench.
+         * Allocates the internal number if the ticket was captured without one.
+         */
+        action attachToOrder(orderId: UUID) returns FuelTickets;
+
+        /**
          * Verify ticket
          */
         action verify() returns FuelTickets;
