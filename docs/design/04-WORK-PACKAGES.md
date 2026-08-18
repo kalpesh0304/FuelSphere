@@ -240,12 +240,62 @@ Each is a package. Entry criteria as stated; all also require Phase 0 complete.
 |---|---|---|---|
 | WP-17 | Delivery and FOB reconciliation | WP-12, WP-13 | Metered mass against gauge delta produces a status against a resolved tolerance, with the applied record |
 | WP-18 | Fuel plan versioning and the regulated stack | B3, A7 | A revision creates a new version; a ticket binds to the version it executed against |
-| WP-19 | Burn derivation and APU | WP-07, WP-18 | Burn derives from four gauge points; APU burn derives from cycle minutes and rate; ACARS variance no longer inert |
+| WP-19 | Burn derivation and APU | WP-07, WP-18 | Burn derives from four gauge points; APU burn derives from cycle minutes and rate; ACARS variance no longer inert. **See the design notes below** |
 | WP-20 | Pricing derivation | WP-08, WP-13 | A formula resolves an index, applies components in sequence, and records every quote used |
 | WP-21 | Invoice matching and posting | WP-20 | Three-way match produces a status; duplicates detected independently; posting errors retained and reprocessable |
 | WP-22 | Completeness and stock reconciliation | WP-17, WP-19 | Absence distinguished from legitimate non-expectation; tail stock reconciles at the last on-blocks before period end |
 | WP-23 | Posting determination | WP-21 | Movement type and cost object resolve per event; the GL account is never supplied on the interface |
 | WP-24 | Carrier arrangements | WP-16 | Fuel processing scope resolves per leg; a missing arrangement raises an exception rather than defaulting |
+
+---
+
+### WP-19 design notes — APU apportionment between arriving and departing flights
+
+Recorded 17 August 2026 during the SME requirements review.
+
+**The ledger does not apportion.** APU burn leaves the tail's tanks regardless of who is charged. For `ROB_LEDGER` it is an event on the tail between two flights. Apportionment is a **cost allocation** question, not a fuel question.
+
+**Primary rule — allocate by phase.** `APU_USAGE.usage_phase` already carries this:
+
+| Phase | Bears the cost |
+|---|---|
+| `PRE_DEPARTURE` | Departing flight — boarding, loading, engine start |
+| `IN_FLIGHT` | That flight |
+| `POST_ARRIVAL` | Arriving flight — disembarkation, offload |
+| `OVERNIGHT`, parked, maintenance | **Neither flight.** Station or aircraft cost object |
+
+Post-arrival and pre-departure genuinely belong to different flights. No split is required for the ordinary case.
+
+**Better rule where gauge readings exist — split at the refuelling event.**
+
+```
+fob_at_arrival_kg
+      │  ← APU burns OLD fuel, from the previous uplift
+fob_before_kg
+      │  ← uplift
+fob_after_kg
+      │  ← APU burns NEW fuel, just purchased
+fob at off-blocks
+```
+
+Two **measurable** gaps, not apportioned ones. `ground_burn_kg` on `FUEL_DELIVERIES` is the first of them. Where the readings exist the split is a measurement rather than a convention, which is materially more defensible.
+
+**The hard case — one cycle spanning the whole turn.** APU starts at on-blocks and stops after the next departure's engine start. One cycle, two flights, no phase boundary.
+
+| Basis | Verdict |
+|---|---|
+| Time-proportional, split at the midpoint | Arbitrary |
+| **Split at the refuelling event** | **Preferred.** Uses the physical divide, consistent with the measured case |
+| Whole cycle to the departing flight | Simple, and wrong on a long turn |
+
+**Resolution order:** split at the refuelling event where fuel readings exist → fall back to phase → fall back to time-proportional, recording the basis used.
+
+**Two edge cases:**
+
+- **Tail swap.** Arriving and departing aircraft differ, so there is no turn. Post-arrival belongs to one tail, pre-departure to another. Any logic assuming a continuous turn gets this wrong
+- **Long ground stop.** Twelve hours between two barely-related flights. Charging either is misleading — this is where `OVERNIGHT` earns its place, allocating to the station or the aircraft rather than a flight
+
+**Two gaps in the current design, both to be closed here:** there is no allocation rule for a cycle spanning the boundary, and nothing states that overnight running belongs to neither flight.
 
 ---
 
