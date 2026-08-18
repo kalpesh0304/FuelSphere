@@ -632,6 +632,22 @@ type TicketStatus : String(20) enum {
 }
 
 /**
+ * Ticket Match Status (WP-10, decision A1)
+ *
+ * Distinct from TicketStatus, which tracks the ticket's own workflow.
+ * This tracks whether the fuel on it has been tied to an order.
+ *
+ * UNMATCHED is not an error state. It is a ticket awaiting attachment,
+ * with an owner and an age.
+ */
+type TicketMatchStatus : String(20) enum {
+    Unmatched      = 'UNMATCHED';       // No order. Capturable, chaseable, visible
+    Matched        = 'MATCHED';         // Attached to an order
+    MatchedNoPlan  = 'MATCHED_NO_PLAN'; // Order found, no fuel plan behind it
+    NotExpected    = 'NOT_EXPECTED';    // Processing mode NONE, or no uplift was planned
+}
+
+/**
  * Cockpit Crew Review Status (Step 4 of 7-step journey)
  */
 type CrewReviewStatus : String(20) enum {
@@ -740,7 +756,12 @@ entity FUEL_ORDERS : cuid, AuditTrail {
  * automatic PO/GR creation in S/4HANA
  */
 entity FUEL_DELIVERIES : cuid, AuditTrail {
-        order               : Association to FUEL_ORDERS @mandatory;
+        // WP-10 / decision B2: the delivery hangs off the aircraft, not the
+        // order. A refuelling with two suppliers has two orders and one
+        // delivery, so a mandatory FK to one of them is wrong. Orders resolve
+        // transitively through the tickets.
+        order               : Association to FUEL_ORDERS;
+        aircraft_reg        : String(10) @mandatory;    // Join key: tail + date + departure time (REQ-FL-010)
         sales_order         : Association to FUEL_SALES_ORDERS;  // Link to supplier's sales order
         delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
 
@@ -792,7 +813,15 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
  * Multiple tickets may be associated with a single order/delivery
  */
 entity FUEL_TICKETS : cuid, AuditTrail {
-        order               : Association to FUEL_ORDERS @mandatory;
+        // WP-10 / decision A1: NOT mandatory. Fuel is routinely delivered with
+        // no order in the system - a verbal post-freeze top-up, a diversion
+        // uplift at an uncontracted station, fuel put on a reassigned tail.
+        // The alternative to recording it is a fabricated order, which
+        // corrupts order data permanently to satisfy a foreign key.
+        order               : Association to FUEL_ORDERS;
+        @assert.range: true
+        match_status        : TicketMatchStatus default 'UNMATCHED';
+        ticket_source       : String(1) default 'M';    // IATA-04: M manual, E electronic
         delivery            : Association to FUEL_DELIVERIES;  // Optional link to specific delivery
 
         ticket_number       : String(50) @mandatory;    // Physical ticket number from supplier
