@@ -509,13 +509,57 @@ Where only one reading is available, populate `fob_before_kg` and leave `fob_at_
 
 **`NOT_ATTRIBUTABLE`** exists because one FQIS pair across two suppliers produces one variance figure that belongs to neither. Pro-rata allocation by volume is arithmetically neat and evidentially worthless — never use it to raise a dispute.
 
-### `delivered_quantity` — CHANGE to derived
+### `delivered_quantity` — derived, but **not in WP-12**
 
-Currently keyed. **Decision B2: it becomes the sum of its tickets.** Consistent with the rule that totals sum from their children.
+Decision B2 makes it the sum of its tickets, consistent with the rule that totals sum from their children.
 
-### `temperature_corrected_qty` — rename and fix
+**Deferred to WP-17.** Three reasons:
 
-The name implies a density correction that does not happen. Either use the density it demands, or rename to state what it computes. **Report which you did.**
+| | |
+|---|---|
+| `@mandatory` in two places | `schema.cds:771` and `order-fiori-annotations.cds:670`. Making it derived is a **relax**, and relaxing a constraint is not additive — the readers need surveying first |
+| Two writers set it directly | `refueler-service.js:148` and `:159` |
+| Five readers consume it for `EPD401` | In `order-service.js` |
+
+WP-17 is delivery and FOB reconciliation — **where the derived value is actually consumed.** Changing it there, alongside the reconciliation that depends on it, is safer than changing it here and leaving it unused for two packages.
+
+**WP-12 records the four sites and leaves them.**
+
+### `temperature_corrected_qty` — keep the name, gate on unit
+
+**Resolved 17 August 2026.** An earlier draft offered a choice including renaming. Renaming is prohibited by `05-CONVENTIONS.md` §6, and the field appears in projections and seed data.
+
+The correction is **volumetric** — `Measured × [1 − 0.00099 × (T − 15)]`. Thermal expansion acts on volume, not mass. It is meaningful only where `uom_code` is a volume unit.
+
+```
+uom_code is a volume unit  →  compute the correction
+uom_code is a mass unit    →  return null
+```
+
+**Return `null`, never the input unchanged.** Returning the input silently claims a correction was applied. Missing is not zero.
+
+> **Naming debt, accepted.** The field name implies a density correction that does not happen. It is retained because renaming an existing field is prohibited. **State the discrepancy in the field comment** so the next reader is not misled.
+
+### `density_uom` — a CDS enum, not a master table
+
+```cds
+type DensityUom : String(6) enum {
+    KgPerLitre = 'KGL';
+    KgPerM3    = 'KGM';
+}
+```
+
+**With `@assert.range`**, per defect D25 — a declared enum enforces nothing without it.
+
+Not a row in `UNIT_OF_MEASURE`. That table holds **quantity** units and carries attributes: `conversion_to_kg`, `sap_uom`, `sap_uom_iso`. Density units are a different kind of thing with no attributes, and a master table for two attribute-free values is over-engineering.
+
+Values are IATA `VUOMBase`. Add members if a supplier transmits one.
+
+### Error codes — `EPD`, and look them up
+
+**No new prefix.** `03-VALIDATION-RULES.md` places the FOB reconciliation rules in the `EPD` block, and **`EPD411` — "meter reading does not match ticket quantity" — is designed, unimplemented, and exactly this rule.**
+
+Consult `03-VALIDATION-RULES.md` for the assigned code before writing one, as WP-07 did with `MDM402`. New codes in an existing prefix start at `x450`.
 
 ### Validation that must NOT be written
 
