@@ -613,6 +613,12 @@ Where the design already has an equivalent field, the industry code values repla
 
 **Where it lands:** each value takes effect in the work package that builds or touches the field. There is no separate adoption package — the target schema document carries the values, and packages pick them up as they go.
 
+**REFINED 17 August 2026, after WP-11.** The rule above holds where a field is being created or has no established value set. **Where the repository already holds a populated code list with referential integrity, that list governs internally.**
+
+WP-11 surfaced this: `01-TARGET-SCHEMA.md` §5 specified `'LT'` from IATA-14's `PUOMBase`, but `UNIT_OF_MEASURE` uses `LTR`, and `uom_code` is a foreign key. Adopting `LT` literally would have left a dangling association from the first record on three entities.
+
+**IATA codes are mapped at the interface, not imposed on existing master data.** `LTR ↔ LT` when sending or receiving an IATA Transaction message. Renaming master data for cosmetic alignment is a migration for no benefit, and leaving two codes for one unit is worse than one code that differs from the standard.
+
 ### G2 — Backlog, needs design work
 
 Material, but none is on the critical path and none can be designed today.
