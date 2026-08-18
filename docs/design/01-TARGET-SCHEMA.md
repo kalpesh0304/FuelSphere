@@ -300,26 +300,124 @@ aircraft_reg : String(10) @mandatory;   // Registration. Join key: tail + date +
 
 **Decision A2:** planning in kilograms, order and delivery in litres. Density is the conversion.
 
+### The unit code is `LTR`, not `LT`
+
+**Corrected 17 August 2026.** An earlier version of this section specified `'LT'`, taken from the IATA `PUOMBase` list under decision G1. **`LT` does not exist in this repository.**
+
+```
+UNIT_OF_MEASURE keys:  KG, LTR, GAL, USG, MT
+uom_code is a FOREIGN KEY:
+    uom : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
+```
+
+Defaulting to `LT` would leave a dangling association from the first record, on three entities at once. **Use `LTR`. Do not add an `LT` row** — two litre codes is worse than one that differs from IATA.
+
+> **This refines decision G1.** Industry code values replace the design's own where a field is being created or has no established value set. **Where the repository already holds a populated code list with referential integrity, that list governs internally**, and IATA codes are mapped at the interface — `LTR ↔ LT` when sending or receiving an IATA Transaction message. Renaming master data for cosmetic alignment is a migration for no benefit.
+
+### SAP unit codes — send ISO
+
+FuelSphere posts a PO, a GR and an invoice to SAP. **The unit travels on all three**, and SAP holds two representations in T006:
+
+| | Internal `MSEHI` | ISO `ISOCODE` |
+|---|---|---|
+| Kilogram | `KG` | `KGM` |
+| Litre | `L` | `LTR` |
+| Metric tonne | `TO` | `TNE` |
+
+The repository's `UNIT_OF_MEASURE` list is a mixture — `LTR` is ISO, `KG` is internal, `MT` is neither. Some codes would resolve against T006 and some would not.
+
+**ADD the mapping rather than renaming the list:**
+
+```cds
+sap_uom     : String(3);   // T006 MSEHI, internal
+sap_uom_iso : String(3);   // T006 ISOCODE
+```
+
+**Send `sap_uom_iso` on the PO, the GR and the invoice.** BAPIs accept both — `ENTRY_UOM` and `ENTRY_UOM_ISO` — and ISO is stable across clients where internal codes can be renamed per installation. A product shipping to several airlines must not depend on one client's naming.
+
+> **Verify against the target client's T006 before go-live.** Internal unit codes are client-configurable and the mapping above is the standard set, not a guarantee.
+
+### The conversion factor is planning-only
+
+`UNIT_OF_MEASURE.conversion_to_kg` and SAP's material master **MARM** are two independent sources for the same number. If they differ:
+
+```
+FuelSphere    12,000 L × 0.800        = 9,600 kg
+SAP           12,000 L × MARM factor  = something else
+```
+
+The difference appears as a **phantom variance** in stock reconciliation, superimposed on the genuine density variance NEW-01 addresses. Two variances, one real and one an artefact.
+
+**SAP's MARM is authoritative.** The GR posts in litres and SAP converts regardless, so FuelSphere's factor must never be used for anything that has to agree with SAP.
+
+**Use `conversion_to_kg` for planning-side estimates only** — converting a plan mass into an order volume, which is a forward estimate. Never for settlement, valuation or reconciliation.
+
+### The three entities in scope
+
 | Entity | Field | Now | Target |
 |---|---|---|---|
-| `FUEL_ORDERS` | `uom_code` | `default 'KG'` | **`default 'LT'`** |
-| `FUEL_TICKETS` | `uom_code` | `default 'KG'` | **`default 'LT'`** |
-| `FUEL_DELIVERIES` | — | no `uom_code` | **ADD `uom_code : String(3) default 'LT'`** |
+| `FUEL_ORDERS` | `uom_code` | `default 'KG'` | **`default 'LTR'`** |
+| `FUEL_TICKETS` | `uom_code` | `default 'KG'` | **`default 'LTR'`** |
+| `FUEL_DELIVERIES` | — | no `uom_code` | **ADD `uom_code : String(3) default 'LTR'`** |
+
+> **`LTR` is a fallback default, not a rule.** Litres are not universal. AFSMA states the Delivery Note carries quantity *"in kilograms, litres or gallons, in accordance with Seller's normal practices"* — **the unit is the supplier's choice.** A US into-plane agent meters in gallons and will issue a gallon ticket whatever FuelSphere prefers. IATA's `PUOMBase` carries fourteen units; `UNIT_OF_MEASURE` already holds `KG`, `LTR`, `GAL`, `USG`, `MT`, and distinguishes `GAL` from `USG`.
+>
+> **Resolution order: supplier contract, then station, then `LTR`.** The contract knows the supplier's practice; the station knows local convention. The global default applies only where neither is configured.
+>
+> Contract-level and station-level unit configuration arrives with WP-13 and the contract master. Until then the fallback stands, which is correct for a litre-metering reference client and wrong for the second customer with a US station.
+
+### Three units, three different jobs
+
+| Layer | Unit | Set by |
+|---|---|---|
+| Ticket | As metered | **The supplier** |
+| Invoice | As priced | **The contract** |
+| Internal, valuation | Kilograms | The airline |
+
+**All three can differ on one transaction.** A supplier meters in gallons, prices per litre, and the airline values in kilograms. IATA's invoice standard carries `PricingUOM` and `InvoiceUOM` as separate fields with separate factors precisely because they diverge — that is gap IATA-33.
+
+**The unit is an attribute of the transaction, not a property of the system.** Store what was metered in the unit it was metered in; derive the comparable figure.
+
+**Seven `uom_code default 'KG'` declarations exist. Four stay in kilograms deliberately:**
+
+| Entity | Why it stays |
+|---|---|
+| `PLANNING_LINE` | Planning. A2 keeps planning in kilograms |
+| `DEMAND_CALCULATION` | Planning |
+| `FUEL_SALES_ORDERS` | Supplier side, not the airline's procurement |
+| `PRICE_ASSUMPTION`, `FLIGHT_COSTS` | Pricing. WP-20 |
 
 ### `FUEL_ORDERS` — ADD the conversion evidence
 
 ```cds
 conversion_density   : Decimal(8,4);   // kg/L used to convert plan mass to order volume
+conversion_source    : String(20);     // Which configuration row produced it
 ordered_quantity_kg  : Decimal(12,2);  // The plan figure this order was converted from
 ```
 
-Without both, the order records a converted number with no way to reproduce it. `ordered_quantity` stays as the litre figure and remains the commercial quantity.
+Without all three, the order records a converted number nobody can reproduce. `ordered_quantity` stays the litre figure and remains the commercial quantity.
 
-### Migration
+### The density source — and one it must not be
 
-Seed data is currently in kilograms. Under WP-11 either convert the values at a stated density and say so in the PR, or leave them and set `uom_code` per row to `'KG'` so nothing is silently misread. **Do not change the unit label without changing the number.**
+`UNIT_OF_MEASURE.conversion_to_kg` already carries a factor: `LTR` holds `0.800000`. **Resolve the plan-to-order conversion from that row and record which row produced it**, rather than hardcoding a constant. That satisfies the applied-value principle properly instead of approximating it.
 
----
+> **Boundary.** `0.800000` is a **generic planning factor, not a delivered density.** It is correct for converting a plan mass into an order volume, which is a forward estimate. It must **never** be used to derive ticket mass — decision B6 makes the delivered density on the ticket authoritative there. Two densities, two jobs. State the distinction in the code.
+
+When WP-13 lands, the resolution moves into the parameter framework and `conversion_source` records the parameter row instead. The field is added now so that migration is a value change rather than a schema change.
+
+### The conversion path does not exist yet
+
+Nothing converts a plan mass into an order quantity today. The dispatch import writes `dispatch_qty_kg` and links the order, but never sets `ordered_quantity`.
+
+Build a shared converter, with an optional mass input on `createOrderFromFlight`. **Fill order quantity from `dispatch_qty_kg` only where the order has none — additive, never overwriting.**
+
+### Migration — leave the numbers, label them
+
+Seed data is in kilograms. **Set `uom_code = 'KG'` explicitly per existing row.** Do not convert the quantities.
+
+`unit_price` is per kilogram. Converting quantity without converting price would silently corrupt `total_amount`, and pricing is WP-20. Relabelling without recomputing is forbidden; converting quantity without price is the same error one layer down.
+
+New records take the litre default. Nothing existing is silently reread.
 
 ## 6. WP-12 · Delivery measurement
 
@@ -332,20 +430,30 @@ Seed data is currently in kilograms. Under WP-11 either convert the values at a 
 The meter belongs to the **bowser**, so it belongs on the ticket, one per vehicle.
 
 ```cds
-meter_start          : Decimal(15,2);   // Litres
-meter_end            : Decimal(15,2);   // Litres
-quantity_litres      : Decimal(15,2);   // = meter_end - meter_start. Derived, not keyed
-density_kg_per_l     : Decimal(8,4);    // As delivered
-density_basis        : String(3) default 'MEA';  // IATA-01: MEA measured, STD standard
-density_temp_c       : Decimal(5,2);
-quantity_flag        : String(2) default 'GR';   // IATA-12: GR gross, NT net
-quantity_kg          : Decimal(15,2);   // = quantity_litres × density_kg_per_l. Derived
-batch_coa_ref        : String(50);      // Certificate of analysis, for density disputes
+meter_start        : Decimal(15,2);   // In uom_code
+meter_end          : Decimal(15,2);   // In uom_code
+quantity_metered   : Decimal(15,2);   // = meter_end − meter_start. Derived, not keyed
+uom_code           : String(3);       // FK to UNIT_OF_MEASURE. The supplier's unit
+density_value      : Decimal(8,4);    // As delivered, per uom_code
+density_uom        : String(6);       // IATA VUOMBase: KGL kg/litre, KGM kg/m³
+density_basis      : String(3) default 'MEA';  // IATA-01: MEA measured, STD standard
+density_temp_c     : Decimal(5,2);
+quantity_flag      : String(2) default 'GR';   // IATA-12: GR gross, NT net
+quantity_kg        : Decimal(15,2);   // Derived. The canonical comparable figure
+batch_coa_ref      : String(50);      // Certificate of analysis, for density disputes
 ```
+
+> **These names deliberately carry no unit.** An earlier draft specified `quantity_litres` and `density_kg_per_l`, which bake in an assumption that does not hold — a gallon ticket has no litres figure, and its density is per gallon.
+>
+> **Store as metered, derive canonical.** The as-metered figure must survive unaltered because it is what the supplier invoices and what a dispute is about. `quantity_kg` is what reconciliation, burn and valuation compare against.
+>
+> `05-CONVENTIONS.md` forbids renaming a field once it exists. These do not exist yet, so they are named correctly from the start.
 
 **`quantity_flag` is the field IATA-12 adds.** Net is temperature-corrected, gross is not. Without it no quantity in the system states which basis it is on.
 
-`quantity` — the existing field — stays as the supplier's **claimed** figure. `quantity_kg` is the derived one.
+`quantity` — the existing field — stays as the supplier's **claimed** figure in `uom_code`. `quantity_kg` is the derived canonical one.
+
+**The reconciliation compares `Σ quantity_kg` against `fob_delta_kg`.** Both in kilograms, whatever the supplier metered in. That is the whole reason the canonical figure is derived — a gallon ticket and a litre ticket on the same aircraft must be summable.
 
 ### `FUEL_DELIVERIES` — ADD the gauge pair
 
@@ -360,7 +468,7 @@ ground_burn_kg       : Decimal(12,2);   // Derived: fob_at_arrival − fob_befor
 fob_source           : FobSource default 'NONE';
 fob_rounding_kg      : Integer default 0;   // 100 where crew-reported. Sets the tolerance floor
 
-recon_variance_kg    : Decimal(12,2);   // Sum of ticket mass minus fob_delta_kg
+recon_variance_kg    : Decimal(12,2);   // Σ ticket quantity_kg − fob_delta_kg
 recon_status         : ReconStatus default 'NOT_RECONCILED';
 supplier_count       : Integer;         // Derived. Attribution requires 1
 delivery_method      : String(3);       // IATA-02: HYD hydrant, REF refueller
