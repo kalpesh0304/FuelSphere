@@ -144,6 +144,10 @@ FQIS readings enrich the delivery whenever they arrive, which is typically after
 
 A direct FK breaks one of those. Resolve through the ticket table in either direction. A denormalised order reference may sit on the delivery for screens — **derived, read-only, never authoritative**.
 
+**An unmatched ticket carries no internal number until it is matched.** WP-04's allocator will not mint a ticket number without a station, because a number containing no traceable station is defect D17. The station comes from the order. So where no order exists, `internal_number` stays null and `attachToOrder` allocates it at matching.
+
+Both rules survive intact. Refusing the ticket for want of a station would put fuel outside the system, which is what A1 exists to prevent; minting a number with a placeholder station would reintroduce D17.
+
 **A ticket may arrive with no order** — decision A1. The delivery can hold tickets that resolve to nothing yet. Attaching one to an order later changes which orders the delivery touches without touching the delivery. That is correct: the physical event does not change because the paperwork was sorted out afterwards.
 
 ### Reconciliation

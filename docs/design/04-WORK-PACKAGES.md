@@ -167,8 +167,11 @@ No decisions required. Start here.
 | `FUEL_BURNS` | `tail_number` | **Yes** | 5 |
 | `ROB_LEDGER` | `tail_number` | **Yes** | 12 |
 | `FUEL_BURN_EXCEPTIONS` | `tail_number` | **Yes** | 0 |
+| `FUEL_DELIVERIES` | `aircraft_reg` | **Yes** | added by WP-10 |
 
-**Six entities, not the four originally named.** `FUEL_TICKETS` and `FUEL_BURN_EXCEPTIONS` were missing from the earlier list.
+**Seven entities.** Four were named originally; the WP-07 survey found `FUEL_TICKETS` and `FUEL_BURN_EXCEPTIONS`; **WP-10 added a seventh, `FUEL_DELIVERIES.aircraft_reg`** — a new `@mandatory` field on an entity that previously carried no aircraft reference at all.
+
+Note the count grew *after* the survey. A survey is accurate at the moment it runs; a package landing in between changes the answer. **Re-survey before WP-07B starts.**
 
 Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`, `C-GHPX`, `C-GROV`, `RP-C8801` to `RP-C8805`, `RP-C8888`.
 
