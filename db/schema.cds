@@ -84,7 +84,23 @@ entity UNIT_OF_MEASURE : ActiveStatus {
     key uom_code        : String(3);      // UoM code (KG, LTR, GAL, etc.)
         uom_name        : String(50);     // UoM description
         uom_category    : String(20);     // Category (MASS, VOLUME, etc.)
-        conversion_to_kg: Decimal(15,6);  // Conversion factor to kg (for volume)
+
+        // WP-11: planning-side conversion factor ONLY.
+        // SAP's MARM carries its own litre-to-kilogram factor and is
+        // authoritative. Two independent sources for the same number produce a
+        // phantom variance in stock reconciliation on top of the real density
+        // variance. Use this for the plan-to-order estimate and for nothing
+        // that has to agree with SAP.
+        conversion_to_kg: Decimal(15,6);  // Planning estimate factor. NOT for settlement or reconciliation
+
+        // WP-11: SAP T006 mapping. The unit travels on the PO, the GR and the
+        // invoice. This list is a mixture — LTR is ISO, KG is internal, MT is
+        // neither — so the mapping is added rather than the list renamed.
+        // Send sap_uom_iso: internal codes are client-configurable and a
+        // product shipping to several airlines cannot depend on one client's
+        // naming. Verify against the target client's T006 before go-live.
+        sap_uom         : String(3);      // T006 MSEHI, internal
+        sap_uom_iso     : String(3);      // T006 ISOCODE
 }
 
 /**
@@ -699,7 +715,18 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Product
         product             : Association to MASTER_PRODUCTS;
         uom                 : Association to UNIT_OF_MEASURE on uom.uom_code = uom_code;
-        uom_code            : String(3) default 'KG';   // Default to KG
+        // WP-11 / A2: order and delivery in litres, planning in kilograms.
+        // LTR is a FALLBACK, not a rule — the unit is the supplier's choice
+        // (AFSMA). Resolution order is supplier contract, then station, then
+        // this default; contract and station configuration arrive with WP-13.
+        uom_code            : String(3) default 'LTR';
+
+        // WP-11: evidence for the plan-mass to order-volume conversion.
+        // Without all three the order records a converted number nobody can
+        // reproduce.
+        conversion_density  : Decimal(8,4);   // kg/L used to convert plan mass to order volume
+        conversion_source   : String(20);     // Which configuration row produced it
+        ordered_quantity_kg : Decimal(12,2);  // The plan figure this order was converted from
 
         // Quantity & Pricing
         ordered_quantity    : Decimal(12,2) @mandatory; // Ordered fuel quantity (kg)
@@ -768,7 +795,8 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         // Delivery Details
         delivery_date       : Date @mandatory;          // Actual delivery date
         delivery_time       : Time @mandatory;          // Actual delivery time
-        delivered_quantity  : Decimal(12,2) @mandatory; // Actual delivered quantity (kg)
+        delivered_quantity  : Decimal(12,2) @mandatory; // Actual delivered quantity
+        uom_code            : String(3) default 'LTR';  // WP-11: unit of the delivered quantity
 
         // Quality Measurements (FDD-05 validation rules)
         @assert.range: [-40, 50]  // VAL-EPD-003: Must be between -40°C and +50°C
@@ -833,7 +861,7 @@ entity FUEL_TICKETS : cuid, AuditTrail {
 
         // Quantity
         quantity            : Decimal(15,2) @mandatory; // Quantity on ticket (kg)
-        uom_code            : String(3) default 'KG';   // Unit of measure
+        uom_code            : String(3) default 'LTR';  // WP-11: fallback default; the supplier's metering unit governs
 
         // Timing
         delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket
