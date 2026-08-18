@@ -19,7 +19,12 @@ const {
     assertOrderableForFlight,
     reportRegisterError
 } = require('./lib/aircraft-register');
-const { DEFAULT_VOLUME_UOM, planMassToOrderVolume } = require('./lib/fuel-uom');
+const {
+    DEFAULT_VOLUME_UOM,
+    planMassToOrderVolume,
+    isMassUom,
+    deriveGaugeFigures
+} = require('./lib/fuel-uom');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -79,6 +84,63 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // ====================================================================
         // ORDER CREATION - Total amount calc & order number generation
         // ====================================================================
+
+        // ====================================================================
+        // AIRCRAFT GAUGE PAIR - WP-12, decision B5
+        // ====================================================================
+
+        // fob_delta_kg and ground_burn_kg are derived from the FQIS readings.
+        // Both are kilograms unconditionally; an FQIS reports mass, so there
+        // is no unit to resolve here.
+        //
+        // ground_burn_kg is derived ONLY where arrival and before are two
+        // separate measurements. Where either is missing it stays null. It is
+        // never produced by copying one reading into the other: that yields a
+        // zero ground burn, and a zero is a claim that no APU burned, not a
+        // record that nobody measured.
+        const deriveGauge = async (req) => {
+            const d = req.data;
+
+            // req.data carries only what the caller sent, so an update that
+            // corrects one reading has to read the row for the others. Read
+            // from req.target rather than FuelDeliveries: the same handler
+            // serves the draft and the active entity, and reading the wrong
+            // one returns nothing for a draft in progress.
+            let stored = {};
+            if (req.event !== 'CREATE') {
+                const id = d.ID || _id(req.params);
+                if (id) {
+                    stored = await SELECT.one.from(req.target)
+                        .columns('fob_at_arrival_kg', 'fob_before_kg', 'fob_after_kg')
+                        .where({ ID: id }) || {};
+                }
+            }
+            const at = (f) => (d[f] !== undefined ? d[f] : stored[f]);
+
+            const derived = deriveGaugeFigures({
+                fob_at_arrival_kg: at('fob_at_arrival_kg'),
+                fob_before_kg: at('fob_before_kg'),
+                fob_after_kg: at('fob_after_kg')
+            });
+            d.fob_delta_kg = derived.fob_delta_kg;
+            d.ground_burn_kg = derived.ground_burn_kg;
+        };
+
+        // Registered on the draft entity as well as the active one, and this
+        // is not belt-and-braces. FUEL_DELIVERIES is a draft composition
+        // CHILD of FUEL_ORDERS: draftActivate fires CREATE on the root and
+        // writes the children with it, so no per-child CREATE event ever
+        // reaches the active entity. Registering only on FuelDeliveries left
+        // fob_delta_kg and ground_burn_kg null on every delivery created
+        // through the application, while the handler looked correct and the
+        // request returned 201. Deriving into the draft row carries the
+        // values through activation.
+        //
+        // FuelTickets does not need this - it is a draft ROOT in
+        // TicketService, so its activation does fire CREATE on the active
+        // entity. Root and child behave differently; check which one you have.
+        this.before(['CREATE', 'UPDATE', 'PATCH'],
+            [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
 
         this.before(['PATCH', 'UPDATE'], [FuelOrders, FuelOrders.drafts], async (req) => {
             const { ordered_quantity, unit_price } = req.data;
@@ -472,9 +534,42 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const temp = delivery.temperature;
             const density = delivery.density;
             const measuredQty = delivery.delivered_quantity;
+            const uom = delivery.uom_code;
 
             if (temp === null || temp === undefined) return req.error(400, 'EPD403: Temperature not recorded on this delivery.');
             if (density === null || density === undefined) return req.error(400, 'EPD404: Density not recorded on this delivery.');
+
+            // WP-12: the correction is VOLUMETRIC. Thermal expansion acts on
+            // volume, not on mass — a kilogram is a kilogram at any
+            // temperature. Applying the factor to a mass figure produces a
+            // number that means nothing, which is what this action did before.
+            //
+            // Where the delivery is measured in a mass unit the answer is
+            // null, and null is written. Returning the input unchanged would
+            // be worse than the old behaviour, not better: it silently claims
+            // a correction was applied. Missing is not zero and not identity.
+            const mass = await isMassUom(uom);
+            if (mass === null) {
+                return req.error(400, `EPD404: Unit ${uom || '(none)'} does not resolve in UNIT_OF_MEASURE, so no correction basis can be established.`);
+            }
+            if (mass === true) {
+                await UPDATE(FuelDeliveries).where({ ID: delivery.ID }).set({
+                    temperature_corrected_qty: null,
+                    modified_at: new Date().toISOString(),
+                    modified_by: req.user.id
+                });
+                return {
+                    success: false,
+                    deliveryNumber: delivery.delivery_number,
+                    measuredQuantity: measuredQty,
+                    measuredTemperature: temp,
+                    measuredDensity: density,
+                    correctionFactor: null,
+                    correctedQuantity: null,
+                    referenceTemperature: 15.0,
+                    message: `No correction applied. Delivery is measured in ${uom}, a mass unit, and thermal expansion acts on volume. temperature_corrected_qty is null.`
+                };
+            }
 
             // ASTM D1250: Corrected = Measured × [1 - α × (T - 15)]
             // α = 0.00099 for Jet A/A-1
@@ -498,7 +593,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 correctionFactor: correctionFactor,
                 correctedQuantity: correctedQty,
                 referenceTemperature: refTemp,
-                message: `Temperature corrected from ${measuredQty} kg to ${correctedQty} kg (factor: ${correctionFactor}, ΔT: ${(temp - refTemp).toFixed(1)}°C)`
+                message: `Temperature corrected from ${measuredQty} to ${correctedQty} ${uom} (factor: ${correctionFactor}, ΔT: ${(temp - refTemp).toFixed(1)}°C)`
             };
         });
 

@@ -9,6 +9,7 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const { allocateDeliveryNumber, reportAllocationError } = require('./lib/number-range');
+const { deriveGaugeFigures } = require('./lib/fuel-uom');
 
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
@@ -139,7 +140,20 @@ module.exports = class RefuelerService extends cds.ApplicationService {
                 throw e;
             }
 
-            // Create delivery record
+            // Create delivery record.
+            //
+            // WP-12: this is a second creation path for FUEL_DELIVERIES and it
+            // writes at the database layer, so the gauge derivation registered
+            // on FuelOrderService.FuelDeliveries never sees it. The supplier
+            // side transmits no FQIS reading today, so the derivation yields
+            // nulls - but it is called rather than assumed, so that the day a
+            // reading arrives here it is derived instead of silently skipped.
+            const gauge = deriveGaugeFigures({
+                fob_at_arrival_kg: null,
+                fob_before_kg: null,
+                fob_after_kg: null
+            });
+
             await INSERT.into(FUEL_DELIVERIES).entries({
                 sales_order_ID: order.ID,
                 delivery_number: deliveryNumber,
@@ -150,6 +164,8 @@ module.exports = class RefuelerService extends cds.ApplicationService {
                 density: density || null,
                 vehicle_id: vehicleId || order.vehicle_id,
                 driver_name: driverName || order.driver_name,
+                fob_delta_kg: gauge.fob_delta_kg,
+                ground_burn_kg: gauge.ground_burn_kg,
                 status: 'Pending'
             });
 
