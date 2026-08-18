@@ -67,6 +67,12 @@ annotate MasterDataService.Manufacturers with @(restrict: [
 ]);
 
 // Aircraft - Read by all with MasterDataRead, Write by MasterDataWrite, Delete by Admin
+annotate MasterDataService.AircraftRegistrations with @(restrict: [
+    { grant: 'READ', to: ['MasterDataRead'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite'] },
+    { grant: 'DELETE', to: ['MasterDataAdmin'] }
+]);
+
 annotate MasterDataService.Aircraft with @(restrict: [
     { grant: 'READ', to: ['MasterDataRead'] },
     { grant: ['CREATE', 'UPDATE'], to: ['MasterDataWrite'] },

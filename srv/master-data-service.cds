@@ -58,6 +58,17 @@ service MasterDataService {
     };
 
     /**
+     * AircraftRegistrations - the aircraft register (WP-07)
+     * One row per individual aircraft, keyed on the registration.
+     * Aircraft above is the TYPE master; this is the register of tails.
+     */
+    entity AircraftRegistrations as projection on db.AIRCRAFT_REGISTRATIONS {
+        *,
+        aircraft_type                     : redirected to Aircraft,
+        virtual null as activeCriticality : Integer
+    };
+
+    /**
      * Airports - Airport Master
      * Access: integration-admin (Edit), ops-manager/fuel-planner (View)
      */
