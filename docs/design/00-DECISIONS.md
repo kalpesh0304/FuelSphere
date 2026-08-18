@@ -119,7 +119,32 @@ Items are grouped by what they block. **Group A must be closed before any code i
 
 **Also retire `PRICING_CONFIG` (singular)** in favour of `PRICING_CONFIGURATIONS`. The duplication extends to configuration, not just formulas.
 
-**Decision: KEEP THE PLURAL FAMILY.** `PRICING_FORMULAS`, `FORMULA_COMPONENTS`, `MARKET_INDICES`, `MARKET_INDEX_VALUES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`. Retire the singular family and `PRICING_CONFIG` — no writer, only read-projected by Planning. WP-08.
+**Decision: KEEP THE PLURAL FAMILY.** `PRICING_FORMULAS`, `FORMULA_COMPONENTS`, `MARKET_INDICES`, `MARKET_INDEX_VALUES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`. Retire the singular family and `PRICING_CONFIG`. **DELIVERED under WP-08, PR #35.**
+
+**Correction — this decision contained a factual error.** It stated the singular family was "only read-projected by Planning". WP-08's survey found it was read-projected by **three** services and referenced by associations on **two retained entities**:
+
+```
+PRICE_ASSUMPTION.source_formula  → PRICING_FORMULA
+PRICE_ASSUMPTION.base_index      → MARKET_INDEX
+FLIGHT_COSTS.pricing_formula     → PRICING_FORMULA
+```
+
+Deleting on the original description would have broken the build. It also named one projection collision where there were **three** — `PricingFormulas`, `MarketIndices`, `DerivedPrices`.
+
+**The two families are not versions of one design.** Of `DERIVED_PRICE`'s 26 fields, **20 have no same-named counterpart** on `DERIVED_PRICES`. Four read paths were dropped rather than guessed at, because no counterpart exists:
+
+| Dropped | Note |
+|---|---|
+| `PricingFormulas.contract` | No counterpart |
+| `MarketIndices.values` | **`MARKET_INDICES` has no forward composition to its values.** The relationship is modelled only from the child |
+| `DerivedPrices.airport` | No counterpart |
+| `DerivedPrices.product` | No counterpart |
+
+Three were renames: `elements` → `components`, `market_index` → `lookup_index`, `marketIndex` → `market_index`.
+
+**For WP-20:** those four paths are gone by design, not by oversight of the merge. Do not attempt to restore them.
+
+`FormulaElementCategory` is now an orphan type — its only consumer was the deleted `PRICING_FORMULA_ELEMENT.category`. Left in place; the plural family's `component_type` may want it.
 
 ---
 
@@ -168,7 +193,11 @@ FUEL_DELIVERIES                    registration + time window
               └─ order (FK, nullable)
 ```
 
-**The delivery hangs off the aircraft, not the order.** It keys on registration plus time window.
+**The delivery hangs off the aircraft, not the order.** It keys on **registration + date + departure time** — REQ-FL-010, accepted 17 August 2026.
+
+> ACARS transmits fuel data for a **tail**, not a flight number, so FuelSphere must resolve the join itself. Tail plus date is insufficient: a narrowbody flies four to six sectors a day, and departure time is what separates them.
+
+This replaces the earlier wording, "registration plus time window", which named no anchor. The key states what a reading attaches *to*; the window becomes a tolerance either side of it.
 
 **Orders link transitively, through the ticket.** No direct FK in either direction, because the relationship is many-to-many both ways:
 
@@ -376,6 +405,33 @@ A broken chain must not stop the airline operating. The next entry restarts from
 > **Open point F11 — chain recovery mechanics.** How the restart is represented is not yet designed. Options include an explicit `ADJUSTMENT` entry closing the gap, an entry typed `CHAIN_RESTART`, or an opening balance flagged as unverified. Each has consequences for ledger closure reporting and for whether the gap is later reconcilable. Deferred; WP-03 raises the exception and permits continuation without deciding the representation.
 
 **Decision: keep the assertion, raise FB402, allow subsequent entries. Confirmed.**
+
+---
+
+### B9. Cost object determination model — REQ-SAP-002
+
+**Decision: the burn posting cost object is either a cost centre or a PM order**, selected by `FLIGHT_COST_OBJECT_MODEL` per company code.
+
+| Value | Determination |
+|---|---|
+| `PM_ORDER` | **Lookup** — flight to PM order, from the trip record or an equivalent standard SAP table |
+| `COST_CENTER` | **Derivation** — event category, station, service type, carrier code |
+
+**Event category is a determination dimension.** Engine burn and APU burn on the same leg may resolve to different cost centres. The design's rule that *cost object resolves per event, not per leg* is load-bearing here.
+
+**`PM_ORDER` is a lookup, not a rule.** FuelSphere reads the flight-to-PM-order relationship; it does not derive or maintain it.
+
+> **Dependency:** the trip record is REQ-INT-002 Path A, deferred pending OI-006. `PM_ORDER` mode cannot be built until SAP provides the structure, or an equivalent standard table is identified.
+
+**Burn corrections carry the object of the flight being corrected**, not of the period in which the correction was made. Holds under both models.
+
+**Aircraft to cost object: provisioned, not consumed.** `AIRCRAFT_REGISTRATIONS` gains a nullable `cost_object_type` and `cost_object_id`. No current flow requires it — burn posts to the flight object, not the tail. Provisioned so it is not retrofitted; **no determination logic until a use case exists.**
+
+**Airport maps to plant only.** The cost centre and profit centre mappings are **not adopted**. Station-level cost resolves through `FS_COST_OBJECT_RULE`, where station is a determination dimension. The design has no profit centre concept and does not gain one.
+
+**Effect on the design.** `FS_COST_OBJECT_RULE` survives with a narrower role. Under `PM_ORDER` the object is looked up, bypassing the rule table. Under `COST_CENTER` the derivation is four dimensions rather than the ten scope levels designed. The wider hierarchy remains for non-burn objects.
+
+**Decision: confirmed.**
 
 ---
 
@@ -607,13 +663,14 @@ Raised and deliberately deferred. Not blocking.
 | # | Item | Context | Revisit when |
 |---|---|---|---|
 | F1 | **Flight number on the supplier ticket feed** | Where a supplier transmits a flight number on the ticket, it can disagree with the flight resolved through the order — after a tail swap, or on a transcription error. Comparing the two would catch fuel delivered against the wrong order, which is otherwise invisible until invoice matching. Not needed now: the refuelling event is created from a ticket already matched to an order, so the flight resolves down that path with nothing to compare against | An electronic supplier ticket feed carrying a flight number is introduced |
-| F2 | **Refuelling event window duration** | How long an event stays open before a new ticket opens a fresh one. Too short and a slow two-bowser uplift splits, breaking the FQIS pairing. Too long and a genuine top-up merges into the original. Suggested starting point two hours, as a parameter | Real turnaround data is available to calibrate against |
+| F2 | **Refuelling event window — three calibration questions** | **(a) Duration.** How long an event stays open before a new ticket opens a fresh one. Too short and a slow two-bowser uplift splits, breaking the FQIS pairing. Too long and a genuine top-up merges into the original. Two hours as a starting parameter. **(b) Tolerance either side of departure time.** REQ-FL-010 settles the anchor — registration + date + departure time — but not how far before or after a reading is still accepted. A delivery starting 13:10 for a 15:00 departure is clearly that flight's; at 11:45 following an 11:00 arrival it is ambiguous. **(c) Scheduled or actual departure time.** Actual is more accurate; scheduled is available earlier. A schedule slip from 15:00 to 17:30 moves the join, and a reading taken at 15:20 changes meaning | Real turnaround data is available to calibrate against |
 | F3 | **Where the ePOD signature belongs** | Per ticket where each fueller signs their own, or per delivery where the crew signs one consolidated document at the end. **Partial evidence for per ticket:** IATA service level guidance places the receipt with the fuelling operative — "provide fuel delivery receipt to representative for signature prior to aircraft departure" is listed as a duty of the person operating the fuel vehicle, implying one receipt per vehicle. Not conclusive for multi-bowser turns | Confirmed with the airline, or resolved from the IATA Transaction standard — see F9 |
 | F9 | **Obtain the IATA Fuel Data Standards** | Four free XML standards covering the exact lifecycle: Tender/Bid, Operational (preliminary through revised and final order, concluding with a Fuel Summary), Transaction (electronic fuel transaction settlement), Invoice. **The Transaction standard is the industry schema for the fuel ticket** and would settle F3, the delivery-versus-ticket structure and the field set from the industry's own definition rather than inference. Broad supplier adoption including Shell Aviation, Air bp, ENOC, Q8, Neste, Singapore Petroleum; airline adoption including Lufthansa, British Airways, Emirates, Singapore Airlines, Cathay Pacific, Qatar. Note the Operational standard's shape — preliminary, revised, final, summary — is order versioning independently arrived at | **Now.** Free download at iata.org/en/programs/ops-infra/fuel/data-standards, contact fdsg@iata.org |
 | F4 | **FQIS source and confidence on the event** | Without ACARS, fuel on board is crew-reported and typically rounded to 100 kg, which is 0.9% of a narrowbody uplift and 25% of a small top-up. Reconciliation tolerance should resolve partly from the source, and missing readings must read as NOT_RECONCILED rather than PASS | ACARS coverage per fleet is known, and it is confirmed whether crew record fuel on board at refuelling at all |
 | F5 | **Into-plane pricing models** | Per litre at station level today. Volume-banded, per turn, aircraft-size and out-of-hours models are not supported | Contract terms across stations are known |
 | F6 | **Dispatch plan version gap rate** | Push-on-change with latest-only emission is confirmed. Gaps still occur under push. Whether a gap is a defect to chase or normal attrition determines how versions_skipped is interpreted | Observed gap rates are available |
 | F7 | **Aircraft type structure for a product** | Four code schemes plus a separate configuration table, or a flatter shape with alias resolution alone. Current design favours correctness of parameter resolution over setup simplicity | Two or three implementations have been observed |
+| **F17** | **Six status columns remain free text after WP-09** | `AIRCRAFT_OPSTATUS.status_code`, `ALERT_INSTANCES.status`, `INDEX_IMPORT_BATCHES.status`, `ROUTE_MASTER.status`, `SECURITY_USERS.employment_status`, `INVOICES.fi_posting_status`. Found by the WP-09 survey. Deliberately excluded: each belongs to a module that is not built, so enum-ing it means guessing the value set before the behaviour exists. **`SECURITY_USERS.employment_status` is a special case** — it is deliberately free text with its own comment `// ACTIVE, TERMINATED, LOA`, and it is not the `UserStatus` column. WP-06 established this. Do not "fix" it | Each with the package that builds its module |
 | **F16** | **Validation guards should flag, not early-return** | WP-05 measurement: the removed 100,000 kg guard used `req.error` followed by `return`, and the return also skipped the `total_amount` calculation further down the handler. An over-threshold order ended up with **neither a quantity nor a total** — the guard silently suppressed a derived value as a side effect of blocking the write, with no indication why. When WP-13 introduces configurable thresholds, prefer flagging the record and continuing so derived values still populate. Applies to any guard that sits above a derivation in the same handler | WP-13, tolerance configuration. Review other early-return guards for the same pattern |
 | **F13** | **Master data sync safety outside a request context** | WP-01 measurement established that CAP's ambient request transaction makes the full-replace sync atomic **on the request path**. `_syncFromS4` has no equivalent protection if called with no ambient transaction. No scheduler exists today, but `CLAUDE.md` and `PRICING_CONFIGURATIONS.derivation_schedule` both imply one is intended. At that point the original D1 risk becomes real, and whoever adds the scheduler will not know. Note that F12 (upsert) would remove the exposure entirely by eliminating the delete-then-insert window | **Before any scheduler or background job is added.** Whichever work package introduces one must handle this, or it reintroduces D1 |
 | **F12** | **Master data sync — replace full delete-and-insert with upsert. HIGH PRIORITY** | **Note from WP-01 measurement:** `s4-sync-config.js:117-130` holds a commented-out `SuppliersVendor` feed targeting the same table as `Suppliers`, with an in-file warning that full replace deletes all supplier records first. Under full-replace semantics two feeds against one table cannot coexist — the second wipes the first. Upsert removes that constraint, so enabling `SuppliersVendor` is gated on this item. The S/4 master data sync deletes the entire table and reinserts. WP-01 restores the transaction wrapper, which removes the data-loss risk, but the pattern remains wrong. Upsert is better on every dimension: the table is never empty, a failure affects one row rather than all, audit history survives, and what changed is visible. **The blocking question is not technical.** When S/4 stops sending a supplier, what happens to the fuel tickets and orders that already reference it? Three options — mark inactive and continue resolving on existing transactions; mark inactive and block new use; or delete and orphan the references. Each also needs a stable business key per entity to match on, and a delete indicator field, which is a schema change | **Before any further master data work.** Raise as a Phase 1 work package. Requires a product decision on the inactive-record question, not only a code change |
