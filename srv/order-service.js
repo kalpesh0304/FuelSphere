@@ -19,6 +19,7 @@ const {
     assertOrderableForFlight,
     reportRegisterError
 } = require('./lib/aircraft-register');
+const { DEFAULT_VOLUME_UOM, planMassToOrderVolume } = require('./lib/fuel-uom');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -257,7 +258,8 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // ====================================================================
 
         this.on('createOrderFromFlight', async (req) => {
-            const { flightId, supplierId, contractId, productId, orderedQuantity, unitPrice, currencyCode, priority, notes } = req.data;
+            const { flightId, supplierId, contractId, productId, orderedQuantity, orderedQuantityKg,
+                    unitPrice, currencyCode, priority, notes } = req.data;
 
             // Look up the flight
             const flight = await SELECT.one.from(FlightSchedule).where({ ID: flightId });
@@ -287,6 +289,12 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const { MASTER_AIRPORTS } = cds.entities('fuelsphere');
             const airport = await SELECT.one.from(MASTER_AIRPORTS).where({ iata_code: stationCode });
 
+            // WP-11 / A2: an order created from a plan in kilograms carries the
+            // equivalent volume, the density used and the source mass. Without
+            // all three the converted number cannot be reproduced. A missing
+            // factor leaves the quantity alone rather than inventing one.
+            const converted = await planMassToOrderVolume(orderedQuantityKg);
+
             const orderId = cds.utils.uuid();
             await INSERT.into(FuelOrders).entries({
                 ID: orderId,
@@ -297,8 +305,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 supplier_ID: supplierId,
                 contract_ID: contractId,
                 product_ID: productId,
-                uom_code: 'KG',
+                uom_code: DEFAULT_VOLUME_UOM,
                 ordered_quantity: orderedQuantity,
+                ...(converted ? {
+                    ordered_quantity: converted.quantity,
+                    uom_code: converted.uom_code,
+                    conversion_density: converted.conversion_density,
+                    conversion_source: converted.conversion_source,
+                    ordered_quantity_kg: converted.ordered_quantity_kg
+                } : {}),
                 unit_price: unitPrice,
                 total_amount: totalAmount,
                 currency_code: currencyCode || 'USD',
@@ -842,9 +857,13 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     remarks: remarks || null
                 });
 
-                // Track fuel order update
+                // Track fuel order update. The dispatch mass travels with it so
+                // the order can be converted to volume where it has no quantity.
                 if (flightRecord.fuel_order_ID) {
-                    ordersToUpdate.set(flightRecord.fuel_order_ID, fuelOrderId);
+                    ordersToUpdate.set(flightRecord.fuel_order_ID, {
+                        dispatchFuelOrderId: fuelOrderId,
+                        dispatchQtyKg
+                    });
                 }
 
                 // Add to duplicate set to prevent duplicates within same upload
@@ -862,11 +881,31 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             }
 
             // --- Bulk UPDATE fuel orders with dispatch_fuel_order_id ---
-            for (const [fuelOrderID, dispatchFuelOrderId] of ordersToUpdate) {
+            for (const [fuelOrderID, { dispatchFuelOrderId, dispatchQtyKg }] of ordersToUpdate) {
                 try {
-                    await UPDATE(FUEL_ORDERS)
-                        .set({ dispatch_fuel_order_id: dispatchFuelOrderId })
+                    const changes = { dispatch_fuel_order_id: dispatchFuelOrderId };
+
+                    // WP-11 / A2: the dispatch carries the plan mass in
+                    // kilograms. Where the order has no quantity yet, convert it
+                    // to the order's volume unit and record the density, its
+                    // source and the mass it came from. ADDITIVE ONLY - an order
+                    // that already carries a quantity is never overwritten,
+                    // because a dispatch figure is not an amendment.
+                    const existing = await SELECT.one.from(FUEL_ORDERS)
+                        .columns('ordered_quantity')
                         .where({ ID: fuelOrderID });
+                    if (existing && !(Number(existing.ordered_quantity) > 0)) {
+                        const converted = await planMassToOrderVolume(dispatchQtyKg);
+                        if (converted) {
+                            changes.ordered_quantity    = converted.quantity;
+                            changes.uom_code            = converted.uom_code;
+                            changes.conversion_density  = converted.conversion_density;
+                            changes.conversion_source   = converted.conversion_source;
+                            changes.ordered_quantity_kg = converted.ordered_quantity_kg;
+                        }
+                    }
+
+                    await UPDATE(FUEL_ORDERS).set(changes).where({ ID: fuelOrderID });
                     ordersUpdated++;
                 } catch (e) {
                     errors.push({ row: 0, field: 'FUEL_ORDER_ID',
