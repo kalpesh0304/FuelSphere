@@ -83,6 +83,20 @@ No decisions required. Start here.
 
 ---
 
+### WP-09B · Enforce the remaining enum-typed elements
+
+**Entry:** WP-09 merged
+**Scope:** 79 enum-typed elements exist in `db/schema.cds` and **none is enforced**. Declaring a CDS enum does not validate input; CAP checks only where `@assert.range` is present. WP-09 enforced `FLIGHT_SCHEDULE.status` alone. Add enforcement to the remaining 78, following the house form established in WP-09.
+**Out of scope:** Adding, removing or renaming enum members. Converting further free-text columns to enums — that is open point F17.
+**Exit:**
+- Every enum-typed element rejects a value outside its enum
+- `cds deploy` succeeds with the existing seed set, or every seed value that now fails is reported with whether the data or the enum is wrong
+- Defect D25 closed
+
+> **Wide blast radius.** Every writer of an enum-typed field, and every seed value, becomes subject to a constraint that has never been applied. Expect failures — they are the point. WP-06 found 15 seed violations by sweep; enforcement will find any that a sweep missed, plus any the code produces at runtime. **Survey writers before annotating**, and stage the work by module rather than annotating all 78 at once.
+
+---
+
 ### WP-02B · Grant bound actions their own authorisation entries
 
 **Entry:** WP-02 merged
@@ -114,13 +128,55 @@ No decisions required. Start here.
 
 ### WP-07 · Aircraft register
 
-**Entry:** Decision B1
-**Scope:** Add a registration entity carrying tail number, type reference, dry operating weight, per-tail performance factor, APU burn rate, FQIS accuracy, tank capacity and lifecycle status. Re-document `AIRCRAFT_MASTER` as the type master. Replace free-text `tail_number` and `aircraft_reg` with associations on flight schedule, burn, ROB ledger and dispatch. Migrate existing seed values.
-**Out of scope:** Provisional lifecycle behaviour and gating — WP-15. APU usage — WP-19.
-**Exit:**
-- No transactional entity references an aircraft by free-text string
-- A registration absent from the register is rejected or provisioned per B1
-- Defect D11 closed
+**Entry:** Decision B1. WP-09 merged — this package edits `db/schema.cds`, which WP-09 also changed.
+**Specification:** `01-TARGET-SCHEMA.md` §2 and §2A. **Where this entry and §2 differ, §2 governs.**
+
+**Scope**
+1. Add `AIRCRAFT_REGISTRATIONS`, keyed on `registration`, with the per-tail fields and `AircraftRecordStatus` per §2.
+2. Add §2A's optional `cost_object_type` and `cost_object_id`. **Provisioned, not consumed** — no determination logic against them.
+3. Keep `AIRCRAFT_MASTER` unchanged, re-documenting its header comment as the aircraft **type** master.
+4. Gate order creation on `PROVISIONAL` status per decision A4. **Ticket capture and ROB entry stay unblocked.**
+5. Seed the registrations already present in the data.
+
+**Out of scope**
+- **Replacing `tail_number` and `aircraft_reg` strings with associations. That is WP-07B.** An earlier version of this entry made it exit criterion 1; `01-TARGET-SCHEMA.md` §2 excludes it by name, and §2 governs.
+- Provisional lifecycle behaviour beyond the order-creation gate — WP-16.
+- APU usage. `apu_burn_rate_kg_hr` is added so the register is complete; nothing consumes it until WP-19.
+- Fixing `recalculateROB(aircraftId: UUID)`, whose signature cannot address a tail. Note it here; the fix belongs with WP-07B.
+
+**Exit**
+- `AIRCRAFT_REGISTRATIONS` exists and holds the registrations found in seed data
+- An order cannot be created against a `PROVISIONAL` registration
+- A ticket **can** be captured against a `PROVISIONAL` registration
+- `cds compile` and `cds deploy` clean, verified by exit code
+
+---
+
+### WP-07B · Migrate tail references from string to association
+
+**Entry:** WP-07 merged
+**Specification:** none yet written. **This package needs a specification before it starts** — `01-TARGET-SCHEMA.md` §2 defers it without describing the target.
+
+**The problem.** Six entities reference an aircraft by free-text string. Surveyed under WP-07:
+
+| Entity | Field | Mandatory | Seed rows |
+|---|---|---|---|
+| `FLIGHT_SCHEDULE` | `aircraft_reg` | | 14 |
+| `FUEL_TICKETS` | `aircraft_reg` | | 5 |
+| `FLIGHT_DISPATCH` | `tail_number` | | 7 |
+| `FUEL_BURNS` | `tail_number` | **Yes** | 5 |
+| `ROB_LEDGER` | `tail_number` | **Yes** | 12 |
+| `FUEL_BURN_EXCEPTIONS` | `tail_number` | **Yes** | 0 |
+
+**Six entities, not the four originally named.** `FUEL_TICKETS` and `FUEL_BURN_EXCEPTIONS` were missing from the earlier list.
+
+Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`, `C-GHPX`, `C-GROV`, `RP-C8801` to `RP-C8805`, `RP-C8888`.
+
+**Why it is separate.** Three of the six fields are `@mandatory`, so this is not additive — it changes required columns on `FUEL_BURNS` and `ROB_LEDGER`, which WP-03 fixed and WP-06 seeded. And every register row must exist before any reference can resolve, which WP-07 provides.
+
+**Also in scope here:** `recalculateROB(aircraftId: UUID)` cannot address a tail. Correct the signature once registrations are associable.
+
+**Before starting, decide:** whether the string fields are replaced, or retained alongside the association as a denormalised copy. Retaining them is safer for inbound feeds that carry a registration before the register has a matching row — which is the provisional case A4 is built for.
 
 ---
 
