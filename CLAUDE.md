@@ -29,11 +29,21 @@ Authoritative. Read before starting work.
 | File | Governs |
 |---|---|
 | `docs/design/00-DECISIONS.md` | Resolved merge decisions. **Non-negotiable.** An unfilled decision means stop and ask |
+| `docs/design/01-TARGET-SCHEMA.md` | Target schema, entity by entity, in this repository's names |
+| `docs/design/02-BEHAVIOUR.md` | Behaviour per module, mapped to this repository's services |
+| `docs/design/03-VALIDATION-RULES.md` | 195 validation rules, each with an error code |
 | `docs/design/04-WORK-PACKAGES.md` | Bounded work packages with entry and exit criteria |
 | `docs/design/05-CONVENTIONS.md` | Naming, patterns, what not to touch |
 | `docs/design/FuelSphere_Design_Workbook.xlsx` | Scenarios, validation rules, screens, IATA standards map |
 
-`01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md` and `03-VALIDATION-RULES.md` are placeholders. **Stop and ask** before schema or behaviour work.
+**All three specification documents are now written.** They replaced placeholders on 17 August 2026. `01-TARGET-SCHEMA.md` covers WP-07 to WP-12 plus cost object determination; entities not listed are unchanged in Phase 1.
+
+### Records, not specifications
+
+| File | Note |
+|---|---|
+| `docs/data/SME_Requirements_Register.md` | How 52 SME requirements were dispositioned. **NOT a specification.** Accepted items are already specified in 01, 02 and 03. Do not implement from it |
+| `docs/as-built-baseline/` | Independent documentation of the code as it stood before Phase 0 |
 
 `docs/design/` also holds seven documents predating the merge reconciliation — `DESIGN_DECISIONS.md`, `MASTER_DATA_HLD.md`, `OVERALL_HLD.md`, `PERSONA_AUTHORIZATION_MATRIX.md`, `PROJECT_TRACKER.md`, `RACI.md`, `SESSION_CONTEXT.md`. **These are historical.** Where one conflicts with the authoritative set above, the authoritative set wins. `DESIGN_DECISIONS.md` in particular is superseded by `00-DECISIONS.md`.
 
@@ -366,7 +376,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | ~~D1~~ | ~~Master sync transaction wrapper commented out~~ — **NOT A DEFECT.** Measured under WP-01 on 16 Aug 2026. CAP wraps every inbound request in a managed transaction; bare `DELETE`/`INSERT` dispatch onto it and `req.error(500)` rolls back. Delete and insert are already atomic on the request path. **Restoring the wrapper breaks the sync** — see trap below. Residual risk only if `_syncFromS4` is called outside a request context |
 | D2 | 93 occurrences of `'any'` across 69 authorisation grants |
 | D3 | ROB formula drops uplift, clamps negatives |
-| D4 | Non-atomic `max + 1` number generation |
+| ~~D4~~ | **CLOSED** under WP-04. Shared allocator with an atomic counter, nine sites across five services |
 | D5 | No optimistic locking; status guards read-then-write |
 | D11 | No aircraft register |
 | D13 | `captureSignatures` has no order status guard |
@@ -374,6 +384,10 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | D15 | ROB ledger cannot be rebuilt; `recalculateROB` unimplemented |
 | D16 | Hardcoded 100,000 order guard blocks legitimate widebody orders |
 | **D19** | **`S2A` destination used by code, provisioned nowhere. Master data sync fails on a fresh deployment** |
+| **D25** | **79 enum-typed elements in the schema. Zero are enforced.** Declaring a CDS enum does **not** validate input — CAP only checks where `@assert.range` is present. Before annotation, a POST with `status='RETURNED'` against a newly declared enum returned **201**. This is the mechanism behind the whole enum-violation class WP-06 corrected: `SUBMITTED` could sit in seed data against an enum lacking the member because nothing ever checked. WP-09 enforced one field; the other 78 have a wide blast radius across writers and seed data. See WP-09B |
+| **D24** | **Three seed CSVs are dead, not misnamed.** `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv`. No matching entity exists under any name; headers are camelCase (`iataCode`, `specificEnergy`) from a different design; CAP has never loaded them. Live equivalents are `MASTER_AIRPORTS` and `MASTER_SUPPLIERS`; `FUEL_TYPES` has no counterpart at all. **Delete, do not rename** |
+| **D22** | **Eleven bound actions are denied under real authorisation, for every user including one holding all scopes.** CAP checks a bound action against the entity's `@restrict` for a grant naming that action. `FuelDeliveries` and its peers grant only READ/CREATE/UPDATE/DELETE, so the action is refused before its own `@requires` is consulted. Pre-existing and unchanged by WP-02. **Masked locally by dummy auth; would surface on XSUAA.** Fix is mechanical — a `{ grant: '<action>', to: [...] }` entry per action mirroring its existing `@requires`, granting nothing new. See WP-02B |
+| **D23** | **Two implemented services have no authorisation of any kind.** `authorization.cds` covers 4 of 15 services. `PlanningService` (610 lines, live) and `RefuelerService` (235 lines, live) have no annotation block — not even a service-level `@requires`. `PlanningAccess` is defined as a scope and appears in no grant for that reason, which is a missing grant on working code rather than an unimplemented module |
 | **D21** | **`aircraft_ID` written to `ROB_LEDGER` where no such element exists** — `burn-service.js:479` and `:1071`. The association flattens to `aircraft_type_code`, so `adjustROB` and the Excel ROB import silently never set the aircraft reference |
 | **D20** | **A malformed S/4 response is reported to the caller as "0 records."** `master-data-service.js:130-135` — where the response matches none of the three expected shapes, the `throw` is commented out and the raw body logged. `s4Data` stays `[]`, so the zero-row guard fires. **Data-safe**, but a payload the code cannot parse is indistinguishable from an empty source. A schema change at the S/4 end would be chased as a data problem |
 
@@ -383,15 +397,24 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 | Trap | Detail |
 |---|---|
-| **Two pricing families** | Singular (`PRICING_FORMULA`, `MARKET_INDEX`, `DERIVED_PRICE`, `PRICING_CONFIG`) and plural (`PRICING_FORMULAS`, `MARKET_INDICES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`). **Two services project the same name over different base tables.** Confirm which family you are in before editing |
+| ~~Two pricing families~~ | **RESOLVED** under WP-08, PR #35. The singular family is deleted; 95 projection names across 15 services, zero collisions |
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
 | **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
 | **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
 | **`cds.tx(req, …)` inside a request handler silently discards writes** | CAP already wraps every inbound request in a managed transaction. Passing `req` opens a nested one and the writes never land, **while the action still returns HTTP 200 with success: true**. Measured under WP-01 on all three master data feeds. `cds.tx()` **without** `req` is a different thing — an independent root transaction, correct where a record must survive a failed request. Unmeasured; verify before relying on it |
 | **Check CAP's defaults before adding a safety net** | D1 was recorded as a data-loss defect because a transaction wrapper was commented out. It was commented out because it was redundant. Verify what the framework already provides before treating an absence as a gap |
 | **`MASTER_SUPPLIERS` is `cuid`** | Its primary key is a generated UUID, so a duplicate `supplier_code` raises no constraint violation. Any test relying on a PK collision there will pass vacuously |
+| **Local development does not exercise authorisation at all** | Dev auth is `kind: 'dummy'`, which authorises every request as privileged. `@restrict` is never evaluated. The twelve test users in section 5 have no effect locally. To test authorisation you must override to `kind: 'mocked'` **and** supply the users map in the same override — replacing the auth block alone discards the users. This is why 93 `'any'` entries survived unnoticed |
+| **A DateTime field cannot carry an ETag** | `@odata.etag` on `modified_at` rejects every conditional request with 412, including a token CAP itself just issued. Measured under WP-04 and isolated: an Integer carrier returns 200, and `created_at`, which is never auto-updated, still returns 412. The annotation and `@cds.on.update` are not the cause |
+| **`@odata.etag` is not additive** | It makes `If-Match` **mandatory** on every modifying call for that entity. Every unconditional update becomes 428, breaking `draftActivate` and any existing client. Adding it is a breaking change, not an enhancement |
+| **A search that matches one form is silently partial** | Three occurrences, three dresses. WP-04 grepped `ConcurrencyMode` where OData v4 emits `Core.OptimisticConcurrency`. WP-08 grepped `^\[error` where the compiler emits `[ERROR]`. WP-09 grepped `status: '…'` and missed `req.data.status = '…'` — the **primary writer**, in assignment form rather than object-literal form. **A verification that can produce a false pass is worse than none.** Key on exit codes; where a search is unavoidable, make it form-agnostic and prove the instrument against a known-present string |
+| **Declaring a CDS enum does not enforce it** | CAP validates only where `@assert.range` is present. Without it an enum is documentation — any string is accepted. 79 enum-typed elements exist and 0 are enforced. **A change that declares an enum and stops there looks done and is not** |
+| **The two pricing families were not versions of one design** | Of `DERIVED_PRICE`'s 26 fields, 20 had no counterpart on `DERIVED_PRICES`. Four read paths were dropped in WP-08 because none exists. `MARKET_INDICES` has no forward composition to its values — the relationship is modelled only from the child |
+| **A defect's stated scope may understate it** | WP-02 found `authorization.cds` covers 4 of 15 services. WP-04 found nine number-generation sites across five services where the defect named three. Survey before fixing — a partial fix on a distributed defect looks complete and is not |
+| **Bound actions need their own grant** | A grant of READ/CREATE/UPDATE/DELETE on an entity does not permit its bound actions. CAP looks for a grant naming the action; without one the call is refused before the action's own `@requires` is read. See D22 |
 | **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
-| **Seed data is inadequate for testing** | FUEL_TICKETS 2 rows, FUEL_DELIVERIES 3, FUEL_BURNS 4, FUEL_ORDERS 7, ROB_LEDGER 9. ERROR_LOGS and EXCEPTION_ITEMS 0 |
+| **Seed data now covers the priority cases** | WP-06 added 20 scenario rows across 8 files: tail swap, defuel, broken ledger chain, duplicate invoice line, over-delivery, unmatched ticket, cancelled flight with fuel delivered, multi-ticket order. **26 of the design workbook's 157 scenarios are seedable**; 131 need entities that do not exist here |
+| **Check the field type before calling a value an enum violation** | `SECURITY_USERS.employment_status` was reported as holding a value outside `UserStatus`. It is `String(20)`, not enum-typed, and `UserStatus` belongs to a different column. A sweep of all 380 enum-typed values found 15 genuine defects that nobody had listed — `PARTIAL` for `PARTIAL_MATCH` and `OK` for `NORMAL` |
 | **Three CSVs break the naming pattern** | `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv` are PascalCase where the other 76 are UPPER_SNAKE |
 | **Hardcoded thresholds implement documented rules** | −40/+50 °C and 0.775/0.840 kg/L are `EPD403` and `EPD404`. Not arbitrary magic numbers. Move the values to `TOLERANCE_RULES` without changing them |
 | **Historical documents sit beside authoritative ones** | Seven pre-merge documents share `docs/design/`. See section 1 |
