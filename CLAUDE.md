@@ -29,11 +29,21 @@ Authoritative. Read before starting work.
 | File | Governs |
 |---|---|
 | `docs/design/00-DECISIONS.md` | Resolved merge decisions. **Non-negotiable.** An unfilled decision means stop and ask |
+| `docs/design/01-TARGET-SCHEMA.md` | Target schema, entity by entity, in this repository's names |
+| `docs/design/02-BEHAVIOUR.md` | Behaviour per module, mapped to this repository's services |
+| `docs/design/03-VALIDATION-RULES.md` | 195 validation rules, each with an error code |
 | `docs/design/04-WORK-PACKAGES.md` | Bounded work packages with entry and exit criteria |
 | `docs/design/05-CONVENTIONS.md` | Naming, patterns, what not to touch |
 | `docs/design/FuelSphere_Design_Workbook.xlsx` | Scenarios, validation rules, screens, IATA standards map |
 
-`01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md` and `03-VALIDATION-RULES.md` are placeholders. **Stop and ask** before schema or behaviour work.
+**All three specification documents are now written.** They replaced placeholders on 17 August 2026. `01-TARGET-SCHEMA.md` covers WP-07 to WP-12 plus cost object determination; entities not listed are unchanged in Phase 1.
+
+### Records, not specifications
+
+| File | Note |
+|---|---|
+| `docs/SME_Requirements_Register.md` | How 52 SME requirements were dispositioned. **NOT a specification.** Accepted items are already specified in 01, 02 and 03. Do not implement from it |
+| `docs/as-built-baseline/` | Independent documentation of the code as it stood before Phase 0 |
 
 `docs/design/` also holds seven documents predating the merge reconciliation — `DESIGN_DECISIONS.md`, `MASTER_DATA_HLD.md`, `OVERALL_HLD.md`, `PERSONA_AUTHORIZATION_MATRIX.md`, `PROJECT_TRACKER.md`, `RACI.md`, `SESSION_CONTEXT.md`. **These are historical.** Where one conflicts with the authoritative set above, the authoritative set wins. `DESIGN_DECISIONS.md` in particular is superseded by `00-DECISIONS.md`.
 
@@ -386,7 +396,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 
 | Trap | Detail |
 |---|---|
-| **Two pricing families** | Singular (`PRICING_FORMULA`, `MARKET_INDEX`, `DERIVED_PRICE`, `PRICING_CONFIG`) and plural (`PRICING_FORMULAS`, `MARKET_INDICES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`). **Two services project the same name over different base tables.** Confirm which family you are in before editing |
+| ~~Two pricing families~~ | **RESOLVED** under WP-08, PR #35. The singular family is deleted; 95 projection names across 15 services, zero collisions |
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
 | **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
 | **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
@@ -396,6 +406,8 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **Local development does not exercise authorisation at all** | Dev auth is `kind: 'dummy'`, which authorises every request as privileged. `@restrict` is never evaluated. The twelve test users in section 5 have no effect locally. To test authorisation you must override to `kind: 'mocked'` **and** supply the users map in the same override — replacing the auth block alone discards the users. This is why 93 `'any'` entries survived unnoticed |
 | **A DateTime field cannot carry an ETag** | `@odata.etag` on `modified_at` rejects every conditional request with 412, including a token CAP itself just issued. Measured under WP-04 and isolated: an Integer carrier returns 200, and `created_at`, which is never auto-updated, still returns 412. The annotation and `@cds.on.update` are not the cause |
 | **`@odata.etag` is not additive** | It makes `If-Match` **mandatory** on every modifying call for that entity. Every unconditional update becomes 428, breaking `draftActivate` and any existing client. Adding it is a breaking change, not an enhancement |
+| **Never verify with a case-sensitive grep alone** | Twice a check reported clean while the tool was emitting the opposite — `ConcurrencyMode` versus `Core.OptimisticConcurrency` in WP-04, `^\[error` versus `[ERROR]` in WP-08. Key on the exit code |
+| **The two pricing families were not versions of one design** | Of `DERIVED_PRICE`'s 26 fields, 20 had no counterpart on `DERIVED_PRICES`. Four read paths were dropped in WP-08 because none exists. `MARKET_INDICES` has no forward composition to its values — the relationship is modelled only from the child |
 | **A defect's stated scope may understate it** | WP-02 found `authorization.cds` covers 4 of 15 services. WP-04 found nine number-generation sites across five services where the defect named three. Survey before fixing — a partial fix on a distributed defect looks complete and is not |
 | **Bound actions need their own grant** | A grant of READ/CREATE/UPDATE/DELETE on an entity does not permit its bound actions. CAP looks for a grant naming the action; without one the call is refused before the action's own `@requires` is read. See D22 |
 | **Assertions may explain bad code** | `@assert.range: [0, null]` on `closing_rob_kg` may be why the ROB clamp exists. Check for a constraint before removing a defensive line |
