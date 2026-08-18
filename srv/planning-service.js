@@ -9,6 +9,7 @@ const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 const { allocateOrderNumber, reportAllocationError } = require('./lib/number-range');
 const { assertOrderable } = require('./lib/aircraft-register');
+const { DEFAULT_VOLUME_UOM } = require('./lib/fuel-uom');
 
 module.exports = class PlanningService extends cds.ApplicationService {
     async init() {
@@ -313,7 +314,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         flight_ID: flightId,
                         airport_ID: airportID,
                         station_code: originAirport,
-                        uom_code: 'KG',
+                        uom_code: DEFAULT_VOLUME_UOM,
                         ordered_quantity: orderedQuantity || 0,
                         requested_date: flightDate,
                         priority: 'Normal',
@@ -600,7 +601,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
             flight_ID: flight.ID,
             airport_ID: airport ? airport.ID : null,
             station_code: stationCode,
-            uom_code: 'KG',
+            uom_code: DEFAULT_VOLUME_UOM,
             ordered_quantity: 0,
             requested_date: flight.flight_date,
             priority: 'Normal',

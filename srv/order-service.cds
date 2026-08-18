@@ -337,6 +337,7 @@ service FuelOrderService {
         contractId      : UUID,
         productId       : UUID,
         orderedQuantity : Decimal(12,2),
+        orderedQuantityKg : Decimal(12,2),   // WP-11: plan mass; converted to order volume when supplied
         unitPrice       : Decimal(15,4),
         currencyCode    : String(3),
         priority        : String(10),
