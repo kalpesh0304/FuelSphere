@@ -8,6 +8,7 @@ const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 const { allocateOrderNumber, reportAllocationError } = require('./lib/number-range');
+const { assertOrderable } = require('./lib/aircraft-register');
 
 module.exports = class PlanningService extends cds.ApplicationService {
     async init() {
@@ -325,13 +326,29 @@ module.exports = class PlanningService extends cds.ApplicationService {
                     if (unitPrice !== null) orderEntry.unit_price = unitPrice;
                     if (currencyCode) orderEntry.currency_code = currencyCode;
                     if (orderedQuantity && unitPrice) orderEntry.total_amount = orderedQuantity * unitPrice;
-                    ordersToInsert.push(orderEntry);
+                    // A4 / MDM402: the flight record still applies, but no
+                    // order is raised against a PROVISIONAL tail. The import
+                    // reports it rather than failing the whole batch.
+                    let orderable = true;
+                    try {
+                        await assertOrderable(aircraftReg);
+                    } catch (e) {
+                        if (e.code === 'MDM402') {
+                            orderable = false;
+                            errors.push({ row: rowNum, field: 'aircraft_reg', message: e.message, severity: 'WARNING' });
+                            ordersFailed++;
+                        } else { throw e; }
+                    }
+
+                    if (orderable) {
+                        ordersToInsert.push(orderEntry);
+                        flightOrderMap.set(flightId, orderId);
+                        ordersCreated++;
+                    }
 
                     existingFlightMap.set(flightKey, flightId);
                     batchFlightKeys.add(flightKey);
-                    flightOrderMap.set(flightId, orderId);
                     flightsCreated++;
-                    ordersCreated++;
                 }
             }
 
@@ -566,6 +583,10 @@ module.exports = class PlanningService extends cds.ApplicationService {
 
         const stationCode = flight.origin_airport;
         const dateStr = (flight.flight_date || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+
+        // A4 / MDM402: no order against a PROVISIONAL tail. The flight record
+        // that triggered this has already been written and is unaffected.
+        await assertOrderable(flight.aircraft_reg);
 
         // Draw the next order number from the shared atomic range.
         const orderNumber = await allocateOrderNumber(stationCode, dateStr);

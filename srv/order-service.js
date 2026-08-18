@@ -15,6 +15,10 @@ const {
     allocateDeliveryNumber,
     reportAllocationError
 } = require('./lib/number-range');
+const {
+    assertOrderableForFlight,
+    reportRegisterError
+} = require('./lib/aircraft-register');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -89,6 +93,16 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // Derivations that do not depend on the number come first, so the
             // error path below cannot skip them (F16).
             req.data.status = 'Draft';
+
+            // A4 / MDM402: an order commits the airline to a supplier, so it
+            // is gated on the tail being confirmed. Capture paths are not.
+            try {
+                await assertOrderableForFlight(req.data.flight_ID);
+            } catch (e) {
+                if (reportRegisterError(req, e)) return;
+                throw e;
+            }
+
             try {
                 req.data.order_number = await allocateOrderNumber(req.data.station_code);
             } catch (e) {
@@ -250,6 +264,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!flight) return req.error(404, 'Flight not found');
 
             const stationCode = flight.origin_airport;
+
+            // A4 / MDM402 - the flight row carries the registration.
+            try {
+                await assertOrderableForFlight(flight);
+            } catch (e) {
+                if (reportRegisterError(req, e)) return;
+                throw e;
+            }
+
             let orderNumber;
             try {
                 orderNumber = await allocateOrderNumber(stationCode);

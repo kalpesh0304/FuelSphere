@@ -125,8 +125,16 @@ entity AIRCRAFT_OPSTATUS : CodeList {
 }
 
 /**
- * AIRCRAFT_MASTER - Aircraft Type Master
+ * AIRCRAFT_MASTER - Aircraft TYPE Master
  * Source: FuelSphere native
+ *
+ * This is a TYPE master, not an aircraft register. It is keyed on type_code
+ * and every field on it is type-level: model, manufacturer, capacity, MTOW,
+ * cruise burn, fleet size. One row describes a fleet type such as A350, not
+ * an individual aircraft.
+ *
+ * Individual aircraft live in AIRCRAFT_REGISTRATIONS, keyed on registration.
+ * WP-07 / decision B1. Do not repurpose this entity or move fields out of it.
  *
  * Fields aligned with HLD Section 3.2
  */
@@ -140,6 +148,72 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
         cruise_burn_kgph    : Decimal(10,2);  // Cruise fuel burn rate kg/hour
         fleet_size          : Integer;        // Number in fleet
         status              : Association to AIRCRAFT_OPSTATUS;
+}
+
+/**
+ * Aircraft record lifecycle (WP-07, decision A4)
+ *
+ * The principle is that capture is never blocked and external commitment is
+ * gated. A tail seen for the first time on a ticket is recorded, because the
+ * fuel is already in the tanks; what it cannot yet do is carry an order.
+ */
+type AircraftRecordStatus : String(20) enum {
+    Provisional = 'PROVISIONAL';   // Auto-created. Ticket capture allowed, order creation blocked
+    Confirmed   = 'CONFIRMED';     // Identity verified. Orders unblocked
+    Complete    = 'COMPLETE';      // All physical characteristics present
+}
+
+/**
+ * Cost object type (01-TARGET-SCHEMA §2A, REQ-SAP-002)
+ * Provisioned, not consumed. No determination logic reads it yet.
+ */
+type CostObjectType : String(20) enum {
+    CostCenter    = 'COST_CENTER';
+    InternalOrder = 'INTERNAL_ORDER';
+}
+
+/**
+ * AIRCRAFT_REGISTRATIONS - Aircraft Register (WP-07, decision B1)
+ * Source: FuelSphere native
+ *
+ * One row per individual aircraft. Closes defect D11: before this entity the
+ * only record of a tail was a free-text string on five transactional entities.
+ *
+ * Keyed on the registration itself rather than a UUID. It is the natural key,
+ * it appears on every physical document, and a UUID would force a lookup on
+ * every ingest.
+ *
+ * fuel_capacity_kg appears here AND on AIRCRAFT_MASTER deliberately. The type
+ * value is the default; this one overrides it where a tail's tanks differ.
+ * Resolution is registration first, type second.
+ */
+entity AIRCRAFT_REGISTRATIONS : ActiveStatus, AuditTrail {
+    key registration        : String(10);      // Tail number, e.g. RP-C4108
+
+        aircraft_type       : Association to AIRCRAFT_MASTER on aircraft_type.type_code = aircraft_type_code;
+        aircraft_type_code  : String(10);      // FK, mirrors the pattern on FUEL_ORDERS
+
+        // Per-tail physical characteristics
+        dry_operating_weight_kg : Decimal(15,2);
+        fuel_capacity_kg        : Decimal(15,2);   // Overrides the type value where tanks differ
+        apu_burn_rate_kg_hr     : Decimal(8,2);    // Never metered; APU burn derives from this. Unused until WP-19
+        performance_factor_pct  : Decimal(6,3);    // Actual over planned burn. Drifts per tail
+
+        // Lifecycle - decision A4, provisional master data
+        @assert.range: true   // WP-09 finding D25: a CDS enum is advisory without this
+        record_status       : AircraftRecordStatus default 'PROVISIONAL';
+        provisional_expiry  : Date;                // Time-boxed; escalation is WP-16
+        confirmed_by        : String(100);
+        confirmed_at        : DateTime;
+
+        // Operational
+        operator_code       : String(3);           // Operating carrier where leased
+        on_own_aoc          : Boolean default true; // false = wet lease or ACMI
+
+        // Cost object mapping - 01-TARGET-SCHEMA §2A. Provisioned, not consumed.
+        @assert.range: true
+        cost_object_type    : CostObjectType;      // Nullable. Unused by default
+        cost_object_id      : String(20);          // Cost centre or internal order
 }
 
 /**
