@@ -35,11 +35,11 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 if (!item) return;
                 switch (item.status) {
                     case 'Draft':     item.statusCriticality = 0; break;
-                    case 'Created':   item.statusCriticality = 0; break;
                     case 'Submitted': item.statusCriticality = 2; break;
                     case 'Confirmed': item.statusCriticality = 3; break;
                     case 'InProgress':item.statusCriticality = 2; break;
                     case 'Delivered': item.statusCriticality = 3; break;
+                    case 'Completed': item.statusCriticality = 3; break;
                     case 'Cancelled': item.statusCriticality = 1; break;
                     default:          item.statusCriticality = 0;
                 }
@@ -88,7 +88,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         this.before('CREATE', FuelOrders, async (req) => {
             // Derivations that do not depend on the number come first, so the
             // error path below cannot skip them (F16).
-            req.data.status = 'Created';
+            req.data.status = 'Draft';
             try {
                 req.data.order_number = await allocateOrderNumber(req.data.station_code);
             } catch (e) {
@@ -102,7 +102,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (item) {
-                    item.canSubmit = item.status === 'Created';
+                    item.canSubmit = item.status === 'Draft';
                 }
             });
         });
@@ -111,12 +111,12 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // ORDER LIFECYCLE ACTIONS
         // ====================================================================
 
-        // Submit: Created → Submitted
+        // Submit: Draft → Submitted
         this.on('submit', FuelOrders, async (req) => {
             const order = await SELECT.one.from(FuelOrders).where({ ID: _id(req.params) });
             if (!order) return req.error(404, 'Order not found');
-            if (order.status !== 'Created') {
-                return req.error(409, `Cannot submit order in status "${order.status}". Order must be in "Created" status.`);
+            if (order.status !== 'Draft') {
+                return req.error(409, `Cannot submit order in status "${order.status}". Order must be in "Draft" status.`);
             }
             if (!order.ordered_quantity || order.ordered_quantity <= 0) {
                 return req.error(400, 'Order must have a valid quantity before submission.');
@@ -162,11 +162,30 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             return SELECT.one.from(FuelOrders).where({ ID: order.ID });
         });
 
+        // Complete: Delivered → Completed
+        // WP-09: 'Completed' is the terminal state in the documented lifecycle
+        // and appears in seed data, but no code path wrote it. Guarded like
+        // every other transition in this file.
+        this.on('complete', FuelOrders, async (req) => {
+            const order = await SELECT.one.from(FuelOrders).where({ ID: _id(req.params) });
+            if (!order) return req.error(404, 'Order not found');
+            if (order.status !== 'Delivered') {
+                return req.error(409, `Cannot complete order in status "${order.status}". Order must be in "Delivered" status.`);
+            }
+            await UPDATE(FuelOrders).where({ ID: order.ID }).set({
+                status: 'Completed',
+                modified_at: new Date().toISOString(),
+                modified_by: req.user.id
+            });
+            req.info(200, `Order ${order.order_number} completed.`);
+            return SELECT.one.from(FuelOrders).where({ ID: order.ID });
+        });
+
         // Cancel: Draft/Created/Submitted/Confirmed → Cancelled
         this.on('cancel', FuelOrders, async (req) => {
             const order = await SELECT.one.from(FuelOrders).where({ ID: _id(req.params) });
             if (!order) return req.error(404, 'Order not found');
-            const cancellable = ['Draft', 'Created', 'Submitted', 'Confirmed'];
+            const cancellable = ['Draft', 'Submitted', 'Confirmed'];
             if (!cancellable.includes(order.status)) {
                 return req.error(409, `Cannot cancel order in status "${order.status}".`);
             }
@@ -262,7 +281,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 currency_code: currencyCode || 'USD',
                 requested_date: flight.flight_date,
                 priority: priority || 'Normal',
-                status: 'Created',
+                status: 'Draft',
                 notes: notes || `Fuel order for flight ${flight.flight_number} ${flight.origin_airport}-${flight.destination_airport}`
             });
 

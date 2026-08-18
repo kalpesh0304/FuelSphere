@@ -383,6 +383,25 @@ entity CONFIG_APPROVAL_LIMITS : cuid {
 // ============================================================================
 
 /**
+ * Flight Status Enumeration (WP-09, decision B7)
+ *
+ * Replaces free String(20). RETURNED is split: a ramp return is still on
+ * stand and may be refuelled before a second departure attempt, whereas an
+ * air return has burned fuel and landed. One value gave no way to tell which,
+ * and the fuel handling differs.
+ */
+type FlightStatus : String(20) enum {
+    Scheduled     = 'SCHEDULED';
+    Departed      = 'DEPARTED';
+    Arrived       = 'ARRIVED';
+    Cancelled     = 'CANCELLED';
+    Diverted      = 'DIVERTED';
+    Delayed       = 'DELAYED';
+    RampReturn    = 'RAMP_RETURN';   // Returned to stand before departure
+    AirReturn     = 'AIR_RETURN';    // Returned to departure airport after takeoff
+}
+
+/**
  * FLIGHT_SCHEDULE - Flight Schedule Master
  * Source: External flight ops system or manual entry
  * Used for linking fuel orders to specific flights
@@ -399,7 +418,8 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         destination_airport : String(3) @mandatory;     // Arrival airport IATA
         scheduled_departure : Time;                     // Scheduled departure time (backward compat)
         scheduled_arrival   : Time;                     // Scheduled arrival time (backward compat)
-        status              : String(20) default 'SCHEDULED'; // SCHEDULED/DEPARTED/ARRIVED/CANCELLED/DIVERTED/DELAYED/RETURNED
+        @assert.range: true   // WP-09: a CDS enum is advisory without this; CAP accepts any string
+        status              : FlightStatus default 'SCHEDULED'; // WP-09: was free String(20)
 
         // Fuel Order linkage (auto-created as Draft on upload)
         fuel_order          : Association to FUEL_ORDERS on fuel_order.flight = $self;
@@ -1170,6 +1190,7 @@ entity SCENARIO_COMPARISON : cuid, AuditTrail {
  */
 type InvoiceStatus : String(20) enum {
     Draft       = 'DRAFT';
+    Submitted   = 'SUBMITTED';   // WP-09: the documented flow's step between Draft and the three-way match
     Verified    = 'VERIFIED';
     Posted      = 'POSTED';
     Paid        = 'PAID';

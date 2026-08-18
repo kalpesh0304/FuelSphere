@@ -73,6 +73,12 @@ service FuelOrderService {
         action startDelivery() returns FuelOrders;
 
         /**
+         * Complete order
+         * Transitions: Delivered → Completed
+         */
+        action complete() returns FuelOrders;
+
+        /**
          * Cancel order
          * Transitions: Draft/Submitted/Confirmed → Cancelled
          * Requires reason for non-draft orders
