@@ -107,7 +107,10 @@ annotate FuelOrderService.FuelOrders with @(
         FieldGroup#OrderQuantity: {
             Label: 'Quantity',
             Data: [
-                { Value: ordered_quantity, Label: 'Ordered (kg)' },
+                // The label no longer says kg. WP-11 made the unit a field,
+                // and a header that hardcodes one is wrong the moment an
+                // order is placed in litres.
+                { Value: ordered_quantity, Label: 'Ordered' },
                 { Value: uom_code, Label: 'UoM' }
             ]
         },
@@ -212,6 +215,15 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: product.specification, Label: 'Specification' },
                 { Value: ordered_quantity, Label: 'Ordered Quantity' },
                 { Value: uom_code, Label: 'Unit of Measure' },
+                // WP-11 / decision A2. Planning is in kilograms and the order
+                // is in volume, so the order carries the mass it was
+                // converted from, the density used, and which configuration
+                // row supplied it. Shown together because the three only mean
+                // anything as a set: they exist so the conversion can be
+                // reproduced from the order alone.
+                { Value: ordered_quantity_kg, Label: 'Planned Mass (kg)' },
+                { Value: conversion_density, Label: 'Conversion Density' },
+                { Value: conversion_source, Label: 'Density Source' },
                 { Value: unit_price, Label: 'Unit Price' },
                 { Value: total_amount, Label: 'Total Amount' },
                 { Value: currency_code, Label: 'Currency' }
@@ -575,9 +587,37 @@ annotate FuelOrderService.FuelDeliveries with @(
                 ![@UI.Importance]: #High
             },
             { Value: variance_flag, Label: 'Variance', Criticality: varianceCriticality, ![@UI.Importance]: #Medium },
+
+            // WP-17. recon_status and recon_variance_kg are adjacent
+            // deliberately: a variance figure with no verdict beside it cannot
+            // be judged, and a verdict with no figure cannot be checked.
+            // fob_source belongs with them because it is what set the
+            // threshold - the same variance is a pass on a crew reading and a
+            // failure on an ACARS one.
+            {
+                Value: recon_status,
+                Label: 'Reconciliation',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'recon_status' }, 'RECONCILED'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'recon_status' }, 'VARIANCE'] }, 1, 2 ] } ] } },
+                ![@UI.Importance]: #High
+            },
+            { Value: recon_variance_kg, Label: 'Recon Variance (kg)', ![@UI.Importance]: #High },
+            { Value: fob_source, Label: 'FQIS Source', ![@UI.Importance]: #Medium },
+
+            { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: s4_gr_number, Label: 'GR Number', ![@UI.Importance]: #Low },
             { Value: pilot_name, Label: 'Pilot', ![@UI.Importance]: #Low },
             { Value: ground_crew_name, Label: 'Ground Crew', ![@UI.Importance]: #Low }
+        ],
+
+        // WP-UI-01: a list with no filter bar makes an operator scroll.
+        SelectionFields: [
+            delivery_date,
+            aircraft_reg,
+            status,
+            recon_status,
+            fob_source
         ],
 
         Facets: [
@@ -605,6 +645,16 @@ annotate FuelOrderService.FuelDeliveries with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Variance',
                 Label  : 'Variance'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#AircraftGauge',
+                Label  : 'Aircraft Gauge (FQIS)'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#Reconciliation',
+                Label  : 'FOB Reconciliation'
             }
         ],
 
@@ -614,7 +664,10 @@ annotate FuelOrderService.FuelDeliveries with @(
                 { Value: delivery_number, Label: 'Delivery Number' },
                 { Value: delivery_date, Label: 'Delivery Date' },
                 { Value: delivery_time, Label: 'Delivery Time' },
-                { Value: delivered_quantity, Label: 'Delivered Quantity (kg)' },
+                { Value: aircraft_reg, Label: 'Aircraft Registration' },
+                { Value: delivered_quantity, Label: 'Delivered Quantity' },
+                { Value: uom_code, Label: 'Unit of Measure' },
+                { Value: delivery_method, Label: 'Delivery Method' },
                 { Value: vehicle_id, Label: 'Vehicle ID' },
                 { Value: driver_name, Label: 'Driver Name' },
                 { Value: status, Label: 'Status' }
@@ -627,6 +680,47 @@ annotate FuelOrderService.FuelDeliveries with @(
                 { Value: temperature, Label: 'Temperature (C)' },
                 { Value: density, Label: 'Density (kg/L)' },
                 { Value: temperature_corrected_qty, Label: 'Temperature Corrected Qty (kg)' }
+            ]
+        },
+
+        // WP-12 / decision B5. The FQIS belongs to the aircraft, so it belongs
+        // to the refuelling event: one pair per event however many bowsers
+        // were used. Kilograms unconditionally - a gauge reports mass.
+        FieldGroup#AircraftGauge: {
+            Label: 'Aircraft Gauge (FQIS)',
+            Data: [
+                { Value: fob_source, Label: 'Reading Source' },
+                // Two arrival readings, not one. Ground time sits between
+                // them, so they are shown together or the difference between
+                // them looks like an error rather than a measurement.
+                { Value: fob_at_arrival_kg, Label: 'FOB at Arrival (kg)' },
+                { Value: fob_before_kg, Label: 'FOB Before Uplift (kg)' },
+                { Value: ground_burn_kg, Label: 'Ground Burn (kg)' },
+                { Value: fob_after_kg, Label: 'FOB After Uplift (kg)' },
+                { Value: fob_delta_kg, Label: 'FQIS Uplift (kg)' },
+                { Value: fob_rounding_kg, Label: 'Reading Rounding (kg)' }
+            ]
+        },
+
+        // WP-17 / decisions B5 and C-1.
+        FieldGroup#Reconciliation: {
+            Label: 'FOB Reconciliation',
+            Data: [
+                {
+                    Value: recon_status,
+                    Label: 'Reconciliation Status',
+                    Criticality: { $edmJson: { $If: [
+                        { $Eq: [{ $Path: 'recon_status' }, 'RECONCILED'] }, 3,
+                        { $If: [ { $Eq: [{ $Path: 'recon_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
+                },
+                { Value: recon_variance_kg, Label: 'Variance (kg)' },
+                // The source is in this group because it is what set the
+                // threshold the variance was judged against.
+                { Value: fob_source, Label: 'Threshold Source (FQIS)' },
+                { Value: fob_delta_kg, Label: 'FQIS Uplift (kg)' },
+                // Attribution requires exactly one. Two suppliers on one gauge
+                // pair produce a figure belonging to neither.
+                { Value: supplier_count, Label: 'Suppliers on this Refuelling' }
             ]
         },
 
@@ -705,16 +799,48 @@ annotate FuelOrderService.FuelTickets with @(
             { Value: internal_number, Label: 'Internal Number', ![@UI.Importance]: #Medium },
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #High },
-            { Value: quantity, Label: 'Quantity (kg)', ![@UI.Importance]: #High },
+            // WP-11/WP-12: the claimed figure and the metered figure are
+            // different numbers and both carry a unit. @Measures.Unit puts
+            // uom_code against each rather than in a column of its own,
+            // several positions away.
+            { Value: quantity, Label: 'Claimed Quantity', ![@UI.Importance]: #High },
+            { Value: quantity_metered, Label: 'Metered', ![@UI.Importance]: #High },
+            { Value: quantity_kg, Label: 'Mass (kg)', ![@UI.Importance]: #High },
             { Value: delivery_timestamp, Label: 'Delivery Time', ![@UI.Importance]: #Medium },
             {
                 Value: status,
                 Label: 'Status',
-                Criticality: statusCriticality,
+                // WP-UI-01: was `Criticality: statusCriticality`, which names
+                // an element FuelOrderService.FuelTickets does not have — the
+                // virtual exists only on TicketService.FuelTickets. The
+                // compiler accepted it and the column rendered with no
+                // criticality at all. Expressed here instead, so it does not
+                // depend on a virtual that is not there.
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'status' }, 'Rejected'] }, 1,
+                    { $If: [ { $In: [{ $Path: 'status' }, ['Verified', 'Closed', 'Attached']] }, 3, 0 ] } ] } },
+                ![@UI.Importance]: #High
+            },
+            // WP-10 / decision A1. UNMATCHED is not an error - it is a ticket
+            // awaiting attachment, with an owner and an age - but it is the
+            // state somebody has to act on, so it reads negative.
+            {
+                Value: match_status,
+                Label: 'Match Status',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'match_status' }, 'MATCHED'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'match_status' }, 'UNMATCHED'] }, 1, 2 ] } ] } },
                 ![@UI.Importance]: #High
             },
             { Value: verified_by, Label: 'Verified By', ![@UI.Importance]: #Low },
             { Value: verified_at, Label: 'Verified At', ![@UI.Importance]: #Low }
+        ],
+
+        SelectionFields: [
+            delivery_timestamp,
+            aircraft_reg,
+            status,
+            match_status
         ],
 
         Facets: [
@@ -722,6 +848,11 @@ annotate FuelOrderService.FuelTickets with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#TicketDetails',
                 Label  : 'Ticket Details'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#Measurement',
+                Label  : 'Meter and Density'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -737,11 +868,35 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: internal_number, Label: 'Internal Number' },
                 { Value: aircraft_reg, Label: 'Aircraft Registration' },
                 { Value: flight_number, Label: 'Flight Number' },
-                { Value: quantity, Label: 'Quantity (kg)' },
-                { Value: uom_code, Label: 'UoM' },
+                { Value: quantity, Label: 'Claimed Quantity' },
+                { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_timestamp, Label: 'Delivery Time' },
                 { Value: supplier_ticket_ref, Label: 'Supplier Reference' },
-                { Value: status, Label: 'Status' }
+                { Value: ticket_source, Label: 'Capture Source' },
+                { Value: status, Label: 'Status' },
+                { Value: match_status, Label: 'Match Status' }
+            ]
+        },
+
+        // WP-12 / decisions B5 and B6. Store as metered, derive canonical.
+        // The as-metered figures come first because they are what the
+        // supplier invoices and what a dispute is about; quantity_kg is
+        // derived from them and sits after, not instead of them.
+        FieldGroup#Measurement: {
+            Label: 'Meter and Density',
+            Data: [
+                { Value: meter_start, Label: 'Meter Start' },
+                { Value: meter_end, Label: 'Meter End' },
+                { Value: quantity_metered, Label: 'Metered Quantity' },
+                { Value: quantity_flag, Label: 'Gross or Net' },
+                // Density is per uom_code, which is why density_uom sits
+                // beside it: 0.8020 KGL and 802.0 KGM are the same fuel.
+                { Value: density_value, Label: 'Density' },
+                { Value: density_uom, Label: 'Density Unit' },
+                { Value: density_basis, Label: 'Density Basis' },
+                { Value: density_temp_c, Label: 'Density Temperature (C)' },
+                { Value: quantity_kg, Label: 'Canonical Mass (kg)' },
+                { Value: batch_coa_ref, Label: 'Certificate of Analysis' }
             ]
         },
 
@@ -1033,3 +1188,99 @@ annotate FuelOrderService.importFlightDispatchExcel with (
     fileName    @title: 'File Name'
                 @UI.Hidden: true
 );
+
+// ============================================================================
+// WP-UI-01 — FIELD-LEVEL ANNOTATIONS FOR THE PHASE 1 FIELDS
+//
+// Appended as separate `annotate ... with { }` blocks rather than merged into
+// the existing ones. A CDS annotation binds to whatever declaration follows
+// it, so inserting into an existing block is the operation that silently
+// reassigns one; appending self-contained blocks cannot.
+//
+// Three things are being said here:
+//   - every quantity names its unit, via @Measures.Unit, so the unit travels
+//     with the number instead of sitting in a column of its own;
+//   - a derived field is @Common.FieldControl: #ReadOnly, because a field the
+//     system computes must not look like one somebody may type into;
+//   - anything whose technical name would be opaque on screen gets a label.
+// ============================================================================
+
+annotate FuelOrderService.FuelOrders with {
+    // WP-11 conversion evidence. All three are derived at order creation.
+    ordered_quantity  @Measures.Unit: uom_code;
+    uom_code          @title: 'Unit of Measure';
+    ordered_quantity_kg @title       : 'Planned Mass (kg)'
+                        @Common.Label: 'Planned Mass (kg)'
+                        @Common.FieldControl: #ReadOnly;
+    conversion_density  @title       : 'Conversion Density'
+                        @Common.Label: 'Conversion Density (kg/L)'
+                        @Common.FieldControl: #ReadOnly;
+    // Names the configuration row the density came from, not a free-text note.
+    conversion_source   @title       : 'Density Source'
+                        @Common.Label: 'Density Source'
+                        @Common.FieldControl: #ReadOnly;
+};
+
+annotate FuelOrderService.FuelTickets with {
+    // The supplier's claim and the meter reading are both in uom_code.
+    quantity          @Measures.Unit: uom_code  @title: 'Claimed Quantity';
+    quantity_metered  @Measures.Unit: uom_code  @title: 'Metered Quantity'
+                      @Common.FieldControl: #ReadOnly;
+    meter_start       @Measures.Unit: uom_code  @title: 'Meter Start';
+    meter_end         @Measures.Unit: uom_code  @title: 'Meter End';
+    uom_code          @title: 'Unit of Measure';
+
+    // Density is per uom_code and is meaningless without density_uom, so the
+    // unit is bound to it rather than left to the reader to infer.
+    density_value     @Measures.Unit: density_uom  @title: 'Density';
+    density_uom       @title: 'Density Unit'       @Common.Label: 'Density Unit (KGL / KGM)';
+    density_basis     @title: 'Density Basis'      @Common.Label: 'Density Basis (MEA / STD)';
+    density_temp_c    @title: 'Density Temperature (C)';
+
+    // Gross or net. Without it no quantity states which basis it is on.
+    quantity_flag     @title: 'Gross or Net'       @Common.Label: 'Quantity Basis (GR / NT)';
+
+    // Derived. The canonical figure everything downstream compares against.
+    quantity_kg       @title: 'Canonical Mass (kg)'
+                      @Common.Label: 'Canonical Mass (kg)'
+                      @Common.FieldControl: #ReadOnly;
+
+    batch_coa_ref     @title: 'Certificate of Analysis';
+    ticket_source     @title: 'Capture Source'     @Common.Label: 'Capture Source (M / E)';
+
+    // Derived by the matching rules, not typed.
+    match_status      @title: 'Match Status' @Common.FieldControl: #ReadOnly;
+};
+
+annotate FuelOrderService.FuelDeliveries with {
+    aircraft_reg        @title: 'Aircraft Registration';
+    delivered_quantity  @Measures.Unit: uom_code;
+    uom_code            @title: 'Unit of Measure';
+    delivery_method     @title: 'Delivery Method' @Common.Label: 'Delivery Method (HYD / REF)';
+
+    // WP-12 gauge pair. The two readings are entered; the two differences are
+    // derived from them and are read-only.
+    fob_at_arrival_kg   @title: 'FOB at Arrival (kg)'
+                        @Common.Label: 'FOB at Arrival, chocks-on (kg)';
+    fob_before_kg       @title: 'FOB Before Uplift (kg)'
+                        @Common.Label: 'FOB Before Uplift (kg)';
+    fob_after_kg        @title: 'FOB After Uplift (kg)';
+    fob_delta_kg        @title: 'FQIS Uplift (kg)'
+                        @Common.Label: 'FQIS Uplift, after minus before (kg)'
+                        @Common.FieldControl: #ReadOnly;
+    ground_burn_kg      @title: 'Ground Burn (kg)'
+                        @Common.Label: 'Ground Burn, arrival minus before (kg)'
+                        @Common.FieldControl: #ReadOnly;
+    fob_source          @title: 'FQIS Source'
+                        @Common.Label: 'Gauge Reading Source';
+    fob_rounding_kg     @title: 'Reading Rounding (kg)';
+
+    // WP-17 reconciliation. Every one of these is computed.
+    recon_variance_kg   @title: 'Recon Variance (kg)'
+                        @Common.Label: 'Reconciliation Variance, metered minus FQIS (kg)'
+                        @Common.FieldControl: #ReadOnly;
+    recon_status        @title: 'Reconciliation Status' @Common.FieldControl: #ReadOnly;
+    supplier_count      @title: 'Suppliers on this Refuelling'
+                        @Common.Label: 'Suppliers on this Refuelling'
+                        @Common.FieldControl: #ReadOnly;
+};
