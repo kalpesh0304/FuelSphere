@@ -8,6 +8,7 @@ const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
 const { allocateTicketNumber, reportAllocationError } = require('./lib/number-range');
 const { deriveTicketMassKg } = require('./lib/fuel-uom');
+const { reconcileDelivery } = require('./lib/fob-reconciliation');
 
 const _id = (params) => {
     const p = params[0];
@@ -107,6 +108,24 @@ module.exports = class TicketService extends cds.ApplicationService {
 
         this.before(['CREATE', 'UPDATE'], FuelTickets, deriveMeasurement);
 
+        // WP-17: the metered side of the reconciliation is the sum of the
+        // tickets, so any change to a ticket's mass, its delivery or its order
+        // changes the delivery's variance. Re-derive rather than let the
+        // stored figure drift — a stale variance is worse than none, because
+        // it reads as a measurement.
+        //
+        // Registered after the write, not before: the computation reads the
+        // delivery's tickets, so it needs this one to have landed.
+        this.after(['CREATE', 'UPDATE'], FuelTickets, async (data, req) => {
+            const rows = Array.isArray(data) ? data : [data];
+            const ids = new Set();
+            for (const r of rows) {
+                if (r && r.delivery_ID) ids.add(r.delivery_ID);
+            }
+            if (req.data && req.data.delivery_ID) ids.add(req.data.delivery_ID);
+            for (const id of ids) await reconcileDelivery(id);
+        });
+
         this.before('CREATE', FuelTickets, async (req) => {
             // WP-10 / A1: a ticket without an order is UNMATCHED, not invalid.
             //
@@ -173,6 +192,12 @@ module.exports = class TicketService extends cds.ApplicationService {
                 modified_by: req.user.id
             });
 
+            // WP-17: the delivery gains a ticket, and may have lost one.
+            await reconcileDelivery(deliveryId);
+            if (ticket.delivery_ID && ticket.delivery_ID !== deliveryId) {
+                await reconcileDelivery(ticket.delivery_ID);
+            }
+
             req.info(200, `Ticket ${ticket.ticket_number} attached to delivery ${delivery.delivery_number}.`);
             return SELECT.one.from(FuelTickets).where({ ID: ticket.ID });
         });
@@ -213,6 +238,12 @@ module.exports = class TicketService extends cds.ApplicationService {
             }
 
             await UPDATE(FuelTickets).where({ ID: ticket.ID }).set(changes);
+
+            // WP-17: matching supplies the ticket's supplier, so a delivery
+            // that read NOT_ATTRIBUTABLE for an unresolved ticket may now
+            // attribute — or may turn out to have two suppliers after all.
+            if (ticket.delivery_ID) await reconcileDelivery(ticket.delivery_ID);
+
             req.info(200, `Ticket ${ticket.ticket_number} matched to order ${order.order_number}.`);
             return SELECT.one.from(FuelTickets).where({ ID: ticket.ID });
         });
