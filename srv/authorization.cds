@@ -160,7 +160,18 @@ annotate FuelOrderService.FuelOrders with @(restrict: [
     // Update - FuelOrderCreate, FuelOrderApprove or AdminAccess
     { grant: 'UPDATE', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
     // Delete - AdminAccess only
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D22 - a bound action needs its own grant. CAP matches the action name
+    // against this list; READ/CREATE/UPDATE/DELETE do not imply it, so
+    // without these entries every call below is refused before the action's
+    // own @requires is ever read. Each mirrors that @requires exactly and
+    // grants nothing that was not already declared.
+    { grant: 'submit',        to: ['FuelOrderCreate'] },
+    { grant: 'confirm',       to: ['FuelOrderApprove'] },
+    { grant: 'startDelivery', to: ['FuelOrderCreate', 'FuelOrderApprove'] },
+    { grant: 'cancel',        to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
+    { grant: 'calculatePrice', to: ['FuelOrderCreate'] }
 ]);
 
 // Submit action - Requires FuelOrderCreate scope
@@ -195,7 +206,12 @@ annotate FuelOrderService.FuelDeliveries with @(restrict: [
     { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
     { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
     { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D22 - see the note on FuelOrders. Mirrors each action's own @requires.
+    { grant: 'captureSignatures', to: ['ePODCapture'] },
+    { grant: 'verifyQuantity',    to: ['ePODCapture', 'ePODApprove'] },
+    { grant: 'dispute',           to: ['ePODApprove'] }
 ]);
 
 // ePOD Actions authorization
@@ -226,7 +242,11 @@ annotate FuelOrderService.FuelTickets with @(restrict: [
     { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
     { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
     { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D22 - see the note on FuelOrders. Mirrors each action's own @requires.
+    { grant: 'attachToDelivery', to: ['ePODCapture'] },
+    { grant: 'verify',           to: ['ePODApprove'] }
 ]);
 
 annotate FuelOrderService.FuelTickets actions {
@@ -321,7 +341,12 @@ annotate TicketService.FuelTickets with @(restrict: [
     { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
     { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
     { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D22 - see the note on FuelOrders. Mirrors each action's own @requires.
+    { grant: 'attachToDelivery', to: ['ePODCapture'] },
+    { grant: 'verify',           to: ['ePODApprove'] },
+    { grant: 'reject',           to: ['ePODApprove'] }
 ]);
 
 // Ticket actions
