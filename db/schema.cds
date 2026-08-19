@@ -591,13 +591,17 @@ entity FLIGHT_CYCLE_EVENTS : cuid, AuditTrail {
     latitude            : Decimal(10,7);                   // GPS latitude
     longitude           : Decimal(10,7);                   // GPS longitude
     remarks             : String(500);                     // Free-text notes
-    // Refueling-specific fields (populated when event_type = REFUELING)
-    uplift_kg           : Decimal(12,2);                   // Fuel uplifted during refueling
-    density_kg_l        : Decimal(6,4);                    // Fuel density at delivery
-    temperature_c       : Decimal(5,1);                    // Fuel temperature
-    bowser_id           : String(20);                      // Refueling vehicle identifier
-    // Computed
-    sequence_number     : Integer;                         // Auto-assigned order within flight
+    // WP-12: the five refuelling fields (uplift_kg, density_kg_l,
+    // temperature_c, bowser_id, sequence_number) are removed. Three places
+    // holding fuel quantities is one too many. Quantity, density and
+    // temperature live on FUEL_TICKETS, where the meter is; the bowser is
+    // the ticket's vehicle. This is a movement event log.
+    //
+    // Verified before removal: the sole reference anywhere was the wildcard
+    // projection FuelOrderService.FlightCycleEvents. No handler, no
+    // annotation, no UI and no seed CSV read these. Note that uplift_kg is
+    // also a ROB_LEDGER field, which is where every other hit for that name
+    // belongs.
 }
 
 // ============================================================================
@@ -661,6 +665,62 @@ type TicketMatchStatus : String(20) enum {
     Matched        = 'MATCHED';         // Attached to an order
     MatchedNoPlan  = 'MATCHED_NO_PLAN'; // Order found, no fuel plan behind it
     NotExpected    = 'NOT_EXPECTED';    // Processing mode NONE, or no uplift was planned
+}
+
+/**
+ * Density Unit of Measure (WP-12, decision B6)
+ *
+ * IATA VUOMBase. Two values, because two is what IATA transmits.
+ *
+ * NOT a row in UNIT_OF_MEASURE. That table holds *quantity* units and
+ * carries attributes — conversion_to_kg, sap_uom, sap_uom_iso. A density
+ * unit has none of those; it is a bare label saying what density_value is
+ * per. A master table for two attribute-free values is over-engineering.
+ *
+ * @assert.range is not optional here. Per defect D25 a declared CDS enum
+ * enforces nothing on its own — CAP validates only where the annotation is
+ * present. Without it this type is a comment.
+ */
+@assert.range: true
+type DensityUom : String(6) enum {
+    KgPerLitre = 'KGL';   // kg per litre
+    KgPerM3    = 'KGM';   // kg per cubic metre
+}
+
+/**
+ * Source of the aircraft gauge (FQIS) reading (WP-12, decision B5)
+ *
+ * The source governs how much the reading can be trusted, which is why it
+ * is recorded alongside the number rather than assumed.
+ */
+@assert.range: true
+type FobSource : String(20) enum {
+    Acars         = 'ACARS';           // Downlinked. High confidence
+    CrewReported  = 'CREW_REPORTED';   // Typically rounded to 100 kg
+    PanelPreset   = 'PANEL_PRESET';    // What was requested, not what arrived
+    None          = 'NONE';            // No reading
+}
+
+/**
+ * FOB reconciliation status (WP-12, decision B5)
+ *
+ * NOT_RECONCILED must never read as a pass. A missing gauge reading is
+ * unknown, not agreed — the two are opposite conclusions and collapsing
+ * them turns an absent measurement into a clean bill of health.
+ *
+ * NOT_ATTRIBUTABLE exists because one FQIS pair across two suppliers
+ * produces one variance figure that belongs to neither. Pro-rata
+ * allocation by volume is arithmetically neat and evidentially
+ * worthless — never use it to raise a dispute.
+ *
+ * The values land in WP-12. The control that sets them is WP-17.
+ */
+@assert.range: true
+type ReconStatus : String(20) enum {
+    Reconciled      = 'RECONCILED';
+    Variance        = 'VARIANCE';
+    NotReconciled   = 'NOT_RECONCILED';    // No gauge reading. NOT agreement
+    NotAttributable = 'NOT_ATTRIBUTABLE';  // Multi-supplier: one gauge pair, two suppliers
 }
 
 /**
@@ -803,7 +863,15 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         temperature         : Decimal(5,2);             // Fuel temperature (°C)
         @assert.range: [0.775, 0.840]  // VAL-EPD-004: Jet fuel density range (kg/L)
         density             : Decimal(8,4);             // Measured density (kg/L)
-        temperature_corrected_qty : Decimal(12,2);      // Temperature-corrected quantity (to 15°C ref)
+        // WP-12 naming debt, accepted deliberately. The name implies a
+        // density correction. It is not one - the computation is the
+        // volumetric ASTM D1250 factor, Measured x [1 - 0.00099 x (T - 15)],
+        // and density is not an input to it. Renaming an existing field is
+        // prohibited by 05-CONVENTIONS.md section 6 and this one sits in
+        // projections and seed data, so the name stays and the discrepancy
+        // is recorded here instead. Thermal expansion acts on volume, so
+        // the value is null wherever uom_code is a mass unit.
+        temperature_corrected_qty : Decimal(12,2);      // Volumetric correction to 15C ref. NULL where uom_code is mass
 
         // Delivery Vehicle & Personnel
         vehicle_id          : String(20);               // Delivery vehicle ID
@@ -828,6 +896,48 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         variance_percentage : Decimal(5,2);             // Variance as percentage
         variance_flag       : Boolean default false;    // True if variance > 5%
         variance_reason     : String(500);              // Explanation for variance
+
+        // ------------------------------------------------------------------
+        // Aircraft gauge pair - WP-12, decision B5
+        //
+        // The FQIS belongs to the AIRCRAFT, so it belongs to the refuelling
+        // event: one pair per event, however many bowsers were used. The
+        // meter belongs to the bowser and lives on FUEL_TICKETS.
+        //
+        // These are kilograms unconditionally. An FQIS reports mass; there
+        // is no unit to resolve and so no uom_code on this block.
+        // ------------------------------------------------------------------
+
+        // Two arrival readings, not one - REQ-FL-003. They are DIFFERENT
+        // measurements, and between them sits ground time: temperature
+        // change, APU running, any defuel or transfer. An aircraft landing
+        // at 10:00 and refuelling at 14:00 has four hours of drift.
+        //
+        // Where only one reading exists, populate fob_before_kg and leave
+        // fob_at_arrival_kg null. Copying one into the other manufactures a
+        // zero ground burn where the truth is unknown.
+        fob_at_arrival_kg   : Decimal(12,2);            // ROB at chocks-on, end of the arriving leg
+        fob_before_kg       : Decimal(12,2);            // Immediately before uplift. The reconciliation input
+        fob_after_kg        : Decimal(12,2);            // Immediately after uplift
+
+        // Derived. fob_before_kg is the reconciliation input, not the
+        // arrival reading - using arrival would put ground-time drift into
+        // the delivery variance, where it reads as a supplier discrepancy.
+        fob_delta_kg        : Decimal(12,2);            // Derived: fob_after - fob_before
+        // Mostly APU burn, which is never metered. Nothing consumes this
+        // until WP-19, but without both readings recorded nobody can see
+        // there is a difference to explain.
+        ground_burn_kg      : Decimal(12,2);            // Derived: fob_at_arrival - fob_before
+
+        fob_source          : FobSource default 'NONE';
+        fob_rounding_kg     : Integer default 0;        // 100 where crew-reported. Sets the tolerance floor
+
+        // Reconciliation. The fields land in WP-12; the control that
+        // populates them is WP-17 (EPD461-EPD466).
+        recon_variance_kg   : Decimal(12,2);            // EPD461: sum of ticket quantity_kg minus fob_delta_kg
+        recon_status        : ReconStatus default 'NOT_RECONCILED';
+        supplier_count      : Integer;                  // Derived. Attribution requires exactly 1
+        delivery_method     : String(3);                // IATA-02: HYD hydrant, REF refueller
 }
 
 /**
@@ -859,9 +969,49 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         aircraft_reg        : String(10);               // Aircraft registration
         flight_number       : String(10);               // Flight number
 
-        // Quantity
-        quantity            : Decimal(15,2) @mandatory; // Quantity on ticket (kg)
+        // ------------------------------------------------------------------
+        // Quantity and measurement - WP-12, decisions B5 and B6
+        //
+        // Store as metered, derive canonical. The as-metered figure must
+        // survive unaltered: it is what the supplier invoices and what a
+        // dispute is about. quantity_kg is the derived figure reconciliation,
+        // burn and valuation compare against.
+        //
+        // The field names deliberately carry NO unit. An earlier draft
+        // specified quantity_litres and density_kg_per_l, which bake in an
+        // assumption that does not hold - a gallon ticket has no litres
+        // figure, and its density is per gallon. uom_code and density_uom
+        // say what the numbers are in.
+        // ------------------------------------------------------------------
+
+        quantity            : Decimal(15,2) @mandatory; // The supplier's CLAIMED figure, in uom_code
         uom_code            : String(3) default 'LTR';  // WP-11: fallback default; the supplier's metering unit governs
+
+        // The meter belongs to the BOWSER, so it belongs here, one per
+        // vehicle. The aircraft gauge pair belongs to the refuelling event
+        // and lives on FUEL_DELIVERIES.
+        meter_start         : Decimal(15,2);            // In uom_code
+        meter_end           : Decimal(15,2);            // In uom_code
+        quantity_metered    : Decimal(15,2);            // Derived: meter_end - meter_start. In uom_code
+
+        // Delivered density, per uom_code. Decision B6 makes this
+        // authoritative for deriving mass - NOT the planning factor on
+        // UNIT_OF_MEASURE, which is a forward estimate for converting a plan.
+        density_value       : Decimal(8,4);
+        density_uom         : DensityUom;               // IATA VUOMBase. KGL kg/litre, KGM kg/m3
+        density_basis       : String(3) default 'MEA';  // IATA-01: MEA measured, STD standard
+        density_temp_c      : Decimal(5,2);             // Temperature the density was measured at
+
+        // IATA-12. Net is temperature-corrected, gross is not. Without this
+        // no quantity in the system states which basis it is on.
+        quantity_flag       : String(2) default 'GR';   // GR gross, NT net
+
+        // Derived, and the whole point of deriving it: a gallon ticket and a
+        // litre ticket on the same aircraft must be summable. The
+        // reconciliation compares the sum of these against fob_delta_kg.
+        quantity_kg         : Decimal(15,2);            // EPD453: quantity_metered x density_value, normalised to kg
+
+        batch_coa_ref       : String(50);               // Certificate of analysis, for density disputes
 
         // Timing
         delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket

@@ -7,6 +7,7 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
 const { allocateTicketNumber, reportAllocationError } = require('./lib/number-range');
+const { deriveTicketMassKg } = require('./lib/fuel-uom');
 
 const _id = (params) => {
     const p = params[0];
@@ -40,6 +41,71 @@ module.exports = class TicketService extends cds.ApplicationService {
         // ====================================================================
         // TICKET NUMBER GENERATION
         // ====================================================================
+
+        // WP-12 / B5, B6: derive the metered quantity and the canonical mass.
+        //
+        // Store as metered, derive canonical. The as-metered figure is what
+        // the supplier invoices and what a dispute is about, so it is never
+        // overwritten — only quantity_metered and quantity_kg are derived.
+        //
+        // Runs on CREATE and UPDATE alike: a meter reading corrected after
+        // capture must re-derive, or quantity_kg silently keeps the old mass.
+        const deriveMeasurement = async (req) => {
+            const d = req.data;
+
+            // On UPDATE req.data carries only what changed, so the derivation
+            // has to read the stored row for the inputs the caller did not
+            // send. Without this, correcting a meter reading alone would
+            // null quantity_kg because density arrived as undefined.
+            let stored = {};
+            if (req.event === 'UPDATE') {
+                const id = req.data.ID || _id(req.params);
+                if (id) {
+                    stored = await SELECT.one.from(FuelTickets)
+                        .columns('quantity', 'uom_code', 'quantity_metered',
+                                 'density_value', 'density_uom', 'meter_start', 'meter_end')
+                        .where({ ID: id }) || {};
+                }
+            }
+            const at = (field) => (d[field] !== undefined ? d[field] : stored[field]);
+
+            // quantity_metered = meter_end - meter_start, where both are
+            // present. An explicitly supplied quantity_metered is left alone;
+            // some suppliers transmit a total without the two readings.
+            const start = at('meter_start'), end = at('meter_end');
+            if (start !== null && start !== undefined && end !== null && end !== undefined) {
+                const metered = Number((Number(end) - Number(start)).toFixed(2));
+                if (metered < 0) {
+                    return req.error(400, `EPD411: Meter end ${end} is below meter start ${start}.`);
+                }
+                d.quantity_metered = metered;
+            }
+
+            // EPD411 - the meter reading does not match the ticket quantity.
+            //
+            // A warning, not a rejection. Decision A1 is that fuel is
+            // recorded even when the paperwork is imperfect; refusing the
+            // ticket would put the uplift outside the system, which is the
+            // failure this whole area exists to prevent. The mismatch is
+            // surfaced for the matching workbench to chase.
+            const metered = Number(at('quantity_metered'));
+            const claimed = Number(at('quantity'));
+            if (metered > 0 && claimed > 0 && Math.abs(metered - claimed) > 0.01) {
+                req.warn(200, `EPD411: Metered quantity ${metered} does not match ticket quantity ${claimed}.`);
+            }
+
+            // quantity_kg - EPD453. Null where an input is missing; a derived
+            // value with a missing input is null, never zero.
+            const derived = await deriveTicketMassKg({
+                quantity_metered: at('quantity_metered'),
+                uom_code: at('uom_code'),
+                density_value: at('density_value'),
+                density_uom: at('density_uom')
+            });
+            d.quantity_kg = derived.quantity_kg;
+        };
+
+        this.before(['CREATE', 'UPDATE'], FuelTickets, deriveMeasurement);
 
         this.before('CREATE', FuelTickets, async (req) => {
             // WP-10 / A1: a ticket without an order is UNMATCHED, not invalid.

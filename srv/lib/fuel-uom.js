@@ -92,10 +92,145 @@ function conversionFields(c) {
     };
 }
 
+// ===========================================================================
+// WP-12 — delivered measurement. Decisions B5 and B6.
+//
+// Everything below converts a MEASURED figure. It is a different job from
+// the planning conversion above and uses a different input: the density on
+// the ticket, measured at delivery, which decision B6 makes authoritative.
+// Do not reach for resolvePlanningDensity here.
+// ===========================================================================
+
+/**
+ * Density units, IATA VUOMBase. The value is kg per one of these.
+ * Kept in step with type DensityUom in db/schema.cds.
+ */
+const DENSITY_UOM_LITRES_PER_UNIT = {
+    KGL: 1,        // kg per litre
+    KGM: 1000      // kg per cubic metre = kg per 1000 litres
+};
+
+/**
+ * Litres per one unit of a metered volume unit.
+ *
+ * LTR only, and deliberately so. A gallon-to-litre factor exists nowhere in
+ * master data: UNIT_OF_MEASURE.conversion_to_kg on GAL is kilograms per
+ * gallon at an assumed density, not a volume ratio. Dividing it by the LTR
+ * factor does recover 3.7854 litres per gallon, but only while both rows
+ * were computed at the same nominal density — an unstated coupling that
+ * breaks silently the day somebody edits one row and not the other.
+ *
+ * So gallons derive no mass here and say why, rather than carrying a number
+ * whose correctness depends on an assumption nobody recorded. Same reasoning
+ * as the blank SAP gallon codes in WP-11. Tracked as open point F19.
+ */
+const LITRES_PER_VOLUME_UNIT = {
+    LTR: 1
+};
+
+/** Volume units this module can turn into mass. */
+function isConvertibleVolumeUom(uomCode) {
+    return Object.prototype.hasOwnProperty.call(LITRES_PER_VOLUME_UNIT, uomCode);
+}
+
+/**
+ * Is this a mass unit?
+ *
+ * Read from UNIT_OF_MEASURE.uom_category rather than a list in code, so a
+ * new unit is a data change. Returns null where the unit does not resolve —
+ * unknown is not "no".
+ */
+async function isMassUom(uomCode) {
+    if (!uomCode) return null;
+    const row = await SELECT.one.from(UOM).columns('uom_code', 'uom_category').where({ uom_code: uomCode });
+    if (!row || !row.uom_category) return null;
+    return row.uom_category === 'MASS';
+}
+
+/**
+ * Derive a ticket's canonical mass in kilograms.
+ *
+ * This is EPD453 — quantity_kg from quantity_metered and density_value —
+ * and it is the reason quantity_kg exists: a gallon ticket and a litre
+ * ticket on the same aircraft have to be summable against one gauge delta.
+ *
+ * Returns { quantity_kg, basis } on success, or { quantity_kg: null, reason }
+ * where an input is missing or the units do not resolve. Never returns zero
+ * for a missing input — a derived value with a missing input is null.
+ */
+async function deriveTicketMassKg({ quantity_metered, uom_code, density_value, density_uom }) {
+    const metered = Number(quantity_metered);
+    if (!(metered > 0)) return { quantity_kg: null, reason: 'no metered quantity' };
+    if (!uom_code) return { quantity_kg: null, reason: 'no uom_code on the ticket' };
+
+    const row = await SELECT.one.from(UOM)
+        .columns('uom_code', 'uom_category', 'conversion_to_kg')
+        .where({ uom_code });
+    if (!row) return { quantity_kg: null, reason: `unit ${uom_code} is not in UNIT_OF_MEASURE` };
+
+    // A mass ticket needs no density. Its own master factor takes it to
+    // kilograms — KG by 1, MT by 1000.
+    if (row.uom_category === 'MASS') {
+        const factor = Number(row.conversion_to_kg);
+        if (!(factor > 0)) return { quantity_kg: null, reason: `no conversion factor on unit ${uom_code}` };
+        return {
+            quantity_kg: Number((metered * factor).toFixed(2)),
+            basis: `mass unit ${uom_code} x ${factor} kg`
+        };
+    }
+
+    // A volume ticket needs the density measured at delivery.
+    const density = Number(density_value);
+    if (!(density > 0)) return { quantity_kg: null, reason: 'no density_value on the ticket' };
+    if (!density_uom) return { quantity_kg: null, reason: 'no density_uom, so density_value has no meaning' };
+
+    const litresPerDensityUnit = DENSITY_UOM_LITRES_PER_UNIT[density_uom];
+    if (!litresPerDensityUnit) return { quantity_kg: null, reason: `density unit ${density_uom} is not recognised` };
+
+    if (!isConvertibleVolumeUom(uom_code)) {
+        return { quantity_kg: null, reason: `no litre factor for ${uom_code} — see open point F19` };
+    }
+    const litres = metered * LITRES_PER_VOLUME_UNIT[uom_code];
+
+    return {
+        quantity_kg: Number((litres * density / litresPerDensityUnit).toFixed(2)),
+        basis: `${litres} L x ${density} ${density_uom}`
+    };
+}
+
+/**
+ * Aircraft gauge arithmetic — decision B5.
+ *
+ * Both figures are kilograms unconditionally; an FQIS reports mass, so
+ * there is no unit to resolve.
+ *
+ * ground_burn_kg is derived ONLY where both arrival and before readings
+ * exist as separate measurements. Where one is missing it stays null. It
+ * must never be computed by copying one reading into the other, which
+ * manufactures a zero ground burn where the truth is unknown — and a zero
+ * reads as "no APU burn", which is a claim, not an absence.
+ */
+function deriveGaugeFigures({ fob_at_arrival_kg, fob_before_kg, fob_after_kg }) {
+    const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const arrival = num(fob_at_arrival_kg);
+    const before = num(fob_before_kg);
+    const after = num(fob_after_kg);
+
+    return {
+        fob_delta_kg: (before !== null && after !== null)
+            ? Number((after - before).toFixed(2)) : null,
+        ground_burn_kg: (arrival !== null && before !== null)
+            ? Number((arrival - before).toFixed(2)) : null
+    };
+}
+
 module.exports = {
     DEFAULT_VOLUME_UOM,
     SOURCE_UOM_MASTER,
     resolvePlanningDensity,
     planMassToOrderVolume,
-    conversionFields
+    conversionFields,
+    isMassUom,
+    deriveTicketMassKg,
+    deriveGaugeFigures
 };
