@@ -162,6 +162,12 @@ Computed **at delivery level, always**. Attribution to a supplier requires `supp
 
 **Multi-supplier deliveries: variance is recorded, never disputed.** One FQIS pair across two suppliers produces one figure belonging to neither. Pro-rata allocation by volume is arithmetically neat and evidentially worthless.
 
+**`supplier_count` resolves transitively.** `FUEL_TICKETS` carries only a free-text `supplier_ticket_ref`; the supplier lives on the order. B2 forces this anyway — a direct delivery-to-order FK breaks either the two-supplier case or the two-delivery case.
+
+**An unresolvable supplier makes the set unknown, not a singleton.** One known supplier alongside an unmatched ticket is `NOT_ATTRIBUTABLE`, not attributable-to-the-one-we-know. Same reasoning as `NOT_RECONCILED`: unknown is not agreement.
+
+**Attribution is not something a small variance earns.** A two-supplier delivery varying by 12 kg on 19 tonnes still does not attribute. The obstacle is that the figure belongs to neither party, and a small figure belongs to neither just as completely as a large one.
+
 Bowser and supplier bias analysis **excludes** multi-supplier deliveries, or the noise swamps the signal.
 
 ### Tolerance resolves partly from the FQIS source
