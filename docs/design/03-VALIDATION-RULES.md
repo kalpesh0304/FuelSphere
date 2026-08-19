@@ -94,7 +94,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `EPD450` | VR06 | `FUEL_ORDERS` | delivered_qty is derived by summing linked tickets, never stored as a scalar | Error |
 | `EPD451` | VR07 | `FUEL_ORDERS` | order_status = PART_FULFILLED requires a populated under_delivery_reason | Error |
 | `EPD452` | VR08 | `FUEL_ORDERS` | A negative ordered_qty is valid and denotes a DEFUEL instruction | Warning |
-| `EPD453` | VR09 | `FUEL_TICKETS` | quantity_kg = quantity_litres x density_kg_per_l, rounded at display only | Error |
+| `EPD453` | VR09 | `FUEL_TICKETS` | quantity_kg = quantity_metered x density_value, rounded at display only. **Derives only where uom_code is a volume unit whose conversion is established** — returns null for gallons pending F19 | Error |
 | `EPD454` | VR10 | `FUEL_TICKETS` | fuel_order_id and fd_fuel_plan_id may be NULL; ticket must still be accepted at ingestion | Error |
 | `EPD455` | VR11 | `FUEL_TICKETS` | A ticket links to the plan version it executed against, not the latest ACTIVE version | Error |
 | `EPD456` | VR12 | `FUEL_TICKETS` | Multiple tickets may reference one fuel_order_id, distinguished by uplift_sequence | Error |

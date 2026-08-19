@@ -232,12 +232,16 @@ Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`,
 ### WP-12 · Delivery measurement fields
 
 **Entry:** Decisions B2, B5, B6
-**Scope:** Add meter start and end, and aircraft gauge before and after, to `FUEL_DELIVERIES`. Make density load-bearing — derive mass from volume and density. Correct `calculateTemperatureCorrection` so the density it demands is either used or no longer required. Rename `temperature_corrected_qty` to reflect what it computes. Remove fuel quantity fields from `FLIGHT_CYCLE_EVENTS`, leaving it a movement event log.
-**Out of scope:** Reconciliation status and tolerance evaluation — WP-17.
+**Specification:** `01-TARGET-SCHEMA.md` §6. **Where this entry and §6 differ, §6 governs.**
+**Scope:** Meter readings on **`FUEL_TICKETS`** — the meter belongs to the bowser. Gauge pair on **`FUEL_DELIVERIES`** — the FQIS belongs to the aircraft. Make density load-bearing. Gate `calculateTemperatureCorrection` on unit type. Strip the five fuel fields from `FLIGHT_CYCLE_EVENTS`.
+**Out of scope:** Reconciliation status and tolerance evaluation — WP-17. `delivered_quantity` derivation — WP-17. **Renaming `temperature_corrected_qty`** — prohibited by `05-CONVENTIONS.md` §6; §6 of the target schema resolves it by gating on unit and recording the naming debt. Gallon mass derivation — open point F19.
 **Exit:**
-- Mass derives from volume and delivered density
-- No field name implies a calculation that does not happen
+- Mass derives from `quantity_metered` and `density_value`, where the unit's conversion is established
+- `temperature_corrected_qty` returns null where `uom_code` is a mass unit
+- `FLIGHT_CYCLE_EVENTS` carries no fuel quantity fields
 - Defects D8 and D12 closed
+
+> **Two corrections applied 17 August 2026.** An earlier version of this entry placed the meter readings on `FUEL_DELIVERIES` and required `temperature_corrected_qty` to be renamed. Both were wrong: the meter is per bowser and so belongs on the ticket, and renaming an existing field is prohibited. §6 governed in both cases.
 
 ---
 
