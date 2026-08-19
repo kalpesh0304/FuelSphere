@@ -211,7 +211,10 @@ annotate FuelOrderService.FuelDeliveries with @(restrict: [
     // D22 - see the note on FuelOrders. Mirrors each action's own @requires.
     { grant: 'captureSignatures', to: ['ePODCapture'] },
     { grant: 'verifyQuantity',    to: ['ePODCapture', 'ePODApprove'] },
-    { grant: 'dispute',           to: ['ePODApprove'] }
+    { grant: 'dispute',           to: ['ePODApprove'] },
+    // WP-17. Declared with its grant in the same change, because D22 makes an
+    // action without one unreachable for every user including AdminAccess.
+    { grant: 'reconcile',         to: ['ePODCapture', 'ePODApprove'] }
 ]);
 
 // ePOD Actions authorization
@@ -226,6 +229,11 @@ annotate FuelOrderService.FuelDeliveries actions {
 
     @(requires: ['ePODApprove'])
     dispute;
+
+    // Mirrors verifyQuantity - reconciliation is the verification pair's job
+    // and introduces no new scope.
+    @(requires: ['ePODCapture', 'ePODApprove'])
+    reconcile;
 };
 
 // ----------------------------------------------------------------------------

@@ -160,6 +160,15 @@ service FuelOrderService {
          * - VAL-EPD-004: Density between 0.775 and 0.840 kg/L
          */
         action validateDelivery() returns DeliveryValidationResult;
+
+        /**
+         * WP-17 - recompute the FOB reconciliation for this delivery.
+         *
+         * The gauge readings typically arrive AFTER the tickets, so the
+         * automatic triggers on ticket writes cannot be the only entry point.
+         * This is also the re-run for an operator who has corrected a reading.
+         */
+        action reconcile() returns ReconciliationResult;
     };
 
     // ========================================================================
@@ -428,6 +437,19 @@ service FuelOrderService {
      * Temperature Correction Result (FDD-05)
      * Applies ASTM D1250 correction to 15°C reference
      */
+    type ReconciliationResult {
+        deliveryNumber      : String(25);
+        meteredMassKg       : Decimal(15,2);   // Sum of ticket quantity_kg
+        fqisMassKg          : Decimal(12,2);   // fob_after - fob_before
+        reconVarianceKg     : Decimal(12,2);   // Null where no comparison was made
+        reconStatus         : String(20);
+        supplierCount       : Integer;
+        toleranceKg         : Decimal(12,2);   // Null where no comparison was made
+        toleranceSource     : String(20);      // Which rule produced the threshold
+        fobSource           : String(20);
+        evidence            : String(500);     // How the status was reached
+    }
+
     type TemperatureCorrectionResult {
         success                 : Boolean;
         deliveryNumber          : String(25);

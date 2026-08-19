@@ -25,6 +25,12 @@ const {
     isMassUom,
     deriveGaugeFigures
 } = require('./lib/fuel-uom');
+const {
+    reconcile: reconcileFigures,
+    reconcileDelivery,
+    resolveTolerance,
+    toleranceKg
+} = require('./lib/fob-reconciliation');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -141,6 +147,21 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // entity. Root and child behave differently; check which one you have.
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
+
+        // WP-17: a gauge reading typically arrives AFTER the tickets, so the
+        // reconciliation has to re-run when the delivery changes and not only
+        // when a ticket does.
+        //
+        // Registered on the active entity only. A draft delivery has no
+        // tickets pointing at it — tickets carry delivery_ID to the active
+        // row — so reconciling a draft would read an empty ticket set and
+        // write NOT_RECONCILED over a real result. The draft registration
+        // that WP-12 needed for the gauge arithmetic is exactly wrong here:
+        // that computation reads only its own row, this one reads children.
+        this.after(['UPDATE'], FuelDeliveries, async (data, req) => {
+            const rows = Array.isArray(data) ? data : [data];
+            for (const r of rows) if (r && r.ID) await reconcileDelivery(r.ID);
+        });
 
         this.before(['PATCH', 'UPDATE'], [FuelOrders, FuelOrders.drafts], async (req) => {
             const { ordered_quantity, unit_price } = req.data;
@@ -594,6 +615,52 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 correctedQuantity: correctedQty,
                 referenceTemperature: refTemp,
                 message: `Temperature corrected from ${measuredQty} to ${correctedQty} ${uom} (factor: ${correctionFactor}, ΔT: ${(temp - refTemp).toFixed(1)}°C)`
+            };
+        });
+
+        // ====================================================================
+        // FOB RECONCILIATION - WP-17, decisions B2, B5, C-1
+        // ====================================================================
+
+        this.on('reconcile', FuelDeliveries, async (req) => {
+            const delivery = await SELECT.one.from(FuelDeliveries).where({ ID: _id(req.params) });
+            if (!delivery) return req.error(404, 'Delivery not found');
+
+            const result = await reconcileDelivery(delivery.ID);
+            if (!result) return req.error(404, 'Delivery not found');
+
+            // Report the two measured sides and the threshold, not just the
+            // verdict. A status nobody can reproduce is not an audit trail,
+            // and EPD463's exception task needs the figures behind it.
+            const tickets = await SELECT.from(FuelTickets)
+                .columns('quantity_kg').where({ delivery_ID: delivery.ID });
+            const known = tickets.filter(t => t.quantity_kg !== null && t.quantity_kg !== undefined);
+            const meteredKg = known.length === tickets.length && tickets.length
+                ? Number(known.reduce((a, t) => a + Number(t.quantity_kg), 0).toFixed(2))
+                : null;
+            const fqisKg = (delivery.fob_before_kg !== null && delivery.fob_before_kg !== undefined
+                         && delivery.fob_after_kg !== null && delivery.fob_after_kg !== undefined)
+                ? Number((Number(delivery.fob_after_kg) - Number(delivery.fob_before_kg)).toFixed(2))
+                : null;
+
+            const rule = resolveTolerance(delivery.fob_source);
+            const tol = (rule && meteredKg !== null) ? toleranceKg(rule, meteredKg) : null;
+
+            // C-1: this reports. It does NOT gate anything. The supplier is
+            // paid on metered volume and the dispute runs on its own track;
+            // HOLD_PAYMENT_ON_DISCREPANCY is designed, unbuilt, and defaults
+            // off. No posting path reads recon_status.
+            return {
+                deliveryNumber: delivery.delivery_number,
+                meteredMassKg: meteredKg,
+                fqisMassKg: fqisKg,
+                reconVarianceKg: result.recon_variance_kg,
+                reconStatus: result.recon_status,
+                supplierCount: result.supplier_count,
+                toleranceKg: tol,
+                toleranceSource: rule ? rule.source : null,
+                fobSource: delivery.fob_source,
+                evidence: result.evidence
             };
         });
 
