@@ -97,6 +97,21 @@ No decisions required. Start here.
 
 ---
 
+### WP-02C · Grant the eighteen unauthorised bound actions
+
+**Entry:** WP-02B merged
+**Scope:** Eighteen bound actions on restricted entities declare no `@requires` and have no grant. **Add a grant mirroring each entity's existing `UPDATE` scope**, per decision D26. Two are ours — `complete` and `attachToOrder`.
+**Out of scope:** Adding scopes to `xs-security.json`. Assigning a narrower or higher scope than `UPDATE` — that is the production review, not this package.
+**Exit:**
+- Each of the eighteen is callable by a user holding the entity's `UPDATE` scope, and refused without it
+- Scope set unchanged before and after
+- Harness proved able to fail against the pre-change file **and** under dummy auth
+- Defect D26 closed at the floor level
+
+> **`UPDATE` is a floor.** Several of the eighteen warrant a higher scope — `postToS4HANA` should need `FinancePost`. **Flag them in the PR for a production review**; do not assign them here.
+
+---
+
 ### WP-02B · Grant bound actions their own authorisation entries
 
 **Entry:** WP-02 merged
