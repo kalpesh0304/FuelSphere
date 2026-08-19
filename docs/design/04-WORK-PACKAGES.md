@@ -353,6 +353,8 @@ Two **measurable** gaps, not apportioned ones. `ground_burn_kg` on `FUEL_DELIVER
 
 **Resolution order:** split at the refuelling event where fuel readings exist → fall back to phase → fall back to time-proportional, recording the basis used.
 
+**The second gap is not captured.** `ground_burn_kg` measures `fob_at_arrival → fob_before_refuel` — the pre-refuel portion, burning fuel from the previous uplift. The post-refuel portion, `fob_after → fob_out` of the departing leg, burns newly purchased fuel and **nothing derives it.** Both are needed for the split-at-refuelling rule to work in full; today only the arriving side is measurable. See open point F20.
+
 **Two edge cases:**
 
 - **Tail swap.** Arriving and departing aircraft differ, so there is no turn. Post-arrival belongs to one tail, pre-departure to another. Any logic assuming a continuous turn gets this wrong
