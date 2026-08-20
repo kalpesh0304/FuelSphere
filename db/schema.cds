@@ -502,6 +502,18 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         aircraft            : Association to AIRCRAFT_MASTER on aircraft.type_code = aircraft_type;
         aircraft_type       : String(10);               // FK to AIRCRAFT_MASTER.type_code
         aircraft_reg        : String(10);               // Aircraft registration (e.g., RP-C1234)
+
+        // WP-18 / ENR452. The leg's identity, immutable.
+        //
+        // A tail swap changes the registration and nothing else: the leg is
+        // the same leg. Without a stable identity the replacement dispatch
+        // plan looks like a different flight rather than a revision of this
+        // one, which is exactly what plan_group_id has to survive.
+        //
+        // Not flight_number + flight_date. ENR450 records that one flight
+        // number can depart the same station twice on one date, so that pair
+        // is not a key.
+        flight_leg_id       : String(40);               // ENR452. Immutable through a tail swap
         origin              : Association to MASTER_AIRPORTS on origin.iata_code = origin_airport;
         origin_airport      : String(3) @mandatory;     // Departure airport IATA
         destination         : Association to MASTER_AIRPORTS on destination.iata_code = destination_airport;
@@ -810,6 +822,15 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Dispatch System Reference
         dispatch_fuel_order_id : String(20);            // Fuel Order ID from dispatch system (e.g. Legate TripRecord)
 
+        // WP-18 section 9.5. FLIGHT_DISPATCH points at the order; the order
+        // pointed at no plan, so there was no way to say which plan an order
+        // was created against. Without this, versioning closes nothing.
+        //
+        // Consequence, per A7: an order whose plan has since been superseded
+        // is stale BY CONSTRUCTION. No field comparison is needed - the
+        // question is only whether this order's plan is still the active one.
+        dispatch_plan       : Association to FLIGHT_DISPATCH;
+
         // Cockpit Crew Review (Step 4 of 7-step journey)
         crew_review_status      : CrewReviewStatus;              // Crew review outcome
         crew_reviewed_by        : String(100);                   // Captain name/ID
@@ -1109,6 +1130,40 @@ entity FUEL_SALES_ORDERS : cuid, AuditTrail {
 // ============================================================================
 
 /**
+ * Dispatch plan status (WP-18, DSP452)
+ *
+ * Exactly one row per plan_group_id may be ACTIVE. A superseded version is
+ * never updated in place - DSP453 - so the history of a plan family is the
+ * set of its rows, and the current plan is the one ACTIVE row.
+ *
+ * @assert.range because a declared CDS enum enforces nothing without it (D25).
+ */
+@assert.range: true
+type PlanStatus : String(20) enum {
+    Active     = 'ACTIVE';
+    Superseded = 'SUPERSEDED';
+}
+
+/**
+ * Where plan_version came from (WP-18)
+ *
+ * Not in the specification, added under the standing rule that a derived
+ * value records what produced it - the same reason conversion_source and
+ * fob_source exist.
+ *
+ * It is load-bearing here. Section 9.2 states that a gap can only be DETECTED
+ * where the version arrives on the feed; where it is assigned on receipt,
+ * gaps are invisible. Without this field version_gap_flag = false is
+ * ambiguous between "no gap" and "could not tell", and an unknown must never
+ * read as a pass.
+ */
+@assert.range: true
+type PlanVersionSource : String(10) enum {
+    Feed     = 'FEED';       // The source supplied a version. Gaps are detectable
+    Assigned = 'ASSIGNED';   // Assigned on receipt from arrival order. Gaps are invisible
+}
+
+/**
  * FLIGHT_DISPATCH - Dispatch data from external systems
  * Source: Legate TripRecord, Manual, SmartDoc
  * Volume: ~200,000/year
@@ -1144,6 +1199,68 @@ entity FLIGHT_DISPATCH : cuid, AuditTrail {
 
         // Quantities
         dispatch_qty_kg         : Decimal(10,2);            // Dispatcher-confirmed uplift quantity (kg)
+
+        // ------------------------------------------------------------------
+        // The regulated fuel stack - WP-18, decision B3
+        //
+        // dispatch_qty_kg alone cannot support a fuel variance: it is one
+        // number where regulation requires seven, and every variance analysis
+        // needs to know which component moved.
+        //
+        // additional and extra are held SEPARATELY and must not be merged.
+        // Additional is a planned requirement - EDTO, anticipated delay.
+        // Extra is the commander's discretion. Merging them loses the
+        // distinction between what the operation required and what the
+        // commander chose, which is the only interesting question about them.
+        // DSP454.
+        // ------------------------------------------------------------------
+        trip_fuel_kg            : Decimal(12,2);            // Takeoff to touchdown
+        contingency_fuel_kg     : Decimal(12,2);
+        alternate_fuel_kg       : Decimal(12,2);
+        final_reserve_kg        : Decimal(12,2);
+        additional_fuel_kg      : Decimal(12,2);            // EDTO, anticipated delay. PLANNED
+        taxi_fuel_kg            : Decimal(12,2);
+        extra_fuel_kg           : Decimal(12,2);            // Commander's discretion. NOT planned
+
+        // DSP450. Derived from the seven components, never keyed.
+        // dispatch_qty_kg is retained as the dispatcher-confirmed figure and
+        // should equal it.
+        block_fuel_kg           : Decimal(12,2);
+        // DSP451. Block less the fuel already on board.
+        required_uplift_kg      : Decimal(12,2);
+
+        // ------------------------------------------------------------------
+        // Plan versioning - WP-18, decision A7
+        //
+        // Three axes, none substituting for another:
+        //   plan_group_id      the flight leg's plan family. Never changes
+        //   plan_version       the plan revision. Changes on EVERY re-plan
+        //   dispatch_order_id  the commercial commitment. Changes only when
+        //                      the order was already confirmed to the supplier
+        //
+        // The fuel order ID is stable through a re-plan before confirmation
+        // and new after it, so it marks a commercial boundary rather than a
+        // plan revision and cannot be the family key.
+        // ------------------------------------------------------------------
+
+        // DSP452. Derived from the linked flight's flight_leg_id, so it
+        // survives a tail swap.
+        plan_group_id           : String(40);
+
+        // NOT CONTIGUOUS. STG412: the feed transmits the current plan only,
+        // so missing intermediate versions will never arrive. v1 then v4 is
+        // normal, not an error - apply v4, flag the gap, do not hold.
+        plan_version            : Integer;
+        plan_version_source     : PlanVersionSource;        // FEED or ASSIGNED. See the type
+
+        plan_status             : PlanStatus default 'ACTIVE';
+        superseded_by           : Association to FLIGHT_DISPATCH;
+
+        // DSP456. Stamped on the applied row and NEVER back-updated - they
+        // record what was known when this version was applied, not what is
+        // known now.
+        version_gap_flag        : Boolean default false;
+        versions_skipped        : Integer default 0;
         rob_departure_kg        : Decimal(10,2);            // Remaining On Board at chocks-off (kg)
         payload_kg              : Decimal(10,2);            // Actual payload weight (kg) - for Jeppesen burn calc
         payload_plan_kg         : Decimal(10,2);            // Planned payload from the flight plan, capped by MZFW
