@@ -1,7 +1,7 @@
 # 00-DECISIONS.md
 
 **FuelSphere — merge decisions**
-Status: **DECIDED** — Groups A, B, C and D closed. Groups G and F await confirmation. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
+Status: **All groups closed** — A, B, C, D, G1, G2, G3. Phase 0 complete — six work packages run, seven defects closed, one withdrawn. See `Phase0_Closure_Record.md`. Items marked *Decided in design* were settled during the design work, before the as-built baseline was reviewed. They are carried forward unless the build gives cause to revisit — where it does, that is stated.
 
 ---
 
@@ -95,6 +95,33 @@ Items are grouped by what they block. **Group A must be closed before any code i
 
 **Decision: YES — decided in design.** Plan versions are separate rows; tickets bind to the version executed against. Version gaps are flagged and applied, never held — your words: "flag a version gap but not hold it."
 
+**EXTENDED 18 August 2026.** The mechanism, restated in full:
+
+```
+Plan v1   tail C-FDMO   superseded
+Plan v2   tail C-FDMO   superseded    ← re-plan
+Plan v3   tail C-FDMP   ACTIVE        ← tail swap
+              │
+              └─► order created from v3, carries C-FDMP
+```
+
+**Each plan supersedes the last. The fuel order is created against the latest.**
+
+**A tail swap produces a new dispatch plan carrying the new tail.** So the registration on the order is not a copy taken from the schedule and watched for drift — it is inherited from the plan the order was made against. An order whose plan has since been superseded therefore has a stale tail **by construction**, and that is the amendment trigger. No separate comparison is needed: the question is simply whether this order's plan is still the active one.
+
+**Four things are missing, not one:**
+
+| | State |
+|---|---|
+| Version on `FLIGHT_DISPATCH` | Absent |
+| Supersession or active flag | Absent. The entity carries neither `ActiveStatus` nor any equivalent |
+| **Order → plan reference** | **Absent.** `FUEL_ORDERS` links to `FLIGHT_SCHEDULE`, not to a plan. `FLIGHT_DISPATCH` points at the order; the order does not point back |
+| Ticket → version binding | Absent |
+
+**The third is the one that matters most.** Adding versions alone would not close A7 — with no reference on the order, there is no way to say which plan it came from, whichever plans exist.
+
+> **Question for WP-18.** `dispatch_order_id` is mandatory and holds the external system's fuel order ID. **Is it stable across revisions?** If the dispatch system reuses it on a re-plan, it identifies the plan *family* and needs a version alongside it. If it issues a new one per revision, it **is** the version key and no separate field is needed. That answer determines the shape of the fix.
+
 ---
 
 ### A8. Is `'any'` on authorisation grants deliberate? *(build question E5)*
@@ -119,7 +146,32 @@ Items are grouped by what they block. **Group A must be closed before any code i
 
 **Also retire `PRICING_CONFIG` (singular)** in favour of `PRICING_CONFIGURATIONS`. The duplication extends to configuration, not just formulas.
 
-**Decision: KEEP THE PLURAL FAMILY.** `PRICING_FORMULAS`, `FORMULA_COMPONENTS`, `MARKET_INDICES`, `MARKET_INDEX_VALUES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`. Retire the singular family and `PRICING_CONFIG` — no writer, only read-projected by Planning. WP-08.
+**Decision: KEEP THE PLURAL FAMILY.** `PRICING_FORMULAS`, `FORMULA_COMPONENTS`, `MARKET_INDICES`, `MARKET_INDEX_VALUES`, `DERIVED_PRICES`, `PRICING_CONFIGURATIONS`. Retire the singular family and `PRICING_CONFIG`. **DELIVERED under WP-08, PR #35.**
+
+**Correction — this decision contained a factual error.** It stated the singular family was "only read-projected by Planning". WP-08's survey found it was read-projected by **three** services and referenced by associations on **two retained entities**:
+
+```
+PRICE_ASSUMPTION.source_formula  → PRICING_FORMULA
+PRICE_ASSUMPTION.base_index      → MARKET_INDEX
+FLIGHT_COSTS.pricing_formula     → PRICING_FORMULA
+```
+
+Deleting on the original description would have broken the build. It also named one projection collision where there were **three** — `PricingFormulas`, `MarketIndices`, `DerivedPrices`.
+
+**The two families are not versions of one design.** Of `DERIVED_PRICE`'s 26 fields, **20 have no same-named counterpart** on `DERIVED_PRICES`. Four read paths were dropped rather than guessed at, because no counterpart exists:
+
+| Dropped | Note |
+|---|---|
+| `PricingFormulas.contract` | No counterpart |
+| `MarketIndices.values` | **`MARKET_INDICES` has no forward composition to its values.** The relationship is modelled only from the child |
+| `DerivedPrices.airport` | No counterpart |
+| `DerivedPrices.product` | No counterpart |
+
+Three were renames: `elements` → `components`, `market_index` → `lookup_index`, `marketIndex` → `market_index`.
+
+**For WP-20:** those four paths are gone by design, not by oversight of the merge. Do not attempt to restore them.
+
+`FormulaElementCategory` is now an orphan type — its only consumer was the deleted `PRICING_FORMULA_ELEMENT.category`. Left in place; the plural family's `component_type` may want it.
 
 ---
 
@@ -168,7 +220,11 @@ FUEL_DELIVERIES                    registration + time window
               └─ order (FK, nullable)
 ```
 
-**The delivery hangs off the aircraft, not the order.** It keys on registration plus time window.
+**The delivery hangs off the aircraft, not the order.** It keys on **registration + date + departure time** — REQ-FL-010, accepted 17 August 2026.
+
+> ACARS transmits fuel data for a **tail**, not a flight number, so FuelSphere must resolve the join itself. Tail plus date is insufficient: a narrowbody flies four to six sectors a day, and departure time is what separates them.
+
+This replaces the earlier wording, "registration plus time window", which named no anchor. The key states what a reading attaches *to*; the window becomes a tolerance either side of it.
 
 **Orders link transitively, through the ticket.** No direct FK in either direction, because the relationship is many-to-many both ways:
 
@@ -359,7 +415,9 @@ The error **is** the finding. `FB402` carrying `computed = −340 kg` states exa
 
 `ERROR_LOGS` and `EXCEPTION_ITEMS` are integration-monitoring shaped, with `integration_name`, `source_system` and `target_system` all `@mandatory`. A ledger chain break is neither an integration message nor a retryable transfer.
 
-**A second obstacle.** Raising `FB402` fails the request, and CAP rolls the request transaction back. An exception row written in the same handler rolls back with it. Persisting the record while still failing the request requires an independent root transaction — `cds.tx()` **without** `req`, which is distinct from the `cds.tx(req, …)` nesting trap measured under WP-01.
+**A second obstacle.** Raising `FB402` fails the request, and CAP rolls the request transaction back. An exception row written in the same handler rolls back with it.
+
+**CORRECTED 18 August 2026.** This entry previously said the record could be persisted in an independent root transaction — `cds.tx()` without `req`. **WP-20 measured it: that deadlocks** inside a live request on a single-connection database, and `req.on('failed')` does not fire either. **There is no mechanism for writing a record that survives a failed request.** See F14 for what follows.
 
 **Interim position.** The chain break is visible in the `FB402` response, which carries the computed negative value and all four inputs, and in the absence of a ledger row. There is no durable queue. That is accepted for now.
 
@@ -376,6 +434,33 @@ A broken chain must not stop the airline operating. The next entry restarts from
 > **Open point F11 — chain recovery mechanics.** How the restart is represented is not yet designed. Options include an explicit `ADJUSTMENT` entry closing the gap, an entry typed `CHAIN_RESTART`, or an opening balance flagged as unverified. Each has consequences for ledger closure reporting and for whether the gap is later reconcilable. Deferred; WP-03 raises the exception and permits continuation without deciding the representation.
 
 **Decision: keep the assertion, raise FB402, allow subsequent entries. Confirmed.**
+
+---
+
+### B9. Cost object determination model — REQ-SAP-002
+
+**Decision: the burn posting cost object is either a cost centre or a PM order**, selected by `FLIGHT_COST_OBJECT_MODEL` per company code.
+
+| Value | Determination |
+|---|---|
+| `PM_ORDER` | **Lookup** — flight to PM order, from the trip record or an equivalent standard SAP table |
+| `COST_CENTER` | **Derivation** — event category, station, service type, carrier code |
+
+**Event category is a determination dimension.** Engine burn and APU burn on the same leg may resolve to different cost centres. The design's rule that *cost object resolves per event, not per leg* is load-bearing here.
+
+**`PM_ORDER` is a lookup, not a rule.** FuelSphere reads the flight-to-PM-order relationship; it does not derive or maintain it.
+
+> **Dependency:** the trip record is REQ-INT-002 Path A, deferred pending OI-006. `PM_ORDER` mode cannot be built until SAP provides the structure, or an equivalent standard table is identified.
+
+**Burn corrections carry the object of the flight being corrected**, not of the period in which the correction was made. Holds under both models.
+
+**Aircraft to cost object: provisioned, not consumed.** `AIRCRAFT_REGISTRATIONS` gains a nullable `cost_object_type` and `cost_object_id`. No current flow requires it — burn posts to the flight object, not the tail. Provisioned so it is not retrofitted; **no determination logic until a use case exists.**
+
+**Airport maps to plant only.** The cost centre and profit centre mappings are **not adopted**. Station-level cost resolves through `FS_COST_OBJECT_RULE`, where station is a determination dimension. The design has no profit centre concept and does not gain one.
+
+**Effect on the design.** `FS_COST_OBJECT_RULE` survives with a narrower role. Under `PM_ORDER` the object is looked up, bypassing the rule table. Under `COST_CENTER` the derivation is four dimensions rather than the ten scope levels designed. The wider hierarchy remains for non-burn objects.
+
+**Decision: confirmed.**
 
 ---
 
@@ -460,7 +545,26 @@ No ETags, no version tokens. Status guards are read-then-write. Number generatio
 
 **Recommendation: YES, add.** `@odata.etag` on transactional entities; replace `max + 1` with a database sequence or CAP number range.
 
-**Decision: YES.** `@odata.etag` on transactional entities; replace `max + 1` with a database sequence or CAP number range. WP-04.
+**Decision on numbering: YES — DELIVERED under WP-04.** A shared allocator draws from a `NUMBER_RANGES` counter with an atomic increment inside the request transaction, replacing nine `max + 1` sites across five services. Sequence widened to four digits. D4 and D17 closed.
+
+**Decision on optimistic locking: AMENDED 16 Aug 2026. The stated approach does not work.**
+
+WP-04 implemented `@odata.etag`, measured it, and withdrew it. Two problems, both measured:
+
+**The carrier.** `@odata.etag` on `modified_at` rejects **every** conditional request with 412, including a token CAP itself issued moments earlier. Diagnosed by isolation: an Integer carrier returns 200; `created_at`, which is never auto-updated, still returns 412. **A DateTime field is unusable as an ETag carrier in this stack** — the annotation and `@cds.on.update` are both fine.
+
+**The coupling.** CAP ties `@odata.etag` to *requiring* `If-Match` on every modifying call. Every unconditional update becomes 428, which breaks `draftActivate` and the Planning app's PATCH. This is not additive — it is a breaking change for every existing client.
+
+**D5 remains open.** Two decisions sit behind a real fix, neither taken:
+
+| # | Question | Options |
+|---|---|---|
+| 1 | Which carrier | A dedicated integer version field, which needs increment behaviour written for each of the five entities — CAP has no built-in for this |
+| 2 | Is a missing token fatal | Accept the CAP coupling and require `If-Match` everywhere, with clients sending `If-Match: *` where they do not care — a small change touching every client. Or implement the check in handlers instead, comparing a version on write, which avoids the coupling but only protects paths that implement it |
+
+Recommendation on (2): accept the coupling. `If-Match: *` is trivial for a client to send, and handler-level checking protects nothing that a developer forgets to add. But it is a client migration, and that is a delivery decision rather than a design one.
+
+**Decision: numbering delivered; optimistic locking deferred pending the two questions above.**
 
 ---
 
@@ -526,7 +630,23 @@ Code values only. No structural change, no new entities. These make interfaces m
 | IATA-20 | Order state | `FuelOrderStateType` | preliminary, final |
 | IATA-21 | Rate type | `SubItemPricingUnitRateType` | UR, FF, P |
 
-**Decision on G1: _______________**
+**Decision on G1: ADOPT ALL 21.**
+
+Where the design already has an equivalent field, the industry code values replace the design's own. No new entities, no structural change, one new field.
+
+**IATA-12 is the exception** — `QuantityFlag: GR | NT` is a new field, not a value substitution. Net is temperature-corrected, gross is not. Without it no quantity in the system states which basis it is on.
+
+**IATA-17 and IATA-18 are master data, not enumerations** — 233 Platts and Argus assessment codes, and 29 fuel tax types. Both are currently designed as customer-configured free text. Load the standard lists.
+
+**Cost of adopting now is near zero. Cost of adopting later is a data migration**, since changing an enum after rows exist means converting them.
+
+**Where it lands:** each value takes effect in the work package that builds or touches the field. There is no separate adoption package — the target schema document carries the values, and packages pick them up as they go.
+
+**REFINED 17 August 2026, after WP-11.** The rule above holds where a field is being created or has no established value set. **Where the repository already holds a populated code list with referential integrity, that list governs internally.**
+
+WP-11 surfaced this: `01-TARGET-SCHEMA.md` §5 specified `'LT'` from IATA-14's `PUOMBase`, but `UNIT_OF_MEASURE` uses `LTR`, and `uom_code` is a foreign key. Adopting `LT` literally would have left a dangling association from the first record on three entities.
+
+**IATA codes are mapped at the interface, not imposed on existing master data.** `LTR ↔ LT` when sending or receiving an IATA Transaction message. Renaming master data for cosmetic alignment is a migration for no benefit, and leaving two codes for one unit is worse than one code that differs from the standard.
 
 ### G2 — Backlog, needs design work
 
@@ -578,13 +698,23 @@ Raised and deliberately deferred. Not blocking.
 | # | Item | Context | Revisit when |
 |---|---|---|---|
 | F1 | **Flight number on the supplier ticket feed** | Where a supplier transmits a flight number on the ticket, it can disagree with the flight resolved through the order — after a tail swap, or on a transcription error. Comparing the two would catch fuel delivered against the wrong order, which is otherwise invisible until invoice matching. Not needed now: the refuelling event is created from a ticket already matched to an order, so the flight resolves down that path with nothing to compare against | An electronic supplier ticket feed carrying a flight number is introduced |
-| F2 | **Refuelling event window duration** | How long an event stays open before a new ticket opens a fresh one. Too short and a slow two-bowser uplift splits, breaking the FQIS pairing. Too long and a genuine top-up merges into the original. Suggested starting point two hours, as a parameter | Real turnaround data is available to calibrate against |
+| F2 | **Refuelling event window — three calibration questions** | **(a) Duration.** How long an event stays open before a new ticket opens a fresh one. Too short and a slow two-bowser uplift splits, breaking the FQIS pairing. Too long and a genuine top-up merges into the original. Two hours as a starting parameter. **(b) Tolerance either side of departure time.** REQ-FL-010 settles the anchor — registration + date + departure time — but not how far before or after a reading is still accepted. A delivery starting 13:10 for a 15:00 departure is clearly that flight's; at 11:45 following an 11:00 arrival it is ambiguous. **(c) Scheduled or actual departure time.** Actual is more accurate; scheduled is available earlier. A schedule slip from 15:00 to 17:30 moves the join, and a reading taken at 15:20 changes meaning. **(d) There is no completion signal at all.** The window closes on a **timeout**, which is not the same as knowing the refuelling finished. So the window is the *only* discriminator between two bowsers on one uplift and a genuine second refuelling after a re-plan — and it must serve both. **The IATA Transaction Standard and the AIDX Fuel Summary both carry an explicit completion indicator; the manual capture path has no equivalent.** Where an electronic feed exists the supplier states it; where it does not, nothing does. Consider whether departure — off-blocks — should close any open delivery regardless of the window, since no fuel can be added after it | Real turnaround data is available to calibrate against |
 | F3 | **Where the ePOD signature belongs** | Per ticket where each fueller signs their own, or per delivery where the crew signs one consolidated document at the end. **Partial evidence for per ticket:** IATA service level guidance places the receipt with the fuelling operative — "provide fuel delivery receipt to representative for signature prior to aircraft departure" is listed as a duty of the person operating the fuel vehicle, implying one receipt per vehicle. Not conclusive for multi-bowser turns | Confirmed with the airline, or resolved from the IATA Transaction standard — see F9 |
 | F9 | **Obtain the IATA Fuel Data Standards** | Four free XML standards covering the exact lifecycle: Tender/Bid, Operational (preliminary through revised and final order, concluding with a Fuel Summary), Transaction (electronic fuel transaction settlement), Invoice. **The Transaction standard is the industry schema for the fuel ticket** and would settle F3, the delivery-versus-ticket structure and the field set from the industry's own definition rather than inference. Broad supplier adoption including Shell Aviation, Air bp, ENOC, Q8, Neste, Singapore Petroleum; airline adoption including Lufthansa, British Airways, Emirates, Singapore Airlines, Cathay Pacific, Qatar. Note the Operational standard's shape — preliminary, revised, final, summary — is order versioning independently arrived at | **Now.** Free download at iata.org/en/programs/ops-infra/fuel/data-standards, contact fdsg@iata.org |
 | F4 | **FQIS source and confidence on the event** | Without ACARS, fuel on board is crew-reported and typically rounded to 100 kg, which is 0.9% of a narrowbody uplift and 25% of a small top-up. Reconciliation tolerance should resolve partly from the source, and missing readings must read as NOT_RECONCILED rather than PASS | ACARS coverage per fleet is known, and it is confirmed whether crew record fuel on board at refuelling at all |
 | F5 | **Into-plane pricing models** | Per litre at station level today. Volume-banded, per turn, aircraft-size and out-of-hours models are not supported | Contract terms across stations are known |
 | F6 | **Dispatch plan version gap rate** | Push-on-change with latest-only emission is confirmed. Gaps still occur under push. Whether a gap is a defect to chase or normal attrition determines how versions_skipped is interpreted | Observed gap rates are available |
 | F7 | **Aircraft type structure for a product** | Four code schemes plus a separate configuration table, or a flatter shape with alias resolution alone. Current design favours correctness of parameter resolution over setup simplicity | Two or three implementations have been observed |
+| **F21** | **Should an order quantity be rounded to whole litres?** | WP-DEMO-01: `4803 ÷ 0.8 = 6003.75` exactly. Seeding a rounded 6,004 would break WP-11's reproducibility criterion, since the conversion no longer reproduces from the stored density. **Nothing rounds to a whole unit today.** If orders should be placed in whole litres — and a supplier receiving a request for 6,003.75 L is at least odd — the rule belongs **in the conversion**, not in the seed, and rounding **up** is the safe direction so an order never under-requests. Not a formatting question: it changes `ordered_quantity`, and therefore what the three-way match compares | WP-13, with the conversion moving into the parameter framework |
+| **F23** | **A missing index quote cannot be recorded as missing** | `MARKET_INDEX_VALUES.value` is `@mandatory`, so an absent quote can only be inferred from a **gap in the dates**. A quote the market never published and a quote nobody loaded are indistinguishable. **This is the "missing is not zero" principle made unrepresentable by the schema.** It matters commercially: an averaging period short a day because the market was closed is normal; short a day because an import failed is a finding, and today nothing tells them apart. Found by WP-20, which implemented the missing-quote policy as arithmetic over the dates present rather than as a stored absence. **Options:** relax `@mandatory` and add a `quote_status`; or add an explicit NO_QUOTE row type. The first is a relax, so survey the readers | With the index import work, WP-20's remaining actions |
+| **F24** | **Restatement supersession has no field and orders by timestamp** | WP-20 supersedes a restated derivation by `status` plus `derivedAt` ordering, because `DERIVED_PRICES` carries no `superseded_by` and no version. **Two derivations in the same millisecond are ambiguous**, and the correct one is then a matter of insertion order. `FLIGHT_DISPATCH` gained exactly this under WP-18 — `plan_status` with `superseded_by` — and the same shape applies here. Flagged by WP-20 rather than worked around | Before restatement is relied on in anger |
+| **F22** | **`APU406` requires a cap and none is defined** | The rule asks that an open APU cycle — one with no stop time — be **capped and escalated**. **No cap value exists anywhere in the design.** WP-19 flagged the cycle and left it uncomputed rather than cap at an invented figure, which is right: an APU running unbounded is a data problem, and a fabricated ceiling would turn it into a plausible-looking cost. **A cap needs a basis** — the longest credible continuous run, or a per-fleet figure. Until then an open cycle contributes nothing and is visible as an exception | With WP-13, where the value would live |
+| **F19** | **`GAL` and `USG` carry no SAP unit codes** | `UNIT_OF_MEASURE` gained `sap_uom` and `sap_uom_iso` under WP-11, populated for the three units `01-TARGET-SCHEMA.md` §5 names — `KG`, `LTR`, `MT`. The two gallon rows were left **blank rather than guessed**, since a wrong code in master data that later reconciles against SAP is worse than an empty one. Correct call, but a gap with a trigger: **the first US station cannot post a GR or an invoice without them.** Needs the target client's T006, not inference — internal codes are client-configurable. Note the repository distinguishes `GAL` from `USG`, so both need resolving, and imperial versus US gallon is itself a question | Before any station metering in gallons goes live. **WP-12 note:** mass derivation deliberately returns null for gallon tickets rather than recovering the ratio from the master rows. The `GAL`/`LTR` `conversion_to_kg` values do yield 3.7854 L/gal, but only while both rows share a nominal density — an unstated coupling that would break silently the moment either is corrected |
+| **F17** | **Six status columns remain free text after WP-09** | `AIRCRAFT_OPSTATUS.status_code`, `ALERT_INSTANCES.status`, `INDEX_IMPORT_BATCHES.status`, `ROUTE_MASTER.status`, `SECURITY_USERS.employment_status`, `INVOICES.fi_posting_status`. Found by the WP-09 survey. Deliberately excluded: each belongs to a module that is not built, so enum-ing it means guessing the value set before the behaviour exists. **`SECURITY_USERS.employment_status` is a special case** — it is deliberately free text with its own comment `// ACTIVE, TERMINATED, LOA`, and it is not the `UserStatus` column. WP-06 established this. Do not "fix" it | Each with the package that builds its module |
+| **F16** | **Validation guards should flag, not early-return** | WP-05 measurement: the removed 100,000 kg guard used `req.error` followed by `return`, and the return also skipped the `total_amount` calculation further down the handler. An over-threshold order ended up with **neither a quantity nor a total** — the guard silently suppressed a derived value as a side effect of blocking the write, with no indication why. When WP-13 introduces configurable thresholds, prefer flagging the record and continuing so derived values still populate. Applies to any guard that sits above a derivation in the same handler | WP-13, tolerance configuration. Review other early-return guards for the same pattern |
+| **F20** | **Ground burn does not reach the fuel ledger** | Between `IN` of the arriving leg and `OUT` of the departing one, fuel leaves the tanks — almost entirely APU, plus temperature change and any defuel or transfer. `ROB_LEDGER` chains `arrival fuel → fob_before_refuel → uplift` with **nothing representing that gap**, so it is silently absorbed into whichever adjacent figure closes the chain. WP-12 added `ground_burn_kg` on `FUEL_DELIVERIES`, which makes the **pre-refuel** portion visible; the **post-refuel** portion, `fob_after → fob_out`, is not captured at all. Neither is written as a ledger event | Phase 1 ledger work, **with F14 and F15** |
+| **F15** | **No ePOD delivery reaches the fuel ledger** | `UPLIFT` entries are created only by the Excel ROB import (`burn-service.js:940`). Nothing creates a ledger entry from a `FUEL_DELIVERIES` ePOD event. The ROB formula is now correct, but one of the two physical event types never enters the chain, so the ledger cannot detect an uncaptured uplift — which is its primary purpose. Found during WP-03 | Phase 1. Functional, not cosmetic — the ledger control does not work without it |
+| **F14** | **Durable sink for fuel ledger chain-break exceptions** | WP-03 established that no existing entity fits. `FUEL_BURN_EXCEPTIONS` carries burn-variance semantics; `ERROR_LOGS` and `EXCEPTION_ITEMS` are integration-shaped with mandatory `integration_name`, `source_system`, `target_system`. A purpose-built entity is needed, carrying tail, sequence, the four formula inputs, computed closing, and references to the source burn and delivery. **CORRECTED 18 Aug 2026: the mechanism this entry assumed does not exist.** WP-20 measured `cds.tx()` without `req` — it **deadlocks** inside a live request on a single-connection database, and `req.on('failed')` does not fire. **Nothing can be written that survives a failed request.** Three options remain, none free: **(a)** do not fail the request — write the exception and return success with the break in the payload, so the caller reads the payload rather than the status code; **(b)** write from outside the request, via a job or an emitted message, which adds machinery; **(c)** accept the error as the record — `FB402` already carries the computed value and all four inputs, and that is the position today. **(a) is the smallest change and the most honest**: a chain break is a finding, not a failure of the caller's request | Phase 1, with F15 and F20 |
 | **F13** | **Master data sync safety outside a request context** | WP-01 measurement established that CAP's ambient request transaction makes the full-replace sync atomic **on the request path**. `_syncFromS4` has no equivalent protection if called with no ambient transaction. No scheduler exists today, but `CLAUDE.md` and `PRICING_CONFIGURATIONS.derivation_schedule` both imply one is intended. At that point the original D1 risk becomes real, and whoever adds the scheduler will not know. Note that F12 (upsert) would remove the exposure entirely by eliminating the delete-then-insert window | **Before any scheduler or background job is added.** Whichever work package introduces one must handle this, or it reintroduces D1 |
 | **F12** | **Master data sync — replace full delete-and-insert with upsert. HIGH PRIORITY** | **Note from WP-01 measurement:** `s4-sync-config.js:117-130` holds a commented-out `SuppliersVendor` feed targeting the same table as `Suppliers`, with an in-file warning that full replace deletes all supplier records first. Under full-replace semantics two feeds against one table cannot coexist — the second wipes the first. Upsert removes that constraint, so enabling `SuppliersVendor` is gated on this item. The S/4 master data sync deletes the entire table and reinserts. WP-01 restores the transaction wrapper, which removes the data-loss risk, but the pattern remains wrong. Upsert is better on every dimension: the table is never empty, a failure affects one row rather than all, audit history survives, and what changed is visible. **The blocking question is not technical.** When S/4 stops sending a supplier, what happens to the fuel tickets and orders that already reference it? Three options — mark inactive and continue resolving on existing transactions; mark inactive and block new use; or delete and orphan the references. Each also needs a stable business key per entity to match on, and a delete indicator field, which is a schema change | **Before any further master data work.** Raise as a Phase 1 work package. Requires a product decision on the inactive-record question, not only a code change |
 | F11 | **Fuel ledger chain recovery** | When a computed closing balance goes negative, the row is not written and FB402 is raised, but subsequent entries continue. How the restart is represented is undesigned — an explicit ADJUSTMENT closing the gap, a CHAIN_RESTART entry type, or an opening balance flagged unverified. Affects ledger closure reporting and whether the gap remains reconcilable later | Ledger closure is designed, WP-17 |
@@ -630,28 +760,53 @@ Do these regardless.
 
 ## Defects — no decision needed, only sequencing
 
+### Closed under Phase 0
+
+| # | Defect | Closed by |
+|---|---|---|
+| ~~D2~~ | `'any'` on 93 authorisation grants across 69 grants | WP-02, PR #32 |
+| ~~D3~~ | ROB formula dropped uplift and clamped negatives | WP-03, PR #30 |
+| ~~D4~~ | Non-atomic `max + 1` number generation | WP-04, PR #33. Nine sites across five services, not the three named |
+| ~~D13~~ | `captureSignatures` had no order status guard | WP-02, PR #32 |
+| ~~D15~~ | `recalculateROB` unimplemented; ledger could not be rebuilt | WP-03, PR #30 |
+| ~~D16~~ | 100,000 order guard blocked legitimate widebody orders | WP-05, PR #31 |
+| ~~D17~~ | `'XXX'` fallback station code in number generation | WP-04, PR #33 |
+
+### Withdrawn
+
+| # | Defect | Why |
+|---|---|---|
+| ~~D1~~ | Master sync transaction wrapper commented out | **Not a defect.** Measured under WP-01, 16 Aug 2026. CAP's ambient request transaction already makes delete and insert atomic; the wrapper was redundant, and restoring it silently discards writes while returning HTTP 200 with success. Nine of nine scenarios pass on unmodified code, on both in-memory and file-backed sqlite. Residual risk moved to F13 |
+
+### Open
+
 | # | Defect | Blocking |
 |---|---|---|
-| **D21** | **`aircraft_ID` written to `ROB_LEDGER` on two paths where no such element exists.** `burn-service.js:479` (`adjustROB`) and `:1071` (Excel ROB import). The association flattens to `aircraft_type_code`, so the aircraft reference is silently never set on rows created by those paths. Found during WP-03, outside its scope | |
-| D20 | A malformed S/4 response is reported as "0 records" rather than as a parse failure. Data-safe; the zero-row guard fires and no delete occurs. But an unrecognised payload is indistinguishable from an empty source, so a schema change at the S/4 end would be diagnosed as a data problem. Found during WP-01 measurement, outside its scope. Small — carry it with F12 or F13 | |
-| ~~D1~~ | **WITHDRAWN.** Measured under WP-01, 16 Aug 2026. CAP's ambient request transaction already makes delete and insert atomic; the commented-out wrapper was redundant, and restoring it silently discards writes while returning success. Nine of nine scenarios pass on unmodified code, verified on both in-memory and file-backed sqlite. Residual risk moved to open point F13 | — |
-| D2 | `'any'` on 93 authorisation grants | **Yes** |
-| D3 | ROB formula drops uplift and clamps negatives | **Yes** |
-| D4 | Non-atomic `max + 1` number generation | **Yes** |
-| D5 | No optimistic locking | **Yes** |
-| D6 | Duplicate pricing entity families and config tables | |
-| D7 | Order status enum drift across enum, code and seed | |
+| **D22** | **Eleven bound actions denied under real authorisation, for every user including one holding all scopes.** CAP matches a bound action against the entity's `@restrict` for a grant naming that action; entity-level CRUD does not imply it. Pre-existing, unchanged by WP-02. **Masked locally by dummy auth.** Would surface on first XSUAA deployment. Fix is mechanical — see WP-02B | **Yes — deployment** |
+| **D19** | **`S2A` destination used by code, provisioned nowhere.** `mta.yaml` declares `S4HC_TECHNICAL` and `S4HC_USER`; neither is referenced by code. Master data sync fails on a fresh deployment | **Yes — deployment** |
+| **D23** | **Two implemented services have no authorisation of any kind.** `authorization.cds` covers 4 of 15 services. `PlanningService` (610 lines) and `RefuelerService` (235 lines) have no annotation block, not even a service-level `@requires` | **Yes** |
+| D5 | No optimistic locking. See C5 — the stated `@odata.etag` approach was measured and withdrawn; two questions remain open behind a real fix | **Yes** |
+| D11 | No aircraft register. `AIRCRAFT_MASTER` is keyed by `type_code` | **Yes** |
+| D14 | No row-level security. Zero `where:` clauses | **Yes** |
+| D6 | Duplicate pricing entity families and config tables. Decision A10 taken; retirement is WP-08 | |
+| D7 | Order status enum drift. **Narrowed by WP-06:** the seed data is correct, every value is in `OrderStatus`. The disagreement is code-side — `before CREATE` writes `'Created'` | |
 | D8 | `temperature_corrected_qty` implies density correction | |
 | D9 | Simulated S/4 document numbers | |
 | D10 | `planned_burn_kg` hardcoded to zero — ACARS reconciliation inert | |
-| D11 | No aircraft register | **Yes** |
 | D12 | Density required then ignored | |
-| D13 | `captureSignatures` has no order status guard | **Yes** |
-| D14 | No row-level security | **Yes** |
-| D15 | ROB ledger cannot be rebuilt | **Yes** |
-| D16 | 100,000 kg order guard blocks legitimate widebody orders | **Yes** |
-| D17 | `'XXX'` fallback station code in number generation | |
-| D18 | Flight status is unenforced free text | |
+| D18 | Flight status is unenforced free text. Decision B7 taken | |
+| **D21** | `aircraft_ID` written to `ROB_LEDGER` on two paths where no such element exists — `burn-service.js:479` and `:1071`. The association flattens to `aircraft_type_code`, so the reference is silently never set. Found during WP-03 | |
+| **D29** | **`applied_multiplier` carries two unrelated meanings, and component sequence is not unique.** On `PRICE_DERIVATION_LOGS`, `applied_multiplier` holds a genuine multiplier on one row and a **threshold marker** on another — 1.0 against 5000. Separately, one seeded formula has three components sharing `sequence = 3`, so **sequence alone cannot order them deterministically**; WP-20 ordered by `(sequence, componentType, ID)` and reported it rather than assuming. If sequence is meant to be unique per formula it needs a constraint; if it is not, the tiebreak belongs in the design rather than in one module. Both found by WP-20 and left alone | |
+| **D28** | **Four parameters are decided and none exists.** `HOLD_PAYMENT_ON_DISCREPANCY` (C-1), `FLIGHT_COST_OBJECT_MODEL` (B9), `BURN_POSTING_TRIGGER` (C-2) and `UNKNOWN_TAIL_POLICY` (`01-TARGET-SCHEMA` §10.3) are all named in taken decisions. **None is stored anywhere** — the only occurrences in the codebase are comments naming WP-13 as their destination. Found by the WP-07B survey. **This enlarges WP-13:** its scope has been "migrate the hardcoded tolerances", but there is no parameter store to migrate them into, and four parameters have been decided into existence without one. WP-13 must build the store, register these four, and provide the resolution — not merely move literals | |
+| **D27** | **A re-planned dispatch is silently discarded.** `order-service.js:847-851` builds a composite dedup key of fuel order ID, flight number and flight date and on a match warns and skips — not update-in-place, not a second row. Where the dispatch system reuses the fuel order ID on a re-plan, **the revised quantity never lands**, and the only trace is a `WARNING` in an import log. Separately, the import reads 18 named columns and **discards everything else without comment**, so a version column already in the feed is being thrown away. Found by the WP-18 pre-survey. Closed by WP-18, which replaces "duplicate" with "revision" | |
+| **D26** | **Eighteen bound actions carry no `@requires` at all.** WP-02B surveyed 31 bound actions on restricted entities and found **zero had a grant** — including every one that already declared an `@requires`. Thirteen were mechanical and are fixed. The remaining eighteen declare no scope, so there is nothing to mirror: choosing one for a previously unauthorised action is a security decision, not a mechanical fix. **Two are ours** — `complete` from WP-09 and `attachToOrder` from WP-10, both added without an `@requires` while authorisation work was in progress. **Decision: mirror each entity's `UPDATE` grant as a floor** — an action that modifies an entity should require at least what modifying it directly requires, which widens nothing. **A floor, not a correct answer for all eighteen:** `postToS4HANA` should need `FinancePost`, not `UPDATE` on an invoice. Review the high-privilege actions before production. See WP-02C |
+| **D25** | **79 enum-typed elements in the schema. Zero were enforced.** Declaring a CDS enum does **not** validate input — CAP checks only where `@assert.range` is present. WP-09 measured it: before annotation, a POST with `status='RETURNED'` against a newly declared enum returned **201**. This is the mechanism behind the entire enum-violation class WP-06 corrected — `SUBMITTED` could sit in seed data against an enum lacking the member because nothing ever checked. WP-09 enforced one field, WP-12 one more. **The remaining 78 are WP-09B**, whose work is the blast radius across writers and seed data, not the annotation |
+| **D24** | **Three seed CSVs are dead, not misnamed.** `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv`. No matching entity exists under any name; headers are camelCase from a different design; CAP has never loaded them. **Delete, do not rename.** Small and standalone | |
+| D20 | A malformed S/4 response is reported as "0 records" rather than as a parse failure. Data-safe, but an unrecognised payload is indistinguishable from an empty source. Carry with F12 or F13 | |
+
+### Found by sweep, corrected under WP-06
+
+Fifteen enum violations that appeared on no defect list: `PARTIAL` where the enum says `PARTIAL_MATCH` (3 cells), `OK` where it says `NORMAL` (12 cells). Two of the three violations that *were* listed did not exist — `SECURITY_USERS.employment_status` is not enum-typed, and `FUEL_ORDERS.status` data already conformed.
 
 ---
 
@@ -663,6 +818,15 @@ Do these regardless.
 | Product owner | Deferred to Phase 1 | — |
 | Delivery lead | Deferred to Phase 1 | — |
 
-**Phase 0 authorised.** Groups A, B, C, D, G2 and G3 are closed. WP-01 to WP-06 are defect fixes requiring no product or delivery decision.
+**Phase 0 authorised and complete.** Groups A, B, C, D, G2 and G3 closed. WP-01 to WP-06 run: five merged, one closed as already-satisfied. Seven defects closed, one withdrawn, six new ones found.
 
-Product owner and delivery lead sign-off is required before Phase 1 begins.
+**Product owner and delivery lead sign-off is required before Phase 1 begins.** Phase 0 was defect fixes on your signature alone; Phase 1 changes the schema.
+
+**Still open before Phase 1 can start:**
+
+| # | Item |
+|---|---|
+| 1 | `01-TARGET-SCHEMA.md`, `02-BEHAVIOUR.md`, `03-VALIDATION-RULES.md` — all three are placeholders |
+| 2 | Product owner and delivery lead sign-off above |
+
+**Worth a small standalone pass at any time:** WP-02B (eleven bound action grants, deployment-blocking) and D24 (delete three dead CSVs). Both mechanical.
