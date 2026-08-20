@@ -295,7 +295,19 @@ service PricingService {
     action derivePrice(
         contractId: UUID,
         effectiveDate: Date,
-        forceEngine: String
+        forceEngine: String,
+        // WP-20. PRICING_FORMULAS scopes by company_code and
+        // MASTER_CONTRACTS carries none, so the company code is supplied
+        // rather than derived. Formula scope and engine selection both use it.
+        companyCode: String(4),
+        // WP-20 / PRC408. A contract priced on a monthly average cannot be
+        // priced at uplift. The provisional price is a REAL price from a
+        // contracted proxy, and it settles — so which it is has to be stated.
+        // Nothing on MASTER_CONTRACTS declares that a contract prices
+        // provisionally; until something does, the caller says.
+        priceStatus: String(20),
+        // PRC409. The period a PROVISIONAL price settles against, YYYY-MM.
+        settlesForPeriod: String(7)
     ) returns PriceDerivationResult;
 
     /**
@@ -559,6 +571,16 @@ service PricingService {
         baseIndexValue      : Decimal(15,4);
         componentBreakdown  : LargeString;
         calculationTimeMs   : Integer;
+        // WP-20. The evidence a price is re-explainable from — PRC407.
+        priceStatus         : String(20);    // PROVISIONAL or FINAL
+        formulaId           : String(50);    // WHICH formula row resolved
+        formulaVersion      : Integer;
+        scopeResolvedBy     : String(20);    // WHICH scope tier resolved it
+        settlesForPeriod    : String(7);     // PRC409, on a PROVISIONAL price
+        basicFuelPrice      : Decimal(15,4); // Excludes tax components — PRC403
+        taxComponentCount   : Integer;       // Carried, not priced
+        quotesUsed          : Integer;       // Index quotes behind the figure
+        logEntries          : Integer;       // Rows written to PRICE_DERIVATION_LOGS
         message             : String(500);
     };
 
