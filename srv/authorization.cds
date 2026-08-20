@@ -434,6 +434,20 @@ annotate BurnService.FuelBurnExceptions with @(restrict: [
 // BurnService Actions - Upload permissions
 // ----------------------------------------------------------------------------
 
+// WP-19. ApuUsage and its bound action. Declared with its grant in the same
+// change: D22 makes a bound action without one unreachable for every user.
+annotate BurnService.ApuUsage with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] },
+    { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'DELETE', to: ['AdminAccess'] },
+    { grant: 'deriveBurn', to: ['BurnDataEdit', 'AdminAccess'] }
+]);
+
+annotate BurnService.ApuUsage actions {
+    @(requires: ['BurnDataEdit', 'AdminAccess'])
+    deriveBurn;
+};
+
 annotate BurnService.importFuelBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);
 annotate BurnService.importROBInitialExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);
 annotate BurnService.importPlannedBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);

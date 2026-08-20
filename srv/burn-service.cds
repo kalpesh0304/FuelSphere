@@ -149,6 +149,27 @@ service BurnService {
     };
 
     // ========================================================================
+    // APU USAGE (WP-19)
+    // ========================================================================
+
+    /**
+     * ApuUsage - one row per APU CYCLE, not per phase and not per flight.
+     */
+    entity ApuUsage as projection on db.APU_USAGE {
+        *,
+        tail             : redirected to AircraftRegistrations,
+        flight           : redirected to FlightSchedule,
+        allocated_flight : redirected to FlightSchedule
+    } actions {
+        /**
+         * Derive running minutes and burn for this cycle.
+         * APU406 - an open cycle is flagged and never computed.
+         * APU407 - a stop earlier than its start is rejected.
+         */
+        action deriveBurn() returns ApuBurnResult;
+    };
+
+    // ========================================================================
     // REFERENCE DATA (Read-only)
     // ========================================================================
 
@@ -164,6 +185,17 @@ service BurnService {
     entity Aircraft as projection on db.AIRCRAFT_MASTER {
         *,
         manufacturer : redirected to Manufacturers
+    };
+
+    /**
+     * AircraftRegistrations - the tail register (WP-07). Read-only here;
+     * maintained in MasterDataService. The APU burn rate lives on it and is
+     * consumed for the first time by WP-19.
+     */
+    @readonly
+    entity AircraftRegistrations as projection on db.AIRCRAFT_REGISTRATIONS {
+        *,
+        aircraft_type : redirected to Aircraft
     };
 
     @readonly
@@ -454,6 +486,22 @@ service BurnService {
         requiresApproval    : Boolean;
         message             : String(500);
     };
+
+    type ApuBurnResult {
+        cycleId          : UUID;
+        tailNumber       : String(10);
+        usagePhase       : String(20);
+        apuSource        : String(20);
+        isOpen           : Boolean;
+        runningMinutes   : Integer;
+        burnRateKgHr     : Decimal(8,2);   // The rate used
+        rateSource       : String(30);     // Where it came from
+        apuBurnKg        : Decimal(12,2);  // Null where open, or where no rate resolves
+        allocatedFlight  : UUID;
+        allocationBasis  : String(24);
+        derived          : Boolean;        // APU burn is NEVER metered
+        message          : String(500);
+    }
 
     type ROBRecalculationResult {
         success             : Boolean;
