@@ -502,6 +502,19 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         aircraft            : Association to AIRCRAFT_MASTER on aircraft.type_code = aircraft_type;
         aircraft_type       : String(10);               // FK to AIRCRAFT_MASTER.type_code
         aircraft_reg        : String(10);               // Aircraft registration (e.g., RP-C1234)
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
 
         // WP-18 / ENR452. The leg's identity, immutable.
         //
@@ -870,6 +883,19 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         // transitively through the tickets.
         order               : Association to FUEL_ORDERS;
         aircraft_reg        : String(10) @mandatory;    // Join key: tail + date + departure time (REQ-FL-010)
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
         sales_order         : Association to FUEL_SALES_ORDERS;  // Link to supplier's sales order
         delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
 
@@ -988,6 +1014,19 @@ entity FUEL_TICKETS : cuid, AuditTrail {
 
         // Flight Reference
         aircraft_reg        : String(10);               // Aircraft registration
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
         flight_number       : String(10);               // Flight number
 
         // ------------------------------------------------------------------
@@ -1183,6 +1222,19 @@ entity FLIGHT_DISPATCH : cuid, AuditTrail {
 
         // Aircraft & Crew
         tail_number             : String(10);               // Aircraft registration at dispatch (e.g. A6-EGD)
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
         captain_id              : String(20);               // Captain employee or license ID (e.g. CAP-10234)
         dispatcher_id           : String(20);               // Dispatcher employee ID (e.g. DSP-00456)
 
@@ -2203,6 +2255,19 @@ entity FUEL_BURNS : cuid, AuditTrail {
         flight              : Association to FLIGHT_SCHEDULE;  // Associated flight
         aircraft            : Association to AIRCRAFT_MASTER @mandatory;
         tail_number         : String(10) @mandatory;      // Aircraft registration (denormalized)
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
 
         // Burn Date/Time
         burn_date           : Date @mandatory;            // Burn record date
@@ -2259,6 +2324,19 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // Aircraft Reference
         aircraft            : Association to AIRCRAFT_MASTER @mandatory;
         tail_number         : String(10) @mandatory;      // Aircraft registration (denormalized)
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
 
         // Record Timestamp
         record_date         : Date @mandatory;            // Record date
@@ -2312,6 +2390,19 @@ entity FUEL_BURN_EXCEPTIONS : cuid, AuditTrail {
         fuel_burn           : Association to FUEL_BURNS @mandatory;
         aircraft            : Association to AIRCRAFT_MASTER @mandatory;
         tail_number         : String(10) @mandatory;
+        // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
+        // existing constraint and this is optional, always.
+        //
+        // Named `tail`, not `aircraft`. On four of these seven entities
+        // `aircraft` is already an association to AIRCRAFT_MASTER — the TYPE
+        // master, keyed on type_code — and @mandatory on three of them. The
+        // same name would mean type in one place and tail in another.
+        //
+        // Both are retained deliberately. The string is the value AS RECEIVED
+        // and survives a registration the register has never seen; replacing
+        // it would make an unknown tail structurally impossible to record, and
+        // then no parameter could permit one.
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
 
         // Exception Details
         exception_date      : Date @mandatory;
