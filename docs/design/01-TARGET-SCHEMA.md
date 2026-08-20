@@ -797,8 +797,15 @@ Written 18 August 2026. Decisions B1 and A4 apply.
 
 ```cds
 tail_number : String(10) @mandatory;                    // UNCHANGED
-aircraft    : Association to AIRCRAFT_REGISTRATIONS;    // NEW, optional
+tail        : Association to AIRCRAFT_REGISTRATIONS;    // NEW, optional
+                                                        // FK: tail_registration
 ```
+
+> **CORRECTED 18 August 2026.** An earlier draft named the association `aircraft`. **That name is already taken on four of the seven**, as an association to `AIRCRAFT_MASTER` — the **type** master, keyed on `type_code`, and `@mandatory` on three of them.
+>
+> It would not merely have collided. It would have meant **aircraft type in three places and this tail in four others, under one name** — which compiles, and is worse than a name that does not.
+>
+> **`tail` is the association; `tail_registration` is the generated foreign key.** Verify against the compiler before relying on either.
 
 **The string keeps its existing constraint.** Where it is `@mandatory` today it stays `@mandatory`; the association is added alongside and is always optional.
 

@@ -264,6 +264,21 @@ Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`,
 
 ### WP-13 · Parameter resolution and applied evidence
 
+> **SCOPE ENLARGED 18 August 2026 — defect D28.** The scope below reads as "migrate the hardcoded values into configuration". **There is no configuration to migrate them into.**
+>
+> Four parameters are named in taken decisions and **none exists anywhere**:
+>
+> | Parameter | Decided in |
+> |---|---|
+> | `HOLD_PAYMENT_ON_DISCREPANCY` | C-1 |
+> | `FLIGHT_COST_OBJECT_MODEL` | B9 |
+> | `BURN_POSTING_TRIGGER` | C-2 |
+> | `UNKNOWN_TAIL_POLICY` | `01-TARGET-SCHEMA` §10.3 |
+>
+> The only occurrences in the codebase are comments naming WP-13 as their destination. Found by the WP-07B survey.
+>
+> **WP-13 must build the store, register these four, and provide the resolution — before migrating any literal.** `TOLERANCE_RULES`, `ALLOCATION_RULES` and `PRICING_CONFIGURATIONS` are seeded but they are rule tables, not a general parameter store, and none of the four fits them.
+
 **Entry:** Decision A6
 **Scope:** Implement date-effective, priority-ordered resolution against the existing `valid_from`, `valid_to` and `priority` columns. Add an applied-value record capturing which configuration row produced each resolved value. Migrate the hardcoded literals — burn variance 5/10/20, delivery variance ±5%, `1.05`, density bounds 0.775 to 0.840, temperature range −40 to 50 — into `TOLERANCE_RULES` and related tables. Honour `block_on_exceed` and `require_dual_approval`.
 **Out of scope:** SoD rules. Allocation rules.
