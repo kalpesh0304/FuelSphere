@@ -277,7 +277,17 @@ Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`,
 >
 > The only occurrences in the codebase are comments naming WP-13 as their destination. Found by the WP-07B survey.
 >
-> **WP-13 must build the store, register these four, and provide the resolution — before migrating any literal.** `TOLERANCE_RULES`, `ALLOCATION_RULES` and `PRICING_CONFIGURATIONS` are seeded but they are rule tables, not a general parameter store, and none of the four fits them.
+> **WP-13 must build the store, register these four, and provide the resolution — before migrating any literal.** `TOLERANCE_RULES`, `ALLOCATION_RULES` and `PRICING_CONFIGURATIONS` are seeded but they are **rule tables**, not a general parameter store. `TOLERANCE_RULES` is keyed on parameter code **and scope**, with typed value columns per `CFG404`. **`UNKNOWN_TAIL_POLICY` is a single enum with no scope key; `HOLD_PAYMENT_ON_DISCREPANCY` is a boolean switch.** Fitting them in would mean widening rule tables to hold things that are not rules. **The store is genuinely new work.**
+
+**Three constant blocks already sit where WP-13 will collect them**, each named and pointing at it:
+
+| Constant | Where |
+|---|---|
+| `TOLERANCE_BY_FOB_SOURCE` / `TOLERANCE_SOURCE` | `fob-reconciliation.js`, WP-17 |
+| `UNKNOWN_TAIL_POLICY` / `POLICY_SOURCE` | `tail-resolver.js`, WP-07B |
+| `DEFAULT_VOLUME_UOM` | WP-11 |
+
+Each already records **which source produced the value** — the applied-evidence pattern, in place before the store exists.
 
 **Entry:** Decision A6
 **Scope:** Implement date-effective, priority-ordered resolution against the existing `valid_from`, `valid_to` and `priority` columns. Add an applied-value record capturing which configuration row produced each resolved value. Migrate the hardcoded literals — burn variance 5/10/20, delivery variance ±5%, `1.05`, density bounds 0.775 to 0.840, temperature range −40 to 50 — into `TOLERANCE_RULES` and related tables. Honour `block_on_exceed` and `require_dual_approval`.
