@@ -10,6 +10,7 @@
  */
 
 const cds = require('@sap/cds');
+const { resolveTail } = require('./lib/tail-resolver');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 
@@ -342,6 +343,8 @@ module.exports = class BurnService extends cds.ApplicationService {
                 ID: burnId,
                 flight_ID: flight ? flight.ID : null,
                 tail_number: tailNumber,
+                // WP-07B. Never blockable — the burn already happened (A1).
+                tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                 burn_date: burnDate,
                 actual_burn_kg: actualBurnKg,
                 planned_burn_kg: plannedBurnKg || null,
@@ -361,6 +364,8 @@ module.exports = class BurnService extends cds.ApplicationService {
                     ID: cds.utils.uuid(),
                     fuel_burn_ID: burnId,
                     tail_number: tailNumber,
+                    // WP-07B. Never blockable — the burn already happened (A1).
+                    tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                     exception_date: burnDate,
                     variance_kg: varianceKg,
                     variance_pct: variancePct,
@@ -410,6 +415,8 @@ module.exports = class BurnService extends cds.ApplicationService {
             await INSERT.into(FuelBurns).entries({
                 ID: burnId,
                 tail_number: tailNumber,
+                // WP-07B. Never blockable — the burn already happened (A1).
+                tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                 burn_date: burnDate,
                 actual_burn_kg: actualBurnKg,
                 block_off_time: blockOffTime,
@@ -478,6 +485,8 @@ module.exports = class BurnService extends cds.ApplicationService {
                 ID: ledgerId,
                 aircraft_ID: aircraftId,
                 tail_number: tailNumber,
+                // WP-07B. Never blockable — the burn already happened (A1).
+                tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                 record_date: now.toISOString().slice(0, 10),
                 record_time: now.toISOString().slice(11, 19),
                 sequence: nextSeq,
@@ -544,27 +553,46 @@ module.exports = class BurnService extends cds.ApplicationService {
         // (record_date, record_time, sequence) order, seeded from the closing
         // balance of the last entry before fromDate.
         //
-        // Note: the declared signature takes aircraftId: UUID, but the ledger
-        // chain is per tail and AIRCRAFT_MASTER is keyed by type_code, not a
-        // UUID (defect D11 — there is no aircraft register). The parameter is
-        // therefore resolved against tail_number first, then aircraft_type_code.
-        // The .cds signature is left unchanged; correcting it belongs with D11.
+        // WP-07B section 10.6. WP-03 resolved aircraftId against tail_number
+        // and then aircraft_type_code, and left the signature alone because
+        // there was nothing better to point at. There is now: `registration`
+        // addresses the register directly, and the ledger chain is per tail.
+        //
+        // aircraftId is still accepted, so no existing caller breaks.
         this.on('recalculateROB', async (req) => {
-            const { aircraftId, fromDate } = req.data;
-            if (!aircraftId) return req.error(400, 'FB401: aircraftId is required.');
+            const { registration, aircraftId, fromDate } = req.data;
+            const key = registration || aircraftId;
+            if (!key) return req.error(400, 'FB401: registration is required.');
 
-            let entries = await SELECT.from(ROBLedger)
-                .where({ tail_number: aircraftId })
-                .orderBy('record_date asc', 'record_time asc', 'sequence asc');
+            // Resolve through the register first. A tail that is IN the
+            // register addresses its chain by association; one that is not
+            // still resolves by string, because the ledger records the tail as
+            // received and a chain must remain rebuildable for an aircraft
+            // nobody has registered yet.
+            const known = await resolveTail(key);
+            let entries = known
+                ? await SELECT.from(ROBLedger)
+                    .where({ tail_registration: known.registration })
+                    .orderBy('record_date asc', 'record_time asc', 'sequence asc')
+                : [];
+            let addressedBy = known && entries.length ? 'association' : null;
 
             if (entries.length === 0) {
                 entries = await SELECT.from(ROBLedger)
-                    .where({ aircraft_type_code: aircraftId })
+                    .where({ tail_number: String(key).trim().toUpperCase() })
                     .orderBy('record_date asc', 'record_time asc', 'sequence asc');
+                if (entries.length) addressedBy = 'tail_number';
             }
             if (entries.length === 0) {
-                return req.error(404, `FB401: No ROB ledger entries found for '${aircraftId}'.`);
+                entries = await SELECT.from(ROBLedger)
+                    .where({ aircraft_type_code: key })
+                    .orderBy('record_date asc', 'record_time asc', 'sequence asc');
+                if (entries.length) addressedBy = 'aircraft_type_code';
             }
+            if (entries.length === 0) {
+                return req.error(404, `FB401: No ROB ledger entries found for '${key}'.`);
+            }
+            req.addressedBy = addressedBy;
 
             const tailNumber = entries[0].tail_number;
             const inScope = fromDate ? entries.filter(e => e.record_date >= fromDate) : entries;
@@ -635,7 +663,11 @@ module.exports = class BurnService extends cds.ApplicationService {
                 entriesRecalculated,
                 finalROBKg: runningOpening,
                 discrepanciesFound,
-                message: `Rebuilt ${entriesRecalculated} ROB entries for ${tailNumber}. ` +
+                // WP-07B: how the tail was addressed, so a caller can tell a
+                // register hit from a string fallback.
+                addressedBy: req.addressedBy,
+                message: `Rebuilt ${entriesRecalculated} ROB entries for ${tailNumber} ` +
+                         `(addressed by ${req.addressedBy}). ` +
                          `${discrepanciesFound} corrected. Final ROB ${runningOpening} kg.`
             };
         });
@@ -894,6 +926,8 @@ module.exports = class BurnService extends cds.ApplicationService {
                     flight_ID: flightRecord ? flightRecord.ID : null,
                     aircraft_type_code: flightRecord ? flightRecord.aircraft_type : null,
                     tail_number: tailNumber,
+                    // WP-07B. Never blockable — the burn already happened (A1).
+                    tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                     origin_airport_iata_code: depAirport,
                     destination_airport_iata_code: arrAirport,
                     burn_date: burnDate,
@@ -1070,6 +1104,8 @@ module.exports = class BurnService extends cds.ApplicationService {
                     ID: cds.utils.uuid(),
                     aircraft_ID: aircraftMap.get(aircraftType) || null,
                     tail_number: tailNumber,
+                    // WP-07B. Never blockable — the burn already happened (A1).
+                    tail_registration: (await resolveTail(tailNumber) || {}).registration || null,
                     record_date: recordDate,
                     record_time: normalizedTime,
                     sequence: seqCounters[seqKey],
@@ -1310,6 +1346,8 @@ module.exports = class BurnService extends cds.ApplicationService {
         await INSERT.into(ROBLedger).entries({
             ID: cds.utils.uuid(),
             tail_number: burn.tail_number,
+            // WP-07B. Never blockable — the burn already happened (A1).
+            tail_registration: (await resolveTail(burn.tail_number) || {}).registration || null,
             record_date: burn.burn_date,
             record_time: burn.burn_time || '00:00:00',
             sequence: nextSeq,

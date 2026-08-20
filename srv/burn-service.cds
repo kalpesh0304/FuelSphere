@@ -242,7 +242,16 @@ service BurnService {
      * Rebuild ROB ledger from a specific date
      */
     action recalculateROB(
-        aircraftId: UUID,
+        // WP-07B section 10.6. `registration` is the parameter that can
+        // actually address a tail — the ledger chain is per tail, and the
+        // aircraft register is keyed on it.
+        //
+        // aircraftId is retained and deprecated rather than removed: it is a
+        // declared parameter of a live action and dropping it would break any
+        // caller. It never held a UUID in practice, because there was no
+        // register to hold one.
+        registration: String(10),
+        aircraftId: UUID,          // Deprecated. Resolved as a registration
         fromDate: Date
     ) returns ROBRecalculationResult;
 
@@ -453,6 +462,7 @@ service BurnService {
         entriesRecalculated : Integer;
         finalROBKg          : Decimal(12,2);
         discrepanciesFound  : Integer;
+        addressedBy         : String(20);   // WP-07B: association | tail_number | aircraft_type_code
         message             : String(500);
     };
 

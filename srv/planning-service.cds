@@ -351,7 +351,10 @@ service PlanningService {
      */
     action importFlightScheduleExcel(
         fileContent : LargeBinary,
-        fileName    : String(255)
+        fileName    : String(255),
+        // WP-07B. ACCEPT_PROVISIONAL or REJECT. Omitted, the constant default
+        // applies; WP-13 replaces it with a resolved parameter.
+        unknownTailPolicy : String(20)
     ) returns FlightExcelImportResult;
 
     /**

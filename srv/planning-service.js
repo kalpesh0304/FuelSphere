@@ -5,6 +5,7 @@
  */
 
 const cds = require('@sap/cds');
+const { resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY } = require('./lib/tail-resolver');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 const { allocateOrderNumber, reportAllocationError } = require('./lib/number-range');
@@ -38,6 +39,13 @@ module.exports = class PlanningService extends cds.ApplicationService {
 
             const errors = [];
             let flightsProcessed = 0, flightsCreated = 0, flightsUpdated = 0, flightsSkipped = 0;
+
+            // WP-07B. The policy is read once per import, not per row, so a
+            // single upload cannot be judged by two different rules. The
+            // request may override it; the constant is the default until
+            // WP-13 makes it a resolved parameter.
+            const policy = req.data.unknownTailPolicy || UNKNOWN_TAIL_POLICY;
+            const tailDecisions = new Map();   // row number -> resolved registration
             let ordersCreated = 0, ordersFailed = 0;
 
             // Validate file
@@ -176,6 +184,20 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 const destAirport = String(row.destination_airport || '').trim().toUpperCase();
                 const aircraftType = String(row.aircraft_type || '').trim();
                 const aircraftReg = String(row.aircraft_reg || '').trim();
+
+                // WP-07B. The flight schedule is a PLANNING feed, so REJECT
+                // may block it — the flight has not happened yet and there is
+                // nothing to lose by refusing the row. Under
+                // ACCEPT_PROVISIONAL the row lands with the string populated
+                // and the association null.
+                const _tailDecision = applyPolicy(
+                    aircraftReg, await resolveTail(aircraftReg), 'FLIGHT_SCHEDULE', policy);
+                if (!_tailDecision.accept) {
+                    errors.push({ row: rowNum, field: 'aircraft_reg',
+                        message: _tailDecision.reason, severity: 'ERROR' });
+                    flightsSkipped++; continue;
+                }
+                tailDecisions.set(rowNum, _tailDecision.tail_registration);
                 const depTime = _normalizeTime(row.departure_time);
                 const arrTime = _normalizeTime(row.arrival_time);
 
@@ -247,6 +269,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         ID: flightId,
                         aircraft_type: aircraftType || undefined,
                         aircraft_reg: aircraftReg || undefined,
+                        tail_registration: tailDecisions.get(rowNum),
                         origin_airport: originAirport,
                         destination_airport: destAirport,
                         scheduled_departure: depTime || undefined,
@@ -285,6 +308,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         flight_date: flightDate,
                         aircraft_type: aircraftType || null,
                         aircraft_reg: aircraftReg || null,
+                        tail_registration: tailDecisions.get(rowNum),
                         origin_airport: originAirport,
                         destination_airport: destAirport,
                         scheduled_departure: depTime || null,
