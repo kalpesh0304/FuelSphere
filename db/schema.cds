@@ -1672,6 +1672,53 @@ type InvoiceApprovalStatus : String(20) enum {
 /**
  * Approval Action Type
  */
+/**
+ * WP-21A — Check severity.
+ *
+ * Three rungs, and the difference between them is WHAT A HUMAN CAN DO:
+ *
+ *   WARNING     recorded, visible on the invoice, does not gate
+ *   SOFT_ERROR  gates, and an authorised user may bypass it with a reason
+ *   HARD_ERROR  gates, and nobody may bypass it. It needs a corrected
+ *               invoice from the vendor, or master data created or fixed
+ *
+ * @assert.range because D25: a CDS enum validates nothing without it.
+ */
+@assert.range: true
+type CheckSeverity : String(20) enum {
+    Warning     = 'WARNING';
+    SoftError   = 'SOFT_ERROR';
+    HardError   = 'HARD_ERROR';
+}
+
+/**
+ * WP-21A — Exception lifecycle.
+ *
+ * BYPASSED is not CLEARED. A cleared exception stopped being true; a
+ * bypassed one is still true and someone accepted it anyway. Collapsing
+ * them would lose the only evidence that a judgement was made.
+ */
+@assert.range: true
+type ExceptionStatus : String(20) enum {
+    Open        = 'OPEN';
+    Cleared     = 'CLEARED';      // Re-evaluated and no longer raised
+    Bypassed    = 'BYPASSED';     // Still true. Accepted by an authorised user
+}
+
+/**
+ * WP-21A — The posting gate.
+ *
+ * NOT_CHECKED is distinct from CLEAR for the reason PROVISIONAL is distinct
+ * from a passed price check: "not evaluated" must never read as "evaluated
+ * and fine". An invoice captured a moment ago is NOT_CHECKED, not CLEAR.
+ */
+@assert.range: true
+type PostingGate : String(20) enum {
+    NotChecked  = 'NOT_CHECKED';  // The registry has not run
+    Gated       = 'GATED';        // At least one gating exception is open
+    Clear       = 'CLEAR';        // The registry ran and nothing gating remains
+}
+
 type ApprovalAction : String(20) enum {
     Submit      = 'SUBMIT';
     Approve     = 'APPROVE';
@@ -1720,9 +1767,26 @@ entity INVOICES : cuid, AuditTrail {
         // Amounts
         currency            : Association to CURRENCY_MASTER on currency.currency_code = currency_code;
         currency_code       : String(3) @mandatory;       // Invoice currency
-        net_amount          : Decimal(15,2) @mandatory;   // Net invoice amount
-        tax_amount          : Decimal(15,2) default 0;    // Tax amount
-        gross_amount        : Decimal(15,2) @mandatory;   // Gross amount (net + tax)
+
+        // WP-21A / INV454. DERIVED FROM LINES, never keyed from the supplier
+        // document. @mandatory is relaxed because a header total is now an
+        // output of capture rather than an input to it — an invoice whose
+        // lines have not been read yet has no total, and refusing to capture
+        // it would block capture, which principle 1 forbids.
+        //
+        // Three readers surveyed, all in invoice-fiori-annotations.cds and
+        // all display-only, so null is already safe for every one of them.
+        net_amount          : Decimal(15,2);              // DERIVED: sum of line net_amount
+        tax_amount          : Decimal(15,2) default 0;    // DERIVED: sum of line tax_amount
+        gross_amount        : Decimal(15,2);              // DERIVED: net + tax
+
+        // WP-21A. WHAT THE SUPPLIER'S DOCUMENT CLAIMS, retained beside the
+        // derived figure rather than overwriting it. The check compares the
+        // two, so both have to survive — discarding the stated figure would
+        // leave nothing to disagree with, and the disagreement is the finding.
+        stated_net_amount   : Decimal(15,2);              // As printed on the supplier invoice
+        stated_gross_amount : Decimal(15,2);
+        stated_line_count   : Integer;                    // As printed. Compared to lines received
 
         // Payment Terms
         payment_terms       : String(20);                 // Payment terms (NET30, etc.)
@@ -1758,10 +1822,21 @@ entity INVOICES : cuid, AuditTrail {
         is_duplicate        : Boolean default false;      // Duplicate flag
         duplicate_of        : Association to INVOICES;    // Link to original if duplicate
 
+        // WP-21A. CAPTURE IS NEVER BLOCKED; POSTING IS GATED. The two are
+        // different states and this is the one that says so. An invoice with
+        // fifteen hard errors is CAPTURED and GATED, never refused — an
+        // uncaptured invoice is a supplier claim nobody can see.
+        posting_gate        : PostingGate default 'NOT_CHECKED';
+        gate_evaluated_at   : DateTime;                   // When the registry last ran
+        open_hard_count     : Integer default 0;          // Unbypassable gating exceptions open
+        open_soft_count     : Integer default 0;          // Bypassable gating exceptions open
+        warning_count       : Integer default 0;          // Recorded, never gating
+
         // Compositions
         items               : Composition of many INVOICE_ITEMS on items.invoice = $self;
         matches             : Composition of many INVOICE_MATCHES on matches.invoice = $self;
         approvals           : Composition of many INVOICE_APPROVALS on approvals.invoice = $self;
+        exceptions          : Composition of many INVOICE_EXCEPTIONS on exceptions.invoice = $self;
 }
 
 /**
@@ -1797,6 +1872,27 @@ entity INVOICE_ITEMS : cuid {
         // Delivery Reference (for three-way match)
         delivery            : Association to FUEL_DELIVERIES;  // Linked ePOD/GR
         fuel_order          : Association to FUEL_ORDERS;      // Linked fuel order
+
+        // WP-21A — THE KEY THE SUPPLIER ACTUALLY REFERENCES.
+        //
+        // delivery and fuel_order identify neither what was invoiced nor what
+        // the supplier thinks they billed. ONE DELIVERY CARRIES SEVERAL
+        // TICKETS, and a ticket may exist with no order at all (decision A1).
+        // The supplier quotes the ticket number; they do not know our PO.
+        //
+        // ticket_number is what arrives on the document, as text, because the
+        // supplier's string is evidence even when it resolves to nothing.
+        // ticket is what it RESOLVED to, which is a different fact.
+        ticket_number       : String(50);                      // As stated on the supplier document
+        ticket              : Association to FUEL_TICKETS;     // What it resolved to, if anything
+
+        // WP-21A. The PO and GR reached THROUGH the ticket, recorded so the
+        // resolution is re-explainable without re-running it — and so the
+        // stated po_number above can be compared against it. The applied-
+        // evidence pattern, as in conversion_source and plan_version_source.
+        resolved_po_number  : String(10);                      // From ticket -> order.s4_po_number
+        resolved_gr_number  : String(10);                      // From ticket -> delivery.s4_gr_number
+        resolution_source   : String(30);                      // TICKET_NUMBER, TICKET_ID, UNRESOLVED
 
         // Cost Assignment
         cost_center         : String(10);                 // Cost center
@@ -1892,6 +1988,143 @@ entity INVOICE_APPROVALS : cuid {
 }
 
 /**
+ * INVOICE_CHECK_REGISTRY - WP-21A
+ * Source: FuelSphere native (configuration)
+ * Volume: ~40 records
+ *
+ * WHICH CHECKS RUN, AND HOW HARD THEY BITE. A registry, not a rules engine:
+ * it holds only what the tolerance ladder cannot — the check's identity, its
+ * severity where no ladder applies, and whether a human may bypass it.
+ *
+ * The check's LOGIC lives in code. What is configured is whether it runs, how
+ * severe it is, and whether it can be waived. That is the line that makes
+ * changing a severity a configuration change rather than a deployment.
+ */
+entity INVOICE_CHECK_REGISTRY : cuid, ActiveStatus, AuditTrail {
+        check_code          : String(20) @mandatory;      // INV4xx, from 03-VALIDATION-RULES
+        check_name          : String(100) @mandatory;     // Display name
+        check_description   : String(500);                // What it tests, in one sentence
+        check_group         : String(30) @mandatory;      // CAPTURE, RESOLUTION, QUANTITY, PRICE, DUPLICATE
+
+        // Severity
+        //
+        // For a NON-NUMERIC check this IS the severity. For a check with a
+        // tolerance ladder it is the fallback used only where no ladder row
+        // resolves — the ladder decides when there is one, because a severity
+        // that ignores the size of the variance is not a severity.
+        default_severity    : CheckSeverity @mandatory;
+        tolerance_rule_code : String(20);                 // Ladder to resolve, where the check is numeric
+
+        // Bypass
+        //
+        // Independent of severity, because they answer different questions:
+        // severity says whether it gates, this says whether a human may
+        // accept it anyway. A HARD_ERROR is never bypassable and the
+        // handler enforces that regardless of what this column says —
+        // configuration may not make an unbypassable check bypassable.
+        is_bypassable       : Boolean default false;
+        bypass_scope        : String(30);                 // Scope a bypasser must hold. WP-27 layers SoD on this
+
+        // WP-21A. A check DECLARED and not implemented is worse than one
+        // absent, because absence is invisible and a declared no-op looks
+        // like it passed. This makes the gap countable.
+        is_implemented      : Boolean default true;
+        not_implemented_reason : String(200);             // Why, and which package owns it
+
+        // Effective dating, as every configuration table here carries
+        valid_from          : Date;
+        valid_to            : Date;
+}
+
+/**
+ * INVOICE_EXCEPTIONS - WP-21A
+ * Source: FuelSphere native
+ * Volume: ~200,000/year
+ *
+ * ONE ROW PER CHECK THAT FIRED. Raised at capture, re-evaluated on demand,
+ * cleared when it stops being true, bypassed when someone accepts it.
+ *
+ * Carries the APPLIED EVIDENCE: the observed value, the threshold it crossed
+ * and the tolerance row that supplied that threshold — so the exception is
+ * re-explainable without re-running the check, which is the same reason
+ * PRICE_DERIVATION_LOGS stamps the quote id rather than the quote.
+ */
+entity INVOICE_EXCEPTIONS : cuid, AuditTrail {
+        invoice             : Association to INVOICES @mandatory;
+        // Null for a header-level check. An exception against the document
+        // as a whole belongs to no line.
+        invoice_item        : Association to INVOICE_ITEMS;
+        line_number         : Integer;                    // Denormalised, for reading without a join
+
+        // What fired
+        check_code          : String(20) @mandatory;
+        check_group         : String(30);
+        severity            : CheckSeverity @mandatory;   // AS RESOLVED, which may differ from the default
+        severity_source     : String(30);                 // REGISTRY_DEFAULT or TOLERANCE_LADDER
+        message             : String(1000) @mandatory;    // What happened, in the terms of the data
+
+        // The evidence
+        observed_value      : Decimal(18,4);              // What the invoice said
+        expected_value      : Decimal(18,4);              // What FuelSphere resolved
+        variance_value      : Decimal(18,4);              // observed - expected
+        variance_pct        : Decimal(10,4);              // Signed. The RUNG is on magnitude
+        threshold_crossed   : Decimal(10,4);              // The rung's value, where a ladder resolved
+        tolerance_rule      : Association to TOLERANCE_RULES;  // WHICH ROW supplied it
+
+        // Lifecycle
+        status              : ExceptionStatus default 'OPEN';
+        is_gating           : Boolean default false;      // Derived from severity at raise time
+        detected_at         : DateTime @mandatory;
+        detected_by         : String(100);
+        cleared_at          : DateTime;
+        cleared_reason      : String(500);                // Why it stopped being true
+}
+
+/**
+ * INVOICE_EXCEPTION_BYPASSES - WP-21A
+ * Source: FuelSphere native
+ * Volume: ~5,000/year
+ *
+ * WHO ACCEPTED A SOFT ERROR, WHEN, AND WHY.
+ *
+ * Its own entity rather than columns on the exception, for two reasons. A
+ * bypass may be REVOKED and the exception returns to OPEN, which a column
+ * set cannot express without losing the first decision. And INV-002 will add
+ * a second signature (WP-27) — a separate row has somewhere to put it, and
+ * second_approver is declared here unused so that layering it on is a
+ * behaviour change rather than a schema change.
+ *
+ * INVOICE_APPROVALS could not host this: it is an invoice-level approval
+ * workflow with no exception reference and no BYPASS action.
+ */
+entity INVOICE_EXCEPTION_BYPASSES : cuid, AuditTrail {
+        exception           : Association to INVOICE_EXCEPTIONS @mandatory;
+        invoice             : Association to INVOICES @mandatory;   // Denormalised, for the audit query
+        invoice_item        : Association to INVOICE_ITEMS;
+        check_code          : String(20) @mandatory;      // Denormalised: the registry row may change later
+
+        // Who, when, why
+        bypassed_by         : String(100) @mandatory;
+        bypassed_at         : DateTime @mandatory;
+        // A justification long enough to be one. COMPLIANCE_EXCEPTIONS sets
+        // the precedent with a minimum length, and a reason nobody can read
+        // is the same as no reason.
+        bypass_reason       : String(1000) @mandatory;
+        bypass_scope_held   : String(30);                 // The scope that authorised it
+
+        // Revocation
+        is_active           : Boolean default true;
+        revoked_by          : String(100);
+        revoked_at          : DateTime;
+        revocation_reason   : String(500);
+
+        // WP-27 / INV-002. Declared, never written here. Dual approval needs
+        // SOD_RULES enforcement, which is seeded and unenforced.
+        second_approver     : String(100);
+        second_approved_at  : DateTime;
+}
+
+/**
  * TOLERANCE_RULES - Variance Tolerance Configuration
  * Source: FuelSphere native (configuration)
  * Volume: ~50 records
@@ -1909,12 +2142,40 @@ entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         supplier_category   : String(20);                 // Supplier category (NULL = all)
         product_type        : String(20);                 // Product type (NULL = all)
 
+        // WP-21A. WHICH CONTROL these limits belong to. Without it a quantity
+        // tolerance is a quantity tolerance for everything, and the invoice
+        // check would silently pick up the FOB reconciliation's 0.5% — two
+        // controls answering different questions off one row.
+        applies_to          : String(30);                 // INVOICE_LINE, DELIVERY_FOB, ... (NULL = any)
+
         // Tolerance Type & Values
         tolerance_type      : ToleranceType @mandatory;   // PRICE / QUANTITY / AMOUNT / DATE
         lower_limit         : Decimal(10,4);              // Lower tolerance (negative variance)
         upper_limit         : Decimal(10,4);              // Upper tolerance (positive variance)
         is_percentage       : Boolean default true;       // True = %, False = absolute value
         currency_code       : String(3);                  // Currency (if absolute amount)
+
+        // WP-21A — THE LADDER.
+        //
+        // lower_limit and upper_limit are a single line: inside or outside.
+        // A severity ladder needs three, because "within tolerance" and
+        // "beyond tolerance" are not the only two things a variance can be.
+        //
+        //   |value| <= warning              nothing raised
+        //   warning  < |value| <= error     WARNING   recorded, does not gate
+        //   error    < |value| <= critical  SOFT      gates, bypassable
+        //   |value|  > critical             HARD      gates, not bypassable
+        //
+        // Absolute magnitude, so an under-invoice and an over-invoice of the
+        // same size land on the same rung. Which DIRECTION it went is on the
+        // exception; the rung is about size.
+        //
+        // Nullable, because a rule may ladder or may not. A rule with no
+        // ladder falls back to lower_limit/upper_limit as a single line and
+        // the registry's configured severity beyond it.
+        warning_threshold   : Decimal(10,4);              // Below this, nothing is raised
+        error_threshold     : Decimal(10,4);              // Above this, the SOFT rung
+        critical_threshold  : Decimal(10,4);              // Above this, the HARD rung
 
         // Blocking Behavior
         block_on_exceed     : Boolean default true;       // Block invoice if exceeded
