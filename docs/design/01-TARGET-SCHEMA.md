@@ -490,6 +490,68 @@ type ReconStatus : String(20) enum {
 
 **`NOT_RECONCILED` must never read as a pass.** A missing gauge reading is unknown, not agreed.
 
+### Deriving the gauge uplift where the direct readings do not exist
+
+**Added 18 August 2026.** `fob_before_kg` and `fob_after_kg` are the readings the reconciliation needs. **Neither is a standard ACARS report** — the OOOI set carries fuel at `OUT`, `OFF`, `ON` and `IN`, and refuelling is not an OOOI event. A refuelling-panel downlink can be configured per fleet, but it has no operational value to ops control and is billed per message, so it frequently is not.
+
+**`IN` and `OUT` serve as proxies, adjusted for ground APU burn:**
+
+```
+uplift by gauge  =  fob_OUT  −  fob_IN  +  ( APU cycle minutes / 60 × apu_burn_rate_kg_hr )
+```
+
+The sign is **plus**. APU burn reduced the fuel between the two readings, so recovering the uplift means adding it back.
+
+```
+fob_IN              2,400
+  APU burns            70  →  2,330
+  uplift            2,600  →  4,930
+  APU burns            30  →  4,900   fob_OUT
+
+4,900 − 2,400 + 100  =  2,600   ✓
+```
+
+**This is not circular.** APU burn derives from cycle minutes and the per-tail rate, not from any fuel reading.
+
+**The split does not matter here.** Whether the APU ran before or after the uplift is irrelevant to how much fuel went in — total ground APU is sufficient. The split matters only for **cost allocation**, deciding which flight bears it. Two purposes, two requirements.
+
+> **It must be APU CYCLE MINUTES, never ground time.** `(OUT − IN) × rate` assumes the APU ran the whole turn. It usually did not — ground power covers most of it. On a 310-minute turn with the APU running 38 minutes, ground time gives 568 kg against an actual 70 kg. **498 kg of phantom uplift**, far beyond any tolerance, flagging every long turn as a discrepancy.
+
+### Precision ladder
+
+The tolerance follows the precision of the input, as elsewhere. A derived reading carries the error of its derivation.
+
+| Source | Precision | Suggested parameters |
+|---|---|---|
+| Direct before and after, ACARS | To the kilogram | 0.5% \| 50 kg |
+| `IN`/`OUT` adjusted, APU cycles timestamped | Good | 1.0% \| 100 kg |
+| `IN`/`OUT` adjusted, APU minutes apportioned | Weaker | 1.5% \| 200 kg |
+| Crew-reported before and after | Rounded to 100 kg | 1.5% \| 200 kg |
+| **`IN`/`OUT` with no APU adjustment** | **Contaminated** | **Not offered** |
+| Nothing | — | `NOT_RECONCILED` |
+
+**The unadjusted row is the dangerous one and must not be available.** It produces a real-looking number with hundreds of kilograms of APU burn inside it, and nothing distinguishes it from a genuine variance.
+
+### `fob_source` — EXTEND
+
+The enum must record not only where the reading came from but **whether it was derived**:
+
+```cds
+type FobSource : String(20) enum {
+    Acars           = 'ACARS';            // direct before and after
+    AcarsDerived    = 'ACARS_DERIVED';    // IN/OUT adjusted for APU
+    CrewReported    = 'CREW_REPORTED';
+    PanelPreset     = 'PANEL_PRESET';
+    None            = 'NONE';
+}
+```
+
+**A delivery must be able to state which readings produced its variance.** Without it, a contaminated figure and a clean one are indistinguishable.
+
+### `ground_burn_kg` inverts on the derived path
+
+WP-12 built it as **measured** — `fob_at_arrival − fob_before_refuel`. On the derived path it becomes an **input** to the calculation rather than an output of it. Same field, opposite direction. **The delivery must record which.**
+
 ### Two arrival readings, not one — REQ-FL-003
 
 `fob_at_arrival_kg` and `fob_before_kg` are **different measurements**:
@@ -570,6 +632,124 @@ Consult `03-VALIDATION-RULES.md` for the assigned code before writing one, as WP
 It carries `uplift_kg`, `density_kg_l`, `temperature_c`, `bowser_id` and `sequence_number` against a `REFUELING` event type. **Three places holding fuel quantities is one too many.** Strip them; leave it a movement event log.
 
 Check for readers first. If any exist, report rather than delete.
+
+---
+
+## 9. WP-18 · Dispatch plan versioning and the regulated stack
+
+Written 18 August 2026. Decisions A7 and B3 apply. The validation rules already prescribe most of this — `DSP450` to `DSP456`, `STG412`, `ENR452` — and none of the fields they name exists.
+
+### 9.1 The regulated fuel stack — B3
+
+`FLIGHT_DISPATCH` carries a single `dispatch_qty_kg`. The stack is a regulatory requirement and the basis of every fuel variance.
+
+```cds
+trip_fuel_kg          : Decimal(12,2);
+contingency_fuel_kg   : Decimal(12,2);
+alternate_fuel_kg     : Decimal(12,2);
+final_reserve_kg      : Decimal(12,2);
+additional_fuel_kg    : Decimal(12,2);   // EDTO, anticipated delay
+taxi_fuel_kg          : Decimal(12,2);
+extra_fuel_kg         : Decimal(12,2);   // commander's discretion
+block_fuel_kg         : Decimal(12,2);   // DSP450. Derived from the components
+required_uplift_kg    : Decimal(12,2);   // DSP451. Block less fuel already on board
+```
+
+**`additional` and `extra` are held separately.** Additional is a planned requirement; extra is discretionary. Merging them loses the distinction between what the operation required and what the commander chose.
+
+**`block_fuel_kg` is derived, never keyed** — the sum of its components. `dispatch_qty_kg` is retained as the dispatcher-confirmed figure and should equal it.
+
+**This unblocks the burn variance ladder.** `planned_burn_kg` is hardcoded to `0` today, so the `> 0` guard never fires and every ACARS ingest stores `NORMAL` with zero variance — defect D10. Trip fuel is the figure it needs.
+
+### 9.2 Versioning — family, version, status
+
+```cds
+plan_group_id     : String(40);          // DSP452. The family — all versions of one plan
+plan_version      : Integer;             // Non-contiguous. See below
+plan_status       : PlanStatus;          // DSP452. Exactly one ACTIVE per group
+superseded_by     : Association to FLIGHT_DISPATCH;
+version_gap_flag  : Boolean default false;   // DSP456
+versions_skipped  : Integer default 0;       // DSP456
+
+type PlanStatus : String(20) enum {
+    Active     = 'ACTIVE';
+    Superseded = 'SUPERSEDED';
+}
+```
+
+**A superseded version is never updated in place** — `DSP453`. A revision inserts a new row.
+
+**`version_gap_flag` and `versions_skipped` are stamped on the applied row and never back-updated** — `DSP456`. They record what was known at the time of application.
+
+> **Version numbers are NOT contiguous.** `STG412`: the feed transmits the current plan only, so missing intermediate versions **will never arrive**. Receiving v1 then v4 is normal, not an error. **Apply v4, flag the gap, do not hold.** Decision A7 in your own words: *"flag a version gap but not hold it."* Any logic assuming a dense sequence is wrong — and a gap can only be **detected** if the version arrives on the feed. Where it is assigned on receipt instead, gaps are invisible.
+
+### 9.3 Two axes — the plan revision and the commercial commitment
+
+> **On naming.** The field is `dispatch_order_id` in `db/schema.cds`, but the Excel column is `FUEL_ORDER_ID` and the field's own comment reads *"External dispatch system's Fuel Order ID"*. **It is the fuel order ID** — the technical name is ours and it is misleading. Renaming is prohibited by `05-CONVENTIONS.md` §6, so the `@title` carries *"Fuel Order ID"* and users never see the technical name. **This document uses "fuel order ID" throughout; `dispatch_order_id` appears only where the field itself is meant.**
+
+**Answered 18 August 2026.** The **fuel order ID** changes **only when the order has already been communicated to the supplier and confirmed.**
+
+```
+plan revised BEFORE the order is confirmed   →  same fuel order ID
+                                                the plan simply updates
+
+plan revised AFTER  the order is confirmed   →  NEW fuel order ID
+                                                a new commercial commitment
+```
+
+**So it cannot be the family key.** It is stable through some revisions and not others, and what it marks is a commercial boundary rather than a plan revision.
+
+| | Tracks | Changes on |
+|---|---|---|
+| `plan_version` | The plan revision | **Every** re-plan |
+| **Fuel order ID** — `dispatch_order_id` | The commercial commitment | **Confirmation, then a new commitment** |
+| `plan_group_id` | The flight leg's plan family | Never — derived from `flight_leg_id` |
+
+**Three axes, none substituting for another.**
+
+> **This is the same rule seen from the other side.** A confirmed order cannot be increased; an increase is a new incremental order. A new fuel order ID after confirmation **is** that rule expressed in the feed. So a flight may legitimately carry two orders — the original and an incremental one — each against a different plan version.
+
+**`plan_group_id` derives from `flight_leg_id`**, which `ENR452` makes immutable and which survives a tail swap.
+
+**`plan_version` comes from the feed.** The dispatch plan is assumed to carry a plan version or equivalent sequence number.
+
+> **The import discards it today.** `planning-service.js` reads 18 named columns and drops everything else without comment. **WP-18 must add the version column to the read set** — and report what the feed actually sends, since the assumption above is stated rather than observed. If no version column exists, `plan_version` must be assigned on receipt from arrival order, which is weaker and cannot detect a gap.
+
+### 9.4 `flight_leg_id` — immutable through a tail swap
+
+```cds
+flight_leg_id : String(40);   // ENR452. Immutable
+```
+
+`ENR452`: a tail swap changes `actual_registration` only — **`flight_leg_id` is immutable.**
+
+That matters here because a tail swap produces a **new dispatch plan** carrying the new tail. Without a stable leg identity, the new plan looks like a different flight rather than a revision of the same one.
+
+### 9.5 `FUEL_ORDERS` — the order must reference the plan
+
+**The gap most easily missed.** `FUEL_ORDERS` links to `FLIGHT_SCHEDULE` and to no plan at all; `FLIGHT_DISPATCH` points at the order, and the order does not point back.
+
+```cds
+dispatch_plan : Association to FLIGHT_DISPATCH;
+```
+
+**Without it, adding versions closes nothing.** There is no way to say which plan an order was created against, whichever plans exist.
+
+**Consequence, per decision A7 as extended:** an order whose plan has since been superseded is **stale by construction**. That is the amendment trigger, and it needs no field comparison — the question is simply whether this order's plan is still the active one.
+
+### 9.6 Defect D27 — a re-plan is discarded today
+
+`order-service.js:847-851` builds a composite dedup key and **skips** on a match:
+
+```
+warn, dispatchesSkipped++, continue
+```
+
+Not update-in-place, not a second row. So a re-plan reusing the id for the same flight and date is **silently discarded and the revised quantity never lands** — the only trace is a `WARNING` in an import log.
+
+The author assumed one dispatch per order, flight and date, permanently. **WP-18 replaces that assumption**: a matching key is a revision, not a duplicate.
+
+**Separately, the import reads 18 named columns and discards everything else without comment.** If the feed already carries a version column, it is being thrown away. Report what the source actually sends before designing around its absence.
 
 ---
 
