@@ -487,6 +487,7 @@ service FuelOrderService {
         fileName             : String(255);
         dispatchesProcessed  : Integer;
         dispatchesCreated    : Integer;
+        dispatchesSuperseded : Integer;   // WP-18: previous plan versions retired
         dispatchesSkipped    : Integer;
         ordersUpdated        : Integer;
         errors               : array of DispatchImportError;

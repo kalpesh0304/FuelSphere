@@ -31,6 +31,11 @@ const {
     resolveTolerance,
     toleranceKg
 } = require('./lib/fob-reconciliation');
+const {
+    STACK_COMPONENTS,
+    PLAN_ACTIVE, PLAN_SUPERSEDED,
+    deriveStack, resolvePlanGroup, classifyVersion, isResend
+} = require('./lib/dispatch-plan');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -829,7 +834,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
             // Build flight lookup map: "flight_number|flight_date" → { ID, fuel_order_ID }
             const flightRows = await SELECT.from(FLIGHT_SCHEDULE)
-                .columns('ID', 'flight_number', 'flight_date');
+                .columns('ID', 'flight_number', 'flight_date', 'flight_leg_id');
 
             // Build reverse lookup from FUEL_ORDERS: flight_ID → fuel order ID
             const fuelOrderRows = await SELECT.from(FUEL_ORDERS)
@@ -840,14 +845,23 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             );
 
             const flightMap = new Map(
-                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, { ID: f.ID, fuel_order_ID: flightToFuelOrder.get(f.ID) || null }])
+                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, {
+                    ID: f.ID,
+                    flight_leg_id: f.flight_leg_id || null,   // WP-18: the plan family key
+                    fuel_order_ID: flightToFuelOrder.get(f.ID) || null
+                }])
             );
 
-            // Existing dispatches for duplicate detection
-            const existingDispatches = await SELECT.from(FLIGHT_DISPATCH)
-                .columns('dispatch_order_id', 'flight_number', 'flight_date');
-            const existingDispatchSet = new Set(
-                existingDispatches.map(d => `${d.dispatch_order_id}|${d.flight_number}|${d.flight_date}`)
+            // WP-18 / D27. Was a duplicate set keyed on
+            // dispatch_order_id|flight_number|flight_date, used to SKIP.
+            // A matching key is a revision, not a duplicate, so what is needed
+            // now is the ACTIVE plan for each family — the row a revision
+            // supersedes.
+            const activePlans = await SELECT.from(FLIGHT_DISPATCH)
+                .columns('ID', 'plan_group_id', 'plan_version', 'plan_status')
+                .where({ plan_status: PLAN_ACTIVE });
+            const activeByGroup = new Map(
+                activePlans.filter(d => d.plan_group_id).map(d => [d.plan_group_id, d])
             );
 
             // --- Date/DateTime normalization helpers ---
@@ -886,6 +900,8 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
             // --- Process rows ---
             const dispatchesToInsert = [];
+            const supersessions = [];              // WP-18: rows this upload supersedes
+            let dispatchesSuperseded = 0;
             const ordersToUpdate = new Map(); // fuel_order_ID → dispatch_order_id
 
             for (let i = 0; i < rows.length; i++) {
@@ -901,6 +917,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 const atd = _normalizeDateTime(row.ATD);
                 const ata = _normalizeDateTime(row.ATA);
                 const dispatchQtyKg = row.DISPATCH_QTY_KG !== '' ? parseFloat(row.DISPATCH_QTY_KG) : null;
+
+                // WP-18: the version and the regulated stack, added to the
+                // read set. The import read 18 named columns and discarded
+                // everything else without comment, so anything the feed sent
+                // beyond those 18 was thrown away silently.
+                const _n = (v) => (v === undefined || v === null || v === '' ? null : Number(v));
+                const incomingVersion = _n(row.PLAN_VERSION);
+                const stackIn = {};
+                for (const c of STACK_COMPONENTS) {
+                    stackIn[c] = _n(row[c.replace(/_kg$/, '').toUpperCase() + '_KG']);
+                }
                 const robDepartureKg = row.ROB_DEPARTURE_KG !== '' ? parseFloat(row.ROB_DEPARTURE_KG) : null;
                 const payloadKg = row.PAYLOAD_KG !== '' ? parseFloat(row.PAYLOAD_KG) : null;
                 const flightLevel = row.FLIGHT_LEVEL !== '' ? parseInt(row.FLIGHT_LEVEL) : null;
@@ -984,20 +1011,65 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     dispatchesSkipped++; continue;
                 }
 
-                // --- Check for duplicates ---
-                const dupKey = `${fuelOrderId}|${flightNumber}|${flightDate}`;
-                if (existingDispatchSet.has(dupKey)) {
-                    errors.push({ row: rowNum, field: 'FUEL_ORDER_ID',
-                        message: `Duplicate dispatch: ${fuelOrderId} for ${flightNumber} on ${flightDate} already exists.`, severity: 'WARNING' });
+                const flightRecord = flightMap.get(flightKey);
+
+                // ------------------------------------------------------------
+                // WP-18 / defect D27. A MATCHING KEY IS A REVISION.
+                //
+                // This block previously warned and skipped, so a re-planned
+                // quantity never landed and the only trace was a WARNING in an
+                // import log. That assumed one dispatch per order, flight and
+                // date, permanently.
+                // ------------------------------------------------------------
+                const planGroupId = resolvePlanGroup(
+                    flightRecord && flightRecord.flight_leg_id, flightNumber, flightDate);
+                const active = activeByGroup.get(planGroupId) || null;
+
+                // A re-send is still detectable, but only on the narrower test
+                // that the feed supplied the SAME version for the same family.
+                // Where the version is assigned on receipt there is nothing to
+                // compare and every arrival is a new version - reported rather
+                // than hidden.
+                if (active && isResend(incomingVersion, active.plan_version)) {
+                    errors.push({ row: rowNum, field: 'PLAN_VERSION',
+                        message: `DSP453: plan ${planGroupId} version ${incomingVersion} is already active. Re-sent, not revised.`,
+                        severity: 'WARNING' });
                     dispatchesSkipped++; continue;
                 }
 
-                const flightRecord = flightMap.get(flightKey);
+                const version = classifyVersion(incomingVersion, active && active.plan_version);
+                if (version.version_gap_flag) {
+                    errors.push({ row: rowNum, field: 'PLAN_VERSION',
+                        message: `DSP456: plan ${planGroupId} moved from version ${active.plan_version} to ${version.plan_version}; `
+                               + `${version.versions_skipped} version(s) never arrived. Applied, not held.`,
+                        severity: 'WARNING' });
+                }
+
+                // DSP450/DSP451. Derived from the components, never keyed.
+                const stack = deriveStack(stackIn, robDepartureKg);
+
+                const newId = cds.utils.uuid();
+                if (active) {
+                    // DSP453: a superseded version is never updated in place.
+                    // Only its status and the forward pointer change; every
+                    // figure on it stays as it was when it was the plan.
+                    supersessions.push({ ID: active.ID, superseded_by_ID: newId });
+                    dispatchesSuperseded++;
+                }
 
                 // Build dispatch record
                 dispatchesToInsert.push({
-                    ID: cds.utils.uuid(),
+                    ID: newId,
                     dispatch_order_id: fuelOrderId,
+                    plan_group_id: planGroupId,
+                    plan_version: version.plan_version,
+                    plan_version_source: version.plan_version_source,
+                    plan_status: PLAN_ACTIVE,
+                    version_gap_flag: version.version_gap_flag,
+                    versions_skipped: version.versions_skipped,
+                    ...stackIn,
+                    block_fuel_kg: stack.block_fuel_kg,
+                    required_uplift_kg: stack.required_uplift_kg,
                     flight_number: flightNumber,
                     flight_date: flightDate,
                     flight_schedule_ID: flightRecord.ID,
@@ -1024,12 +1096,16 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 if (flightRecord.fuel_order_ID) {
                     ordersToUpdate.set(flightRecord.fuel_order_ID, {
                         dispatchFuelOrderId: fuelOrderId,
-                        dispatchQtyKg
+                        dispatchQtyKg,
+                        dispatchPlanId: newId   // WP-18 section 9.5
                     });
                 }
 
-                // Add to duplicate set to prevent duplicates within same upload
-                existingDispatchSet.add(dupKey);
+                // Two revisions of one plan inside a single upload must chain,
+                // not both end ACTIVE. The newly inserted row becomes the
+                // active one for this family straight away.
+                activeByGroup.set(planGroupId, { ID: newId, plan_group_id: planGroupId,
+                    plan_version: version.plan_version, plan_status: PLAN_ACTIVE });
             }
 
             // --- Bulk INSERT dispatches ---
@@ -1042,10 +1118,29 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 }
             }
 
+            // --- WP-18: retire the superseded rows ---
+            //
+            // After the insert, so superseded_by never points at a row that
+            // does not exist yet. DSP452 holds throughout: exactly one ACTIVE
+            // row per plan_group_id.
+            for (const sup of supersessions) {
+                await UPDATE(FLIGHT_DISPATCH).set({
+                    plan_status: PLAN_SUPERSEDED,
+                    superseded_by_ID: sup.superseded_by_ID
+                }).where({ ID: sup.ID });
+            }
+
             // --- Bulk UPDATE fuel orders with dispatch_fuel_order_id ---
-            for (const [fuelOrderID, { dispatchFuelOrderId, dispatchQtyKg }] of ordersToUpdate) {
+            for (const [fuelOrderID, { dispatchFuelOrderId, dispatchQtyKg, dispatchPlanId }] of ordersToUpdate) {
                 try {
-                    const changes = { dispatch_fuel_order_id: dispatchFuelOrderId };
+                    // WP-18 section 9.5. The order records WHICH plan it came
+                    // from. Always repointed at the newest plan for the leg:
+                    // an order still pointing at a superseded plan is stale by
+                    // construction, and that is the amendment trigger.
+                    const changes = {
+                        dispatch_fuel_order_id: dispatchFuelOrderId,
+                        dispatch_plan_ID: dispatchPlanId
+                    };
 
                     // WP-11 / A2: the dispatch carries the plan mass in
                     // kilograms. Where the order has no quantity yet, convert it
@@ -1087,6 +1182,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 fileName: fileName || 'unknown',
                 dispatchesProcessed,
                 dispatchesCreated,
+                dispatchesSuperseded,
                 dispatchesSkipped,
                 ordersUpdated,
                 errors,

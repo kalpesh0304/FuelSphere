@@ -1321,3 +1321,47 @@ annotate FuelOrderService.FuelDeliveries with {
     statusCriticality   @UI.Hidden;
     varianceCriticality @UI.Hidden;
 };
+
+// ----------------------------------------------------------------------------
+// WP-18 — labels for the plan versioning and stack fields.
+//
+// Beyond WP-18's stated scope, and included because omitting them regresses a
+// criterion that is already merged: WP-UI-02 requires that no field in these
+// entities renders its technical name, and its harness failed on
+// dispatch_plan_ID the moment the association was added. The FLIGHT_DISPATCH
+// fields follow for the same reason — they are user-facing on the Flight
+// Dispatch list.
+// ----------------------------------------------------------------------------
+
+annotate FuelOrderService.FuelOrders with {
+    dispatch_plan @title: 'Dispatch Plan';
+};
+
+annotate FuelOrderService.FlightDispatches with {
+    // The regulated stack. Additional and extra are labelled so the
+    // distinction DSP454 protects is visible on screen, not just in the model.
+    trip_fuel_kg          @title: 'Trip Fuel (kg)';
+    contingency_fuel_kg   @title: 'Contingency Fuel (kg)';
+    alternate_fuel_kg     @title: 'Alternate Fuel (kg)';
+    final_reserve_kg      @title: 'Final Reserve (kg)';
+    additional_fuel_kg    @title: 'Additional Fuel (kg)';
+    taxi_fuel_kg          @title: 'Taxi Fuel (kg)';
+    extra_fuel_kg         @title: 'Extra Fuel, Commander (kg)';
+
+    // Derived, so read-only.
+    block_fuel_kg         @title: 'Block Fuel (kg)'      @Common.FieldControl: #ReadOnly;
+    required_uplift_kg    @title: 'Required Uplift (kg)' @Common.FieldControl: #ReadOnly;
+
+    // Versioning. Every one of these is set by the import, never typed.
+    plan_group_id         @title: 'Plan Family'          @Common.FieldControl: #ReadOnly;
+    plan_version          @title: 'Plan Version'         @Common.FieldControl: #ReadOnly;
+    plan_version_source   @title: 'Version Source'       @Common.FieldControl: #ReadOnly;
+    plan_status           @title: 'Plan Status'          @Common.FieldControl: #ReadOnly;
+    superseded_by         @title: 'Superseded By'        @Common.FieldControl: #ReadOnly;
+    version_gap_flag      @title: 'Version Gap'          @Common.FieldControl: #ReadOnly;
+    versions_skipped      @title: 'Versions Skipped'     @Common.FieldControl: #ReadOnly;
+};
+
+annotate FuelOrderService.FlightSchedule with {
+    flight_leg_id         @title: 'Flight Leg ID'        @Common.FieldControl: #ReadOnly;
+};
