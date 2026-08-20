@@ -2287,6 +2287,19 @@ entity FUEL_BURNS : cuid, AuditTrail {
         taxi_in_kg          : Decimal(10,2);              // Taxi-in fuel
         trip_fuel_kg        : Decimal(12,2);              // Trip fuel (cruise)
 
+        // WP-19 / decision B4. The block burn split into what the engines
+        // took and what the APU took.
+        //
+        // actual_burn_kg IS the block burn — the figure the specification
+        // calls block_burn_kg. There is no field of that name and renaming is
+        // prohibited, so the subtraction is expressed against this one.
+        //
+        // APU burn is NEVER metered. It is the only fuel figure in the system
+        // that is derived rather than measured, and APU_USAGE.apu_source
+        // records how, on every row.
+        apu_burn_kg         : Decimal(12,2);              // Derived. Sum of the cycles apportioned here
+        engine_burn_kg      : Decimal(12,2);              // Derived: actual_burn_kg - apu_burn_kg
+
         // Variance Calculation
         variance_kg         : Decimal(12,2);              // Variance = actual - planned
         variance_pct        : Decimal(5,2);               // Variance percentage
@@ -2425,6 +2438,108 @@ entity FUEL_BURN_EXCEPTIONS : cuid, AuditTrail {
         maintenance_related : Boolean default false;     // True if maintenance issue
         maintenance_order   : String(20);                // Linked maintenance order number
 }
+
+// ============================================================================
+// APU USAGE (WP-19, decisions B4 and B9)
+// ============================================================================
+
+/**
+ * Which part of the operation an APU cycle belongs to.
+ *
+ * Apportionment is a COST question, not a fuel question — for the ledger the
+ * fuel simply left the tanks. This is the primary allocation rule: post-arrival
+ * and pre-departure genuinely belong to different flights, so the ordinary
+ * turnaround needs no split at all.
+ *
+ * OVERNIGHT, PARKED and MAINTENANCE belong to NEITHER flight. Twelve hours
+ * between two barely-related flights charged to either is misleading, and this
+ * is where OVERNIGHT earns its place — the cost goes to the station or the
+ * aircraft, not to a leg.
+ */
+@assert.range: true
+type ApuUsagePhase : String(20) enum {
+    PreDeparture = 'PRE_DEPARTURE';   // Boarding, loading, engine start — the DEPARTING flight
+    InFlight     = 'IN_FLIGHT';       // That flight
+    PostArrival  = 'POST_ARRIVAL';    // Disembarkation, offload — the ARRIVING flight
+    Overnight    = 'OVERNIGHT';       // Neither flight
+    Maintenance  = 'MAINTENANCE';     // Neither flight
+    Parked       = 'PARKED';          // Neither flight
+}
+
+/**
+ * Where an APU cycle came from.
+ *
+ * GROUND_TIME_EST is a DERIVATION at low confidence, not a manual entry and
+ * not a measurement. APU availability is per FLEET rather than per airline —
+ * the AMI is loaded per fleet and APU reports have no operational value to ops
+ * control, so they are frequently not configured. Estimation is therefore a
+ * first-class path, not a degraded one. See open point F4.
+ */
+@assert.range: true
+type ApuSource : String(20) enum {
+    Acars          = 'ACARS';            // Downlinked cycle times. Measured
+    Manual         = 'MANUAL';           // Keyed by a person. Measured, less reliably
+    GroundTimeEst  = 'GROUND_TIME_EST';  // DERIVED at low confidence. Not measured
+}
+
+/**
+ * APU_USAGE - one row per CYCLE, not per phase and not per flight.
+ *
+ * A turnaround produces several cycles across two phases and two legs, so a
+ * cycle is the only thing that can be counted. Timestamps are FULL, not bare
+ * times: a bare time cannot represent a cycle that runs past midnight, and an
+ * overnight cycle is the ordinary case for a parked aircraft.
+ *
+ * MOST APU BURN FALLS OUTSIDE BLOCK TIME — before off-blocks and after
+ * on-blocks — so no gauge reading captures it. That is why the cycle times
+ * matter rather than the block times.
+ */
+entity APU_USAGE : cuid, AuditTrail {
+        // The tail. String as received plus the resolving association, per
+        // WP-07B: an APU cycle can arrive for an aircraft the register has
+        // never seen, and refusing it would lose the burn.
+        tail_number         : String(10) @mandatory;
+        tail                : Association to AIRCRAFT_REGISTRATIONS;
+
+        // Optional. A cycle can exist with no flight attached — OVERNIGHT and
+        // MAINTENANCE belong to no leg by definition.
+        flight              : Association to FLIGHT_SCHEDULE;
+
+        // FULL timestamps. NEVER bare times.
+        apu_start_utc       : Timestamp @mandatory;
+        apu_stop_utc        : Timestamp;                  // Null while the cycle is open
+
+        usage_phase         : ApuUsagePhase @mandatory;
+        apu_source          : ApuSource @mandatory;
+
+        // An open cycle is FLAGGED, not computed. A running APU has burned
+        // something, but how much is not yet knowable, and a figure derived
+        // from a missing stop time would be a guess wearing a measurement's
+        // clothes.
+        is_open             : Boolean default false;
+
+        // Derived. Minutes the APU actually RAN — never ground time.
+        // (OUT - IN) x rate assumes the APU ran the whole turn: on a 310
+        // minute turn with the APU running 38 minutes that is 568 kg against
+        // an actual 70, so 498 kg of phantom burn.
+        running_minutes     : Integer;
+        apu_burn_kg         : Decimal(12,2);
+
+        // Applied evidence — which rate produced the figure and where it came
+        // from, so the derivation can be reproduced from the row alone.
+        burn_rate_kg_hr     : Decimal(8,2);
+        rate_source         : String(30);                 // AIRCRAFT_REGISTRATIONS, or absent
+
+        // Which flight bears the cost, and on what basis. Resolution order is
+        // the refuelling event where gauge readings exist, then the phase,
+        // then time-proportional — recording which was used. The posting
+        // itself is WP-23.
+        allocated_flight    : Association to FLIGHT_SCHEDULE;
+        allocation_basis    : String(24);                 // REFUELLING_EVENT | PHASE | TIME_PROPORTIONAL | NONE
+
+        remarks             : String(500);
+}
+
 
 // ============================================================================
 // COST ALLOCATION MODULE (FDD-09)
