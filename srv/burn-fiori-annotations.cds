@@ -465,3 +465,114 @@ annotate BurnService.importPlannedBurnExcel with (
 annotate BurnService.FuelBurns          with { tail @title: 'Aircraft (Register)'; };
 annotate BurnService.ROBLedger          with { tail @title: 'Aircraft (Register)'; };
 annotate BurnService.FuelBurnExceptions with { tail @title: 'Aircraft (Register)'; };
+
+// ----------------------------------------------------------------------------
+// WP-19 — labels for the APU cycle and the burn split.
+//
+// FUEL_BURNS is not one of WP-UI-02's four entities, so no merged criterion
+// is regressed here. Included for the same reason as WP-18's and WP-07B's:
+// a field that renders its technical name is a field nobody can read.
+// ----------------------------------------------------------------------------
+
+annotate BurnService.FuelBurns with {
+    // Both derived. APU burn is never metered; engine burn is what is left.
+    apu_burn_kg    @title: 'APU Burn (kg)'    @Common.FieldControl: #ReadOnly;
+    engine_burn_kg @title: 'Engine Burn (kg)' @Common.FieldControl: #ReadOnly;
+};
+
+annotate BurnService.ApuUsage with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'APU Cycle',
+            TypeNamePlural : 'APU Cycles',
+            Title          : { Value: tail_number },
+            Description    : { Value: usage_phase }
+        },
+        SelectionFields: [ tail_number, usage_phase, apu_source, is_open ],
+        LineItem: [
+            { Value: tail_number, Label: 'Registration', ![@UI.Importance]: #High },
+            { Value: apu_start_utc, Label: 'Start (UTC)', ![@UI.Importance]: #High },
+            { Value: apu_stop_utc, Label: 'Stop (UTC)', ![@UI.Importance]: #High },
+            { Value: running_minutes, Label: 'Running Minutes', ![@UI.Importance]: #High },
+            // The burn sits beside the rate that produced it and the source
+            // that produced the cycle — a derived figure with neither beside
+            // it cannot be judged.
+            { Value: apu_burn_kg, Label: 'APU Burn (kg)', ![@UI.Importance]: #High },
+            { Value: burn_rate_kg_hr, Label: 'Rate (kg/h)', ![@UI.Importance]: #Medium },
+            {
+                Value: apu_source,
+                Label: 'Source',
+                // An estimate must never read as equivalent to an ACARS
+                // figure — APU413. ACARS is positive, an estimate is
+                // critical: usable, and not the same thing.
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'apu_source' }, 'ACARS'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'apu_source' }, 'GROUND_TIME_EST'] }, 2, 0 ] } ] } },
+                ![@UI.Importance]: #High
+            },
+            { Value: usage_phase, Label: 'Phase', ![@UI.Importance]: #High },
+            {
+                Value: is_open,
+                Label: 'Open Cycle',
+                Criticality: { $edmJson: { $If: [ { $Eq: [{ $Path: 'is_open' }, true] }, 1, 3 ] } },
+                ![@UI.Importance]: #Medium
+            }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Cycle',      Label: 'Cycle' },
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Derivation', Label: 'Derivation' },
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Allocation', Label: 'Cost Allocation' }
+        ],
+        FieldGroup#Cycle: {
+            Label: 'Cycle',
+            Data: [
+                { Value: tail_number, Label: 'Registration' },
+                { Value: apu_start_utc, Label: 'Start (UTC)' },
+                { Value: apu_stop_utc, Label: 'Stop (UTC)' },
+                { Value: is_open, Label: 'Open Cycle' },
+                { Value: usage_phase, Label: 'Usage Phase' },
+                { Value: remarks, Label: 'Remarks' }
+            ]
+        },
+        FieldGroup#Derivation: {
+            Label: 'Derivation',
+            Data: [
+                { Value: running_minutes, Label: 'Running Minutes' },
+                { Value: burn_rate_kg_hr, Label: 'Burn Rate (kg/h)' },
+                { Value: rate_source, Label: 'Rate Source' },
+                { Value: apu_burn_kg, Label: 'APU Burn (kg)' },
+                { Value: apu_source, Label: 'Cycle Source' }
+            ]
+        },
+        FieldGroup#Allocation: {
+            Label: 'Cost Allocation',
+            Data: [
+                { Value: allocated_flight_ID, Label: 'Allocated Flight' },
+                { Value: allocation_basis, Label: 'Allocation Basis' }
+            ]
+        }
+    }
+);
+
+annotate BurnService.ApuUsage with {
+    ID                  @UI.Hidden;
+    tail_number         @title: 'Registration';
+    tail                @title: 'Aircraft (Register)';
+    flight              @title: 'Flight';
+    apu_start_utc       @title: 'APU Start (UTC)';
+    apu_stop_utc        @title: 'APU Stop (UTC)';
+    usage_phase         @title: 'Usage Phase';
+    apu_source          @title: 'Cycle Source';
+    is_open             @title: 'Open Cycle'          @Common.FieldControl: #ReadOnly;
+    running_minutes     @title: 'Running Minutes'     @Common.FieldControl: #ReadOnly;
+    apu_burn_kg         @title: 'APU Burn (kg)'       @Common.FieldControl: #ReadOnly;
+    burn_rate_kg_hr     @title: 'Burn Rate (kg/h)'    @Common.FieldControl: #ReadOnly;
+    rate_source         @title: 'Rate Source'         @Common.FieldControl: #ReadOnly;
+    allocated_flight    @title: 'Allocated Flight'    @Common.FieldControl: #ReadOnly;
+    allocation_basis    @title: 'Allocation Basis'    @Common.FieldControl: #ReadOnly;
+    remarks             @title: 'Remarks';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Changed At';
+    modified_by         @title: 'Changed By';
+};

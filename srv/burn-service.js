@@ -11,6 +11,10 @@
 
 const cds = require('@sap/cds');
 const { resolveTail } = require('./lib/tail-resolver');
+const {
+    PHASE, SOURCE, BASIS,
+    rateForTail, deriveCycle, allocate, splitBlockBurn
+} = require('./lib/apu-burn');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 
@@ -86,6 +90,139 @@ module.exports = class BurnService extends cds.ApplicationService {
         });
 
         // Recalculate Variance
+        // ====================================================================
+        // APU USAGE - WP-19, decisions B4 and B9
+        // ====================================================================
+
+        const { ApuUsage } = this.entities;
+
+        // Derive on write, so a cycle is never stored with stale figures.
+        // Reads its OWN row, so the draft path is registered too — the WP-12
+        // rule. Rejection here is APU407 and is correct: a stop before its
+        // start is not a low-confidence reading, it is impossible.
+        const deriveApuOnWrite = async (req) => {
+            const d = req.data;
+            let stored = {};
+            if (req.event !== 'CREATE') {
+                const id = d.ID || (req.params && req.params[0] &&
+                    (typeof req.params[0] === 'object' ? req.params[0].ID : req.params[0]));
+                if (id) stored = await SELECT.one.from(req.target).where({ ID: id }) || {};
+            }
+            const at = (f) => (d[f] !== undefined ? d[f] : stored[f]);
+
+            const cycle = {
+                tail_number: at('tail_number'),
+                apu_start_utc: at('apu_start_utc'),
+                apu_stop_utc: at('apu_stop_utc'),
+                usage_phase: at('usage_phase'),
+                flight_ID: at('flight_ID')
+            };
+            if (!cycle.apu_start_utc) return;
+
+            const rate = await rateForTail(cycle.tail_number);
+            const derived = deriveCycle(cycle, rate);
+            if (derived.error) return req.error(400, derived.error);
+
+            d.is_open = derived.is_open;
+            d.running_minutes = derived.running_minutes;
+            d.apu_burn_kg = derived.apu_burn_kg;
+            d.burn_rate_kg_hr = derived.burn_rate_kg_hr;
+            d.rate_source = derived.rate_source;
+
+            const alloc = allocate(cycle);
+            d.allocated_flight_ID = alloc.allocated_flight_ID;
+            d.allocation_basis = alloc.allocation_basis;
+        };
+        // Registered on the active entity ONLY — ApuUsage is not
+        // draft-enabled, so ApuUsage.drafts does not exist and passing it
+        // registers a handler against undefined. cds compile returns 0 on
+        // that; the service boot is what catches it.
+        //
+        // The WP-12 rule is about which path a handler needs when a draft
+        // path EXISTS. Check that it does before reaching for it.
+        this.before(['CREATE', 'UPDATE', 'PATCH'], ApuUsage, deriveApuOnWrite);
+
+        this.on('deriveBurn', ApuUsage, async (req) => {
+            const id = typeof req.params[0] === 'object' ? req.params[0].ID : req.params[0];
+            const cycle = await SELECT.one.from(ApuUsage).where({ ID: id });
+            if (!cycle) return req.error(404, 'APU cycle not found');
+
+            const rate = await rateForTail(cycle.tail_number);
+            const derived = deriveCycle(cycle, rate);
+            if (derived.error) return req.error(400, derived.error);
+            const alloc = allocate(cycle);
+
+            await UPDATE(ApuUsage).where({ ID: id }).set({
+                is_open: derived.is_open,
+                running_minutes: derived.running_minutes,
+                apu_burn_kg: derived.apu_burn_kg,
+                burn_rate_kg_hr: derived.burn_rate_kg_hr,
+                rate_source: derived.rate_source,
+                allocated_flight_ID: alloc.allocated_flight_ID,
+                allocation_basis: alloc.allocation_basis
+            });
+
+            return {
+                cycleId: id,
+                tailNumber: cycle.tail_number,
+                usagePhase: cycle.usage_phase,
+                apuSource: cycle.apu_source,
+                isOpen: derived.is_open,
+                runningMinutes: derived.running_minutes,
+                burnRateKgHr: derived.burn_rate_kg_hr,
+                rateSource: derived.rate_source,
+                apuBurnKg: derived.apu_burn_kg,
+                allocatedFlight: alloc.allocated_flight_ID,
+                allocationBasis: alloc.allocation_basis,
+                // APU401: there is no meter. Every figure here is derived, and
+                // a consumer must be able to tell that without inference.
+                derived: true,
+                message: derived.note
+                    || `${derived.running_minutes} min at ${derived.burn_rate_kg_hr} kg/h = ${derived.apu_burn_kg} kg `
+                     + `(derived, ${cycle.apu_source}).`
+            };
+        });
+
+        // WP-19: split the block burn once the APU share is known.
+        //
+        // actual_burn_kg IS the block burn. engine_burn_kg is what is left
+        // after the APU took its share, and it is null wherever the APU
+        // figure is — an unknown APU burn makes the engine burn unknown too,
+        // not equal to the block.
+        const applyBurnSplit = async (burnId, tx) => {
+            const db = tx || cds.db;
+            const burn = await db.run(SELECT.one.from('fuelsphere.FUEL_BURNS')
+                .columns('ID', 'actual_burn_kg', 'tail_number', 'flight_ID').where({ ID: burnId }));
+            if (!burn) return null;
+
+            // Only cycles allocated to this burn's flight. A cycle allocated
+            // to neither flight — OVERNIGHT, PARKED, MAINTENANCE — belongs to
+            // the station or the tail and must not land on a leg.
+            const cycles = burn.flight_ID
+                ? await db.run(SELECT.from('fuelsphere.APU_USAGE')
+                    .columns('apu_burn_kg', 'is_open')
+                    .where({ allocated_flight_ID: burn.flight_ID }))
+                : [];
+
+            let apu = null;
+            if (cycles.length) {
+                const unknown = cycles.filter(c => c.apu_burn_kg === null || c.apu_burn_kg === undefined);
+                // One open cycle makes the total unknown, not short. Summing
+                // the rest would understate the APU share and overstate the
+                // engine burn by exactly the missing amount.
+                apu = unknown.length ? null
+                    : Number(cycles.reduce((a, c) => a + Number(c.apu_burn_kg), 0).toFixed(2));
+            }
+
+            const split = splitBlockBurn(burn.actual_burn_kg, apu);
+            await db.run(UPDATE('fuelsphere.FUEL_BURNS').set({
+                apu_burn_kg: split.apu_burn_kg,
+                engine_burn_kg: split.engine_burn_kg
+            }).where({ ID: burnId }));
+            return split;
+        };
+        this._applyBurnSplit = applyBurnSplit;
+
         this.on('recalculateVariance', FuelBurns, async (req) => {
             const burn = await SELECT.one.from(FuelBurns).where({ ID: _id(req.params) });
             if (!burn) return req.error(404, 'Burn record not found');
@@ -313,7 +450,6 @@ module.exports = class BurnService extends cds.ApplicationService {
             const { AIRCRAFT_MASTER } = cds.entities('fuelsphere');
             const aircraft = await SELECT.one.from(AIRCRAFT_MASTER).where({ type_code: { like: '%' } }); // Simplified
 
-            // Lookup planned burn for variance
             let plannedBurnKg = 0;
             let varianceKg = 0;
             let variancePct = 0;
@@ -324,6 +460,31 @@ module.exports = class BurnService extends cds.ApplicationService {
             const flight = flightNumber
                 ? await SELECT.one.from(FLIGHT_SCHEDULE).where({ flight_number: flightNumber, flight_date: burnDate })
                 : null;
+
+            // ----------------------------------------------------------------
+            // WP-19 / defect D10. plannedBurnKg was declared 0 and never
+            // assigned, so the `> 0` guard below could not fire and every
+            // ACARS ingest stored NORMAL with a zero variance. The ladder
+            // itself is correct — its input was missing.
+            //
+            // WP-18 supplied it. trip_fuel_kg is the trip component of the
+            // regulated stack: takeoff to touchdown, which is what a burn
+            // figure is compared against. Block fuel would include taxi and
+            // reserves that were never burned.
+            //
+            // The ACTIVE plan only. A superseded version is what was planned
+            // before the re-plan, and comparing actuals against a withdrawn
+            // plan produces a variance against a decision nobody took.
+            // ----------------------------------------------------------------
+            if (flight) {
+                const { FLIGHT_DISPATCH } = cds.entities('fuelsphere');
+                const plan = await SELECT.one.from(FLIGHT_DISPATCH)
+                    .columns('trip_fuel_kg', 'plan_version', 'plan_group_id')
+                    .where({ flight_schedule_ID: flight.ID, plan_status: 'ACTIVE' });
+                if (plan && Number(plan.trip_fuel_kg) > 0) {
+                    plannedBurnKg = Number(plan.trip_fuel_kg);
+                }
+            }
 
             // Calculate variance if planned data exists
             if (plannedBurnKg > 0) {
@@ -380,11 +541,19 @@ module.exports = class BurnService extends cds.ApplicationService {
                 tailNumber: tailNumber,
                 flightNumber: flightNumber,
                 actualBurnKg: actualBurnKg,
+                // WP-19 / D10. Surfaced so a caller can see WHICH planned
+                // figure the variance was measured against. A status with no
+                // basis beside it cannot be checked — the same reason
+                // recon_status sits next to its tolerance.
+                plannedBurnKg: plannedBurnKg || null,
                 varianceKg: varianceKg,
                 variancePct: variancePct,
                 varianceStatus: varianceStatus,
                 status: 'PRELIMINARY',
-                message: `ACARS burn data ingested for ${tailNumber}. Status: ${varianceStatus}.`
+                message: plannedBurnKg > 0
+                    ? `ACARS burn ${actualBurnKg} kg against planned ${plannedBurnKg} kg for ${tailNumber}. `
+                    + `Variance ${variancePct}%. Status: ${varianceStatus}.`
+                    : `ACARS burn data ingested for ${tailNumber}. No active plan, so no variance. Status: ${varianceStatus}.`
             };
         });
 
