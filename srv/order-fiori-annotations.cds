@@ -1365,3 +1365,17 @@ annotate FuelOrderService.FlightDispatches with {
 annotate FuelOrderService.FlightSchedule with {
     flight_leg_id         @title: 'Flight Leg ID'        @Common.FieldControl: #ReadOnly;
 };
+
+// ----------------------------------------------------------------------------
+// WP-07B — labels for the tail association.
+//
+// Beyond the stated scope for the same reason as WP-18's: WP-UI-02 requires
+// that no field in these entities render its technical name, and its harness
+// failed on tail_registration the moment the association was added. A merged
+// criterion is a merged criterion.
+// ----------------------------------------------------------------------------
+
+annotate FuelOrderService.FuelTickets    with { tail @title: 'Aircraft (Register)'; };
+annotate FuelOrderService.FuelDeliveries with { tail @title: 'Aircraft (Register)'; };
+annotate FuelOrderService.FlightSchedule with { tail @title: 'Aircraft (Register)'; };
+annotate FuelOrderService.FlightDispatches with { tail @title: 'Aircraft (Register)'; };

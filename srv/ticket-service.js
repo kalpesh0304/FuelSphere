@@ -9,6 +9,7 @@ const { SELECT, UPDATE } = cds.ql;
 const { allocateTicketNumber, reportAllocationError } = require('./lib/number-range');
 const { deriveTicketMassKg } = require('./lib/fuel-uom');
 const { reconcileDelivery } = require('./lib/fob-reconciliation');
+const { resolveTail } = require('./lib/tail-resolver');
 
 const _id = (params) => {
     const p = params[0];
@@ -107,6 +108,23 @@ module.exports = class TicketService extends cds.ApplicationService {
         };
 
         this.before(['CREATE', 'UPDATE'], FuelTickets, deriveMeasurement);
+
+        // WP-07B. A ticket is NEVER blockable, whatever UNKNOWN_TAIL_POLICY
+        // says. Fuel is already in the tanks when a ticket is written, and
+        // refusing to record it puts money outside the system — decision A1.
+        // So the tail resolves or it does not, and the ticket lands either
+        // way with aircraft_reg carrying the registration.
+        //
+        // Registered on the draft entity too: this reads its OWN row, and a
+        // draft-enabled entity writes the draft first. The opposite of the
+        // reconciliation hook, which reads children and must wait.
+        const resolveTicketTail = async (req) => {
+            const reg = req.data.aircraft_reg;
+            if (reg === undefined) return;
+            const row = await resolveTail(reg);
+            req.data.tail_registration = row ? row.registration : null;
+        };
+        this.before(['CREATE', 'UPDATE'], [FuelTickets, FuelTickets.drafts], resolveTicketTail);
 
         // WP-17: the metered side of the reconciliation is the sum of the
         // tickets, so any change to a ticket's mass, its delivery or its order

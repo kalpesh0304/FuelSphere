@@ -460,3 +460,8 @@ annotate BurnService.importPlannedBurnExcel with (
     fileName    @title: 'File Name'
                 @UI.Hidden: true
 );
+
+// WP-07B — the tail association. See the note in order-fiori-annotations.cds.
+annotate BurnService.FuelBurns          with { tail @title: 'Aircraft (Register)'; };
+annotate BurnService.ROBLedger          with { tail @title: 'Aircraft (Register)'; };
+annotate BurnService.FuelBurnExceptions with { tail @title: 'Aircraft (Register)'; };

@@ -36,6 +36,9 @@ const {
     PLAN_ACTIVE, PLAN_SUPERSEDED,
     deriveStack, resolvePlanGroup, classifyVersion, isResend
 } = require('./lib/dispatch-plan');
+const {
+    resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY
+} = require('./lib/tail-resolver');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
@@ -152,6 +155,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // entity. Root and child behave differently; check which one you have.
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
+
+        // WP-07B. Never blockable — the fuel is on the aircraft. Reads its own
+        // row, so the draft path is registered too.
+        const resolveDeliveryTail = async (req) => {
+            const reg = req.data.aircraft_reg;
+            if (reg === undefined) return;
+            const row = await resolveTail(reg);
+            req.data.tail_registration = row ? row.registration : null;
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'],
+            [FuelDeliveries, FuelDeliveries.drafts], resolveDeliveryTail);
 
         // WP-17: a gauge reading typically arrives AFTER the tickets, so the
         // reconciliation has to re-run when the delivery changes and not only
@@ -899,6 +913,11 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             };
 
             // --- Process rows ---
+            // WP-07B. Flight dispatch is a PLANNING feed, so REJECT may
+            // block it. Read once per import so one upload is judged by one
+            // rule.
+            const policy = req.data.unknownTailPolicy || UNKNOWN_TAIL_POLICY;
+
             const dispatchesToInsert = [];
             const supersessions = [];              // WP-18: rows this upload supersedes
             let dispatchesSuperseded = 0;
@@ -1013,6 +1032,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
                 const flightRecord = flightMap.get(flightKey);
 
+                // WP-07B. Blockable: the flight has not departed.
+                const tailDecision = applyPolicy(
+                    tailNumber, await resolveTail(tailNumber), 'FLIGHT_DISPATCH', policy);
+                if (!tailDecision.accept) {
+                    errors.push({ row: rowNum, field: 'TAIL_NUMBER',
+                        message: tailDecision.reason, severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+
                 // ------------------------------------------------------------
                 // WP-18 / defect D27. A MATCHING KEY IS A REVISION.
                 //
@@ -1075,6 +1103,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     flight_schedule_ID: flightRecord.ID,
                     fuel_order_ID: flightRecord.fuel_order_ID || null,
                     tail_number: tailNumber,
+                    tail_registration: tailDecision.tail_registration,
                     captain_id: captainId,
                     dispatcher_id: dispatcherId,
                     atd: atd,

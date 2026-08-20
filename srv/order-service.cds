@@ -388,7 +388,9 @@ service FuelOrderService {
      */
     action importFlightDispatchExcel(
         fileContent : LargeBinary,
-        fileName    : String(255)
+        fileName    : String(255),
+        // WP-07B. ACCEPT_PROVISIONAL or REJECT. See planning-service.cds.
+        unknownTailPolicy : String(20)
     ) returns DispatchImportResult;
 
     // ========================================================================
