@@ -4552,6 +4552,13 @@ entity FORMULA_COMPONENTS : cuid, AuditTrail {
         // Index Lookup
         lookup_index        : Association to MARKET_INDICES; // Market index reference
         index_offset_days   : Integer default 0;             // Days offset from price date
+
+        // WP-20 / PRC411. Non-business days carry no assessment, and the
+        // policy governs resolution — NEVER a silent zero. Named by the rule;
+        // no field existed to hold it.
+        //   PRIOR_PUBLISHED  take the most recent published quote before it
+        //   FAIL             refuse to price rather than substitute
+        missing_quote_policy : String(20) default 'PRIOR_PUBLISHED';
         use_average         : Boolean default false;         // Use rolling average
         average_days        : Integer default 5;             // Rolling average period
 
@@ -4658,6 +4665,43 @@ entity MARKET_INDEX_VALUES : cuid, AuditTrail {
         is_holiday          : Boolean default false;         // Market holiday
         is_corrected        : Boolean default false;         // Correction to prior value
         correction_reason   : String(500);
+
+        // WP-20 restatement. A publication may revise a historical assessment,
+        // and THE ORIGINAL VALUE IS RETAINED — so a restatement inserts a new
+        // row rather than overwriting one.
+        //
+        // is_corrected alone cannot carry this: it records THAT a correction
+        // happened, not which of two rows for one date is the one to price
+        // on. previous_value is the previous DAY's value, a different thing
+        // entirely. This mirrors the supersession pattern DERIVED_PRICES
+        // already uses for exactly the same reason.
+        is_current          : Boolean default true;
+        restates            : Association to MARKET_INDEX_VALUES;
+}
+
+/**
+ * Provisional or final (WP-20, 02-BEHAVIOUR section 8)
+ *
+ * PROVISIONAL IS NOT A DRAFT. A contract priced on a monthly average cannot
+ * be priced at uplift, so the provisional price is a real price from a
+ * contracted proxy and it settles:
+ *
+ *     at uplift     -> PROVISIONAL, from the contracted proxy
+ *     period close  -> FINAL, from the published average
+ *     difference    -> credit or debit note
+ *
+ * The distinction is load-bearing downstream: WP-21 suspends the invoice
+ * price variance check while a price is provisional, because comparing a
+ * proxy against a contract that has not resolved produces a variance every
+ * time. WP-20 does not implement that suspension, but the price has to be
+ * able to SAY which it is or WP-21 cannot.
+ *
+ * @assert.range per D25.
+ */
+@assert.range: true
+type PriceBasis : String(20) enum {
+    Provisional = 'PROVISIONAL';   // From the contracted proxy. A real price, and it settles
+    Final       = 'FINAL';         // From the published average, at period close
 }
 
 /**
@@ -4689,6 +4733,18 @@ entity DERIVED_PRICES : cuid, AuditTrail {
 
         // Pricing Engine
         pricing_engine      : String(20) @mandatory;         // NATIVE, SAP_CPE, NATIVE_FALLBACK
+
+        // WP-20. Nothing on this entity could say whether a price was the
+        // proxy taken at uplift or the settled figure at period close, and
+        // is_current cannot: both are current, at different times, for the
+        // same uplift.
+        //
+        // Named price_status because PRC408 names it that. The rule text is
+        // the specification for a field that did not exist.
+        price_status        : PriceBasis default 'FINAL';
+        // The period a PROVISIONAL price will settle against. Null on a FINAL
+        // price because it has already settled.
+        settles_for_period  : String(7);                     // YYYY-MM
 
         // Hybrid Comparison
         cpe_price           : Decimal(15,4);                 // CPE price (hybrid mode)
