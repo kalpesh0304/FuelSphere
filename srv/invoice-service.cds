@@ -59,6 +59,18 @@ service InvoiceService {
         action executeThreeWayMatch() returns ThreeWayMatchResult;
 
         /**
+         * WP-21A — run the registered pre-posting checks.
+         *
+         * FuelSphere does NOT perform the three-way match; SAP does, at MIRO.
+         * This runs FuelSphere's own checks BEFORE the handoff, because MIRO
+         * is the wrong place to discover that a ticket resolves to nothing.
+         *
+         * CAPTURE IS NEVER BLOCKED. This gates POSTING and captures
+         * everything, however many exceptions it raises.
+         */
+        action validateForPosting() returns ValidationRunResult;
+
+        /**
          * Submit invoice for approval
          * Transitions: Draft → Verified (if matched)
          * Routes to approval queue based on variance
@@ -156,6 +168,58 @@ service InvoiceService {
     // ========================================================================
     // TOLERANCE CONFIGURATION
     // ========================================================================
+
+    // ========================================================================
+    // WP-21A — THE CHECK REGISTRY AND THE EXCEPTION LIFECYCLE
+    // ========================================================================
+
+    /**
+     * InvoiceCheckRegistry - which checks run, and how hard they bite
+     *
+     * Configuration, not code. Changing a severity here changes how the same
+     * invoice gates, without a deployment.
+     */
+    entity InvoiceCheckRegistry as projection on db.INVOICE_CHECK_REGISTRY;
+
+    /**
+     * InvoiceExceptions - one row per check that fired
+     *
+     * Raised at capture, cleared when the check stops being true, bypassed
+     * when an authorised user accepts it. BYPASSED is not CLEARED.
+     */
+    entity InvoiceExceptions as projection on db.INVOICE_EXCEPTIONS {
+        *,
+        invoice        : redirected to Invoices,
+        invoice_item   : redirected to InvoiceItems,
+        tolerance_rule : redirected to ToleranceRules
+    } actions {
+        /**
+         * Bypass a SOFT error. Single-person and recorded.
+         *
+         * A HARD error is refused whatever the registry says — configuration
+         * may not make an unbypassable check bypassable.
+         *
+         * WP-27 / INV-002 layers a second signature onto the bypass RECORD;
+         * this is the first signature and it is deliberately alone.
+         */
+        action bypass(reason: String) returns BypassResult;
+
+        /**
+         * Withdraw a bypass. The exception returns to OPEN and the gate
+         * re-closes.
+         */
+        action revokeBypass(reason: String) returns BypassResult;
+    };
+
+    /**
+     * InvoiceExceptionBypasses - who accepted a soft error, when and why
+     */
+    entity InvoiceExceptionBypasses as projection on db.INVOICE_EXCEPTION_BYPASSES {
+        *,
+        exception    : redirected to InvoiceExceptions,
+        invoice      : redirected to Invoices,
+        invoice_item : redirected to InvoiceItems
+    };
 
     /**
      * ToleranceRules - Variance Tolerance Configuration
@@ -338,6 +402,63 @@ service InvoiceService {
     // ========================================================================
     // TYPE DEFINITIONS
     // ========================================================================
+
+    /**
+     * WP-21A. The outcome of a validation run.
+     *
+     * success is TRUE for a run that found fifteen hard errors. The run
+     * succeeded; the invoice is gated. Conflating the two would make a
+     * refusal indistinguishable from a crash.
+     */
+    type ValidationRunResult {
+        success             : Boolean;      // Did the RUN work, not did the invoice pass
+        invoiceId           : UUID;
+        invoiceNumber       : String(30);
+        postingGate         : String(20);   // NOT_CHECKED / GATED / CLEAR
+        canPost             : Boolean;
+        checksRegistered    : Integer;      // How many rows the registry held
+        checksSkipped       : Integer;      // Registered but not implemented
+        exceptionsRaised    : Integer;
+        hardErrors          : Integer;
+        softErrors          : Integer;
+        warnings            : Integer;
+        derivedNetAmount    : Decimal(15,2);
+        derivedGrossAmount  : Decimal(15,2);
+        derivedLineCount    : Integer;
+        statedNetAmount     : Decimal(15,2);
+        linesResolved       : Integer;
+        linesUnresolved     : Integer;
+        exceptions          : array of ValidationException;
+        message             : String(1000);
+    };
+
+    type ValidationException {
+        checkCode           : String(20);
+        checkGroup          : String(30);
+        severity            : String(20);
+        severitySource      : String(30);   // REGISTRY_DEFAULT or TOLERANCE_LADDER
+        isGating            : Boolean;
+        isBypassable        : Boolean;
+        lineNumber          : Integer;
+        message             : String(1000);
+        observedValue       : Decimal(18,4);
+        expectedValue       : Decimal(18,4);
+        variancePct         : Decimal(10,4);
+        thresholdCrossed    : Decimal(10,4);
+        toleranceRuleCode   : String(20);   // WHICH ROW resolved it
+        rung                : String(20);
+    };
+
+    type BypassResult {
+        success             : Boolean;
+        exceptionId         : UUID;
+        checkCode           : String(20);
+        severity            : String(20);
+        bypassed            : Boolean;
+        bypassId            : UUID;
+        postingGate         : String(20);
+        message             : String(1000);
+    };
 
     type DuplicateCheckResult {
         isDuplicate         : Boolean;
