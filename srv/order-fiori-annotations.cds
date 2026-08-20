@@ -1190,97 +1190,134 @@ annotate FuelOrderService.importFlightDispatchExcel with (
 );
 
 // ============================================================================
-// WP-UI-01 — FIELD-LEVEL ANNOTATIONS FOR THE PHASE 1 FIELDS
+// WP-UI-02 — LABELS FOR THE PHASE 1 FIELDS
 //
-// Appended as separate `annotate ... with { }` blocks rather than merged into
-// the existing ones. A CDS annotation binds to whatever declaration follows
-// it, so inserting into an existing block is the operation that silently
-// reassigns one; appending self-contained blocks cannot.
+// Supersedes the WP-UI-01 field-level block. Two changes beyond wording:
 //
-// Three things are being said here:
-//   - every quantity names its unit, via @Measures.Unit, so the unit travels
-//     with the number instead of sitting in a column of its own;
-//   - a derived field is @Common.FieldControl: #ReadOnly, because a field the
-//     system computes must not look like one somebody may type into;
-//   - anything whose technical name would be opaque on screen gets a label.
+//   1. @title is now the ONLY label annotation. WP-UI-01 set @title AND
+//      @Common.Label on the same fields, and @Common.Label wins in the
+//      emitted EDMX — so every @title on those fields was dead text. Reading
+//      the source would have shown the intended label while the screen showed
+//      the other one.
+//
+//   2. Three labels are deliberate and must not be shortened or generalised:
+//        FUEL_TICKETS.quantity_kg          Uplift by Meter (kg)
+//        FUEL_DELIVERIES.fob_delta_kg      Uplift by Gauge (kg)
+//        FUEL_DELIVERIES.recon_variance_kg Meter vs Gauge Variance (kg)
+//      Together they say what the reconciliation is: two measurements of one
+//      uplift, each named for what measured it, and the difference between
+//      them. "Canonical Mass" and "FQIS Uplift" named the mechanism; these
+//      name the meaning.
+//
+// "Fuel on Board" is written out rather than abbreviated to FOB, which is
+// unambiguous to a mixed audience where FOB is not.
+//
+// Appended as self-contained `annotate ... with { }` blocks. A CDS annotation
+// binds to whatever declaration follows it, so inserting into an existing
+// block is the operation that silently reassigns one.
 // ============================================================================
 
 annotate FuelOrderService.FuelOrders with {
-    // WP-11 conversion evidence. All three are derived at order creation.
-    ordered_quantity  @Measures.Unit: uom_code;
-    uom_code          @title: 'Unit of Measure';
-    ordered_quantity_kg @title       : 'Planned Mass (kg)'
-                        @Common.Label: 'Planned Mass (kg)'
-                        @Common.FieldControl: #ReadOnly;
-    conversion_density  @title       : 'Conversion Density'
-                        @Common.Label: 'Conversion Density (kg/L)'
-                        @Common.FieldControl: #ReadOnly;
-    // Names the configuration row the density came from, not a free-text note.
-    conversion_source   @title       : 'Density Source'
-                        @Common.Label: 'Density Source'
-                        @Common.FieldControl: #ReadOnly;
+    ordered_quantity     @Measures.Unit: uom_code;
+    uom_code             @title: 'Unit of Measure';
+    ordered_quantity_kg  @title: 'Ordered Quantity (kg)'   @Common.FieldControl: #ReadOnly;
+    conversion_density   @title: 'Conversion Density (kg/L)' @Common.FieldControl: #ReadOnly;
+    conversion_source    @title: 'Density Source'          @Common.FieldControl: #ReadOnly;
+
+    // Associations and audit fields. Not on the package list, but every one
+    // of these renders somewhere and the underscored ones render as-is.
+    flight               @title: 'Flight';
+    airport              @title: 'Airport';
+    supplier             @title: 'Supplier';
+    contract             @title: 'Contract';
+    product              @title: 'Product';
+    uom                  @title: 'Unit of Measure';
+    currency             @title: 'Currency';
+    deliveries           @title: 'Deliveries';
+    tickets              @title: 'Tickets';
 };
 
 annotate FuelOrderService.FuelTickets with {
-    // The supplier's claim and the meter reading are both in uom_code.
-    quantity          @Measures.Unit: uom_code  @title: 'Claimed Quantity';
-    quantity_metered  @Measures.Unit: uom_code  @title: 'Metered Quantity'
-                      @Common.FieldControl: #ReadOnly;
-    meter_start       @Measures.Unit: uom_code  @title: 'Meter Start';
-    meter_end         @Measures.Unit: uom_code  @title: 'Meter End';
-    uom_code          @title: 'Unit of Measure';
+    quantity         @Measures.Unit: uom_code  @title: 'Claimed Quantity';
+    quantity_metered @Measures.Unit: uom_code  @title: 'Metered Quantity'
+                     @Common.FieldControl: #ReadOnly;
+    meter_start      @Measures.Unit: uom_code  @title: 'Meter Start';
+    meter_end        @Measures.Unit: uom_code  @title: 'Meter End';
+    uom_code         @title: 'Unit of Measure';
 
-    // Density is per uom_code and is meaningless without density_uom, so the
-    // unit is bound to it rather than left to the reader to infer.
-    density_value     @Measures.Unit: density_uom  @title: 'Density';
-    density_uom       @title: 'Density Unit'       @Common.Label: 'Density Unit (KGL / KGM)';
-    density_basis     @title: 'Density Basis'      @Common.Label: 'Density Basis (MEA / STD)';
-    density_temp_c    @title: 'Density Temperature (C)';
+    density_value    @Measures.Unit: density_uom  @title: 'Density';
+    density_uom      @title: 'Density Unit';
+    density_basis    @title: 'Density Basis';
+    density_temp_c   @title: 'Density Temperature (°C)';
+    quantity_flag    @title: 'Quantity Basis';
 
-    // Gross or net. Without it no quantity states which basis it is on.
-    quantity_flag     @title: 'Gross or Net'       @Common.Label: 'Quantity Basis (GR / NT)';
+    // One of the three. The meter's answer to "how much fuel went on".
+    quantity_kg      @title: 'Uplift by Meter (kg)' @Common.FieldControl: #ReadOnly;
 
-    // Derived. The canonical figure everything downstream compares against.
-    quantity_kg       @title: 'Canonical Mass (kg)'
-                      @Common.Label: 'Canonical Mass (kg)'
-                      @Common.FieldControl: #ReadOnly;
+    batch_coa_ref    @title: 'Batch Certificate';
+    ticket_source    @title: 'Ticket Source';
+    match_status     @title: 'Match Status' @Common.FieldControl: #ReadOnly;
 
-    batch_coa_ref     @title: 'Certificate of Analysis';
-    ticket_source     @title: 'Capture Source'     @Common.Label: 'Capture Source (M / E)';
-
-    // Derived by the matching rules, not typed.
-    match_status      @title: 'Match Status' @Common.FieldControl: #ReadOnly;
+    order            @title: 'Fuel Order';
+    delivery         @title: 'Delivery';
+    created_at       @title: 'Created At';
+    created_by       @title: 'Created By';
+    modified_at      @title: 'Changed At';
+    modified_by      @title: 'Changed By';
 };
 
 annotate FuelOrderService.FuelDeliveries with {
     aircraft_reg        @title: 'Aircraft Registration';
     delivered_quantity  @Measures.Unit: uom_code;
     uom_code            @title: 'Unit of Measure';
-    delivery_method     @title: 'Delivery Method' @Common.Label: 'Delivery Method (HYD / REF)';
+    delivery_method     @title: 'Delivery Method';
 
-    // WP-12 gauge pair. The two readings are entered; the two differences are
-    // derived from them and are read-only.
-    fob_at_arrival_kg   @title: 'FOB at Arrival (kg)'
-                        @Common.Label: 'FOB at Arrival, chocks-on (kg)';
-    fob_before_kg       @title: 'FOB Before Uplift (kg)'
-                        @Common.Label: 'FOB Before Uplift (kg)';
-    fob_after_kg        @title: 'FOB After Uplift (kg)';
-    fob_delta_kg        @title: 'FQIS Uplift (kg)'
-                        @Common.Label: 'FQIS Uplift, after minus before (kg)'
-                        @Common.FieldControl: #ReadOnly;
-    ground_burn_kg      @title: 'Ground Burn (kg)'
-                        @Common.Label: 'Ground Burn, arrival minus before (kg)'
-                        @Common.FieldControl: #ReadOnly;
-    fob_source          @title: 'FQIS Source'
-                        @Common.Label: 'Gauge Reading Source';
-    fob_rounding_kg     @title: 'Reading Rounding (kg)';
+    fob_at_arrival_kg   @title: 'Fuel on Board at Arrival (kg)';
+    fob_before_kg       @title: 'Fuel on Board Before Refuelling (kg)';
+    fob_after_kg        @title: 'Fuel on Board After Refuelling (kg)';
 
-    // WP-17 reconciliation. Every one of these is computed.
-    recon_variance_kg   @title: 'Recon Variance (kg)'
-                        @Common.Label: 'Reconciliation Variance, metered minus FQIS (kg)'
-                        @Common.FieldControl: #ReadOnly;
+    // The second of the three. The aircraft's own answer to the same
+    // question the meter answered, which is why the wording is parallel.
+    fob_delta_kg        @title: 'Uplift by Gauge (kg)' @Common.FieldControl: #ReadOnly;
+
+    ground_burn_kg      @title: 'Ground Burn (kg)' @Common.FieldControl: #ReadOnly;
+    fob_source          @title: 'Gauge Reading Source';
+    fob_rounding_kg     @title: 'Gauge Rounding (kg)';
+
+    // The third. Names both sides, so the number needs no explanation.
+    recon_variance_kg   @title: 'Meter vs Gauge Variance (kg)' @Common.FieldControl: #ReadOnly;
+
     recon_status        @title: 'Reconciliation Status' @Common.FieldControl: #ReadOnly;
-    supplier_count      @title: 'Suppliers on this Refuelling'
-                        @Common.Label: 'Suppliers on this Refuelling'
-                        @Common.FieldControl: #ReadOnly;
+    supplier_count      @title: 'Supplier Count' @Common.FieldControl: #ReadOnly;
+
+    order               @title: 'Fuel Order';
+    sales_order         @title: 'Sales Order';
+    pilot_signature     @title: 'Pilot Signature';
+    ground_crew_signature @title: 'Ground Crew Signature';
+    created_at          @title: 'Created At';
+    created_by          @title: 'Created By';
+    modified_at         @title: 'Changed At';
+    modified_by         @title: 'Changed By';
+};
+
+// ----------------------------------------------------------------------------
+// Internal carriers. Not labelled, hidden.
+//
+// These five virtuals exist only to feed a Criticality: reference. Their value
+// is an integer colour code, so a user-facing label would be inventing a
+// meaning they do not have — "Status Criticality" describes the mechanism, not
+// anything an operator wants in a column. Hidden instead, following the house
+// treatment of ID and of canSubmit, which is already @UI.Hidden.
+//
+// Hiding a field does not stop it being read as a Criticality source.
+// ----------------------------------------------------------------------------
+
+annotate FuelOrderService.FuelOrders with {
+    statusCriticality   @UI.Hidden;
+    priorityCriticality @UI.Hidden;
+};
+
+annotate FuelOrderService.FuelDeliveries with {
+    statusCriticality   @UI.Hidden;
+    varianceCriticality @UI.Hidden;
 };

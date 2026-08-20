@@ -147,25 +147,37 @@ annotate MasterDataService.AircraftRegistrations with @(
 // -----------------------------------------------------------------------------
 
 annotate MasterDataService.AircraftRegistrations with {
-    ID                     @UI.Hidden;
-    registration           @title: 'Registration'
-                           @Common.Label: 'Aircraft Registration (tail)';
-    aircraft_type_code     @title: 'Aircraft Type';
-    record_status          @title: 'Record Status'
-                           @Common.Label: 'Record Status (PROVISIONAL / CONFIRMED)';
-    provisional_expiry     @title: 'Provisional Until';
+    ID                      @UI.Hidden;
+    // Internal carrier for a Criticality reference, and dead besides: the
+    // after-READ that populates activeCriticality is registered for the other
+    // master-data entities and not for this one. Hidden rather than labelled.
+    activeCriticality       @UI.Hidden;
+
+    // WP-UI-02: @title only. WP-UI-01 set @title and @Common.Label together
+    // on several of these, and @Common.Label wins in the EDMX — so the
+    // @title was dead text and the screen showed the other wording.
+    registration            @title: 'Registration';
+    aircraft_type_code      @title: 'Aircraft Type';
+    record_status           @title: 'Record Status';
+    provisional_expiry      @title: 'Provisional Expiry';
     dry_operating_weight_kg @title: 'Dry Operating Weight (kg)';
-    fuel_capacity_kg       @title: 'Fuel Capacity (kg)';
-    apu_burn_rate_kg_hr    @title: 'APU Burn Rate (kg/hr)'
-                           @Common.Label: 'APU Burn Rate (kg per hour)';
-    performance_factor_pct @title: 'Performance Factor (%)'
-                           @Common.Label: 'Performance Factor (% of book figures)';
-    operator_code          @title: 'Operator';
-    on_own_aoc             @title: 'On Own AOC'
-                           @Common.Label: 'Operated on Own AOC';
-    cost_object_type       @title: 'Cost Object Type';
-    cost_object_id         @title: 'Cost Object';
+    fuel_capacity_kg        @title: 'Fuel Capacity (kg)';
+    apu_burn_rate_kg_hr     @title: 'APU Burn Rate (kg/h)';
+    performance_factor_pct  @title: 'Performance Factor (%)';
+    on_own_aoc              @title: 'On Own AOC';
+    cost_object_type        @title: 'Cost Object Type';
+    cost_object_id          @title: 'Cost Object';
+
+    operator_code           @title: 'Operator';
+    is_active               @title: 'Active';
+    aircraft_type           @title: 'Aircraft Type';
+
     // Set by the confirm path, not typed.
-    confirmed_by           @title: 'Confirmed By' @Common.FieldControl: #ReadOnly;
-    confirmed_at           @title: 'Confirmed At' @Common.FieldControl: #ReadOnly;
+    confirmed_by            @title: 'Confirmed By' @Common.FieldControl: #ReadOnly;
+    confirmed_at            @title: 'Confirmed At' @Common.FieldControl: #ReadOnly;
+
+    created_at              @title: 'Created At';
+    created_by              @title: 'Created By';
+    modified_at             @title: 'Changed At';
+    modified_by             @title: 'Changed By';
 };
