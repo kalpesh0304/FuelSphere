@@ -46,8 +46,7 @@
         "csrf": true,
         "csrfInBatch": true,
         "credentials": {
-          "destination": "S2A",
-          "forwardAuthToken": true
+          "destination": "S4HC_TECHNICAL"
         }
       },
       "[hybrid]": {
@@ -57,7 +56,7 @@
         "S2A": {
           "kind": "odata-v2",
           "credentials": {
-            "destination": "S2A"
+            "destination": "S4HC_TECHNICAL"
           },
           "options": {
             "timeout": 60000
@@ -76,8 +75,7 @@
           "csrf": true,
           "csrfInBatch": true,
           "credentials": {
-            "destination": "S2A",
-            "forwardAuthToken": true
+            "destination": "S4HC_TECHNICAL"
           }
         }
       }
