@@ -670,10 +670,16 @@ plan_status       : PlanStatus;          // DSP452. Exactly one ACTIVE per group
 superseded_by     : Association to FLIGHT_DISPATCH;
 version_gap_flag  : Boolean default false;   // DSP456
 versions_skipped  : Integer default 0;       // DSP456
+plan_version_source : PlanVersionSource;     // FEED or ASSIGNED. See 9.3
 
 type PlanStatus : String(20) enum {
     Active     = 'ACTIVE';
     Superseded = 'SUPERSEDED';
+}
+
+type PlanVersionSource : String(10) enum {
+    Feed     = 'FEED';       // the source supplied the version — gaps are detectable
+    Assigned = 'ASSIGNED';   // assigned on receipt — gaps are INVISIBLE
 }
 ```
 
@@ -711,9 +717,25 @@ plan revised AFTER  the order is confirmed   →  NEW fuel order ID
 
 **`plan_group_id` derives from `flight_leg_id`**, which `ENR452` makes immutable and which survives a tail swap.
 
-**`plan_version` comes from the feed.** The dispatch plan is assumed to carry a plan version or equivalent sequence number.
+**`plan_version` should come from the feed. It does not — measured under WP-18.**
 
-> **The import discards it today.** `planning-service.js` reads 18 named columns and drops everything else without comment. **WP-18 must add the version column to the read set** — and report what the feed actually sends, since the assumption above is stated rather than observed. If no version column exists, `plan_version` must be assigned on receipt from arrival order, which is weaker and cannot detect a gap.
+`docs/data/flight_dispatch_upload.csv` carries **exactly the 18 columns the import already read.** No version, no revision, no sequence. `ofplan_reference` carries no revision suffix, and the dispatch specification has no version-like field either.
+
+**The import was not discarding a version. There was none.** `PLAN_VERSION` and the seven stack columns are now in the read set regardless, so the mechanism works the moment the source supplies them.
+
+### `plan_version_source` — added by WP-18, and required
+
+```cds
+plan_version_source : PlanVersionSource;   // FEED | ASSIGNED
+```
+
+Where the version is **assigned on receipt** rather than supplied, versions are contiguous by construction — so `version_gap_flag` **can never fire.**
+
+**Without this field, `version_gap_flag = false` cannot be told apart from "could not look."** An unknown must never read as a pass. Same principle as `NOT_RECONCILED`, and the same convention as `conversion_source` and `fob_source`.
+
+> **Consequence, today.** With the current feed, `plan_version_source = ASSIGNED` and **gap detection does not work.** Versioning, supersession and the order-to-plan link all function; only the gap flag is inert. It becomes live the moment the source supplies a version, with no further change.
+>
+> **This is worth raising with the dispatch system owner.** `STG412` says intermediate versions never arrive, so without a source version there is no way to know one was missed — and the design's answer to a version gap, *flag and apply*, has nothing to flag.
 
 ### 9.4 `flight_leg_id` — immutable through a tail swap
 
@@ -750,6 +772,90 @@ Not update-in-place, not a second row. So a re-plan reusing the id for the same 
 The author assumed one dispatch per order, flight and date, permanently. **WP-18 replaces that assumption**: a matching key is a revision, not a duplicate.
 
 **Separately, the import reads 18 named columns and discards everything else without comment.** If the feed already carries a version column, it is being thrown away. Report what the source actually sends before designing around its absence.
+
+---
+
+## 10. WP-07B · Tail references as associations
+
+Written 18 August 2026. Decisions B1 and A4 apply.
+
+### 10.1 Seven entities, three of them the burn side
+
+| Entity | Field | |
+|---|---|---|
+| `FLIGHT_SCHEDULE` | `aircraft_reg` | optional |
+| `FUEL_DELIVERIES` | `aircraft_reg` | `@mandatory` |
+| `FUEL_TICKETS` | `aircraft_reg` | optional |
+| `FLIGHT_DISPATCH` | `tail_number` | optional |
+| **`FUEL_BURNS`** | `tail_number` | `@mandatory` |
+| **`ROB_LEDGER`** | `tail_number` | `@mandatory` |
+| **`FUEL_BURN_EXCEPTIONS`** | `tail_number` | `@mandatory` |
+
+**The bottom three are why this runs before WP-19.** Burn derivation reads gauge points on `FUEL_BURNS`, chains through `ROB_LEDGER` and raises `FUEL_BURN_EXCEPTIONS` — every entity it touches is one of these. Built against strings, they migrate afterwards with live derivation logic on top.
+
+### 10.2 Retain both. This is additive, not a tightening
+
+```cds
+tail_number : String(10) @mandatory;                    // UNCHANGED
+aircraft    : Association to AIRCRAFT_REGISTRATIONS;    // NEW, optional
+```
+
+**The string keeps its existing constraint.** Where it is `@mandatory` today it stays `@mandatory`; the association is added alongside and is always optional.
+
+**So no writer starts failing**, and there is nothing to survey on the tightening side. Replacing the string would have made an unknown tail structurally impossible to record — and then no parameter could permit one.
+
+> **Retaining both is what makes the parameter possible.** The string always lands. The association resolves or does not. The policy decides whether an unresolved record is accepted.
+
+The string is not a duplicate to be tidied away later. It is the value as received, and it survives a registration the register has never seen.
+
+### 10.3 `UNKNOWN_TAIL_POLICY` — the parameter
+
+Global, per company code, effective-dated. Follows `HOLD_PAYMENT_ON_DISCREPANCY`, `FLIGHT_COST_OBJECT_MODEL` and `BURN_POSTING_TRIGGER`.
+
+| Value | Behaviour |
+|---|---|
+| `ACCEPT_PROVISIONAL` | The record lands. The tail is auto-provisioned where WP-16 exists, otherwise the association is left null and the string carries it |
+| `REJECT` | The record is refused, with the unresolved registration named in the error |
+
+**Where the policy is `ACCEPT_PROVISIONAL` and WP-16 has landed**, an unknown registration creates a `PROVISIONAL` register row and the association resolves immediately — the gating from WP-07 then applies, so ticket capture proceeds and order creation does not. Until WP-16, the association stays null.
+
+### 10.4 Ticket capture is never blockable
+
+**`REJECT` applies to the planning feeds only.**
+
+| Feed | Blockable |
+|---|---|
+| Flight schedule | Yes — the flight has not happened |
+| Flight dispatch | Yes |
+| **Fuel ticket** | **No** |
+| **Fuel burn** | **No** |
+
+**Decision A1 is a decision, not a default.** Fuel is already in the tanks when a ticket is written; refusing to record it puts money outside the system, which is what A1 exists to prevent. The same reasoning covers burn — it already happened.
+
+Otherwise an airline sets `REJECT` for good reasons on the schedule feed and silently loses fuel tickets.
+
+> **Confirm this before building.** The instruction was that the policy be parameter-driven; whether it extends to ticket capture was not stated. This document takes the position that it must not, on A1. **If that is wrong, A1 is what changes — not this section.**
+
+### 10.5 The seed has no orphans
+
+WP-07's harness asserts every registration referenced by transactional data exists in the register: **14 rows, 14 referenced, 0 missing.** So the migration resolves cleanly today and there is no unmatched case to design around in the seed.
+
+**The parameter exists for production**, where a leased tail can appear on a feed before anyone has told the fuel system about it.
+
+### 10.6 Also in scope — `recalculateROB`
+
+```cds
+action recalculateROB(aircraftId: UUID, fromDate: Date)
+```
+
+**The declared parameter cannot address a tail.** WP-03 resolved it against `tail_number` first, then `aircraft_type_code`, and left the signature alone because there was nothing better to point at. There is now.
+
+### 10.7 Out of scope
+
+- **Removing the string fields.** They are the value as received and they stay
+- **Auto-provisioning** — MDM401, WP-16. This package consumes it if present
+- **Changing any `@mandatory`** — the association is optional everywhere
+- Row-level security by tail — WP-14
 
 ---
 
