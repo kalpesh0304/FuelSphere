@@ -77,7 +77,7 @@ Entities exist and are seeded. OData actions are declared. **Calling one returns
 | Item | Reality |
 |---|---|
 | S/4 posting | `s4_po_number` and `s4_gr_number` are **randomly generated**. Nothing is posted |
-| ACARS variance | `planned_burn_kg` hardcoded `0`, so the `> 0` guard never fires. **Every ACARS ingest stores `NORMAL` with zero variance** |
+| ACARS variance | `planned_burn_kg` hardcoded `0` **on the ACARS path only**, so the `> 0` guard never fires there and every ACARS ingest stores `NORMAL` with zero variance. **The ladder is not otherwise dead** — `confirm`, `recalculateVariance` and both Excel imports all compute it, and four of five seeded burns carry a planned figure with a computed status. Measured under WP-19; earlier wording called the whole ladder unreachable, which the code does not support |
 | Density | Demanded by the API (`EPD404`) then **not used**. Correction is temperature-only |
 | Three-way match | Declared. No logic |
 | Duplicate detection | Declared. No logic. No unique constraint on invoice number |
@@ -401,6 +401,9 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **Enum casing is inconsistent by design** | `OrderStatus` uses `Draft`; `CrewReviewStatus` uses `PENDING`. **Do not normalise** — it breaks seed data and external callers |
 | **Seed data follows the spec, code does not** | Where seed data, this file and the code disagree, the code is usually the outlier. Check here before "fixing" data |
 | **Declared is not implemented** | 382 declared actions, 57 `.on` handlers. CAP returns a default no-op for an action with no handler — **it looks like it worked** |
+| **Check whether an entity is draft-enabled before reaching for `.drafts`** | The WP-12 rule says a handler reading its own row needs the draft path. It says nothing about entities that **have no draft path**. WP-19 registered on `ApuUsage.drafts`, which is `undefined` because the entity is not draft-enabled — **compiled clean, failed at boot.** The rule is about which path to use *where one exists* |
+| **A delimiter inside free text shifts every column after it** | WP-19 put a semicolon in a `remarks` value of a semicolon-delimited CSV. The row gained a column, and **CAP reported it as "Invalid time value"** — sending the author after a timestamp that was never wrong. **When a CSV error names a field, check the column count before believing it** |
+| **A UUID key must be valid hex** | WP-19 seeded IDs beginning `apu00000`. `p` and `u` are not hex digits, so the key could not parse and every bound-action call returned 404 |
 | **`cds.tx(req, …)` inside a request handler silently discards writes** | CAP already wraps every inbound request in a managed transaction. Passing `req` opens a nested one and the writes never land, **while the action still returns HTTP 200 with success: true**. Measured under WP-01 on all three master data feeds. `cds.tx()` **without** `req` is a different thing — an independent root transaction, correct where a record must survive a failed request. Unmeasured; verify before relying on it |
 | **Check CAP's defaults before adding a safety net** | D1 was recorded as a data-loss defect because a transaction wrapper was commented out. It was commented out because it was redundant. Verify what the framework already provides before treating an absence as a gap |
 | **`MASTER_SUPPLIERS` is `cuid`** | Its primary key is a generated UUID, so a duplicate `supplier_code` raises no constraint violation. Any test relying on a PK collision there will pass vacuously |
@@ -501,6 +504,10 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 ---
 
 ## 17. Related projects
+
+**Confirmed again by WP-UI-01, 18 August 2026: none of the four apps named in the launchpad exists here.** Manage Fuel Orders, Manage Fuel Tickets, Manage Flight Dispatch and Flight Schedule are `UI.HeaderInfo.TypeNamePlural` values on four entities — labels, not applications. The five apps under `app/` are Admin, Operations, Planning, Fulfillment and Invoicing, all freestyle, and **none reads an annotation.**
+
+**Annotations in this repository reach `$fiori-preview` and `$metadata` only.** They change no pixel in any deployed app here. Where the four named apps are served from is an open question on the demo path.
 
 **FuelSphere-UI does not exist in this repository.** No directory, no git submodule (`.gitmodules` absent), no path matching `*fuelsphere-ui*`. `app/package.json` is named `fuelsphere-approuter`, which is the approuter, not a UI project.
 
