@@ -710,6 +710,9 @@ service BurnService {
     // FB406 - ROB ledger gap detected (missing entries)
     // FB407 - Aircraft not found
     // FB408 - Flight not found
-    // FB409 - Adjustment requires approval
+    // FB409 - Adjustment reason is required (implemented, burn-service.js:621)
+    // FB458 - Adjustment requires approval. RESERVED, unimplemented: SoD-shaped,
+    //         needs SOD_RULES, lands with WP-27. FB410 was NOT used here — it is
+    //         already assigned on the line below.
     // FB410 - Jefferson load failed
 }

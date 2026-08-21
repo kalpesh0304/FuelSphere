@@ -1,7 +1,7 @@
 # 03-VALIDATION-RULES.md
 
 **FuelSphere — validation rules with error codes**
-195 rules, every one carrying a code from the project taxonomy.
+215 rules, every one carrying a code from the project taxonomy.
 
 ---
 
@@ -156,7 +156,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 
 ### FB4xx — Fuel burn
 
-8 rules · 8 against entities that exist today · package: WP-19
+10 rules · 10 against entities that exist today · package: WP-19, WP-27
 
 | Code | Was | Applies to | Rule | Severity |
 |---|---|---|---|---|
@@ -168,6 +168,8 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `FB455` | VR113 | `FUEL_BURNS` | engine_burn = block_burn minus apu_burn; the two must be separable for efficiency reporting | Error |
 | `FB456` | VR114 | `FUEL_BURNS` | Jettisoned and defuelled quantities are excluded from burn; they are separate ledger events | Error |
 | `FB457` | VR122 | `FUEL_BURNS` | Burn variance against plan is not computed for legs that did not complete as planned - air return, diversion, return to ramp. The planned trip fuel refers to a sector that was not flown | Error |
+| `FB409` | — | `ROB_LEDGER` | A manual ROB adjustment requires a reason; an unexplained correction to a fuel ledger is not auditable | Error |
+| `FB458` | — | `ROB_LEDGER` | **Reserved, unimplemented.** A manual ROB adjustment requires a second person's approval. SoD-shaped and dependent on `SOD_RULES`, which is seeded and unenforced — the rule lands with WP-27. Distinct from `FB409`, which is the reason requirement and is implemented | Error |
 
 ### LDG4xx — Fuel ledger
 
@@ -182,7 +184,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 
 ### INV4xx — Invoice
 
-9 rules · 9 against entities that exist today · package: WP-21
+25 rules · 25 against entities that exist today · package: WP-21A, WP-21B
 
 | Code | Was | Applies to | Rule | Severity |
 |---|---|---|---|---|
@@ -195,6 +197,22 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `INV456` | VR34 | `INVOICE_ITEMS` | Negative lines are valid for DEFUEL and must reduce, not increase, the invoice total | Error |
 | `INV457` | VR35 | `INVOICE_ITEMS` | Pricing basis may be CONTRACT or POSTED; the basis determines which reference price applies | Error |
 | `INV458` | VR36 | `INVOICE_ITEMS` | A MATCHED status on quantity and price does not clear a density error; FQIS cross check is required | Warning |
+| `INV459` | — | `INVOICES` | A header field the document cannot be processed without is absent; the invoice is captured and posting is gated | Error |
+| `INV460` | — | `INVOICES` | The stated line count must equal the lines received; a document short a line is not a document | Error |
+| `INV461` | — | `INVOICES` | An invoice dated after today is accepted and gated; the date is the supplier's claim, not ours to correct | Error |
+| `INV462` | — | `INVOICE_ITEMS` | A stated ticket number that is not in FuelSphere, or that matches more than one ticket, resolves to nothing; INV450 requires exactly one | Error |
+| `INV463` | — | `INVOICE_ITEMS` | A ticket that exists and carries no order is UNMATCHED; there is no purchase order to invoice against | Error |
+| `INV464` | — | `INVOICE_ITEMS` | The resolved order carries no s4_po_number; an invoice cannot reference a purchase order that was never created | Error |
+| `INV465` | — | `INVOICE_ITEMS` | Where the line states a PO other than the one the ticket resolves to, the resolved PO governs and the disagreement is raised | Error |
+| `INV466` | — | `INVOICE_ITEMS` | No goods receipt exists against the resolved order; nothing records that the fuel was received | Error |
+| `INV467` | — | `INVOICE_ITEMS` | Invoiced quantity exceeding the ordered quantity is raised separately from the goods receipt comparison; more was billed than was ever ordered | Error |
+| `INV468` | — | `INVOICE_ITEMS` | Where the line and the goods receipt are in different units, no quantity comparison is performed; comparing the numbers would compare different things | Error |
+| `INV469` | — | `INVOICE_ITEMS` | Line net amount must equal quantity times unit price; the arithmetic on the line is checked before any tolerance is | Error |
+| `INV470` | — | `INVOICE_ITEMS` | A PROVISIONAL contract price suspends the price comparison and raises a warning in its place; not compared must never read as compared and fine | Warning |
+| `INV471` | — | `INVOICE_ITEMS` | A charge naming none of the components the contract carries is raised; the contract is the list of what may be billed | Error |
+| `INV472` | — | `INVOICE_ITEMS` | A contract component the invoice does not name is reported; an absent charge is a finding, not a saving | Warning |
+| `INV473` | — | `INVOICES` | The same invoice number for the same vendor is already captured; the document number is the supplier's own key | Error |
+| `INV474` | — | `INVOICE_ITEMS` | The same order and goods receipt combination invoiced more than once; one receipt against one order is billed once | Error |
 
 ### MDM4xx — Master data
 
@@ -366,7 +384,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 
 ### PRC4xx — Pricing
 
-14 rules · 11 against entities that exist today · package: WP-20
+16 rules · 13 against entities that exist today · package: WP-20
 
 | Code | Was | Applies to | Rule | Severity |
 |---|---|---|---|---|
@@ -384,6 +402,8 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `PRC412` | VR173 | `—` | The tax code is determined by FuelSphere and supplied on the purchase document; SAP calculates the amount | Error |
 | `PRC413` | VR174 | `—` | Contract default applies only where no rule matches; flight nature overrides it | Error |
 | `PRC414` | VR175 | `—` | A diversion changing flight nature after pricing triggers tax code reassessment | Warning |
+| `PRC450` | — | `PRICING_FORMULAS` | No ACTIVE formula in validity is in scope for the contract at the transaction date; a scope that cannot be verified does not match | Error |
+| `PRC451` | — | `PRICING_FORMULAS` | More than one ACTIVE formula resolves at the same scope tier; PRC401 resolves the source per contract, and two answers is not one | Error |
 
 ---
 
