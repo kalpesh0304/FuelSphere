@@ -1,7 +1,7 @@
 # 03-VALIDATION-RULES.md
 
 **FuelSphere — validation rules with error codes**
-213 rules, every one carrying a code from the project taxonomy.
+215 rules, every one carrying a code from the project taxonomy.
 
 ---
 
@@ -156,7 +156,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 
 ### FB4xx — Fuel burn
 
-8 rules · 8 against entities that exist today · package: WP-19
+10 rules · 10 against entities that exist today · package: WP-19, WP-27
 
 | Code | Was | Applies to | Rule | Severity |
 |---|---|---|---|---|
@@ -168,6 +168,8 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `FB455` | VR113 | `FUEL_BURNS` | engine_burn = block_burn minus apu_burn; the two must be separable for efficiency reporting | Error |
 | `FB456` | VR114 | `FUEL_BURNS` | Jettisoned and defuelled quantities are excluded from burn; they are separate ledger events | Error |
 | `FB457` | VR122 | `FUEL_BURNS` | Burn variance against plan is not computed for legs that did not complete as planned - air return, diversion, return to ramp. The planned trip fuel refers to a sector that was not flown | Error |
+| `FB409` | — | `ROB_LEDGER` | A manual ROB adjustment requires a reason; an unexplained correction to a fuel ledger is not auditable | Error |
+| `FB458` | — | `ROB_LEDGER` | **Reserved, unimplemented.** A manual ROB adjustment requires a second person's approval. SoD-shaped and dependent on `SOD_RULES`, which is seeded and unenforced — the rule lands with WP-27. Distinct from `FB409`, which is the reason requirement and is implemented | Error |
 
 ### LDG4xx — Fuel ledger
 
