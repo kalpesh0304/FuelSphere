@@ -23,6 +23,26 @@ const _id = (params) => {
     return typeof p === 'object' ? p.ID : p;
 };
 
+/**
+ * WP-13 — THE BURN VARIANCE LADDER, RESOLVED FROM ONE PLACE.
+ *
+ * It was written out three times in this file, in two forms: twice ascending
+ * with <=, once descending with >. Both give the same answer, which is
+ * precisely why three copies survived — nothing ever disagreed, so nothing
+ * ever pointed at them. Moving "the" constant would have moved one of three.
+ *
+ * The thresholds now come from TOLERANCE_RULES row TOL-BURN-VARIANCE, at the
+ * values they held as literals: 5, 10, 20.
+ */
+const { resolveToleranceRule, burnVarianceStatus } = require('./lib/parameter-store');
+
+async function burnLadder(absPct, asOfDate) {
+    const t = await resolveToleranceRule(
+        { ruleCode: 'TOL-BURN-VARIANCE' }, {}, asOfDate);
+    const l = burnVarianceStatus(absPct, t.rule);
+    return { ...l, source: t.evidence ? `TOLERANCE_RULES:${t.evidence.rule_code}` : t.reason };
+}
+
 module.exports = class BurnService extends cds.ApplicationService {
     async init() {
         const { FuelBurns, ROBLedger, FuelBurnExceptions } = this.entities;
@@ -236,10 +256,7 @@ module.exports = class BurnService extends cds.ApplicationService {
             const absPct = Math.abs(variancePct);
 
             let varianceStatus;
-            if (absPct <= 5)       varianceStatus = 'NORMAL';
-            else if (absPct <= 10) varianceStatus = 'WARNING';
-            else if (absPct <= 20) varianceStatus = 'EXCEPTION';
-            else                   varianceStatus = 'CRITICAL';
+            varianceStatus = (await burnLadder(absPct)).status;
 
             const requiresReview = varianceStatus === 'EXCEPTION' || varianceStatus === 'CRITICAL';
 
@@ -491,10 +508,7 @@ module.exports = class BurnService extends cds.ApplicationService {
                 varianceKg = actualBurnKg - plannedBurnKg;
                 variancePct = Number(((varianceKg / plannedBurnKg) * 100).toFixed(2));
                 const absPct = Math.abs(variancePct);
-                if (absPct <= 5)       varianceStatus = 'NORMAL';
-                else if (absPct <= 10) varianceStatus = 'WARNING';
-                else if (absPct <= 20) varianceStatus = 'EXCEPTION';
-                else                   varianceStatus = 'CRITICAL';
+                varianceStatus = (await burnLadder(absPct)).status;
             }
 
             const requiresReview = varianceStatus === 'EXCEPTION' || varianceStatus === 'CRITICAL';
@@ -1064,10 +1078,9 @@ module.exports = class BurnService extends cds.ApplicationService {
                     varianceKg = actualBurn - plannedBurn;
                     variancePct = parseFloat(((varianceKg / plannedBurn) * 100).toFixed(2));
                     const absPct = Math.abs(variancePct);
-                    if (absPct > 20) { varianceStatus = 'CRITICAL'; requiresReview = true; }
-                    else if (absPct > 10) { varianceStatus = 'EXCEPTION'; requiresReview = true; }
-                    else if (absPct > 5) { varianceStatus = 'WARNING'; }
-                    else { varianceStatus = 'NORMAL'; }
+                    const _l = await burnLadder(absPct);
+                    varianceStatus = _l.status;
+                    requiresReview = _l.requiresReview;
                 }
 
                 // Calculate flight duration from block times

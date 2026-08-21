@@ -61,6 +61,35 @@ const STATUS = {
  * Resolve the tolerance for a gauge source.
  * Returns null where no comparison can be made at all.
  */
+/**
+ * WP-13 — the same tolerance, resolved from TOLERANCE_RULES.
+ *
+ * The constants below are retained as the last resort and keep their own
+ * source label, so a fallback is never mistaken for configuration. CFG401
+ * requires a global row to exist, so reaching the constant means the row was
+ * deleted.
+ *
+ * The rule code carries fob_source because TOLERANCE_RULES has no scope
+ * column for it — company, supplier category and product type are the three,
+ * and a gauge source is none of them. TOL-FOB-ACARS and its two siblings.
+ */
+async function resolveToleranceFromStore(fobSource, scope = {}, asOfDate = null, tx = null) {
+    if (!fobSource || fobSource === 'NONE') return null;
+    const { resolveToleranceRule } = require('./parameter-store');
+    const t = await resolveToleranceRule({ ruleCode: `TOL-FOB-${fobSource}` }, scope, asOfDate, tx);
+    if (!t.resolved) {
+        const c = resolveTolerance(fobSource);
+        return c ? { ...c, source: TOLERANCE_SOURCE, fallbackReason: t.reason } : null;
+    }
+    return {
+        percent: Math.abs(Number(t.rule.upper_limit)),
+        floorKg: t.rule.floor_value === null ? null : Math.abs(Number(t.rule.floor_value)),
+        note: t.rule.description,
+        source: `TOLERANCE_RULES:${t.evidence.rule_code}`,
+        evidence: t.evidence
+    };
+}
+
 function resolveTolerance(fobSource) {
     const rule = TOLERANCE_BY_FOB_SOURCE[fobSource];
     if (!rule) return null;
@@ -86,7 +115,19 @@ const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v)
  * @param {object[]} tickets   quantity_kg, and the supplier each resolves to
  * @returns {{recon_variance_kg, recon_status, supplier_count, evidence}}
  */
-function reconcile(delivery, tickets) {
+/**
+ * WP-13 — `rule` is now a PARAMETER, not a lookup.
+ *
+ * This is a calculation and it stays synchronous and pure. Making it async so
+ * it could resolve its own tolerance would push a database read into a
+ * function whose whole value is that it has none — and it broke three cases
+ * in WP-17's harness that call it directly, which is what caught it.
+ *
+ * Resolution happens at the EDGE, in reconcileDelivery and in the handler,
+ * and the resolved rule is handed in. Omit it and the constant answers, with
+ * its own source label so a fallback is never read as configuration.
+ */
+function reconcile(delivery, tickets, rule) {
     const suppliers = new Set();
     let unresolvedSupplier = 0;
     let unknownMass = 0;
@@ -112,7 +153,7 @@ function reconcile(delivery, tickets) {
     // not be derived - in every one of those the comparison was not made, and
     // saying so is the only honest answer. No variance is computed, because a
     // variance figure would imply one was.
-    const rule = resolveTolerance(delivery.fob_source);
+    if (!rule) rule = resolveTolerance(delivery.fob_source);
     const before = num(delivery.fob_before_kg);
     const after = num(delivery.fob_after_kg);
 
@@ -205,7 +246,9 @@ async function reconcileDelivery(deliveryId, srv) {
         supplier_ID: t.order_ID ? (supplierByOrder[t.order_ID] || null) : null
     }));
 
-    const result = reconcile(delivery, enriched);
+    const storeRule = await resolveToleranceFromStore(
+        delivery.fob_source, {}, delivery.delivery_date);
+    const result = reconcile(delivery, enriched, storeRule);
 
     await db.run(UPDATE(D).set({
         recon_variance_kg: result.recon_variance_kg,
@@ -217,6 +260,7 @@ async function reconcileDelivery(deliveryId, srv) {
 }
 
 module.exports = {
+    resolveToleranceFromStore,
     TOLERANCE_BY_FOB_SOURCE,
     TOLERANCE_SOURCE,
     STATUS,

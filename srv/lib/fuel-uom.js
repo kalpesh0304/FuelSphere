@@ -37,6 +37,25 @@ const UOM = 'fuelsphere.UNIT_OF_MEASURE';
  * first two arrive with WP-13.
  */
 const DEFAULT_VOLUME_UOM = 'LTR';
+const DEFAULT_VOLUME_UOM_SOURCE = 'WP11_CONSTANT';
+
+/**
+ * WP-13 — the default volume unit, resolved from SYSTEM_PARAMETERS.
+ *
+ * It is a FALLBACK, not a rule: 01-TARGET-SCHEMA §5 puts the resolution order
+ * at supplier contract, then station, then this. Moving it into the store is
+ * what makes the first two expressible later — a scoped row per station is a
+ * row, where a constant would have needed code.
+ *
+ * The constant is retained as the last resort with its own source label.
+ */
+async function resolveDefaultVolumeUom(scope = {}, asOfDate = null, tx = null) {
+    const { resolveParameter } = require('./parameter-store');
+    const r = await resolveParameter('DEFAULT_VOLUME_UOM', scope, asOfDate, tx);
+    return r.resolved
+        ? { uom: r.value, source: `SYSTEM_PARAMETERS:${r.evidence.parameter_id}`, evidence: r.evidence }
+        : { uom: DEFAULT_VOLUME_UOM, source: DEFAULT_VOLUME_UOM_SOURCE, fallbackReason: r.reason };
+}
 
 /** Where a resolved factor came from, recorded on the order. */
 const SOURCE_UOM_MASTER = 'UOM_MASTER';
@@ -226,6 +245,8 @@ function deriveGaugeFigures({ fob_at_arrival_kg, fob_before_kg, fob_after_kg }) 
 
 module.exports = {
     DEFAULT_VOLUME_UOM,
+    DEFAULT_VOLUME_UOM_SOURCE,
+    resolveDefaultVolumeUom,
     SOURCE_UOM_MASTER,
     resolvePlanningDensity,
     planMassToOrderVolume,

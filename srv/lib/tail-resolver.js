@@ -38,7 +38,30 @@ const POLICY = {
 const UNKNOWN_TAIL_POLICY = POLICY.ACCEPT_PROVISIONAL;
 
 /** Where the value came from, recorded on every decision. */
-const POLICY_SOURCE = 'WP07B_CONSTANT';
+const POLICY_SOURCE = 'WP07B_CONSTANT';   // the fallback's own label, kept for the pure path
+
+/**
+ * WP-13 — resolve the policy from SYSTEM_PARAMETERS.
+ *
+ * WP-07B wrote UNKNOWN_TAIL_POLICY as a named constant with POLICY_SOURCE
+ * beside it, precisely so this move would be a value change rather than a
+ * structural one. The evidence pattern is PRESERVED, not replaced by a bare
+ * lookup: the caller still learns which source produced the value, and now
+ * learns which ROW as well.
+ *
+ * The constant remains as the last resort. CFG401 says a global row must
+ * always exist, so reaching the fallback means the row was deleted — and the
+ * source says so rather than pretending the constant was configuration.
+ */
+async function resolvePolicy(scope = {}, asOfDate = null, tx = null) {
+    const { resolveParameter } = require('./parameter-store');
+    const r = await resolveParameter('UNKNOWN_TAIL_POLICY', scope, asOfDate, tx);
+    if (r.resolved && Object.values(POLICY).includes(r.value)) {
+        return { policy: r.value, source: `SYSTEM_PARAMETERS:${r.evidence.parameter_id}`, evidence: r.evidence };
+    }
+    return { policy: UNKNOWN_TAIL_POLICY, source: POLICY_SOURCE,
+             evidence: null, fallbackReason: r.reason || `resolved '${r.value}', which is not a POLICY member` };
+}
 
 const UNKNOWN_TAIL_REJECTED = 'MDM403';
 
@@ -127,6 +150,7 @@ async function resolveOnto(data, stringField, feed, policy, tx) {
 }
 
 module.exports = {
+    resolvePolicy,
     POLICY, UNKNOWN_TAIL_POLICY, POLICY_SOURCE, UNKNOWN_TAIL_REJECTED,
     BLOCKABLE, isBlockable,
     resolveTail, applyPolicy, resolveOnto
