@@ -171,7 +171,18 @@ annotate FuelOrderService.FuelOrders with @(restrict: [
     { grant: 'confirm',       to: ['FuelOrderApprove'] },
     { grant: 'startDelivery', to: ['FuelOrderCreate', 'FuelOrderApprove'] },
     { grant: 'cancel',        to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
-    { grant: 'calculatePrice', to: ['FuelOrderCreate'] }
+    { grant: 'calculatePrice', to: ['FuelOrderCreate'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'complete',   to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] },
+    { grant: 'crewReview', to: ['FuelOrderCreate', 'FuelOrderApprove', 'AdminAccess'] }
 ]);
 
 // Submit action - Requires FuelOrderCreate scope
@@ -214,7 +225,18 @@ annotate FuelOrderService.FuelDeliveries with @(restrict: [
     { grant: 'dispute',           to: ['ePODApprove'] },
     // WP-17. Declared with its grant in the same change, because D22 makes an
     // action without one unreachable for every user including AdminAccess.
-    { grant: 'reconcile',         to: ['ePODCapture', 'ePODApprove'] }
+    { grant: 'reconcile',         to: ['ePODCapture', 'ePODApprove'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'calculateTemperatureCorrection', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
+    { grant: 'validateDelivery',               to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] }
 ]);
 
 // ePOD Actions authorization
@@ -354,7 +376,17 @@ annotate TicketService.FuelTickets with @(restrict: [
     // D22 - see the note on FuelOrders. Mirrors each action's own @requires.
     { grant: 'attachToDelivery', to: ['ePODCapture'] },
     { grant: 'verify',           to: ['ePODApprove'] },
-    { grant: 'reject',           to: ['ePODApprove'] }
+    { grant: 'reject',           to: ['ePODApprove'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'attachToOrder', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] }
 ]);
 
 // Ticket actions
@@ -407,7 +439,22 @@ annotate BurnService with @(requires: 'authenticated-user');
 annotate BurnService.FuelBurns with @(restrict: [
     { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] },
     { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'confirm',             to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'reject',              to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'recalculateVariance', to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'flagForReview',       to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'completeReview',      to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'postToFinance',       to: ['BurnDataEdit', 'AdminAccess'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -417,7 +464,18 @@ annotate BurnService.FuelBurns with @(restrict: [
 annotate BurnService.ROBLedger with @(restrict: [
     { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] },
     { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'approveAdjustment', to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'rejectAdjustment',  to: ['BurnDataEdit', 'AdminAccess'] }
 ]);
 
 // ----------------------------------------------------------------------------
@@ -427,7 +485,21 @@ annotate BurnService.ROBLedger with @(restrict: [
 annotate BurnService.FuelBurnExceptions with @(restrict: [
     { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] },
     { grant: ['CREATE', 'UPDATE'], to: ['BurnDataEdit', 'AdminAccess'] },
-    { grant: 'DELETE', to: ['AdminAccess'] }
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
+    // own, so there was nothing to mirror and WP-02B could not fix them
+    // mechanically. Decision D26: MIRROR THE ENTITY'S UPDATE GRANT AS A FLOOR
+    // — an action that modifies an entity should require at least what
+    // modifying it directly requires, which widens nothing.
+    //
+    // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
+    // flagged in the pull request for a production review, not decided here.
+    { grant: 'assign',             to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'startInvestigation', to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'resolve',            to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'close',              to: ['BurnDataEdit', 'AdminAccess'] },
+    { grant: 'linkMaintenance',    to: ['BurnDataEdit', 'AdminAccess'] }
 ]);
 
 // ----------------------------------------------------------------------------
