@@ -906,10 +906,29 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         uom_code            : String(3) default 'LTR';  // WP-11: unit of the delivered quantity
 
         // Quality Measurements (FDD-05 validation rules)
-        @assert.range: [-40, 50]  // VAL-EPD-003: Must be between -40°C and +50°C
-        temperature         : Decimal(5,2);             // Fuel temperature (°C)
-        @assert.range: [0.775, 0.840]  // VAL-EPD-004: Jet fuel density range (kg/L)
-        density             : Decimal(8,4);             // Measured density (kg/L)
+        //
+        // WP-13 / D30 — THE @assert.range ANNOTATIONS ARE GONE, DELIBERATELY.
+        //
+        // They held -40/50 and 0.775/0.840 as compile-time literals, which is
+        // the same two numbers EPD403 and EPD404 enforce in the handler. An
+        // annotation cannot read a configuration store, so moving the literal
+        // into TOLERANCE_RULES would have left the annotation enforcing the
+        // old bound: config changes, behaviour does not, and nothing says why.
+        //
+        // Measured under WP-13 before removing them, because "it enforces
+        // nothing" and "it enforces on one path" are different claims:
+        //
+        //   db.run INSERT  (how every handler writes)  STORED, assertion silent
+        //   POST child into a draft                    ACCEPTED 201, deferred
+        //   draftActivate                              REJECTED 400, assertion fires
+        //
+        // So they were real enforcement on exactly one path — the OData draft
+        // path — and silent on the path the handlers use. Replaced by a
+        // resolved check in order-service.js that fires on BOTH, reading the
+        // TOLERANCE_RULES rows TOL-EPD-TEMP and TOL-EPD-DENSITY. The values
+        // are unchanged; only where they live has moved.
+        temperature         : Decimal(5,2);             // Fuel temperature (°C). EPD403, resolved
+        density             : Decimal(8,4);             // Measured density (kg/L). EPD404, resolved
         // WP-12 naming debt, accepted deliberately. The name implies a
         // density correction. It is not one - the computation is the
         // volumetric ASTM D1250 factor, Measured x [1 - 0.00099 x (T - 15)],
@@ -1730,11 +1749,18 @@ type ApprovalAction : String(20) enum {
 /**
  * Tolerance Type Enumeration
  */
+@assert.range: true
 type ToleranceType : String(20) enum {
-    Price       = 'PRICE';
-    Quantity    = 'QUANTITY';
-    Amount      = 'AMOUNT';
-    Date        = 'DATE';
+    Price        = 'PRICE';
+    Quantity     = 'QUANTITY';
+    Amount       = 'AMOUNT';
+    Date         = 'DATE';
+    // WP-13 / D30. None of the three limits this package collects could be
+    // represented as a tolerance rule, because the type had no member for
+    // any of them. A rule table that cannot name the rule is not a store.
+    Temperature  = 'TEMPERATURE';    // EPD403. An absolute band, not a variance
+    Density      = 'DENSITY';        // EPD404. Likewise
+    BurnVariance = 'BURN_VARIANCE';  // The ladder, written out three times
 }
 
 /**
@@ -2132,6 +2158,84 @@ entity INVOICE_EXCEPTION_BYPASSES : cuid, AuditTrail {
  * Configurable thresholds for price, quantity, and amount variances
  * by company code, supplier category, or product type
  */
+/**
+ * ParameterValueType - WP-13
+ *
+ * Which typed column carries this parameter's value. CFG404 requires the
+ * value columns to match the parameter, enforced by constraint rather than by
+ * the screen — this is the discriminator that makes that checkable.
+ */
+@assert.range: true
+type ParameterValueType : String(20) enum {
+    Boolean = 'BOOLEAN';
+    Text    = 'TEXT';
+    Number  = 'NUMBER';
+    Choice  = 'CHOICE';    // One of a stated set, held in allowed_values
+}
+
+/**
+ * SYSTEM_PARAMETERS - WP-13
+ * Source: FuelSphere native (configuration)
+ * Volume: ~100 records
+ *
+ * THE SCALAR PARAMETER STORE. Defect D28: four parameters are named in taken
+ * decisions and none existed anywhere — the only occurrences in the codebase
+ * were comments naming WP-13 as their destination.
+ *
+ * THIS IS NOT TOLERANCE_RULES AND MUST NOT BECOME IT.
+ *
+ *   TOLERANCE_RULES    a RULE table. Keyed on code AND scope, carrying a
+ *                      numeric ladder — warning, error, critical — plus a
+ *                      floor. It answers "how far is too far".
+ *   SYSTEM_PARAMETERS  a SCALAR store. One value per parameter per scope.
+ *                      It answers "which of these is it".
+ *
+ * UNKNOWN_TAIL_POLICY is a single enum with no scope key;
+ * HOLD_PAYMENT_ON_DISCREPANCY is a boolean switch. Fitting either into a rule
+ * table means widening the rule table to hold things that are not rules, and
+ * the ladder columns would sit permanently null beside them.
+ */
+entity SYSTEM_PARAMETERS : cuid, ActiveStatus, AuditTrail {
+        parameter_code      : String(50) @mandatory;      // HOLD_PAYMENT_ON_DISCREPANCY, ...
+        parameter_name      : String(100) @mandatory;
+        description         : String(1000);
+
+        // Typed value. Exactly one column is populated, per value_type.
+        value_type          : ParameterValueType @mandatory;
+        value_boolean       : Boolean;
+        value_text          : String(200);
+        value_number        : Decimal(18,6);
+        // For CHOICE: the values this parameter may take, comma separated.
+        // Held so a resolution can REFUSE an unregistered value rather than
+        // pass it through — the D25 lesson, applied to configuration.
+        allowed_values      : String(500);
+
+        // Scope. NULL means "any" and is what makes a row the global default.
+        // Resolution is by specificity first, then priority, then date.
+        company_code        : String(4);
+        station_code        : String(3);
+
+        // Lower wins, as on TOLERANCE_RULES. The two stores order the same way
+        // deliberately: one resolution rule, learned once.
+        priority            : Integer default 100;
+
+        // Effective dating. CFG402: resolution is AS OF THE TRANSACTION DATE,
+        // never the query date. A parameter changed in March must not
+        // re-evaluate January.
+        valid_from          : Date @mandatory;
+        valid_to            : Date;
+
+        // Provenance. WHICH DECISION put this parameter here, and which
+        // package consumes it. A parameter nobody can trace to a decision is
+        // a literal with a longer name.
+        decision_ref        : String(30);                 // C-1, B9, C-2, 10.3
+        consuming_package   : String(30);                 // The package that reads it
+        // WP-13 registers several parameters it does not wire. A registered
+        // parameter that changes nothing must SAY SO, or the next reader
+        // assumes it is live and edits it expecting an effect.
+        is_wired            : Boolean default false;
+}
+
 entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         rule_code           : String(20) @mandatory;      // Rule identifier
         rule_name           : String(100) @mandatory;     // Display name
@@ -2176,6 +2280,14 @@ entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         warning_threshold   : Decimal(10,4);              // Below this, nothing is raised
         error_threshold     : Decimal(10,4);              // Above this, the SOFT rung
         critical_threshold  : Decimal(10,4);              // Above this, the HARD rung
+
+        // WP-13. A PERCENTAGE ALONE CANNOT WORK on a small quantity, which is
+        // the reason WP-17's FOB tolerances were a percentage AND a floor:
+        // 100 kg of crew rounding is 0.9% of a narrowbody uplift and 25% of a
+        // 400 kg top-up. The effective tolerance is the greater of the two.
+        // Nullable — a rule with no floor is a pure percentage, as before.
+        floor_value         : Decimal(15,4);              // Absolute floor, in the measure's own unit
+        floor_uom           : String(3);                  // KG, LTR, ... for the floor only
 
         // Blocking Behavior
         block_on_exceed     : Boolean default true;       // Block invoice if exceeded
