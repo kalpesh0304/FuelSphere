@@ -162,7 +162,7 @@ npm run build        # production build
 
 ### Test users — `.cdsrc.json`
 
-Twelve named users. Roles are **scope names**, not persona names.
+**Thirteen entries — the twelve named below plus a `*` fallback.** Nothing depends on the fallback. Roles are **scope names**, not persona names.
 
 | User | Roles | station | region |
 |---|---|---|---|
