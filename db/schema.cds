@@ -907,26 +907,22 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
 
         // Quality Measurements (FDD-05 validation rules)
         //
-        // WP-13 / D30 — THE @assert.range ANNOTATIONS ARE GONE, DELIBERATELY.
+        // WP-13 / D30 — THE ANNOTATIONS ARE CONVERTED TO COMMENTS, NOT DELETED.
         //
-        // They held -40/50 and 0.775/0.840 as compile-time literals, which is
-        // the same two numbers EPD403 and EPD404 enforce in the handler. An
-        // annotation cannot read a configuration store, so moving the literal
-        // into TOLERANCE_RULES would have left the annotation enforcing the
-        // old bound: config changes, behaviour does not, and nothing says why.
+        //     @assert.range: [-40, 50]     VAL-EPD-003, EPD403
+        //     @assert.range: [0.775, 0.840] VAL-EPD-004, EPD404
         //
-        // Measured under WP-13 before removing them, because "it enforces
-        // nothing" and "it enforces on one path" are different claims:
+        // They ENFORCED. Measured before removal: on a draft-enabled entity
+        // CAP defers input validation to draftActivate, and both rejected
+        // there with the bound named. They are removed for one reason only —
+        // AN ANNOTATION CANNOT READ A CONFIGURATION STORE, so leaving them
+        // live would mean the store moves and the enforced bound does not.
         //
-        //   db.run INSERT  (how every handler writes)  STORED, assertion silent
-        //   POST child into a draft                    ACCEPTED 201, deferred
-        //   draftActivate                              REJECTED 400, assertion fires
-        //
-        // So they were real enforcement on exactly one path — the OData draft
-        // path — and silent on the path the handlers use. Replaced by a
-        // resolved check in order-service.js that fires on BOTH, reading the
-        // TOLERANCE_RULES rows TOL-EPD-TEMP and TOL-EPD-DENSITY. The values
-        // are unchanged; only where they live has moved.
+        // Enforced now by EPD403 and EPD404 in order-service.js, resolved
+        // from TOLERANCE_RULES rows TOL-EPD-TEMP and TOL-EPD-DENSITY, at the
+        // same values. Deleting outright would lose the documented intent;
+        // leaving them live would keep something that looks like enforcement
+        // and no longer is.
         temperature         : Decimal(5,2);             // Fuel temperature (°C). EPD403, resolved
         density             : Decimal(8,4);             // Measured density (kg/L). EPD404, resolved
         // WP-12 naming debt, accepted deliberately. The name implies a
@@ -2159,14 +2155,14 @@ entity INVOICE_EXCEPTION_BYPASSES : cuid, AuditTrail {
  * by company code, supplier category, or product type
  */
 /**
- * ParameterValueType - WP-13
+ * ConfigValueType - WP-13
  *
- * Which typed column carries this parameter's value. CFG404 requires the
+ * Which typed column carries a PARAMETER row's value. CFG404 requires the
  * value columns to match the parameter, enforced by constraint rather than by
  * the screen — this is the discriminator that makes that checkable.
  */
 @assert.range: true
-type ParameterValueType : String(20) enum {
+type ConfigValueType : String(20) enum {
     Boolean = 'BOOLEAN';
     Text    = 'TEXT';
     Number  = 'NUMBER';
@@ -2174,77 +2170,74 @@ type ParameterValueType : String(20) enum {
 }
 
 /**
- * SYSTEM_PARAMETERS - WP-13
+ * ConfigRowKind - WP-13
+ *
+ * ONE STORE, TWO KINDS OF ROW. TOLERANCE_RULES is already named Parameter
+ * Configuration and its scope columns are already nullable, so a scalar with
+ * no scope fits it. A second entity would put parameter configuration in two
+ * places, which is what the no-second-store rule exists to prevent.
+ *
+ * The kind says which columns carry the answer:
+ *
+ *   PARAMETER  value_type + one of value_boolean / value_text / value_number,
+ *              with allowed_values where the type is CHOICE.
+ *              The ladder columns are null
+ *   TOLERANCE  lower_limit / upper_limit, or the ladder
+ *              warning_threshold / error_threshold / critical_threshold,
+ *              plus floor_value. The value columns are null
+ */
+@assert.range: true
+type ConfigRowKind : String(20) enum {
+    Parameter = 'PARAMETER';
+    Tolerance = 'TOLERANCE';
+}
+
+/**
+ * TOLERANCE_RULES - Parameter and Tolerance Configuration
  * Source: FuelSphere native (configuration)
  * Volume: ~100 records
  *
- * THE SCALAR PARAMETER STORE. Defect D28: four parameters are named in taken
- * decisions and none existed anywhere — the only occurrences in the codebase
- * were comments naming WP-13 as their destination.
+ * THE ONE CONFIGURATION STORE. Its own header already called it Parameter
+ * Configuration, and its scope columns were always nullable — so a scalar
+ * parameter with no scope was always representable here.
  *
- * THIS IS NOT TOLERANCE_RULES AND MUST NOT BECOME IT.
- *
- *   TOLERANCE_RULES    a RULE table. Keyed on code AND scope, carrying a
- *                      numeric ladder — warning, error, critical — plus a
- *                      floor. It answers "how far is too far".
- *   SYSTEM_PARAMETERS  a SCALAR store. One value per parameter per scope.
- *                      It answers "which of these is it".
- *
- * UNKNOWN_TAIL_POLICY is a single enum with no scope key;
- * HOLD_PAYMENT_ON_DISCREPANCY is a boolean switch. Fitting either into a rule
- * table means widening the rule table to hold things that are not rules, and
- * the ladder columns would sit permanently null beside them.
+ * Resolution is the same for both kinds, deliberately — one rule, learned
+ * once: SPECIFICITY, then PRIORITY, then DATE, as of the TRANSACTION date and
+ * never the query date (CFG402), returning the row that resolved (CFG406).
  */
-entity SYSTEM_PARAMETERS : cuid, ActiveStatus, AuditTrail {
-        parameter_code      : String(50) @mandatory;      // HOLD_PAYMENT_ON_DISCREPANCY, ...
-        parameter_name      : String(100) @mandatory;
-        description         : String(1000);
+entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
+        rule_code           : String(20) @mandatory;      // Rule identifier, or PARAMETER code
+        rule_name           : String(100) @mandatory;     // Display name
+        description         : String(500);                // Rule description
 
-        // Typed value. Exactly one column is populated, per value_type.
-        value_type          : ParameterValueType @mandatory;
+        // WP-13. Which kind of row this is, and therefore which columns
+        // carry the answer. Defaults to TOLERANCE so every pre-existing row
+        // keeps its meaning without being touched.
+        row_kind            : ConfigRowKind default 'TOLERANCE';
+
+        // ---- PARAMETER rows only. Null on a TOLERANCE row ----------------
+        value_type          : ConfigValueType;
         value_boolean       : Boolean;
         value_text          : String(200);
         value_number        : Decimal(18,6);
         // For CHOICE: the values this parameter may take, comma separated.
         // Held so a resolution can REFUSE an unregistered value rather than
-        // pass it through — the D25 lesson, applied to configuration.
+        // pass it through — D25 applied to configuration.
         allowed_values      : String(500);
 
-        // Scope. NULL means "any" and is what makes a row the global default.
-        // Resolution is by specificity first, then priority, then date.
-        company_code        : String(4);
-        station_code        : String(3);
-
-        // Lower wins, as on TOLERANCE_RULES. The two stores order the same way
-        // deliberately: one resolution rule, learned once.
-        priority            : Integer default 100;
-
-        // Effective dating. CFG402: resolution is AS OF THE TRANSACTION DATE,
-        // never the query date. A parameter changed in March must not
-        // re-evaluate January.
-        valid_from          : Date @mandatory;
-        valid_to            : Date;
-
-        // Provenance. WHICH DECISION put this parameter here, and which
-        // package consumes it. A parameter nobody can trace to a decision is
-        // a literal with a longer name.
+        // Provenance. A parameter nobody can trace to a decision is a literal
+        // with a longer name. is_wired exists because WP-13 registers four
+        // parameters and wires one — a registered parameter that changes
+        // nothing must SAY so, or the next reader edits it expecting an effect.
         decision_ref        : String(30);                 // C-1, B9, C-2, 10.3
-        consuming_package   : String(30);                 // The package that reads it
-        // WP-13 registers several parameters it does not wire. A registered
-        // parameter that changes nothing must SAY SO, or the next reader
-        // assumes it is live and edits it expecting an effect.
+        consuming_package   : String(30);
         is_wired            : Boolean default false;
-}
-
-entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
-        rule_code           : String(20) @mandatory;      // Rule identifier
-        rule_name           : String(100) @mandatory;     // Display name
-        description         : String(500);                // Rule description
 
         // Scope
         company_code        : String(4);                  // Company code (NULL = all)
         supplier_category   : String(20);                 // Supplier category (NULL = all)
         product_type        : String(20);                 // Product type (NULL = all)
+        station_code        : String(3);                  // WP-13: station scope (NULL = all)
 
         // WP-21A. WHICH CONTROL these limits belong to. Without it a quantity
         // tolerance is a quantity tolerance for everything, and the invoice
@@ -2253,7 +2246,11 @@ entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         applies_to          : String(30);                 // INVOICE_LINE, DELIVERY_FOB, ... (NULL = any)
 
         // Tolerance Type & Values
-        tolerance_type      : ToleranceType @mandatory;   // PRICE / QUANTITY / AMOUNT / DATE
+        // WP-13 — RELAXED. @mandatory was correct while every row was a
+        // tolerance; a PARAMETER row has no tolerance type. Three readers
+        // surveyed, all filters (invoice-checks.js:123, parameter-store.js:130
+        // and :155), so a null simply fails to match rather than breaking one.
+        tolerance_type      : ToleranceType;              // PRICE / QUANTITY / ... Null on a PARAMETER row
         lower_limit         : Decimal(10,4);              // Lower tolerance (negative variance)
         upper_limit         : Decimal(10,4);              // Upper tolerance (positive variance)
         is_percentage       : Boolean default true;       // True = %, False = absolute value
