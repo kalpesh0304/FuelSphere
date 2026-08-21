@@ -21,6 +21,7 @@ const {
 } = require('./lib/aircraft-register');
 const {
     DEFAULT_VOLUME_UOM,
+    resolveDefaultVolumeUom,
     planMassToOrderVolume,
     isMassUom,
     deriveGaugeFigures
@@ -28,7 +29,7 @@ const {
 const {
     reconcile: reconcileFigures,
     reconcileDelivery,
-    resolveTolerance,
+    resolveTolerance, resolveToleranceFromStore,
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const {
@@ -37,13 +38,17 @@ const {
     deriveStack, resolvePlanGroup, classifyVersion, isResend
 } = require('./lib/dispatch-plan');
 const {
-    resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY
+    resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY,
+    resolvePolicy
 } = require('./lib/tail-resolver');
 // Helper to extract entity ID from bound action params (handles draft-enabled entities)
 const _id = (params) => {
     const p = params[0];
     return typeof p === 'object' ? p.ID : p;
 };
+
+const PARAM = require('./lib/parameter-store');
+const { resolveToleranceRule, withinBand } = PARAM;
 
 module.exports = class FuelOrderService extends cds.ApplicationService {
     async init() {
@@ -407,7 +412,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 supplier_ID: supplierId,
                 contract_ID: contractId,
                 product_ID: productId,
-                uom_code: DEFAULT_VOLUME_UOM,
+                uom_code: (await resolveDefaultVolumeUom()).uom,
                 ordered_quantity: orderedQuantity,
                 ...(converted ? {
                     ordered_quantity: converted.quantity,
@@ -662,7 +667,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 ? Number((Number(delivery.fob_after_kg) - Number(delivery.fob_before_kg)).toFixed(2))
                 : null;
 
-            const rule = resolveTolerance(delivery.fob_source);
+            const rule = await resolveToleranceFromStore(delivery.fob_source, {}, delivery.delivery_date);
             const tol = (rule && meteredKg !== null) ? toleranceKg(rule, meteredKg) : null;
 
             // C-1: this reports. It does NOT gate anything. The supplier is
@@ -700,19 +705,27 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 errors.push({ code: 'EPD401', field: 'delivered_quantity', message: `Delivered quantity ${delivery.delivered_quantity} kg exceeds ordered ${order.ordered_quantity} kg by more than 5%.`, severity: 'ERROR' });
             }
 
-            // VAL-EPD-003: Temperature range
+            // VAL-EPD-003: Temperature range. WP-13 — resolved, not literal.
+            const _tempRule = await resolveToleranceRule({ ruleCode: 'TOL-EPD-TEMP' }, {}, delivery.delivery_date);
             if (delivery.temperature !== null && delivery.temperature !== undefined) {
-                if (delivery.temperature < -40 || delivery.temperature > 50) {
-                    errors.push({ code: 'EPD403', field: 'temperature', message: `Temperature ${delivery.temperature}°C is out of range (-40°C to +50°C).`, severity: 'ERROR' });
+                const b = withinBand(delivery.temperature, _tempRule.rule);
+                if (b.checked && !b.within) {
+                    errors.push({ code: 'EPD403', field: 'temperature', message: `Temperature ${delivery.temperature}°C is out of range (${b.lower}°C to ${b.upper}°C), per ${_tempRule.evidence.rule_code}.`, severity: 'ERROR' });
+                } else if (!b.checked) {
+                    errors.push({ code: 'EPD403', field: 'temperature', message: _tempRule.reason, severity: 'ERROR' });
                 }
             } else {
                 warnings.push({ code: 'EPD403', field: 'temperature', message: 'Temperature not recorded.', severity: 'WARNING' });
             }
 
-            // VAL-EPD-004: Density range
+            // VAL-EPD-004: Density range. WP-13 — resolved, not literal.
+            const _densRule = await resolveToleranceRule({ ruleCode: 'TOL-EPD-DENSITY' }, {}, delivery.delivery_date);
             if (delivery.density !== null && delivery.density !== undefined) {
-                if (delivery.density < 0.775 || delivery.density > 0.840) {
-                    errors.push({ code: 'EPD404', field: 'density', message: `Density ${delivery.density} kg/L is out of specification (0.775 - 0.840 kg/L).`, severity: 'ERROR' });
+                const b = withinBand(delivery.density, _densRule.rule);
+                if (b.checked && !b.within) {
+                    errors.push({ code: 'EPD404', field: 'density', message: `Density ${delivery.density} kg/L is out of specification (${b.lower} - ${b.upper} kg/L), per ${_densRule.evidence.rule_code}.`, severity: 'ERROR' });
+                } else if (!b.checked) {
+                    errors.push({ code: 'EPD404', field: 'density', message: _densRule.reason, severity: 'ERROR' });
                 }
             } else {
                 warnings.push({ code: 'EPD404', field: 'density', message: 'Density not recorded.', severity: 'WARNING' });
@@ -916,7 +929,12 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // WP-07B. Flight dispatch is a PLANNING feed, so REJECT may
             // block it. Read once per import so one upload is judged by one
             // rule.
-            const policy = req.data.unknownTailPolicy || UNKNOWN_TAIL_POLICY;
+            // WP-13. The policy now RESOLVES from TOLERANCE_RULES. An explicit
+            // parameter on the call still wins — that is the operator
+            // overriding configuration for one run, not configuration itself.
+            const _pol = await resolvePolicy();
+            const policy = req.data.unknownTailPolicy || _pol.policy;
+            const policySource = req.data.unknownTailPolicy ? 'CALLER' : _pol.source;
 
             const dispatchesToInsert = [];
             const supersessions = [];              // WP-18: rows this upload supersedes
@@ -1218,6 +1236,52 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 message
             };
         });
+
+        // ================================================================
+        // WP-13 / D30 — THE RESOLVED LIMIT IS THE ENFORCED LIMIT
+        //
+        // @assert.range: [-40, 50] and [0.775, 0.840] were removed from
+        // db/schema.cds. They were compile-time literals, so a store could
+        // never move them — config would have changed and behaviour would
+        // not, which is the trap D30 names.
+        //
+        // Measured before removing them. They fired on ONE path:
+        //
+        //   db.run INSERT        STORED, assertion silent
+        //   POST child to draft  ACCEPTED 201, deferred
+        //   draftActivate        REJECTED 400
+        //
+        // This replaces them on BOTH, which is strictly more than they
+        // covered — the db registration closes the hole every handler wrote
+        // through. Same values, resolved from TOL-EPD-TEMP and
+        // TOL-EPD-DENSITY.
+        // ================================================================
+        const qualityGuard = PARAM.qualityGuard;
+
+        // A handler reading its OWN row needs the draft path too — WP-12.
+        this.before(['CREATE','UPDATE'], FuelDeliveries, qualityGuard);
+        if (FuelDeliveries.drafts) this.before(['CREATE','UPDATE'], FuelDeliveries.drafts, qualityGuard);
+        // THE db.run PATH CANNOT BE GUARDED, and this is measured rather
+        // than assumed. A before handler on the database service does NOT
+        // fire on db.run(INSERT.into(...)) — one registered inside the test
+        // itself fired zero times. So the raw-CQN path has no interception
+        // point, which is also why @assert.range never fired on it.
+        //
+        // Nothing is registered there. A no-op registration that reads as
+        // coverage is worse than an acknowledged gap: this is the same family
+        // as a declared action with no handler, which looks like it worked.
+        // Recorded as a finding instead.
+        //
+        // A handler reading its OWN row needs the draft path too — WP-12.
+        this.before(['CREATE','UPDATE'], FuelDeliveries, qualityGuard);
+        if (FuelDeliveries.drafts) this.before(['CREATE','UPDATE'], FuelDeliveries.drafts, qualityGuard);
+        // The DATABASE layer, which is how every handler in this repository
+        // writes and where @assert.range never fired at all.
+        //
+        // Deferred to 'served' because cds.db is NOT AVAILABLE during service
+        // init — measured under WP-13: registering there silently no-ops and
+        // the guard never fires. Registered once, guarded against a second
+        // registration if the service is initialised twice in one process.
 
         await super.init();
     }

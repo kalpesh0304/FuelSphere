@@ -906,10 +906,25 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         uom_code            : String(3) default 'LTR';  // WP-11: unit of the delivered quantity
 
         // Quality Measurements (FDD-05 validation rules)
-        @assert.range: [-40, 50]  // VAL-EPD-003: Must be between -40°C and +50°C
-        temperature         : Decimal(5,2);             // Fuel temperature (°C)
-        @assert.range: [0.775, 0.840]  // VAL-EPD-004: Jet fuel density range (kg/L)
-        density             : Decimal(8,4);             // Measured density (kg/L)
+        //
+        // WP-13 / D30 — THE ANNOTATIONS ARE CONVERTED TO COMMENTS, NOT DELETED.
+        //
+        //     @assert.range: [-40, 50]     VAL-EPD-003, EPD403
+        //     @assert.range: [0.775, 0.840] VAL-EPD-004, EPD404
+        //
+        // They ENFORCED. Measured before removal: on a draft-enabled entity
+        // CAP defers input validation to draftActivate, and both rejected
+        // there with the bound named. They are removed for one reason only —
+        // AN ANNOTATION CANNOT READ A CONFIGURATION STORE, so leaving them
+        // live would mean the store moves and the enforced bound does not.
+        //
+        // Enforced now by EPD403 and EPD404 in order-service.js, resolved
+        // from TOLERANCE_RULES rows TOL-EPD-TEMP and TOL-EPD-DENSITY, at the
+        // same values. Deleting outright would lose the documented intent;
+        // leaving them live would keep something that looks like enforcement
+        // and no longer is.
+        temperature         : Decimal(5,2);             // Fuel temperature (°C). EPD403, resolved
+        density             : Decimal(8,4);             // Measured density (kg/L). EPD404, resolved
         // WP-12 naming debt, accepted deliberately. The name implies a
         // density correction. It is not one - the computation is the
         // volumetric ASTM D1250 factor, Measured x [1 - 0.00099 x (T - 15)],
@@ -1730,11 +1745,18 @@ type ApprovalAction : String(20) enum {
 /**
  * Tolerance Type Enumeration
  */
+@assert.range: true
 type ToleranceType : String(20) enum {
-    Price       = 'PRICE';
-    Quantity    = 'QUANTITY';
-    Amount      = 'AMOUNT';
-    Date        = 'DATE';
+    Price        = 'PRICE';
+    Quantity     = 'QUANTITY';
+    Amount       = 'AMOUNT';
+    Date         = 'DATE';
+    // WP-13 / D30. None of the three limits this package collects could be
+    // represented as a tolerance rule, because the type had no member for
+    // any of them. A rule table that cannot name the rule is not a store.
+    Temperature  = 'TEMPERATURE';    // EPD403. An absolute band, not a variance
+    Density      = 'DENSITY';        // EPD404. Likewise
+    BurnVariance = 'BURN_VARIANCE';  // The ladder, written out three times
 }
 
 /**
@@ -2132,15 +2154,90 @@ entity INVOICE_EXCEPTION_BYPASSES : cuid, AuditTrail {
  * Configurable thresholds for price, quantity, and amount variances
  * by company code, supplier category, or product type
  */
+/**
+ * ConfigValueType - WP-13
+ *
+ * Which typed column carries a PARAMETER row's value. CFG404 requires the
+ * value columns to match the parameter, enforced by constraint rather than by
+ * the screen — this is the discriminator that makes that checkable.
+ */
+@assert.range: true
+type ConfigValueType : String(20) enum {
+    Boolean = 'BOOLEAN';
+    Text    = 'TEXT';
+    Number  = 'NUMBER';
+    Choice  = 'CHOICE';    // One of a stated set, held in allowed_values
+}
+
+/**
+ * ConfigRowKind - WP-13
+ *
+ * ONE STORE, TWO KINDS OF ROW. TOLERANCE_RULES is already named Parameter
+ * Configuration and its scope columns are already nullable, so a scalar with
+ * no scope fits it. A second entity would put parameter configuration in two
+ * places, which is what the no-second-store rule exists to prevent.
+ *
+ * The kind says which columns carry the answer:
+ *
+ *   PARAMETER  value_type + one of value_boolean / value_text / value_number,
+ *              with allowed_values where the type is CHOICE.
+ *              The ladder columns are null
+ *   TOLERANCE  lower_limit / upper_limit, or the ladder
+ *              warning_threshold / error_threshold / critical_threshold,
+ *              plus floor_value. The value columns are null
+ */
+@assert.range: true
+type ConfigRowKind : String(20) enum {
+    Parameter = 'PARAMETER';
+    Tolerance = 'TOLERANCE';
+}
+
+/**
+ * TOLERANCE_RULES - Parameter and Tolerance Configuration
+ * Source: FuelSphere native (configuration)
+ * Volume: ~100 records
+ *
+ * THE ONE CONFIGURATION STORE. Its own header already called it Parameter
+ * Configuration, and its scope columns were always nullable — so a scalar
+ * parameter with no scope was always representable here.
+ *
+ * Resolution is the same for both kinds, deliberately — one rule, learned
+ * once: SPECIFICITY, then PRIORITY, then DATE, as of the TRANSACTION date and
+ * never the query date (CFG402), returning the row that resolved (CFG406).
+ */
 entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
-        rule_code           : String(20) @mandatory;      // Rule identifier
+        rule_code           : String(20) @mandatory;      // Rule identifier, or PARAMETER code
         rule_name           : String(100) @mandatory;     // Display name
         description         : String(500);                // Rule description
+
+        // WP-13. Which kind of row this is, and therefore which columns
+        // carry the answer. Defaults to TOLERANCE so every pre-existing row
+        // keeps its meaning without being touched.
+        row_kind            : ConfigRowKind default 'TOLERANCE';
+
+        // ---- PARAMETER rows only. Null on a TOLERANCE row ----------------
+        value_type          : ConfigValueType;
+        value_boolean       : Boolean;
+        value_text          : String(200);
+        value_number        : Decimal(18,6);
+        // For CHOICE: the values this parameter may take, comma separated.
+        // Held so a resolution can REFUSE an unregistered value rather than
+        // pass it through — D25 applied to configuration.
+        allowed_values      : String(500);
+
+        // Provenance. A parameter nobody can trace to a decision is a literal
+        // with a longer name. is_wired exists because WP-13 registers four
+        // parameters and wires one — a registered parameter that changes
+        // nothing must SAY so, or the next reader edits it expecting an effect.
+        decision_ref        : String(30);                 // C-1, B9, C-2, 10.3
+        consuming_package   : String(30);
+        is_wired            : Boolean default false;
 
         // Scope
         company_code        : String(4);                  // Company code (NULL = all)
         supplier_category   : String(20);                 // Supplier category (NULL = all)
         product_type        : String(20);                 // Product type (NULL = all)
+        station_code        : String(3);                  // WP-13: station scope (NULL = all)
 
         // WP-21A. WHICH CONTROL these limits belong to. Without it a quantity
         // tolerance is a quantity tolerance for everything, and the invoice
@@ -2149,7 +2246,11 @@ entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         applies_to          : String(30);                 // INVOICE_LINE, DELIVERY_FOB, ... (NULL = any)
 
         // Tolerance Type & Values
-        tolerance_type      : ToleranceType @mandatory;   // PRICE / QUANTITY / AMOUNT / DATE
+        // WP-13 — RELAXED. @mandatory was correct while every row was a
+        // tolerance; a PARAMETER row has no tolerance type. Three readers
+        // surveyed, all filters (invoice-checks.js:123, parameter-store.js:130
+        // and :155), so a null simply fails to match rather than breaking one.
+        tolerance_type      : ToleranceType;              // PRICE / QUANTITY / ... Null on a PARAMETER row
         lower_limit         : Decimal(10,4);              // Lower tolerance (negative variance)
         upper_limit         : Decimal(10,4);              // Upper tolerance (positive variance)
         is_percentage       : Boolean default true;       // True = %, False = absolute value
@@ -2176,6 +2277,14 @@ entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
         warning_threshold   : Decimal(10,4);              // Below this, nothing is raised
         error_threshold     : Decimal(10,4);              // Above this, the SOFT rung
         critical_threshold  : Decimal(10,4);              // Above this, the HARD rung
+
+        // WP-13. A PERCENTAGE ALONE CANNOT WORK on a small quantity, which is
+        // the reason WP-17's FOB tolerances were a percentage AND a floor:
+        // 100 kg of crew rounding is 0.9% of a narrowbody uplift and 25% of a
+        // 400 kg top-up. The effective tolerance is the greater of the two.
+        // Nullable — a rule with no floor is a pure percentage, as before.
+        floor_value         : Decimal(15,4);              // Absolute floor, in the measure's own unit
+        floor_uom           : String(3);                  // KG, LTR, ... for the floor only
 
         // Blocking Behavior
         block_on_exceed     : Boolean default true;       // Block invoice if exceeded

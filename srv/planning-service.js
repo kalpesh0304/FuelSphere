@@ -5,12 +5,15 @@
  */
 
 const cds = require('@sap/cds');
-const { resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY } = require('./lib/tail-resolver');
+const { resolveTail, applyPolicy, UNKNOWN_TAIL_POLICY,
+    resolvePolicy } = require('./lib/tail-resolver');
 const { SELECT, INSERT, UPDATE } = cds.ql;
 const XLSX = require('xlsx');
 const { allocateOrderNumber, reportAllocationError } = require('./lib/number-range');
 const { assertOrderable } = require('./lib/aircraft-register');
-const { DEFAULT_VOLUME_UOM } = require('./lib/fuel-uom');
+const { DEFAULT_VOLUME_UOM,
+    resolveDefaultVolumeUom
+} = require('./lib/fuel-uom');
 
 module.exports = class PlanningService extends cds.ApplicationService {
     async init() {
@@ -44,7 +47,12 @@ module.exports = class PlanningService extends cds.ApplicationService {
             // single upload cannot be judged by two different rules. The
             // request may override it; the constant is the default until
             // WP-13 makes it a resolved parameter.
-            const policy = req.data.unknownTailPolicy || UNKNOWN_TAIL_POLICY;
+            // WP-13. The policy now RESOLVES from TOLERANCE_RULES. An explicit
+            // parameter on the call still wins — that is the operator
+            // overriding configuration for one run, not configuration itself.
+            const _pol = await resolvePolicy();
+            const policy = req.data.unknownTailPolicy || _pol.policy;
+            const policySource = req.data.unknownTailPolicy ? 'CALLER' : _pol.source;
             const tailDecisions = new Map();   // row number -> resolved registration
             let ordersCreated = 0, ordersFailed = 0;
 
@@ -338,7 +346,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
                         flight_ID: flightId,
                         airport_ID: airportID,
                         station_code: originAirport,
-                        uom_code: DEFAULT_VOLUME_UOM,
+                        uom_code: (await resolveDefaultVolumeUom()).uom,
                         ordered_quantity: orderedQuantity || 0,
                         requested_date: flightDate,
                         priority: 'Normal',
@@ -625,7 +633,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
             flight_ID: flight.ID,
             airport_ID: airport ? airport.ID : null,
             station_code: stationCode,
-            uom_code: DEFAULT_VOLUME_UOM,
+            uom_code: (await resolveDefaultVolumeUom()).uom,
             ordered_quantity: 0,
             requested_date: flight.flight_date,
             priority: 'Normal',

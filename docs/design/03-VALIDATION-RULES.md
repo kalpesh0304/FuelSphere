@@ -1,7 +1,7 @@
 # 03-VALIDATION-RULES.md
 
 **FuelSphere — validation rules with error codes**
-215 rules, every one carrying a code from the project taxonomy.
+218 rules, every one carrying a code from the project taxonomy.
 
 ---
 
@@ -237,7 +237,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 
 ### CFG4xx — Configuration resolution
 
-6 rules · 4 against entities that exist today · package: WP-13
+9 rules · 7 against entities that exist today · package: WP-13
 
 | Code | Was | Applies to | Rule | Severity |
 |---|---|---|---|---|
@@ -247,6 +247,9 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `CFG404` | VR45 | `TOLERANCE_RULES` | Value columns must match the parameter_code; enforce by check constraint, not by the config screen | Error |
 | `CFG405` | VR46 | `—` | Rows are immutable once written; a later config change never alters an applied value | Error |
 | `CFG406` | VR47 | `—` | Every tolerance driven status must have a corresponding applied row naming the parameter_id used | Error |
+| `CFG450` | — | `SYSTEM_PARAMETERS` | No parameter row is in scope at the transaction date. CFG401 requires a global row to always exist, so this is a configuration defect rather than an absent value | Error |
+| `CFG451` | — | `TOLERANCE_RULES` | No tolerance rule is in scope at the transaction date, for the same reason | Error |
+| `CFG452` | — | `SYSTEM_PARAMETERS` | A CHOICE parameter resolved to a value outside its own allowed_values. Declaring the set is not enforcing it unless something checks | Error |
 
 ### STG4xx — Inbound staging
 
