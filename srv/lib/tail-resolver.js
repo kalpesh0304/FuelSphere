@@ -41,7 +41,7 @@ const UNKNOWN_TAIL_POLICY = POLICY.ACCEPT_PROVISIONAL;
 const POLICY_SOURCE = 'WP07B_CONSTANT';   // the fallback's own label, kept for the pure path
 
 /**
- * WP-13 — resolve the policy from SYSTEM_PARAMETERS.
+ * WP-13 — resolve the policy from TOLERANCE_RULES.
  *
  * WP-07B wrote UNKNOWN_TAIL_POLICY as a named constant with POLICY_SOURCE
  * beside it, precisely so this move would be a value change rather than a
@@ -57,7 +57,7 @@ async function resolvePolicy(scope = {}, asOfDate = null, tx = null) {
     const { resolveParameter } = require('./parameter-store');
     const r = await resolveParameter('UNKNOWN_TAIL_POLICY', scope, asOfDate, tx);
     if (r.resolved && Object.values(POLICY).includes(r.value)) {
-        return { policy: r.value, source: `SYSTEM_PARAMETERS:${r.evidence.parameter_id}`, evidence: r.evidence };
+        return { policy: r.value, source: `TOLERANCE_RULES:${r.evidence.parameter_id}`, evidence: r.evidence };
     }
     return { policy: UNKNOWN_TAIL_POLICY, source: POLICY_SOURCE,
              evidence: null, fallbackReason: r.reason || `resolved '${r.value}', which is not a POLICY member` };

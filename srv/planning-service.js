@@ -47,7 +47,7 @@ module.exports = class PlanningService extends cds.ApplicationService {
             // single upload cannot be judged by two different rules. The
             // request may override it; the constant is the default until
             // WP-13 makes it a resolved parameter.
-            // WP-13. The policy now RESOLVES from SYSTEM_PARAMETERS. An explicit
+            // WP-13. The policy now RESOLVES from TOLERANCE_RULES. An explicit
             // parameter on the call still wins — that is the operator
             // overriding configuration for one run, not configuration itself.
             const _pol = await resolvePolicy();

@@ -40,7 +40,7 @@ const DEFAULT_VOLUME_UOM = 'LTR';
 const DEFAULT_VOLUME_UOM_SOURCE = 'WP11_CONSTANT';
 
 /**
- * WP-13 — the default volume unit, resolved from SYSTEM_PARAMETERS.
+ * WP-13 — the default volume unit, resolved from TOLERANCE_RULES.
  *
  * It is a FALLBACK, not a rule: 01-TARGET-SCHEMA §5 puts the resolution order
  * at supplier contract, then station, then this. Moving it into the store is
@@ -53,7 +53,7 @@ async function resolveDefaultVolumeUom(scope = {}, asOfDate = null, tx = null) {
     const { resolveParameter } = require('./parameter-store');
     const r = await resolveParameter('DEFAULT_VOLUME_UOM', scope, asOfDate, tx);
     return r.resolved
-        ? { uom: r.value, source: `SYSTEM_PARAMETERS:${r.evidence.parameter_id}`, evidence: r.evidence }
+        ? { uom: r.value, source: `TOLERANCE_RULES:${r.evidence.parameter_id}`, evidence: r.evidence }
         : { uom: DEFAULT_VOLUME_UOM, source: DEFAULT_VOLUME_UOM_SOURCE, fallbackReason: r.reason };
 }
 

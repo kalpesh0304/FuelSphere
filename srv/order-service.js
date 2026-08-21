@@ -929,7 +929,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // WP-07B. Flight dispatch is a PLANNING feed, so REJECT may
             // block it. Read once per import so one upload is judged by one
             // rule.
-            // WP-13. The policy now RESOLVES from SYSTEM_PARAMETERS. An explicit
+            // WP-13. The policy now RESOLVES from TOLERANCE_RULES. An explicit
             // parameter on the call still wins — that is the operator
             // overriding configuration for one run, not configuration itself.
             const _pol = await resolvePolicy();

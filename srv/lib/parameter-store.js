@@ -1,12 +1,14 @@
 /**
  * FuelSphere - Configuration resolution (WP-13)
  *
- * TWO STORES, EACH SHAPED FOR ITS JOB.
+ * ONE STORE, TWO KINDS OF ROW. TOLERANCE_RULES was already named Parameter
+ * Configuration and its scope columns were already nullable, so a scalar with
+ * no scope always fitted it. A second entity would have put parameter
+ * configuration in two places.
  *
- *   SYSTEM_PARAMETERS  scalar. One typed value per parameter per scope.
- *                      "Which of these is it." D28's four live here
- *   TOLERANCE_RULES    a rule table. A numeric ladder and a floor, keyed on
- *                      code and scope. "How far is too far"
+ *   row_kind = PARAMETER   scalar. value_type plus one typed value column.
+ *                          "Which of these is it." D28's four live here
+ *   row_kind = TOLERANCE   a ladder and a floor. "How far is too far"
  *
  * Both resolve the same way, deliberately — one rule, learned once:
  *
@@ -62,13 +64,13 @@ function inScope(rows, scope, asOf, fields) {
 async function resolveParameter(code, scope = {}, asOfDate = null, tx = null) {
     const db = tx || cds.db;
     const asOf = d(asOfDate) || today();
-    const rows = await db.run(SELECT.from('fuelsphere.SYSTEM_PARAMETERS')
-        .where({ parameter_code: code }));
+    const rows = await db.run(SELECT.from('fuelsphere.TOLERANCE_RULES')
+        .where({ rule_code: code, row_kind: 'PARAMETER' }));
 
     const eligible = inScope(rows, scope, asOf, ['company_code', 'station_code']);
     if (!eligible.length) {
         return { value: null, resolved: false,
-            reason: `${ERR.NO_PARAMETER}: no SYSTEM_PARAMETERS row for ${code} in scope at ${asOf}. `
+            reason: `${ERR.NO_PARAMETER}: no PARAMETER row for ${code} in scope at ${asOf}. `
                   + `A global row must always exist (CFG401), so this is a configuration defect, `
                   + `not an absent value.` };
     }
@@ -95,9 +97,10 @@ async function resolveParameter(code, scope = {}, asOfDate = null, tx = null) {
     return {
         value, resolved: true,
         evidence: {
-            source: 'SYSTEM_PARAMETERS',
+            source: 'TOLERANCE_RULES',
+            row_kind: 'PARAMETER',
             parameter_id: row.ID,
-            parameter_code: row.parameter_code,
+            parameter_code: row.rule_code,
             value_type: row.value_type,
             scope_company_code: row.company_code || null,
             scope_station_code: row.station_code || null,
@@ -127,7 +130,11 @@ async function resolveToleranceRule({ ruleCode, appliesTo, toleranceType },
                                     scope = {}, asOfDate = null, tx = null) {
     const db = tx || cds.db;
     const asOf = d(asOfDate) || today();
-    const where = ruleCode ? { rule_code: ruleCode } : { tolerance_type: toleranceType };
+    // row_kind excluded explicitly: a PARAMETER row shares the code space and
+    // must never answer a tolerance question.
+    const where = ruleCode
+        ? { rule_code: ruleCode, row_kind: 'TOLERANCE' }
+        : { tolerance_type: toleranceType, row_kind: 'TOLERANCE' };
     const rows = await db.run(SELECT.from('fuelsphere.TOLERANCE_RULES').where(where));
 
     let candidates = rows;
