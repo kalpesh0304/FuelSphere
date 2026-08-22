@@ -2206,7 +2206,15 @@ type ConfigRowKind : String(20) enum {
  * never the query date (CFG402), returning the row that resolved (CFG406).
  */
 entity TOLERANCE_RULES : cuid, ActiveStatus, AuditTrail {
-        rule_code           : String(20) @mandatory;      // Rule identifier, or PARAMETER code
+        // WP fix/hdi-seed-data. String(40), not String(20) and not String(30).
+        // HANA enforces NVARCHAR length where SQLite ignores it, so four seeded
+        // codes (21, 24, 24 and 27 chars) failed the HDI deploy while passing
+        // every local test. Widened rather than shortened because the codes are
+        // named in decisions C-1, B9 and C-2 and in 01-TARGET-SCHEMA 10.3, and
+        // because rule_code is the parameter resolver's lookup key - shortening
+        // moves every reader. 40, not the current maximum of 27: sizing a column
+        // to today's longest value is how this defect arrives a second time.
+        rule_code           : String(40) @mandatory;      // Rule identifier, or PARAMETER code
         rule_name           : String(100) @mandatory;     // Display name
         description         : String(500);                // Rule description
 
@@ -3512,7 +3520,14 @@ entity API_PERFORMANCE_METRICS : cuid {
         std_deviation       : Decimal(10,2);                 // Standard deviation
 
         // Throughput
-        requests_per_second : Decimal(10,2);                 // Avg requests/second
+        // WP fix/hdi-seed-data. Decimal(10,4), not Decimal(10,2). All seven
+        // seeded values carry four decimal places and every one of them rounds
+        // to 0.00 at scale 2, so the column was meaningless whether HANA
+        // rejected the load or silently rounded it. Widened to preserve what was
+        // seeded rather than invent plausible figures. peak_requests_per_second
+        // below is left at scale 2 deliberately - its seeded values all fit, and
+        // widening a column whose data is correct is outside this fix.
+        requests_per_second : Decimal(10,4);                 // Avg requests/second
         peak_requests_per_second : Decimal(10,2);            // Peak requests/second
         total_bytes_sent    : Integer64;                     // Total bytes sent
         total_bytes_received : Integer64;                    // Total bytes received
