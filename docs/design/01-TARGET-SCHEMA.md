@@ -5,6 +5,16 @@ Written against `db/schema.cds` as at 16 August 2026: 97 entities, 68 types, 2 a
 
 ---
 
+> ## STATUS — AS BUILT, 24 August 2026
+>
+> **Every one of the 67 fields this document specifies now exists in `db/schema.cds`.** Every ADD added, every REMOVE removed, every CHANGE made — measured against the schema, not against the packages' descriptions of themselves.
+>
+> **Sections 2 to 10 are a RECORD.** They describe WP-07, 2A, WP-09, WP-10, WP-11, WP-12, WP-18 and WP-07B, and nothing in them needs maintaining. **Their remaining value is the reasoning** — why `LTR` not `LT`, why the conversion factor is planning-only, why `delivered_quantity` is derived. That does not go stale.
+>
+> **ONE DIRECTIVE IS UNMET: `ACARS_DERIVED`.** Section 5 extends `FobSource` to five members and the schema has four. **Defect D41.**
+>
+> **Six later packages have no home here** — WP-13, WP-19, WP-20, WP-21A, WP-33 and the HDI seed fixes. That is what makes the document look behind rather than complete. **It is not a target any more; do not extend it.**
+
 ## How to read this
 
 This document specifies **what changes and what it becomes**, entity by entity, in **this repository's own names**. Every field name below was read from `db/schema.cds`. Where a field does not exist, that is stated rather than assumed.
@@ -49,7 +59,7 @@ Where a field below carries a code list, the values are the industry ones. They 
 
 ### Assertions
 
-Existing assertions stay unless this document says otherwise. Two are load-bearing:
+**CORRECTED 24 August — this instruction is no longer safe to follow.** It read *"existing assertions stay unless this document says otherwise"*, and named temperature and density as load-bearing. **WP-13 removed both** — `db/schema.cds:1041–1042` keeps them as comments, the fields are bare `Decimal`, and the limits resolve from `TOLERANCE_RULES` through `qualityGuard`. **Preserving them would reintroduce the double enforcement WP-13 existed to remove** (closed defect D30). Of the three named below, only `ROB_LEDGER.closing_rob_kg` is still true.
 
 - `FUEL_DELIVERIES.temperature` — `@assert.range: [-40, 50]`, error `EPD403`
 - `FUEL_DELIVERIES.density` — `@assert.range: [0.775, 0.840]`, error `EPD404`
@@ -873,16 +883,18 @@ action recalculateROB(aircraftId: UUID, fromDate: Date)
 | Chain restart representation after a ledger break | F11 |
 | Durable sink for ledger chain-break exceptions | F14 |
 | ePOD delivery creating a ledger entry | F15 |
-| Where the ePOD signature belongs — ticket or delivery | F3. Signatures stay on `FUEL_DELIVERIES` |
+| ~~Where the ePOD signature belongs~~ | **REVERSED 24 August.** `Document_Capture_Specification.md` §8A migrates **both signature fields into `SOURCE_DOCUMENTS`**, and four fields leave `FUEL_DELIVERIES`. That is WP-31's entire premise |
 | How long a delivery stays open before a new ticket opens a fresh one | F2. Two hours as a starting parameter |
 | Master data upsert instead of full replace | F12 |
 | Optimistic locking carrier | C5, D5 — `@odata.etag` on a DateTime does not work |
 | Staging entities | WP-15 |
-| `FLIGHT_DISPATCH` regulated fuel stack | WP-18. Decision B3 taken |
+| ~~`FLIGHT_DISPATCH` regulated fuel stack~~ | **BUILT.** WP-18 — all six fields present, plus plan versioning |
 | Carrier arrangements | WP-24 |
-| APU usage | WP-19 |
+| ~~APU usage~~ | **BUILT.** WP-19 — `APU_USAGE` exists |
 
 **Do not invent any of these.** Each is deferred deliberately, with the reasoning recorded in `00-DECISIONS.md`.
+
+> **CORRECTED 24 August.** Four rows above were stale: three had been built and one decision reversed. **A do-not-invent list containing things that already exist is worse than no list** — it sends someone looking for a gap that is not there, and in the signature case it contradicts a specification merged the same day.
 
 ---
 

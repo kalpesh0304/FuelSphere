@@ -99,7 +99,7 @@ flight_start_utc    : Timestamp;
 start_source        : ClosureSource;
 ```
 
-**`aobt`, `atot`, `aldt` and `aibt` already exist as timestamps and carry no fuel figure at any of them.** So trip burn cannot be computed today — `OFF − ON` has no operands.
+**`aobt`, `atot`, `aldt` and `aibt` now carry a fuel figure each — WP-33 added them, and trip burn is computable.** An earlier version of this line said the opposite and survived the retraction seventeen lines above it. **`closure_document` is the only field this section still adds.**
 
 | `ClosureSource` | |
 |---|---|
