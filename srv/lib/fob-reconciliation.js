@@ -15,6 +15,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
+const { DERIVED_SOURCE } = require('./fob-derivation');
 
 // ===========================================================================
 // TOLERANCE - a stated placeholder with a migration path
@@ -42,7 +43,16 @@ const TOLERANCE_BY_FOB_SOURCE = {
     CREW_REPORTED: { percent: 1.5, floorKg: 200, note: '100 kg rounding, doubled' },
     // What was requested, not what arrived. Held to the crew threshold because
     // its error is at least as large, never smaller.
-    PANEL_PRESET:  { percent: 1.5, floorKg: 200, note: 'treated as CREW_REPORTED' }
+    PANEL_PRESET:  { percent: 1.5, floorKg: 200, note: 'treated as CREW_REPORTED' },
+    // WP-34. A reconstructed reading inherits the error of its derivation.
+    //
+    // Section 5's precision ladder offers TWO derived rungs - 1.0% / 100 kg
+    // where the APU cycles are timestamped, 1.5% / 200 kg where the minutes
+    // are apportioned - and extends the enum by ONE member. Until that is
+    // resolved, the WEAKER rung applies, on the PANEL_PRESET precedent above:
+    // held to the looser threshold because the error is at least as large,
+    // never smaller. The tighter rung would manufacture discrepancies.
+    ACARS_DERIVED: { percent: 1.5, floorKg: 200, note: 'derived from IN/OUT plus APU' }
     // NONE is deliberately absent. There is no reading, so there is no
     // comparison to hold to a threshold - see resolveTolerance.
 };
@@ -157,13 +167,21 @@ function reconcile(delivery, tickets, rule) {
     const before = num(delivery.fob_before_kg);
     const after = num(delivery.fob_after_kg);
 
+    // WP-34. A DERIVED delivery has no gauge pair and never will - the whole
+    // reason it was derived is that neither reading exists. Its FQIS mass is
+    // the derived delta, and demanding a pair would send every derived
+    // delivery to NOT_RECONCILED with 'gauge pair incomplete', which is true
+    // of the pair and false of the delivery.
+    const isDerived = delivery.fob_source === DERIVED_SOURCE;
+    const derivedDelta = num(delivery.fob_delta_kg);
+
     if (!rule) {
         return { ...base, recon_variance_kg: null, recon_status: STATUS.NOT_RECONCILED,
             evidence: `fob_source ${delivery.fob_source || '(none)'} carries no reading` };
     }
-    if (before === null || after === null) {
+    if (isDerived ? derivedDelta === null : (before === null || after === null)) {
         return { ...base, recon_variance_kg: null, recon_status: STATUS.NOT_RECONCILED,
-            evidence: 'gauge pair incomplete' };
+            evidence: isDerived ? 'derived uplift not computed' : 'gauge pair incomplete' };
     }
     if (!tickets.length) {
         return { ...base, recon_variance_kg: null, recon_status: STATUS.NOT_RECONCILED,
@@ -175,7 +193,7 @@ function reconcile(delivery, tickets, rule) {
     }
 
     // ---- The comparison -------------------------------------------------
-    const fqisKg = Number((after - before).toFixed(2));
+    const fqisKg = isDerived ? derivedDelta : Number((after - before).toFixed(2));
     const variance = Number((meteredKg - fqisKg).toFixed(2));
     const tol = toleranceKg(rule, meteredKg);
 
@@ -206,7 +224,8 @@ function reconcile(delivery, tickets, rule) {
         ...base,
         recon_variance_kg: variance,
         recon_status: within ? STATUS.RECONCILED : STATUS.VARIANCE,
-        evidence: `metered ${meteredKg} - FQIS ${fqisKg} = ${variance}; `
+        evidence: `metered ${meteredKg} - FQIS ${fqisKg} = ${variance} `
+            + `(${isDerived ? 'derived uplift, no gauge pair' : 'fob_after - fob_before'}); `
             + `tolerance ${tol} kg (${rule.percent}% or ${rule.floorKg} kg floor, ${delivery.fob_source}, ${rule.source})`
     };
 }
@@ -225,7 +244,12 @@ async function reconcileDelivery(deliveryId, srv) {
     const D = 'fuelsphere.FUEL_DELIVERIES';
 
     const delivery = await db.run(SELECT.one.from(D)
-        .columns('ID', 'fob_source', 'fob_before_kg', 'fob_after_kg')
+        // fob_delta_kg carries the FQIS mass on the derived path (WP-34).
+        // delivery_date is read below to resolve the tolerance as of the
+        // delivery - it was consumed without being selected, so every
+        // resolution ran with asOfDate undefined.
+        .columns('ID', 'fob_source', 'fob_before_kg', 'fob_after_kg',
+                 'fob_delta_kg', 'delivery_date')
         .where({ ID: deliveryId }));
     if (!delivery) return null;
 

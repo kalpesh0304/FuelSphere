@@ -32,6 +32,7 @@ const {
     resolveTolerance, resolveToleranceFromStore,
     toleranceKg
 } = require('./lib/fob-reconciliation');
+const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -643,6 +644,38 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         });
 
         // ====================================================================
+        // GAUGE DERIVATION - WP-34, defect D41
+        //
+        // Runs BEFORE reconciliation in the operational sequence: it produces
+        // the FQIS side that the reconciliation then compares. Deliberately
+        // NOT chained onto reconcile() - a reconciliation must never silently
+        // manufacture the measurement it is about to judge.
+        // ====================================================================
+
+        this.on('deriveGaugeReadings', FuelDeliveries, async (req) => {
+            const delivery = await SELECT.one.from(FuelDeliveries).where({ ID: _id(req.params) });
+            if (!delivery) return req.error(404, 'Delivery not found');
+
+            const result = await deriveDeliveryUplift(delivery.ID);
+            // Every refusal carries its own EPD code and says which operand
+            // was missing. A derivation that cannot run must say so loudly -
+            // a silent skip here leaves a delivery looking measured.
+            if (result.error) return req.error(400, result.error);
+
+            return {
+                deliveryNumber: delivery.delivery_number,
+                derived: result.derived,
+                fobSource: result.fobSource,
+                fobDeltaKg: result.fobDeltaKg,
+                groundBurnKg: result.groundBurnKg,
+                arrivingFlight: result.arrivingFlight,
+                departingFlight: result.departingFlight,
+                apuCycles: result.apuCycles,
+                evidence: result.evidence
+            };
+        });
+
+        // ====================================================================
         // FOB RECONCILIATION - WP-17, decisions B2, B5, C-1
         // ====================================================================
 
@@ -662,10 +695,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             const meteredKg = known.length === tickets.length && tickets.length
                 ? Number(known.reduce((a, t) => a + Number(t.quantity_kg), 0).toFixed(2))
                 : null;
-            const fqisKg = (delivery.fob_before_kg !== null && delivery.fob_before_kg !== undefined
-                         && delivery.fob_after_kg !== null && delivery.fob_after_kg !== undefined)
-                ? Number((Number(delivery.fob_after_kg) - Number(delivery.fob_before_kg)).toFixed(2))
-                : null;
+            // WP-34. A DERIVED delivery has no gauge pair, so recomputing the
+            // FQIS mass from fob_after minus fob_before reports null for a
+            // figure the reconciliation has just used. The status and the
+            // variance were right and the number beside them was empty.
+            const fqisKg = delivery.fob_source === DERIVED_SOURCE
+                ? (delivery.fob_delta_kg === null || delivery.fob_delta_kg === undefined
+                    ? null : Number(delivery.fob_delta_kg))
+                : ((delivery.fob_before_kg !== null && delivery.fob_before_kg !== undefined
+                    && delivery.fob_after_kg !== null && delivery.fob_after_kg !== undefined)
+                    ? Number((Number(delivery.fob_after_kg) - Number(delivery.fob_before_kg)).toFixed(2))
+                    : null);
 
             const rule = await resolveToleranceFromStore(delivery.fob_source, {}, delivery.delivery_date);
             const tol = (rule && meteredKg !== null) ? toleranceKg(rule, meteredKg) : null;
