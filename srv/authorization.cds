@@ -226,6 +226,10 @@ annotate FuelOrderService.FuelDeliveries with @(restrict: [
     // WP-17. Declared with its grant in the same change, because D22 makes an
     // action without one unreachable for every user including AdminAccess.
     { grant: 'reconcile',         to: ['ePODCapture', 'ePODApprove'] },
+    // WP-34, same rule as above: the grant lands in the same change as the
+    // action, because D22 makes an ungranted bound action unreachable for
+    // every user including one holding all scopes.
+    { grant: 'deriveGaugeReadings', to: ['ePODCapture', 'ePODApprove'] },
 
     // D26 / WP-02C. These eighteen bound actions declare NO @requires of their
     // own, so there was nothing to mirror and WP-02B could not fix them

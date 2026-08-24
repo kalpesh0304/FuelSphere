@@ -117,6 +117,11 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `EPD473` | VR88 | `FUEL_TICKETS` | A ticket for a leg in NONE mode is accepted with match_status NOT_EXPECTED, never rejected | Error |
 | `EPD474` | VR97 | `FUEL_TICKETS` | Where the active plan version at uplift time was never received, version_coverage is GAPPED and the ticket does not bind to an earlier version | Error |
 | `EPD475` | VR188 | `FUEL_TICKETS` | A reconciliation exception is never suppressed because an ePOD signature exists | Error |
+| `EPD476` | WP-34 | `FUEL_DELIVERIES` | The gauge derivation needs the departing leg; a delivery with no order, or an order with no flight, cannot be derived | Error |
+| `EPD477` | WP-34 | `FUEL_DELIVERIES` | The gauge derivation needs an arrival reading, an OUT reading and both turnaround boundaries; an absent operand refuses the derivation | Error |
+| `EPD478` | WP-34 | `FUEL_DELIVERIES` | An unadjusted OUT minus IN is NOT OFFERED. With no APU cycle recorded the derivation is refused, because an absent cycle is not evidence the APU stayed off | Error |
+| `EPD479` | WP-34 | `FUEL_DELIVERIES` | An open APU cycle, or one carrying no burn figure, makes the turnaround total unknown rather than zero, and refuses the derivation | Error |
+| `EPD480` | WP-34 | `FUEL_DELIVERIES` | A derivation never replaces a measurement; a delivery already carrying a measured gauge pair is not re-derived | Error |
 
 ### ENR4xx — Flight schedule enrichment
 

@@ -169,6 +169,21 @@ service FuelOrderService {
          * This is also the re-run for an operator who has corrected a reading.
          */
         action reconcile() returns ReconciliationResult;
+
+        /**
+         * WP-34 - reconstruct the gauge uplift where the readings do not exist.
+         *
+         * Neither fob_before_kg nor fob_after_kg is a standard ACARS report.
+         * Where the refuelling-panel downlink is not configured, this derives
+         * the uplift from the arrival reading, the OUT reading and the ground
+         * APU burn between them, and stamps fob_source ACARS_DERIVED so the
+         * reconciliation holds it to the derived threshold rather than the
+         * measured one.
+         *
+         * REFUSES rather than approximates. No APU figure means no derivation
+         * - 01-TARGET-SCHEMA section 5 marks unadjusted IN/OUT NOT OFFERED.
+         */
+        action deriveGaugeReadings() returns GaugeDerivationResult;
     };
 
     // ========================================================================
@@ -450,6 +465,23 @@ service FuelOrderService {
         toleranceSource     : String(20);      // Which rule produced the threshold
         fobSource           : String(20);
         evidence            : String(500);     // How the status was reached
+    }
+
+    /**
+     * WP-34. `derived` is not decoration: APU401's rule is that every figure
+     * produced without a meter says so, and a consumer must be able to tell
+     * without inference.
+     */
+    type GaugeDerivationResult {
+        deliveryNumber      : String(25);
+        derived             : Boolean;         // Always true on success
+        fobSource           : String(20);      // ACARS_DERIVED
+        fobDeltaKg          : Decimal(12,2);   // The reconstructed uplift
+        groundBurnKg        : Decimal(12,2);   // The APU adjustment, an INPUT here
+        arrivingFlight      : String(40);
+        departingFlight     : String(40);
+        apuCycles           : Integer;         // How many cycles fed the adjustment
+        evidence            : String(500);     // The arithmetic, reproducible from the row
     }
 
     type TemperatureCorrectionResult {
