@@ -770,14 +770,29 @@ type DensityUom : String(6) enum {
 }
 
 /**
- * Source of the aircraft gauge (FQIS) reading (WP-12, decision B5)
+ * Source of the aircraft gauge (FQIS) reading (WP-12, decision B5; WP-34)
  *
  * The source governs how much the reading can be trusted, which is why it
  * is recorded alongside the number rather than assumed.
+ *
+ * ACARS_DERIVED is WP-34, closing defect D41 and the one unmet directive of
+ * 01-TARGET-SCHEMA section 5. It records that the gauge figure was NOT read
+ * off the aircraft but RECONSTRUCTED - fob_at_arrival plus the OUT reading,
+ * adjusted for the APU burn in between (section 5, the uplift derivation).
+ *
+ * IT IS A SEPARATE MEMBER RATHER THAN A FLAG BESIDE 'ACARS' BECAUSE IT
+ * CARRIES A DIFFERENT TOLERANCE. A derived reading inherits the error of its
+ * derivation, and TOL-FOB-ACARS_DERIVED is looser than TOL-FOB-ACARS for that
+ * reason. Recorded as 'ACARS' it would be held to the measured threshold and
+ * would flag as a supplier discrepancy.
+ *
+ * @assert.range on this type predates WP-34. Adding a member WIDENS the
+ * accepted set, so no existing writer or seed row is affected.
  */
 @assert.range: true
 type FobSource : String(20) enum {
-    Acars         = 'ACARS';           // Downlinked. High confidence
+    Acars         = 'ACARS';           // Downlinked. High confidence. MEASURED
+    AcarsDerived  = 'ACARS_DERIVED';   // WP-34. IN/OUT adjusted for APU. DERIVED, not measured
     CrewReported  = 'CREW_REPORTED';   // Typically rounded to 100 kg
     PanelPreset   = 'PANEL_PRESET';    // What was requested, not what arrived
     None          = 'NONE';            // No reading
