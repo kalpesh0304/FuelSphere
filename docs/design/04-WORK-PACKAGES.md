@@ -432,7 +432,7 @@ One mobile device, five capture points: **tech log, gauge before, gauge after, f
 | Source flags | On every extracted value, and **the flag selects the tolerance** |
 | `OCR_CONFIRMED` | New `FobSource` value at 0.5% / 50 kg, **the same as ACARS** |
 | Confirmation handler | The confirmed value is stored; `ocr_raw` is audit only |
-| Confidence threshold | From `TOLERANCE_RULES`, **handler-enforced** — `@assert.range` is inert on numerics, per D30 |
+| Confidence threshold | From `TOLERANCE_RULES`, **handler-enforced** — because the threshold is resolved from configuration and **an annotation is a compile-time literal that cannot read a store.** Not because `@assert.range` fails on numerics; **it does not**, and D30 was corrected on 24 August |
 
 **Why OCR earns ACARS's tolerance:** decision **C-5**. The same load cell drives the downlink and the dial, so the instrument error is identical. **What differs is the recording** — a crew figure is written to the nearest 100 kg; an OCR read of the dial is to the kilogram.
 
