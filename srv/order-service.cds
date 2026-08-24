@@ -104,6 +104,19 @@ service FuelOrderService {
     };
 
     // ========================================================================
+    // THE EVIDENCE LAYER - WP-31
+    // ========================================================================
+
+    /**
+     * SourceDocuments - the image behind an extracted value.
+     *
+     * Exposed here because FuelOrderService owns the delivery and the ticket,
+     * which cite most of them. Reached through the citing field - the entity
+     * holds no link back to its subject, by design.
+     */
+    entity SourceDocuments as projection on db.SOURCE_DOCUMENTS;
+
+    // ========================================================================
     // EPOD (Electronic Proof of Delivery)
     // ========================================================================
 
@@ -169,6 +182,7 @@ service FuelOrderService {
          * This is also the re-run for an operator who has corrected a reading.
          */
         action reconcile() returns ReconciliationResult;
+
 
         /**
          * WP-34 - reconstruct the gauge uplift where the readings do not exist.

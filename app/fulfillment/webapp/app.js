@@ -50,6 +50,18 @@
 
     var pipelineStatuses = ['RECEIVED', 'CONFIRMED', 'SCHEDULED', 'DELIVERED', 'INVOICED', 'CLOSED'];
 
+    /**
+     * WP-31 step 3. When a delivery was signed, from the evidence layer.
+     *
+     * One helper because five readers used to name the same column and would
+     * otherwise be moved five times, each an opportunity to miss one. Null
+     * where unsigned - and null where the query forgot to $expand, which is
+     * why the expand sits beside this in the fetch below.
+     */
+    function signedAt(d) {
+        return (d && d.signature_pilot_document && d.signature_pilot_document.captured_at) || null;
+    }
+
     async function odata(url) {
         try {
             var res = await fetch(url);
@@ -72,7 +84,10 @@
         var [salesOrders, fuelOrders, deliveries, tickets] = await Promise.all([
             odata(REFUELER_SVC + '/SalesOrders?$orderby=scheduled_date desc'),
             odata(ORDER_SVC + '/FuelOrders?$orderby=requested_date desc'),
-            odata(ORDER_SVC + '/FuelDeliveries?$top=500'),
+            // WP-31 step 3. The signature is now a DOCUMENT, so the query
+            // expands it. Without this every signature reader below silently
+            // reads undefined - which is D32 exactly, and nothing would throw.
+            odata(ORDER_SVC + '/FuelDeliveries?$top=500&$expand=signature_pilot_document($select=captured_at,image_uri)'),
             odata(ORDER_SVC + '/FuelTickets?$top=500')
         ]);
 
@@ -113,7 +128,11 @@
         var awaitingDelivery = filteredFO.filter(function(o) {
             return o.status === 'Confirmed' || o.status === 'InProgress';
         }).length;
-        var pendingSig = filteredDeliveries.filter(function(d) { return !d.signature_timestamp; }).length;
+        // WP-31 step 3. Still counts deliveries awaiting a signature; it asks
+        // the document instead of the column. THE MOVE THAT MATTERS: if this
+        // one were left behind it would count zero pending signatures for
+        // ever, report "all signed", and never throw.
+        var pendingSig = filteredDeliveries.filter(function(d) { return !signedAt(d); }).length;
         var ticketsCreated = filteredTickets.length;
 
         setText('kpiOrders', active);
@@ -268,7 +287,7 @@
             var delivery = deliveries.find(function(d) { return d.order_ID === order.ID; });
             var ticket = delivery ? tickets.find(function(t) { return t.delivery_ID === delivery.ID; }) : null;
 
-            var hasSigned = delivery && delivery.signature_timestamp;
+            var hasSigned = delivery && signedAt(delivery);
             var hasTicket = !!ticket;
             var hasSapSO = order.s4_po_number;
 
@@ -322,13 +341,13 @@
                     // Ticket created — show signed status, no actions
                     html += '<div class="delivery-card-sig delivery-card-sig-done">' +
                         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#107E3E"/></svg>' +
-                        '<span>Pilot Signed — ' + new Date(delivery.signature_timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</span>' +
+                        '<span>Pilot Signed — ' + new Date(signedAt(delivery)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</span>' +
                         '<span class="sig-locked">Locked</span>' +
                     '</div>';
                 } else if (hasSigned) {
                     html += '<div class="delivery-card-sig delivery-card-sig-done">' +
                         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#107E3E"/></svg>' +
-                        '<span>Pilot Signed — ' + new Date(delivery.signature_timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</span>' +
+                        '<span>Pilot Signed — ' + new Date(signedAt(delivery)).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + '</span>' +
                     '</div>';
                 } else {
                     html += '<div class="delivery-card-sig delivery-card-sig-pending">' +
@@ -463,7 +482,7 @@
                     '<br><span class="badge badge-posted" style="font-size:9px">TICKET: ' + ticket.ticket_number + '</span>';
             } else if (delivery) {
                 deliveryCell = '<a class="link-epod">' + (epodNum || '--') + '</a>' +
-                    '<br><span class="badge badge-pending" style="font-size:9px">' + (delivery.signature_timestamp ? 'SIGNED' : 'PENDING SIG') + '</span>';
+                    '<br><span class="badge badge-pending" style="font-size:9px">' + (signedAt(delivery) ? 'SIGNED' : 'PENDING SIG') + '</span>';
             } else {
                 deliveryCell = '<span class="text-muted">--</span>';
             }

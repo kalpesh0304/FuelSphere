@@ -299,6 +299,8 @@ annotate PlanningService.FlightSchedule with {
     fob_at_on_kg                  @title: 'FOB at ON (kg)';
     fob_at_in_kg                  @title: 'FOB at IN (kg)';
     fob_source                    @title: 'Gauge Reading Source';
+    // WP-31. On the association so the label reaches closure_document_ID.
+    closure_document              @title: 'Tech Log Image';
     flight_closure_utc            @title: 'Flight Closure (UTC)';
     closure_source                @title: 'Closure Source';
     flight_start_utc              @title: 'Flight Start (UTC)';

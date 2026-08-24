@@ -458,8 +458,10 @@ annotate RefuelerService.DeliveryRecords with @(
             Data: [
                 { Value: pilot_name, Label: 'Pilot Name' },
                 { Value: ground_crew_name, Label: 'Ground Crew Name' },
-                { Value: signature_timestamp, Label: 'Signature Time' },
-                { Value: signature_location, Label: 'Location' }
+                // WP-31 step 3. MOVED to the evidence layer - same two
+                // values, read from the pilot signature document.
+                { Value: signature_pilot_document.captured_at, Label: 'Signature Time' },
+                { Value: signature_pilot_document.capture_location, Label: 'Location' }
             ]
         },
 
@@ -489,8 +491,11 @@ annotate RefuelerService.DeliveryRecords with {
     driver_name              @title: 'Driver Name';
     pilot_name               @title: 'Pilot Name';
     ground_crew_name         @title: 'Ground Crew Name';
-    signature_timestamp      @title: 'Signature Time'            @Common.FieldControl: #ReadOnly;
-    signature_location       @title: 'Location';
+    // WP-31 step 3. Readers moved; the labels on the old fields stay until
+    // step 4 removes the fields - they are still exposed, and an unlabelled
+    // exposed field renders its technical name.
+    signature_pilot_document @title: 'Pilot Signature';
+    signature_crew_document  @title: 'Ground Crew Signature';
     status                   @title: 'Status'                    @Common.FieldControl: #ReadOnly;
     quantity_variance        @title: 'Quantity Variance'         @Common.FieldControl: #ReadOnly;
     variance_percentage      @title: 'Variance %'               @Common.FieldControl: #ReadOnly;

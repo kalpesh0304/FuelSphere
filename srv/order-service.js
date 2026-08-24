@@ -33,6 +33,7 @@ const {
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
+const { createSignatureDocuments } = require('./lib/signature-documents');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -481,14 +482,14 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 : 0;
             const varianceFlag = Math.abs(variancePct) > 5;
 
-            // Update delivery with signatures and S/4 references
+            // WP-31 step 4. The signature bytes, their timestamp and their
+            // location no longer live on this row - they are the document's,
+            // and the document is written below from the payload that carried
+            // them. pilot_name and ground_crew_name STAY: they are the ePOD's
+            // record of who was present, and EPD402 gates on them.
             await UPDATE(FuelDeliveries).where({ ID: delivery.ID }).set({
                 pilot_name: pilotName,
-                pilot_signature: pilotSignature,
                 ground_crew_name: groundCrewName,
-                ground_crew_signature: groundCrewSignature,
-                signature_timestamp: now,
-                signature_location: signatureLocation,
                 s4_gr_number: s4GRNumber,
                 s4_gr_year: new Date().getFullYear().toString(),
                 s4_gr_item: '0001',
@@ -499,6 +500,16 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 modified_at: now,
                 modified_by: req.user.id
             });
+
+            // WP-31 step 4. The capture writes its evidence directly. The
+            // bytes come from this action's payload and never touch the
+            // delivery row, because the columns they used to land in are
+            // gone.
+            const sigDocs = await createSignatureDocuments(delivery.ID, {
+                pilotSignature, pilotName, groundCrewSignature, groundCrewName,
+                capturedAt: now, location: signatureLocation
+            });
+            if (sigDocs.error) return req.error(400, sigDocs.error);
 
             // Update parent order with PO number and status → Delivered
             await UPDATE(FuelOrders).where({ ID: order.ID }).set({

@@ -609,6 +609,10 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         // different instants. Do not consume this assuming an answer.
         flight_closure_utc  : Timestamp;                // C-4 split point
         closure_source      : ClosureSource;            // How closure was obtained
+        // WP-31. The tech log photograph the closure time was read off.
+        // The ONLY field this package adds to FLIGHT_SCHEDULE - the other
+        // nine in this block landed with WP-33.
+        closure_document    : Association to SOURCE_DOCUMENTS;
         flight_start_utc    : Timestamp;                // F20 boundary. SEMANTICS OPEN
         start_source        : ClosureSource;            // How start was obtained
 
@@ -793,6 +797,7 @@ type DensityUom : String(6) enum {
 type FobSource : String(20) enum {
     Acars         = 'ACARS';           // Downlinked. High confidence. MEASURED
     AcarsDerived  = 'ACARS_DERIVED';   // WP-34. IN/OUT adjusted for APU. DERIVED, not measured
+    OcrConfirmed  = 'OCR_CONFIRMED';   // WP-31. Dial photographed, read, CONFIRMED. ACARS precision
     CrewReported  = 'CREW_REPORTED';   // Typically rounded to 100 kg
     PanelPreset   = 'PANEL_PRESET';    // What was requested, not what arrived
     None          = 'NONE';            // No reading
@@ -843,6 +848,165 @@ type OrderRelationship : String(20) enum {
     Original    = 'ORIGINAL';
     Amendment   = 'AMENDMENT';
     Incremental = 'INCREMENTAL';
+}
+
+// ============================================================================
+// THE EVIDENCE LAYER (WP-31, Document_Capture_Specification)
+//
+// Five points in the fuel lifecycle where a number is written on paper or
+// shown on a dial and somebody has to get it into the system: the tech log,
+// the cockpit gauge before and after, the supplier's fuel ticket, and the
+// bowser meter. One mobile device photographs all five.
+//
+// THE IMAGE IS RETAINED WHETHER OCR SUCCEEDED OR NOT. It is not a
+// convenience - it is the compliance record, so the number and its evidence
+// arrive together and a disputed figure has a picture behind it eighteen
+// months later. Deleting the image after a successful read destroys the
+// evidence and keeps only the claim.
+//
+// @assert.range on each per D25. What the annotation does is stated in
+// CLAUDE.md's trap row and is not restated here; note only that it does NOT
+// reach a db.run write, which is how the WP-31 handlers write, so nothing
+// here substitutes for a guard.
+// ============================================================================
+
+/**
+ * What was photographed (WP-31, specification section 2)
+ *
+ * SIGNATURE_PILOT and SIGNATURE_CREW are here because the ePOD signatures
+ * migrate INTO this model rather than staying beside it. Leaving them would
+ * mean the signature is stored one way and the tech log photograph another,
+ * for no reason but the order they were built in.
+ */
+@assert.range: true
+type DocumentType : String(20) enum {
+    TechLog         = 'TECH_LOG';           // Closure time, uplift as recorded, defects
+    GaugeBefore     = 'GAUGE_BEFORE';       // FQIS before refuelling
+    GaugeAfter      = 'GAUGE_AFTER';        // FQIS after refuelling
+    FuelTicket      = 'FUEL_TICKET';        // The supplier's document
+    BowserMeter     = 'BOWSER_METER';       // The supplier's instrument
+    SignaturePilot  = 'SIGNATURE_PILOT';    // Migrated from FUEL_DELIVERIES
+    SignatureCrew   = 'SIGNATURE_CREW';     // Migrated from FUEL_DELIVERIES
+}
+
+/**
+ * How the image arrived (WP-31)
+ */
+@assert.range: true
+type CaptureMethod : String(20) enum {
+    MobileCamera = 'MOBILE_CAMERA';
+    Upload       = 'UPLOAD';
+    Email        = 'EMAIL';
+}
+
+/**
+ * What the OCR engine managed (WP-31)
+ *
+ * NOT_ATTEMPTED is a first-class outcome, not a failure. A signature is not
+ * read, it is held; and an image captured with no engine run is stored and
+ * read by somebody later. FAILED likewise: capture is never blocked, which
+ * is A1 applied to evidence - the fuel is already in the tanks and refusing
+ * to record it because a photograph would not read puts money outside the
+ * system.
+ */
+@assert.range: true
+type OcrStatus : String(20) enum {
+    NotAttempted = 'NOT_ATTEMPTED';   // Stored, no engine run. Somebody reads it later
+    Read         = 'READ';            // The engine returned a value
+    Partial      = 'PARTIAL';         // Some fields read, some not
+    Failed       = 'FAILED';          // The engine could not read it. The IMAGE IS STILL STORED
+}
+
+/**
+ * How an extracted value was obtained (WP-31, specification section 3)
+ *
+ * NOT a replacement for FUEL_TICKETS.ticket_source, which is IATA-04's
+ * String(1) - M manual, E electronic - and belongs to an external standard.
+ * Adding a third letter there for OCR would put a local value into a field
+ * another party reads by the standard's rules. This sits beside it.
+ */
+@assert.range: true
+type CaptureSource : String(20) enum {
+    Ocr        = 'OCR';           // Photographed, read, and CONFIRMED by a person
+    Manual     = 'MANUAL';        // Keyed
+    Electronic = 'ELECTRONIC';    // The supplier sent a structured document
+}
+
+/**
+ * SOURCE_DOCUMENTS - the evidence behind an extracted value (WP-31)
+ *
+ * THIS ENTITY HOLDS NO LINK BACK TO ITS SUBJECT. There is no flight, no
+ * delivery and no ticket association here. A document is reached ONLY through
+ * the field that cites it - closure_document, gauge_before_document,
+ * signature_pilot_document and their siblings.
+ *
+ * An earlier draft declared both directions. THAT MODELS ONE RELATIONSHIP
+ * TWICE, and two links can disagree with nothing saying which wins. The
+ * reference lives on the parent field, beside the value it evidences, which
+ * is also the only question anyone asks: where did THIS number come from,
+ * never what did that image yield.
+ *
+ * THE COST IS RETRIEVAL. "Every image for this delivery" is a read of that
+ * delivery's own four document fields rather than a filter here. At most four
+ * per entity, so the cost is small and the ambiguity is gone.
+ *
+ * AND THE CONSEQUENCE TO WATCH: a document row exists briefly before the
+ * parent field is set. WRITE BOTH IN ONE TRANSACTION, or an unreferenced
+ * document is a photograph nobody can find.
+ *
+ * Do NOT build an OCR_EXTRACTIONS table. It would be correct and nobody
+ * would ever query it.
+ *
+ * AuditTrail, not CAP's managed - 65 entities in this schema use the former
+ * and 1 uses the latter, and they are different columns.
+ */
+entity SOURCE_DOCUMENTS : cuid, AuditTrail {
+        @assert.range: true
+        document_type    : DocumentType   @mandatory;
+
+        // THE IMAGE LIVES IN THE OBJECT STORE, NOT IN THE ROW. LargeBinary
+        // is what the ePOD signatures use today and it is fine at a few
+        // kilobytes; a photographed tech log is 2 to 5 MB, and putting those
+        // in HANA rows is a mistake nobody notices until the table is large.
+        //
+        // NO OBJECT STORE IS PROVISIONED. mta.yaml carries hana, xsuaa,
+        // destination, application-logs and connectivity, and nothing else.
+        // INT404 "object store upload failed" is a designed code with nothing
+        // behind it. This is the contract; the bytes cannot move until the
+        // service exists. See D19(b) for the same shape.
+        image_uri        : String(500)    @mandatory;
+        // So the record can prove WHICH image it referred to. A URI can be
+        // repointed; a hash cannot be talked out of.
+        image_hash       : String(64);
+
+        @assert.range: true
+        capture_method   : CaptureMethod  @mandatory;
+        captured_by      : String(50)     @mandatory;
+        captured_at      : Timestamp      @mandatory;
+        capture_station  : String(3);
+
+        @assert.range: true
+        ocr_status       : OcrStatus      @mandatory;
+        // Threshold-checked in a HANDLER, not by an annotation - the
+        // threshold resolves from TOLERANCE_RULES and an annotation is a
+        // compile-time literal that cannot read a store. That reason holds
+        // whatever @assert.range does, which is why it is the one stated.
+        ocr_confidence   : Decimal(5,2);
+        ocr_engine       : String(50);
+        // AUDIT ONLY. Never read by anything downstream. The CONFIRMED value
+        // is what is used, and it lives on the parent field beside the
+        // meaning, not here.
+        ocr_raw          : LargeString;
+
+        // What makes a figure defensible. ocr_status = READ with
+        // confirmed_by null IS A NUMBER NOBODY HAS LOOKED AT, and it must
+        // never render as a confirmed one.
+        confirmed_by     : String(50);
+        confirmed_at     : Timestamp;
+
+        // From FUEL_DELIVERIES.signature_location, generalised: GPS is worth
+        // having on every capture, not only on signatures.
+        capture_location : String(100);
 }
 
 
@@ -1083,13 +1247,49 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         vehicle_id          : String(20);               // Delivery vehicle ID
         driver_name         : String(100);              // Driver name
 
-        // Digital Signatures (stored as base64 or reference to Object Store)
-        pilot_signature     : LargeBinary;              // Pilot signature image
+        // ====================================================================
+        // WP-31 STEP 4 - THE FIRST FIELD REMOVAL THIS PROJECT HAS MADE.
+        //
+        // Four fields left here:
+        //
+        //     pilot_signature       -> SOURCE_DOCUMENTS.image_uri + image_hash
+        //     ground_crew_signature -> SOURCE_DOCUMENTS.image_uri + image_hash
+        //     signature_timestamp   -> SOURCE_DOCUMENTS.captured_at
+        //     signature_location    -> SOURCE_DOCUMENTS.capture_location
+        //
+        // They were stored, not evidenced: two LargeBinary images with no
+        // source, no confirmation and no hash. And the comment that stood
+        // here read "stored as base64 or reference to Object Store" - an
+        // undecided decision sitting in a comment, which is D28's class.
+        //
+        // The names STAY. pilot_name and ground_crew_name are the ePOD's
+        // record of who was present, EPD402 gates on them, and they are not
+        // evidence of an image.
+        //
+        // Removed only after step 3 proved zero readers remained. A removal
+        // that fails loudly is recoverable; one that fails quietly is D32.
+        // ====================================================================
         pilot_name          : String(100);              // Pilot name
-        ground_crew_signature : LargeBinary;            // Ground crew signature image
         ground_crew_name    : String(100);              // Ground crew name
-        signature_timestamp : Timestamp;                // Signature capture time
-        signature_location  : String(100);              // GPS coordinates or location
+
+        // ====================================================================
+        // WP-31 step 2 - the evidence layer reaches this entity.
+        //
+        // FOUR associations, not two. The gauge pair evidences the readings;
+        // the signature pair is HOW THE MIGRATED SIGNATURES ARE REACHED AT
+        // ALL. SOURCE_DOCUMENTS holds no link back to its subject, so a
+        // document with no field citing it is a photograph nobody can find -
+        // and step 4 removes the last thing pointing at these.
+        //
+        // The four fields above are still here and still hold their values.
+        // They leave in step 4, and only once step 3 has proved zero readers
+        // remain. A removal that fails loudly is recoverable; one that fails
+        // quietly is D32.
+        // ====================================================================
+        gauge_before_document   : Association to SOURCE_DOCUMENTS;
+        gauge_after_document    : Association to SOURCE_DOCUMENTS;
+        signature_pilot_document : Association to SOURCE_DOCUMENTS;
+        signature_crew_document  : Association to SOURCE_DOCUMENTS;
 
         // S/4HANA References (populated after signature)
         s4_gr_number        : String(10);               // S/4HANA Material Document Number
@@ -1177,6 +1377,25 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         @assert.range: true
         match_status        : TicketMatchStatus default 'UNMATCHED';
         ticket_source       : String(1) default 'M';    // IATA-04: M manual, E electronic
+
+        // ====================================================================
+        // WP-31 - the evidence behind the ticket.
+        //
+        // TWO DOCUMENTS, AND THEY ARE DIFFERENT PHOTOGRAPHS: the paper ticket
+        // and the bowser's meter face. Where one supplier prints the meter
+        // reading on the ticket itself, ONE document may serve both fields -
+        // do not force a second photograph to satisfy a model.
+        //
+        // ticket_capture_source sits BESIDE ticket_source and does not
+        // replace it. ticket_source is IATA-04's one-character code and
+        // belongs to an external standard; adding a third letter for OCR
+        // would put a local value into a field another party reads by the
+        // standard's rules.
+        // ====================================================================
+        ticket_document       : Association to SOURCE_DOCUMENTS;
+        meter_document        : Association to SOURCE_DOCUMENTS;
+        @assert.range: true
+        ticket_capture_source : CaptureSource;          // How the values were obtained
         delivery            : Association to FUEL_DELIVERIES;  // Optional link to specific delivery
 
         ticket_number       : String(50) @mandatory;    // Physical ticket number from supplier
