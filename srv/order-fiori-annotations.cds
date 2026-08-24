@@ -191,7 +191,10 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: flight_ID, Label: 'Flight' },
                 { Value: priority, Label: 'Priority' },
                 { Value: status, Label: 'Status' },
-                { Value: notes, Label: 'Notes' }
+                { Value: notes, Label: 'Notes' },
+                // WP-33
+                { Value: parent_order_ID, Label: 'Amends / Increments Order' },
+                { Value: order_relationship, Label: 'Order Relationship' }
             ]
         },
 
@@ -226,7 +229,10 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: conversion_source, Label: 'Density Source' },
                 { Value: unit_price, Label: 'Unit Price' },
                 { Value: total_amount, Label: 'Total Amount' },
-                { Value: currency_code, Label: 'Currency' }
+                { Value: currency_code, Label: 'Currency' },
+                // WP-33
+                { Value: is_tankering, Label: 'Tankering' },
+                { Value: tankering_sectors, Label: 'Tankering Sectors' }
             ]
         },
 
@@ -260,7 +266,11 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: status, Label: 'Order Status' },
                 { Value: dispatch_fuel_order_id, Label: 'Dispatch Reference' },
                 { Value: crew_review_status, Label: 'Crew Review' },
-                { Value: s4_po_number, Label: 'S/4 PO Number' }
+                { Value: s4_po_number, Label: 'S/4 PO Number' },
+                // WP-33
+                { Value: communicated_at, Label: 'Communicated At' },
+                { Value: communication_status, Label: 'Communication Status' },
+                { Value: communication_reference, Label: 'Communication Reference' }
             ]
         },
 
@@ -310,6 +320,17 @@ annotate FuelOrderService.FuelOrders with {
 
 // Field-level annotations for FuelOrders
 annotate FuelOrderService.FuelOrders with {
+    // WP-33
+    communicated_at              @title: 'Communicated At';
+    // WP-33. The @title goes on the ASSOCIATION: CAP propagates it to the
+    // generated foreign key, which is the property that actually renders.
+    // Without it parent_order_ID shows its technical name on screen.
+    parent_order                 @title: 'Amends / Increments Order';
+    communication_status         @title: 'Communication Status';
+    communication_reference      @title: 'Communication Reference';
+    order_relationship           @title: 'Order Relationship';
+    is_tankering                 @title: 'Tankering';
+    tankering_sectors            @title: 'Tankering Sectors';
     ID              @UI.Hidden;
     order_number    @title: 'Order Number' @Common.FieldControl: #ReadOnly;
     station_code    @title: 'Station' @mandatory;
@@ -670,7 +691,11 @@ annotate FuelOrderService.FuelDeliveries with @(
                 { Value: delivery_method, Label: 'Delivery Method' },
                 { Value: vehicle_id, Label: 'Vehicle ID' },
                 { Value: driver_name, Label: 'Driver Name' },
-                { Value: status, Label: 'Status' }
+                { Value: status, Label: 'Status' },
+                // WP-33
+                { Value: refuel_start_utc, Label: 'Refuel Start (UTC)' },
+                { Value: refuel_end_utc, Label: 'Refuel End (UTC)' },
+                { Value: refuel_complete, Label: 'Refuel Complete' }
             ]
         },
 
@@ -757,6 +782,10 @@ annotate FuelOrderService.FuelDeliveries with @(
 
 // Field-level annotations for FuelDeliveries
 annotate FuelOrderService.FuelDeliveries with {
+    // WP-33
+    refuel_start_utc             @title: 'Refuel Start (UTC)';
+    refuel_end_utc               @title: 'Refuel End (UTC)';
+    refuel_complete              @title: 'Refuel Complete';
     ID                  @UI.Hidden;
     delivery_number     @title: 'Delivery Number' @Common.FieldControl: #ReadOnly;
     delivery_date       @title: 'Delivery Date' @mandatory;
@@ -896,7 +925,10 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: density_basis, Label: 'Density Basis' },
                 { Value: density_temp_c, Label: 'Density Temperature (C)' },
                 { Value: quantity_kg, Label: 'Canonical Mass (kg)' },
-                { Value: batch_coa_ref, Label: 'Certificate of Analysis' }
+                { Value: batch_coa_ref, Label: 'Certificate of Analysis' },
+                // WP-33
+                { Value: vehicle_id, Label: 'Vehicle' },
+                { Value: meter_serial, Label: 'Meter Serial' }
             ]
         },
 
@@ -912,6 +944,9 @@ annotate FuelOrderService.FuelTickets with @(
 
 // Field-level annotations for FuelTickets
 annotate FuelOrderService.FuelTickets with {
+    // WP-33
+    vehicle_id                   @title: 'Vehicle';
+    meter_serial                 @title: 'Meter Serial';
     ID                  @UI.Hidden;
     ticket_number       @title: 'Ticket Number' @mandatory;
     internal_number     @title: 'Internal Number' @Common.FieldControl: #ReadOnly;
