@@ -262,6 +262,209 @@ Eleven distinct registrations across 43 seed rows: `C-FITU`, `C-GFAH`, `C-GHPQ`,
 
 ## Phase 2 — configuration and staging
 
+### WP-33 · The design-review fields — **SUPERSEDES WP-19B AND WP-32**
+
+**Raised 24 August, prioritised the same day.** WP-19B and WP-32 below are retained for their reasoning; **WP-33 is what runs.**
+
+**Twenty-five fields across four entities. Purely additive — nothing is removed, nothing is relaxed.**
+
+| Entity | Fields | |
+|---|---|---|
+| `FLIGHT_SCHEDULE` | 13 | fuel at the four OOOI points, closure, start, actual stations |
+| `FUEL_ORDERS` | 7 | communication, lineage, tankering |
+| `FUEL_TICKETS` | 2 | vehicle and meter identity |
+| `FUEL_DELIVERIES` | 3 | the refuelling window |
+
+**Six recorded items cannot be implemented without them:**
+
+| | |
+|---|---|
+| **C-3** | Gates on whether an order was communicated. **No field records it**, so neither branch can be chosen |
+| **C-4** | Splits the ground gap at flight closure. **Nothing holds the timestamp** |
+| **F2** | The refuelling window. `fob_before` and `fob_after` say what; **nothing says when** |
+| **F20** | The second ground gap, between `fob_after` and push-back |
+| **F22** | The completion signal. IATA carries one; the manual path has none |
+| **WP-19** | Defines trip burn as `OFF − ON`. **Neither operand exists** |
+
+**Half a day.** No handler, no logic, no migration.
+
+**AND IT PLACES THEM.** Two field groups on `PlanningService.FlightSchedule`, per the amendment — otherwise UI-B-03 grows from twenty-two unplaced fields to forty-eight, by exactly the habit that produced it.
+
+**WP-31 runs separately and afterwards.** It is the first removal the project makes and must not ride along with additive work.
+
+---
+
+### WP-19B · The missing flight fuel fields
+
+**FOUND, NOT PLANNED. Raised 24 August.** Same class as WP-02C and WP-07B — work the original analysis did not see, discovered while reviewing a screen.
+
+**`FLIGHT_SCHEDULE` carries `aobt`, `atot`, `aldt` and `aibt` as timestamps and NO fuel figure at any of them.** Nor does anything, anywhere, carry a flight closure or flight start timestamp.
+
+```cds
+fob_at_out_kg      : Decimal(10,2);
+fob_at_off_kg      : Decimal(10,2);
+fob_at_on_kg       : Decimal(10,2);
+fob_at_in_kg       : Decimal(10,2);
+fob_source         : FobSource;
+
+flight_closure_utc : Timestamp;
+closure_source     : ClosureSource;   // OCR | MANUAL | NONE
+flight_start_utc   : Timestamp;
+start_source       : ClosureSource;
+
+actual_origin              : Association to MASTER_AIRPORTS;
+actual_origin_airport      : String(3);
+actual_destination         : Association to MASTER_AIRPORTS;
+actual_destination_airport : String(3);
+// CORRECTED 24 Aug: matches the existing origin / origin_airport pair,
+// where the ASSOCIATION carries the short name. Counter-intuitive, and
+// consistency within the entity beats being right in isolation.
+```
+
+**THIRTEEN fields.** The last four added 24 August. (An earlier draft said fourteen and listed thirteen — the miscount was mine, caught by WP-33 counting rather than trusting.)
+
+### Actual stations — and why this is not the diversion modelling that was rejected
+
+`origin` and `destination` are the **planned** sector. A flight that lands at `YOW` instead of `YUL` has nowhere to say so.
+
+**FuelSphere needs both, for reasons that are its own:**
+
+| | |
+|---|---|
+| **The uplift station** | Determines the **contract**, the supplier and the price. An uplift at the diversion airport may have no contract at all |
+| **The burn** | Computed against a plan for a different sector, so the variance is meaningless unless the actual sector is known |
+| **The return leg** | Departs from the diversion airport, so **actual origin can differ from planned too** |
+
+> **This is narrower than the diversion candidate that was rejected, and that is the point.** That one asked FuelSphere to model which alternates were available — 1:N, resolved in flight, and properly the dispatch system's. This records **where the aircraft actually was**: one value each, and the uplift happened at exactly one station.
+
+**Both the string and the association**, per the WP-07B convention: the value as received and the value as resolved are different facts, and a diversion airport may not be in the register at all.
+
+**OPEN: what does null mean?** Either *no deviation, actual equals planned*, or *the feed did not say*. **They are different**, and the answer decides whether the fields are always populated or only on deviation. **Add the fields; do not default them**, and do not copy the planned value in.
+
+**Two things that are specified today and cannot be computed:**
+
+| | |
+|---|---|
+| **Trip burn** | WP-19 defines it as `OFF − ON`. **Neither operand exists.** The times are there; the fuel is not |
+| **The ground-gap split** | Decision **C-4** names flight closure as the split point. **Nothing holds it**, so the rule is undeliverable |
+
+> **Same shape as D28's four parameters** — a decision taken, and no field behind it.
+
+**Schema only. No logic, no handler.**
+
+**Out of scope:** where the values come from — that is WP-31. This package gives them somewhere to land.
+
+**Open:** what *flight start* means. Engineering releasing the aircraft, the outbound crew signing the tech log, or `AOBT`? **They are not the same**, and the ground gap needs the first — `AOBT` is after refuelling and would put the departing flight's APU burn nowhere. **Add the field; leave the semantics for the SME.**
+
+---
+
+### WP-32 · Order communication, lineage and tankering
+
+**FOUND, NOT PLANNED. Accepted 24 August** from the five-entity design review. **Schema only.**
+
+Nine fields across two entities. Each supports a decision that is taken and currently unimplementable.
+
+```cds
+// FUEL_ORDERS
+communicated_at         : Timestamp;
+communication_status    : CommunicationStatus;  // NOT_SENT | SENT |
+                                                // ACKNOWLEDGED | FAILED
+communication_reference : String(50);
+
+parent_order            : Association to FUEL_ORDERS;
+order_relationship      : OrderRelationship;    // ORIGINAL | AMENDMENT |
+                                                // INCREMENTAL
+is_tankering            : Boolean default false;
+tankering_sectors       : Integer;
+
+// FUEL_TICKETS
+vehicle_id              : String(20);
+meter_serial            : String(30);
+```
+
+**WHY EACH IS NEEDED**
+
+| | |
+|---|---|
+| **Communication** | **Decision C-3 gates on it:** a plan revised *before* communication amends in place; *after*, it creates an incremental order. **Nothing records that an order was communicated**, so neither branch can be chosen. Same class as D28's four parameters, and worse — the decision has two branches and no field to choose between them |
+| **Lineage** | C-3's second branch creates an incremental order with nothing linking it to the original. Without `parent_order`, **a station with two orders for one flight cannot tell an incremental from a duplicate** — which is exactly the distinction the invoice duplicate check depends on |
+| **Tankering** | `extra_fuel_kg` exists and does not say the extra is *for* tankering rather than weather or a known delay. **The reason is commercial:** tankered fuel is a deliberate arbitrage whose benefit is measured, and WP-20 recorded that a benefit measured on a provisional price **can reverse**. That measurement must know which uplifts were tankering |
+| **Vehicle identity** | Scenario 2 has two bowsers, distinguishable today **only because their meter ranges happen to differ**. That is a coincidence of the seed, not a model. And **WP-31's document specification already lists `meter_serial` as an OCR-extracted value**, assuming a home that does not exist |
+
+**All nine optional.** No existing constraint changes.
+
+**Out of scope:** implementing C-3's amend-versus-incremental behaviour, and any supplier transmission. This package gives both somewhere to stand.
+
+**Rejected in the same review**, and the boundary is right: diversion fields, the alternate airport, and the planned payload. **A diversion alternate depends on where the diversion happens** — one flight may have several, resolved in flight against fuel remaining and weather. That is a 1:N table belonging to the flight dispatch system. **FuelSphere consumes `alternate_fuel_kg` because it determines the uplift; it does not need the reasoning that produced it.**
+
+**ALSO IN SCOPE — the refuelling window, accepted 24 August.**
+
+```cds
+// FUEL_DELIVERIES
+refuel_start_utc  : Timestamp;
+refuel_end_utc    : Timestamp;
+refuel_complete   : Boolean default false;
+```
+
+**Three open points turn on these and none can close without them:**
+
+| | |
+|---|---|
+| **F2** | The refuelling window itself. `fob_before_kg` and `fob_after_kg` say what the gauge read; **nothing says when refuelling started or finished** |
+| **F20** | The second ground gap. Between `fob_after` and push-back the APU may run and the aircraft may sit for an hour, and **that fuel is uncaptured.** C-4 splits the FIRST gap at flight closure; **closure does not divide this one** |
+| **F22** | No completion signal exists on the manual path. IATA's message carries one, so **nothing knows a delivery is finished rather than in progress** |
+
+**`refuel_complete` is the signal**, and it must be set by something — an explicit action, or the arrival of the ticket. **Deciding which is behaviour and belongs with F22**, not here. This package gives it a field.
+
+**Twelve fields now, across three entities.** Still schema only.
+
+---
+
+### WP-31 · Document capture and OCR
+
+**NEW CAPABILITY. Specified in `docs/Document_Capture_Specification.md`.**
+
+One mobile device, five capture points: **tech log, gauge before, gauge after, fuel ticket, bowser meter.** Photograph, OCR, confirm on screen.
+
+| | |
+|---|---|
+| `SOURCE_DOCUMENTS` | New entity. Three nullable associations — flight, delivery, ticket — **exactly one populated** |
+| Source flags | On every extracted value, and **the flag selects the tolerance** |
+| `OCR_CONFIRMED` | New `FobSource` value at 0.5% / 50 kg, **the same as ACARS** |
+| Confirmation handler | The confirmed value is stored; `ocr_raw` is audit only |
+| Confidence threshold | From `TOLERANCE_RULES`, **handler-enforced** — `@assert.range` is inert on numerics, per D30 |
+
+**Why OCR earns ACARS's tolerance:** decision **C-5**. The same load cell drives the downlink and the dial, so the instrument error is identical. **What differs is the recording** — a crew figure is written to the nearest 100 kg; an OCR read of the dial is to the kilogram.
+
+**Depends on WP-19B**, which gives `closure_document` a timestamp to sit beside.
+
+**SURVEY DONE, 24 August. NOTHING EXISTS TO EXTEND.** The entire evidence layer is **two `LargeBinary` fields on `FUEL_DELIVERIES`** — `pilot_signature` and `ground_crew_signature`. No image URI anywhere; all seven `_uri` hits in the schema are endpoints or links.
+
+**So both signature fields MIGRATE INTO `SOURCE_DOCUMENTS`** as `SIGNATURE_PILOT` and `SIGNATURE_CREW`. **One evidence model, not two** — otherwise the ePOD signature is stored one way and the tech log photograph another, for no reason but the order they were built in.
+
+**Two problems in what exists, both inherited:** `LargeBinary` puts the image **in the row**, and the comment beside it reads *"stored as base64 or reference to Object Store"* — **nobody decided.** Fine for a signature; **a photographed tech log is 2 to 5 MB.** And the signatures carry no source, no confirmation and no hash: **stored, not evidenced.**
+
+**The migration is real work.** `LargeBinary` to `image_uri` is not a rename — the bytes move to the object store. `signature_timestamp` becomes `captured_at`, `signature_location` becomes a new `capture_location` on `SOURCE_DOCUMENTS`, and **`ocr_status` is `NOT_ATTEMPTED` because a signature is not read, it is held.**
+
+**THIS IS THE FIRST REMOVAL THE PROJECT WILL MAKE.** Every merged package has been additive. **Decided 24 August: migrate anyway** — one evidence model is worth it, and leaving the signatures creates a legacy corner every later package must know about.
+
+**FOUR STEPS, AND THE OLD FIELDS SURVIVE UNTIL THE LAST.** Do not remove and add in one commit.
+
+| | |
+|---|---|
+| **1** | Build `SOURCE_DOCUMENTS`. Touch `FUEL_DELIVERIES` not at all |
+| **2** | Migrate the data. Bytes to the object store; **the old fields still hold their values** |
+| **3** | **Move every reader** — handlers, projections, annotations, harnesses, seed CSVs. Nothing breaks, because the old fields are still there |
+| **4** | Remove the four fields. **Only after step 3 proves zero readers remain** |
+
+**Step 3 is the package. The rest is mechanical.**
+
+> **A removal that fails loudly is recoverable. One that fails quietly is D32** — three UI bindings reading fields that never existed on `INVOICES`, rendering blank, and the Exception Queue permanently claiming *"No exceptions, all clear"* whatever the data said. **Nothing threw, so nobody noticed.**
+
+**Out of scope:** the OCR engine itself. That is a service the mobile app calls; FuelSphere records what it returned and who confirmed it.
+
+---
+
 ### WP-13 · Parameter resolution and applied evidence
 
 > **SCOPE ENLARGED 18 August 2026 — defect D28.** The scope below reads as "migrate the hardcoded values into configuration". **There is no configuration to migrate them into.**
@@ -396,6 +599,12 @@ Two **measurable** gaps, not apportioned ones. `ground_burn_kg` on `FUEL_DELIVER
 **Resolution order:** split at the refuelling event where fuel readings exist → fall back to phase → fall back to time-proportional, recording the basis used.
 
 **The second gap is not captured.** `ground_burn_kg` measures `fob_at_arrival → fob_before_refuel` — the pre-refuel portion, burning fuel from the previous uplift. The post-refuel portion, `fob_after → fob_out` of the departing leg, burns newly purchased fuel and **nothing derives it.** Both are needed for the split-at-refuelling rule to work in full; today only the arriving side is measurable. See open point F20.
+
+> **SUPERSEDED 21 August by decision C-4.** The resolution order above — split at the refuelling event, then by phase, then time-proportional — is replaced. **The split point is FLIGHT CLOSURE**, when the inbound captain signs off and hands the aircraft to engineering. Everything from chocks-on to closure is the **arriving** flight's; everything from closure to next chocks-off is the **departing** flight's.
+>
+> That is an operational boundary with a timestamp and a transfer of responsibility behind it, where the refuelling event was inferred from which fuel sat in the tank. **The timestamp comes from the TECH LOG** and needs a field and a capture path — OCR of a photographed tech log, or manual entry. **Evaporation joins APU as a cause of the loss**, and both book against one of the two flights on the same split.
+>
+> The phase and time-proportional fallbacks remain useful **only where no closure timestamp exists**.
 
 **Two edge cases:**
 
