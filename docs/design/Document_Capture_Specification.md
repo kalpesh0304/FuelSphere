@@ -1,13 +1,14 @@
 # Document Capture and OCR — Specification
 
 **FuelSphere · the evidence layer**
+`docs/design/Document_Capture_Specification.md`
 24 August 2026
 
 ---
 
 ## 1. What this is for
 
-Four points in the fuel lifecycle where **a number is written on paper or shown on a dial**, and somebody has to get it into the system.
+**Five** points in the fuel lifecycle where **a number is written on paper or shown on a dial**, and somebody has to get it into the system.
 
 | | Instrument | Owner | Yields |
 |---|---|---|---|
@@ -32,7 +33,7 @@ It is not a convenience. **It is the compliance record** — so the number and i
 `SOURCE_DOCUMENTS` — new, and nothing like it exists today.
 
 ```cds
-entity SOURCE_DOCUMENTS : cuid, managed {
+entity SOURCE_DOCUMENTS : cuid, AuditTrail {
   document_type    : DocumentType   @mandatory;
   image_uri        : String(500)    @mandatory;
   image_hash       : String(64);
@@ -49,15 +50,17 @@ entity SOURCE_DOCUMENTS : cuid, managed {
   confirmed_by     : String(50);
   confirmed_at     : Timestamp;
 
-  flight           : Association to FLIGHT_SCHEDULE;
-  delivery         : Association to FUEL_DELIVERIES;
-  ticket           : Association to FUEL_TICKETS;
+  capture_location : String(100);   // from signature_location
 }
 ```
 
-**Exactly one of the three associations is populated.** A tech log belongs to a flight; gauge images to a delivery; ticket and meter images to a ticket.
+**`SOURCE_DOCUMENTS` HOLDS NO LINK BACK TO ITS SUBJECT.** A document is reached **only** through the field that cites it — `closure_document`, `gauge_before_document`, `ticket_document` and their siblings.
 
-> **Not a generic attachment table.** Its shape follows what fuel evidence actually is, and a document that belongs to nothing is a document nobody can act on.
+> **CORRECTED 24 August.** An earlier draft declared `flight`, `delivery` and `ticket` associations here **as well as** the parent-side fields. **That models one relationship twice, and two links can disagree** — with nothing saying which wins. Section 4's rule already settles it: the reference lives on the parent field, beside the value it evidences.
+>
+> **The cost is retrieval.** *"Every image for this delivery"* becomes a read of that delivery's own two document fields rather than a filter on `SOURCE_DOCUMENTS`. **At most two per entity**, so the cost is small and the ambiguity is gone.
+>
+> **The consequence to watch:** a document row exists briefly before the parent field is set. **Write both in one transaction**, or an unreferenced document is a photograph nobody can find.
 
 ### Enumerations
 
@@ -75,7 +78,11 @@ entity SOURCE_DOCUMENTS : cuid, managed {
 
 A value without a provenance flag is a value nobody can weigh. **The flag also selects the tolerance**, which is already how `fob_source` behaves.
 
-### On `FLIGHT_SCHEDULE` — six fields absent today
+### On `FLIGHT_SCHEDULE` — **NINE OF THESE NOW EXIST. BUILT BY WP-33.**
+
+> **CORRECTED 24 August.** This section was written before WP-33 merged and said the fields were absent. **`fob_at_out_kg`, `fob_at_off_kg`, `fob_at_on_kg`, `fob_at_in_kg`, `fob_source`, `flight_closure_utc`, `closure_source`, `flight_start_utc` and `start_source` are all on `main`.** Only **`closure_document`** is absent, and it is the only one WP-31 adds.
+>
+> The claim that *trip burn cannot be computed today* is also no longer true — **WP-33 supplied exactly those operands.**
 
 ```cds
 fob_at_out_kg       : Decimal(10,2);
@@ -135,6 +142,8 @@ A tech log yields **the closure timestamp, the uplift as recorded, and any defec
 
 ```
 SOURCE_DOCUMENTS  1 ──── N  the fields that cite it
+
+and nothing points the other way
 ```
 
 **Do not build an `OCR_EXTRACTIONS` table.** It would be correct and nobody would ever query it — the question is always *where did THIS field come from*, never *what did that image yield*.
@@ -154,7 +163,9 @@ photograph  →  OCR reads  →  person sees the read on screen
 
 ### Which is why OCR earns the tighter tolerance
 
-`fob_source` gains **`OCR_CONFIRMED`** at **0.5% | 50 kg** — the same as `ACARS`.
+`fob_source` gains **`OCR_CONFIRMED`**, taking the same tolerance as `ACARS`.
+
+> **MEASURED 24 August, and only half of it is in the data.** `TOL-FOB-ACARS` carries `floor_value = 50` and **`tolerance_value` EMPTY** — as do all three FOB rows. **The 50 kg floor is confirmed; the 0.5% is not in `TOLERANCE_RULES` at all.** So a new `OCR_CONFIRMED` row copying ACARS would copy an empty percentage. **The reasoning below holds; the percentage needs a source**, like the confidence threshold in section 10.
 
 **The reason is rounding, not accuracy.** Decision C-5: the same load cell drives the ACARS downlink and the cockpit dial, so the instrument error is identical. What differs is the recording — a crew figure is written down to the nearest 100 kg, and an OCR read of the dial is to the kilogram.
 
@@ -166,7 +177,7 @@ Below a threshold, the value **cannot be accepted without explicit manual confir
 
 **The threshold belongs in `TOLERANCE_RULES`**, alongside everything else WP-13 collected. Not a literal.
 
-`ocr_confidence` is a `Decimal`, so **`@assert.range` will not enforce it.** A handler check, per D30.
+`ocr_confidence` needs a **handler** check — **not because `@assert.range` fails on a numeric bound, which is a claim that was retracted on 24 August.** It enforces. The reason is that **the threshold is resolved from `TOLERANCE_RULES` and an annotation is a compile-time literal that cannot read a store.**
 
 ---
 
@@ -205,9 +216,9 @@ Below a threshold, the value **cannot be accepted without explicit manual confir
 | | |
 |---|---|
 | `SOURCE_DOCUMENTS` | New entity, four enums, `@assert.range` on each |
-| Six fields on `FLIGHT_SCHEDULE` | Four fuel figures, two timestamps, plus their source flags |
+| **One** field on `FLIGHT_SCHEDULE` | **`closure_document` only.** The other nine landed with WP-33 |
 | Two associations on `FUEL_DELIVERIES` | And `OCR_CONFIRMED` on `FobSource` |
-| Three fields on `FUEL_TICKETS` | Two documents and a source flag |
+| **Two** fields on `FUEL_TICKETS` | Two document associations. **`ticket_source` already exists** |
 | Confirmation handler | Raw read → person → stored value |
 | Confidence threshold | From `TOLERANCE_RULES`, handler-enforced |
 | Object store integration | `image_uri` and `image_hash` |
@@ -224,7 +235,7 @@ Below a threshold, the value **cannot be accepted without explicit manual confir
 
 Searched for `image`, `photo`, `attachment`, `document`, `proof`, `epod`, `signature`, and separately for `_uri`, `_url`, `blob`, `LargeBinary`, `MediaType`.
 
-**The entire evidence layer is two fields on `FUEL_DELIVERIES`:**
+**The entire evidence layer is four fields on `FUEL_DELIVERIES`:**
 
 ```cds
 pilot_signature       : LargeBinary;    // Pilot signature image
@@ -262,7 +273,7 @@ Fine for a signature at a few kilobytes. **A photographed tech log is 2 to 5 MB*
 
 ### This is the first removal this project will make
 
-**Every merged package so far has been additive.** The only removals in the history predate the work — WP-08's duplicate pricing family and D24's three orphaned CSVs, both retirements of things nothing used.
+**Every merged package so far has been additive.** The only prior removal is WP-08's duplicate pricing family. **D24's three orphaned CSVs are still on `main`** — `Airports`, `FuelTypes` and `Suppliers`; D24 says delete and nobody has. **So this is the first removal of a FIELD**, which is the stronger claim and still true.
 
 **Four fields with seeded data behind them leave `FUEL_DELIVERIES`:**
 
@@ -309,7 +320,7 @@ test/    every harness asserting on a signature
 
 **`FUEL_DELIVERIES` carries no proof association.** WP-12 built the measurement fields and no evidence link.
 
-> **Still survey the READERS of the two signature fields before moving them.** WP-21A found three UI bindings pointing at fields that never existed on `INVOICES` " that is what happens when a field moves and a reader does not.
+> **Still survey the READERS of the two signature fields before moving them.** the shipped UI reads **five** fields that never existed on `INVOICES` — D32 " that is what happens when a field moves and a reader does not.
 
 ---
 
