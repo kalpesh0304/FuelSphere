@@ -812,11 +812,6 @@ annotate FuelOrderService.FuelDeliveries with {
     // one renders its technical name to a user. WP-UI-02's harness caught it.
     // A field that is still visible still needs a label, whatever the plan
     // for it is.
-    signature_timestamp @title: 'Signature Time' @Common.FieldControl: #ReadOnly;
-    signature_location  @title: 'Location';
-    pilot_signature       @title: 'Pilot Signature (legacy)';
-    ground_crew_signature @title: 'Ground Crew Signature (legacy)';
-
     signature_pilot_document @title: 'Pilot Signature';
     signature_crew_document  @title: 'Ground Crew Signature';
     gauge_before_document    @title: 'Gauge Before';

@@ -494,8 +494,6 @@ annotate RefuelerService.DeliveryRecords with {
     // WP-31 step 3. Readers moved; the labels on the old fields stay until
     // step 4 removes the fields - they are still exposed, and an unlabelled
     // exposed field renders its technical name.
-    signature_timestamp      @title: 'Signature Time'            @Common.FieldControl: #ReadOnly;
-    signature_location       @title: 'Location';
     signature_pilot_document @title: 'Pilot Signature';
     signature_crew_document  @title: 'Ground Crew Signature';
     status                   @title: 'Status'                    @Common.FieldControl: #ReadOnly;

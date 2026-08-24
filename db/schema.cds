@@ -1247,13 +1247,30 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         vehicle_id          : String(20);               // Delivery vehicle ID
         driver_name         : String(100);              // Driver name
 
-        // Digital Signatures (stored as base64 or reference to Object Store)
-        pilot_signature     : LargeBinary;              // Pilot signature image
+        // ====================================================================
+        // WP-31 STEP 4 - THE FIRST FIELD REMOVAL THIS PROJECT HAS MADE.
+        //
+        // Four fields left here:
+        //
+        //     pilot_signature       -> SOURCE_DOCUMENTS.image_uri + image_hash
+        //     ground_crew_signature -> SOURCE_DOCUMENTS.image_uri + image_hash
+        //     signature_timestamp   -> SOURCE_DOCUMENTS.captured_at
+        //     signature_location    -> SOURCE_DOCUMENTS.capture_location
+        //
+        // They were stored, not evidenced: two LargeBinary images with no
+        // source, no confirmation and no hash. And the comment that stood
+        // here read "stored as base64 or reference to Object Store" - an
+        // undecided decision sitting in a comment, which is D28's class.
+        //
+        // The names STAY. pilot_name and ground_crew_name are the ePOD's
+        // record of who was present, EPD402 gates on them, and they are not
+        // evidence of an image.
+        //
+        // Removed only after step 3 proved zero readers remained. A removal
+        // that fails loudly is recoverable; one that fails quietly is D32.
+        // ====================================================================
         pilot_name          : String(100);              // Pilot name
-        ground_crew_signature : LargeBinary;            // Ground crew signature image
         ground_crew_name    : String(100);              // Ground crew name
-        signature_timestamp : Timestamp;                // Signature capture time
-        signature_location  : String(100);              // GPS coordinates or location
 
         // ====================================================================
         // WP-31 step 2 - the evidence layer reaches this entity.

@@ -49,9 +49,9 @@ const TYPE = { PILOT: 'SIGNATURE_PILOT', CREW: 'SIGNATURE_CREW' };
  * `document` is the citing field - without it the row is unreachable.
  */
 const SIDES = [
-    { bytes: 'pilot_signature',       name: 'pilot_name',
+    { payloadBytes: 'pilotSignature',      payloadName: 'pilotName',
       document: 'signature_pilot_document_ID', type: TYPE.PILOT },
-    { bytes: 'ground_crew_signature', name: 'ground_crew_name',
+    { payloadBytes: 'groundCrewSignature', payloadName: 'groundCrewName',
       document: 'signature_crew_document_ID',  type: TYPE.CREW }
 ];
 
@@ -150,35 +150,44 @@ async function putUpload(uri, buf) {
 }
 
 /**
- * Migrate one delivery's signatures.
+ * Build the two signature documents for a delivery, FROM THE CAPTURE PAYLOAD.
+ *
+ * STEP 4 CHANGED WHERE THE BYTES COME FROM, not what is built. Until now this
+ * module read them back off FUEL_DELIVERIES, because that is where
+ * captureSignatures had put them. Those four columns are gone, so the bytes
+ * arrive from the action that received them and never touch the delivery row.
+ *
+ * That also retires the backfill: migrateDelivery and migrateAll existed to
+ * move rows that already held signatures, and after the removal there is
+ * nothing left to read them from. THE BACKFILL MUST BE RUN BEFORE THIS
+ * VERSION DEPLOYS - see the note in the package.
  *
  * THE DOCUMENT AND THE CITING FIELD ARE WRITTEN TOGETHER. A document row that
- * exists before its parent field is set is unreachable, and the window is
+ * exists before its parent field is set is unreachable, and that window is
  * exactly where a failure leaves an orphan.
  *
- * Idempotent: a delivery whose citing field is already set is skipped, so a
- * re-run does not duplicate the evidence.
+ * Idempotent: a side whose citing field is already set is skipped, so a
+ * re-capture does not duplicate the evidence.
  */
-async function migrateDelivery(deliveryId, srv) {
+async function createSignatureDocuments(deliveryId, payload, srv) {
     const db = srv || cds.db;
 
     const d = await db.run(SELECT.one.from(FD).columns(
-        'ID', 'delivery_number', 'pilot_signature', 'ground_crew_signature',
-        'pilot_name', 'ground_crew_name', 'signature_timestamp', 'signature_location',
-        'signature_pilot_document_ID', 'signature_crew_document_ID'
+        'ID', 'delivery_number', 'signature_pilot_document_ID', 'signature_crew_document_ID'
     ).where({ ID: deliveryId }));
     if (!d) return { error: `delivery ${deliveryId} not found` };
 
+    const at = payload.capturedAt || new Date().toISOString();
     const created = [];
     const skipped = [];
 
     for (const side of SIDES) {
-        if (d[side.document]) { skipped.push({ side: side.type, reason: 'already migrated' }); continue; }
+        if (d[side.document]) { skipped.push({ side: side.type, reason: 'already captured' }); continue; }
 
         // Resolve to REAL BYTES before anything else. Never test emptiness on
-        // the raw column - String(stream) is a non-empty 15-character string
-        // and would pass a length check while carrying no image at all.
-        const bytes = await toBuffer(d[side.bytes]);
+        // a raw value - String(stream) is a non-empty 15-character string and
+        // would pass a length check while carrying no image at all.
+        const bytes = await toBuffer(payload[side.payloadBytes]);
 
         // NO BYTES IS NOT A FAILURE AND NOT A DOCUMENT. Creating a row for an
         // image that was never captured manufactures evidence, which is the
@@ -191,6 +200,7 @@ async function migrateDelivery(deliveryId, srv) {
         const id = cds.utils.uuid();
         const uri = uriFor(d.ID, side.type);
         const upload = await putUpload(uri, bytes);
+        const who = payload[side.payloadName] || 'unknown';
 
         await db.run(INSERT.into(SD).entries({
             ID: id,
@@ -200,12 +210,12 @@ async function migrateDelivery(deliveryId, srv) {
             capture_method: SIGNATURE_CAPTURE_METHOD,
             // The signatory is who captured it. Which is what a signature
             // already means, and why confirmed_by carries the same value.
-            captured_by: d[side.name] || 'unknown',
-            captured_at: d.signature_timestamp,
+            captured_by: who,
+            captured_at: at,
             ocr_status: SIGNATURE_OCR_STATUS,
-            confirmed_by: d[side.name] || null,
-            confirmed_at: d.signature_timestamp,
-            capture_location: d.signature_location
+            confirmed_by: who,
+            confirmed_at: at,
+            capture_location: payload.location || null
         }));
         await db.run(UPDATE(FD).set({ [side.document]: id }).where({ ID: d.ID }));
 
@@ -213,40 +223,16 @@ async function migrateDelivery(deliveryId, srv) {
                        hash: hashOf(bytes), bytesStored: upload.stored, bytes: upload.bytes });
     }
 
-    // Proof, in the return value, that step 2 removed nothing.
-    const after = await db.run(SELECT.one.from(FD).columns(
-        'pilot_signature', 'ground_crew_signature', 'signature_timestamp', 'signature_location'
-    ).where({ ID: d.ID }));
-
     return {
         deliveryId: d.ID,
         deliveryNumber: d.delivery_number,
         created, skipped,
-        oldFieldsIntact: {
-            pilot_signature: after.pilot_signature !== null && after.pilot_signature !== undefined,
-            ground_crew_signature: after.ground_crew_signature !== null && after.ground_crew_signature !== undefined,
-            signature_timestamp: after.signature_timestamp ?? null,
-            signature_location: after.signature_location ?? null
-        },
         objectStore: 'NOT PROVISIONED - uri and hash computed, bytes not moved'
     };
-}
-
-/** Every delivery carrying a signature that has not been migrated yet. */
-async function migrateAll(srv) {
-    const db = srv || cds.db;
-    const rows = await db.run(SELECT.from(FD).columns('ID')
-        .where({ or: [
-            { pilot_signature: { '!=': null } },
-            { ground_crew_signature: { '!=': null } }
-        ] }));
-    const results = [];
-    for (const r of rows) results.push(await migrateDelivery(r.ID, db));
-    return results;
 }
 
 module.exports = {
     TYPE, SIDES, SIGNATURE_OCR_STATUS, SIGNATURE_CAPTURE_METHOD, OBJECT_STORE_PREFIX,
     EPD_BYTES_UNREADABLE,
-    uriFor, toBuffer, hashOf, putUpload, migrateDelivery, migrateAll
+    uriFor, toBuffer, hashOf, putUpload, createSignatureDocuments
 };

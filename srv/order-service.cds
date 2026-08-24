@@ -183,17 +183,6 @@ service FuelOrderService {
          */
         action reconcile() returns ReconciliationResult;
 
-        /**
-         * WP-31 step 2 - move this delivery's signatures into the evidence
-         * layer.
-         *
-         * ADDITIVE. The four old fields keep their values; step 4 removes
-         * them, and only once step 3 has proved zero readers remain.
-         *
-         * Idempotent - a delivery already carrying its citing fields is
-         * skipped rather than duplicated.
-         */
-        action migrateSignatures() returns SignatureMigrationResult;
 
         /**
          * WP-34 - reconstruct the gauge uplift where the readings do not exist.
@@ -507,23 +496,6 @@ service FuelOrderService {
         departingFlight     : String(40);
         apuCycles           : Integer;         // How many cycles fed the adjustment
         evidence            : String(500);     // The arithmetic, reproducible from the row
-    }
-
-    /**
-     * WP-31. `oldFieldsIntact` is reported rather than assumed: step 2's
-     * safety property is that it removed nothing, and a claim is not a check.
-     */
-    type SignatureMigrationResult {
-        deliveryNumber   : String(25);
-        createdCount     : Integer;
-        skippedCount     : Integer;
-        pilotDocument    : String(36);
-        crewDocument     : String(36);
-        pilotHash        : String(64);
-        crewHash         : String(64);
-        bytesStored      : Boolean;      // FALSE - no object store is provisioned
-        oldFieldsIntact  : Boolean;      // The four fields still hold their values
-        detail           : String(500);
     }
 
     type TemperatureCorrectionResult {

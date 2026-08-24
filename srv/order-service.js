@@ -33,7 +33,7 @@ const {
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
-const { migrateDelivery } = require('./lib/signature-migration');
+const { createSignatureDocuments } = require('./lib/signature-documents');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -482,14 +482,14 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 : 0;
             const varianceFlag = Math.abs(variancePct) > 5;
 
-            // Update delivery with signatures and S/4 references
+            // WP-31 step 4. The signature bytes, their timestamp and their
+            // location no longer live on this row - they are the document's,
+            // and the document is written below from the payload that carried
+            // them. pilot_name and ground_crew_name STAY: they are the ePOD's
+            // record of who was present, and EPD402 gates on them.
             await UPDATE(FuelDeliveries).where({ ID: delivery.ID }).set({
                 pilot_name: pilotName,
-                pilot_signature: pilotSignature,
                 ground_crew_name: groundCrewName,
-                ground_crew_signature: groundCrewSignature,
-                signature_timestamp: now,
-                signature_location: signatureLocation,
                 s4_gr_number: s4GRNumber,
                 s4_gr_year: new Date().getFullYear().toString(),
                 s4_gr_item: '0001',
@@ -501,15 +501,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 modified_by: req.user.id
             });
 
-            // WP-31 step 3. The capture now produces DOCUMENTS as well, so a
-            // signature is evidenced the moment it is taken rather than only
-            // once a backfill runs.
-            //
-            // The four old fields above are STILL WRITTEN. Step 3 moves
-            // readers, not writers - the writer goes in step 4 with the
-            // fields it writes, and until then both shapes are live so
-            // nothing breaks while the readers move one at a time.
-            await migrateDelivery(delivery.ID);
+            // WP-31 step 4. The capture writes its evidence directly. The
+            // bytes come from this action's payload and never touch the
+            // delivery row, because the columns they used to land in are
+            // gone.
+            const sigDocs = await createSignatureDocuments(delivery.ID, {
+                pilotSignature, pilotName, groundCrewSignature, groundCrewName,
+                capturedAt: now, location: signatureLocation
+            });
+            if (sigDocs.error) return req.error(400, sigDocs.error);
 
             // Update parent order with PO number and status → Delivered
             await UPDATE(FuelOrders).where({ ID: order.ID }).set({
@@ -651,47 +651,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 correctedQuantity: correctedQty,
                 referenceTemperature: refTemp,
                 message: `Temperature corrected from ${measuredQty} to ${correctedQty} ${uom} (factor: ${correctionFactor}, ΔT: ${(temp - refTemp).toFixed(1)}°C)`
-            };
-        });
-
-        // ====================================================================
-        // SIGNATURE MIGRATION - WP-31 step 2
-        //
-        // Moves the two ePOD signatures into SOURCE_DOCUMENTS and sets the
-        // citing fields, in that order and together. REMOVES NOTHING - the
-        // four old fields keep their values until step 4.
-        // ====================================================================
-
-        this.on('migrateSignatures', FuelDeliveries, async (req) => {
-            const delivery = await SELECT.one.from(FuelDeliveries).where({ ID: _id(req.params) });
-            if (!delivery) return req.error(404, 'Delivery not found');
-
-            const r = await migrateDelivery(delivery.ID);
-            if (r.error) return req.error(400, r.error);
-
-            const pick = (t) => r.created.find(c => c.side === t) || {};
-            const pilot = pick('SIGNATURE_PILOT');
-            const crew = pick('SIGNATURE_CREW');
-            const o = r.oldFieldsIntact;
-
-            return {
-                deliveryNumber: r.deliveryNumber,
-                createdCount: r.created.length,
-                skippedCount: r.skipped.length,
-                pilotDocument: pilot.documentId || null,
-                crewDocument: crew.documentId || null,
-                pilotHash: pilot.hash || null,
-                crewHash: crew.hash || null,
-                bytesStored: r.created.length ? r.created.every(c => c.bytesStored) : false,
-                // Reported from a re-read, not from the fact that nothing
-                // deleted them. Step 2's safety property is checked, not
-                // claimed.
-                oldFieldsIntact: o.pilot_signature || o.ground_crew_signature
-                    || o.signature_timestamp !== null || o.signature_location !== null,
-                detail: r.skipped.length
-                    ? `${r.created.length} created; skipped: `
-                      + r.skipped.map(s => `${s.side} (${s.reason})`).join(', ')
-                    : `${r.created.length} created. ${r.objectStore}`
             };
         });
 
