@@ -213,6 +213,18 @@ annotate FuelOrderService.FuelOrders actions {
  * - Operations Manager: Full access including verification
  * - Finance Controller: Read for invoice matching
  */
+// WP-31. The evidence layer. READ is wide because a document is the proof
+// behind a number many roles already see; WRITE is narrow because capture is
+// an operational act. No DELETE outside AdminAccess: THE IMAGE IS THE
+// COMPLIANCE RECORD, and deleting it after a successful read destroys the
+// evidence and keeps only the claim.
+annotate FuelOrderService.SourceDocuments with @(restrict: [
+    { grant: 'READ',   to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
+    { grant: 'DELETE', to: ['AdminAccess'] }
+]);
+
 annotate FuelOrderService.FuelDeliveries with @(restrict: [
     { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
     { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
