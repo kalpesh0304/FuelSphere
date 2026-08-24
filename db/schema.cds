@@ -580,6 +580,63 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         boarded_passengers  : Integer;                  // PAX boarded (final, from DCS at door-close ~30 min before departure)
         cargo_kg            : Decimal(10,2);            // Cargo load in kg
         captain_name        : String(100);              // Pilot in command (assigned closer to flight)
+
+        // ====================================================================
+        // WP-33 - the design-review fields. PURELY ADDITIVE, all optional.
+        //
+        // NULL IS NOT ZERO AND NOT "SAME AS PLANNED". No closure timestamp
+        // means no split point - not a split at zero, and not the whole gap
+        // charged to one flight. A null actual_destination does NOT mean the
+        // flight went where it was planned to. Nothing here defaults.
+        // ====================================================================
+
+        // Fuel on board at each OOOI event (WP-19). WP-19 defines trip burn as
+        // OFF minus ON and neither operand existed until now. The four pair
+        // with aobt / atot / aldt / aibt above.
+        fob_at_out_kg       : Decimal(10,2);            // FOB at OUT  (aobt)
+        fob_at_off_kg       : Decimal(10,2);            // FOB at OFF  (atot)
+        fob_at_on_kg        : Decimal(10,2);            // FOB at ON   (aldt)
+        fob_at_in_kg        : Decimal(10,2);            // FOB at IN   (aibt)
+        // Reuses the FobSource type already declared for FUEL_DELIVERIES.
+        // Declared WITHOUT a default, unlike FUEL_DELIVERIES.fob_source which
+        // carries default 'NONE' - here an absent reading must stay absent.
+        fob_source          : FobSource;                // How the four were obtained
+
+        // Ground-gap boundaries (decisions C-4 and F20). C-4 splits the ground
+        // gap at flight closure; F20 is the second gap, between fob_after and
+        // push-back. SEMANTICS OF flight_start_utc ARE OPEN - engineering
+        // release, outbound crew signing the tech log, or AOBT are three
+        // different instants. Do not consume this assuming an answer.
+        flight_closure_utc  : Timestamp;                // C-4 split point
+        closure_source      : ClosureSource;            // How closure was obtained
+        flight_start_utc    : Timestamp;                // F20 boundary. SEMANTICS OPEN
+        start_source        : ClosureSource;            // How start was obtained
+
+        // Actual stations flown (WP-07B convention: the value as received and
+        // the value as resolved are different facts, and a diversion airport
+        // may not be in the register at all).
+        //
+        // NAMING FOLLOWS origin / origin_airport ABOVE. DO NOT "FIX" IT.
+        //
+        // Read in isolation the convention looks backwards: `actual_origin` is
+        // an ASSOCIATION and `actual_origin_airport` is the String(3) IATA
+        // code, which is the opposite of what either name suggests. WP-33
+        // originally specified them the other way round, which reads better on
+        // its own and was rejected for that reason.
+        //
+        // Two pairs running opposite ways on ONE entity is a trap: someone
+        // reading `actual_origin` and expecting a string gets an association.
+        // CONSISTENCY WITHIN THE ENTITY BEATS BEING RIGHT IN ISOLATION. If the
+        // convention is ever changed, change origin / destination in the same
+        // commit or not at all.
+        //
+        // SEMANTICS OF NULL ARE OPEN - it may mean "no deviation" or "the feed
+        // did not say". Those are different facts and nothing should assume one.
+        actual_origin              : Association to MASTER_AIRPORTS;   // As resolved
+        actual_origin_airport      : String(3);         // As received (IATA). SEMANTICS OPEN
+        actual_destination         : Association to MASTER_AIRPORTS;   // As resolved
+        actual_destination_airport : String(3);         // As received (IATA). SEMANTICS OPEN
+
 }
 
 // ============================================================================
@@ -727,6 +784,54 @@ type FobSource : String(20) enum {
 }
 
 /**
+ * Ground-handover source (WP-33, decisions C-4 and F20)
+ *
+ * Where a closure or start timestamp came from. NONE means no timestamp was
+ * captured - it does NOT mean the gap is zero. A missing split point leaves
+ * the ground gap unattributable, which is a different answer from attributing
+ * all of it to one flight.
+ */
+@assert.range: true
+type ClosureSource : String(20) enum {
+    Ocr    = 'OCR';      // Read off a scanned handover document
+    Manual = 'MANUAL';   // Keyed by a human
+    None   = 'NONE';     // Not captured
+}
+
+/**
+ * Order communication status (WP-33, decision C-3)
+ *
+ * C-3 branches on whether an order reached the supplier: an uncommunicated
+ * order is amended in place, a communicated one takes an incremental order.
+ * Without this the branch cannot be chosen at all.
+ *
+ * NOT_SENT and FAILED are not the same. FAILED means an attempt was made and
+ * the outcome is unknown to us, which is the case that needs a human.
+ */
+@assert.range: true
+type CommunicationStatus : String(20) enum {
+    NotSent      = 'NOT_SENT';
+    Sent         = 'SENT';
+    Acknowledged = 'ACKNOWLEDGED';
+    Failed       = 'FAILED';
+}
+
+/**
+ * Order relationship (WP-33, decision C-3)
+ *
+ * How an order relates to its parent. AMENDMENT replaces the parent's figure;
+ * INCREMENTAL adds to it. Summing across a chain without reading this would
+ * double-count every amendment.
+ */
+@assert.range: true
+type OrderRelationship : String(20) enum {
+    Original    = 'ORIGINAL';
+    Amendment   = 'AMENDMENT';
+    Incremental = 'INCREMENTAL';
+}
+
+
+/**
  * FOB reconciliation status (WP-12, decision B5)
  *
  * NOT_RECONCILED must never read as a pass. A missing gauge reading is
@@ -863,6 +968,30 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // Composition: One order can have multiple deliveries and tickets
         deliveries          : Composition of many FUEL_DELIVERIES on deliveries.order = $self;
         tickets             : Composition of many FUEL_TICKETS on tickets.order = $self;
+
+        // ====================================================================
+        // WP-33 - the design-review fields. PURELY ADDITIVE, all optional.
+        // ====================================================================
+
+        // Communication (decision C-3). C-3 gates on whether an order reached
+        // the supplier: uncommunicated is amended in place, communicated takes
+        // an incremental order. Neither branch was selectable before this.
+        communicated_at         : Timestamp;            // When it went to the supplier
+        communication_status    : CommunicationStatus;  // No default - absent is not NOT_SENT
+        communication_reference : String(50);           // Carrier's message reference
+
+        // Order chaining (decision C-3). Self-association; the generated
+        // foreign key is parent_order_ID because FUEL_ORDERS is cuid.
+        parent_order            : Association to FUEL_ORDERS;
+        order_relationship      : OrderRelationship;    // No default - see below
+
+        // Tankering. is_tankering and refuel_complete are the only two of the
+        // twenty-six that carry a default, and they carry it because WP-33
+        // specifies it. An omitted insert therefore reads false, not null;
+        // an explicit null is stored and read back as null.
+        is_tankering            : Boolean default false;
+        tankering_sectors       : Integer;              // Sectors the uplift covers
+
 }
 
 /**
@@ -1000,6 +1129,17 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         recon_status        : ReconStatus default 'NOT_RECONCILED';
         supplier_count      : Integer;                  // Derived. Attribution requires exactly 1
         delivery_method     : String(3);                // IATA-02: HYD hydrant, REF refueller
+
+        // ====================================================================
+        // WP-33 - the refuelling window (decision F2). fob_before_kg and
+        // fob_after_kg above say WHAT the gauge read; nothing said WHEN.
+        // F22 is the completion signal - IATA's message carries one, the
+        // manual path has none.
+        // ====================================================================
+        refuel_start_utc    : Timestamp;                // F2. Window opens
+        refuel_end_utc      : Timestamp;                // F2. Window closes
+        refuel_complete     : Boolean default false;    // F22. Completion signal
+
 }
 
 /**
@@ -1100,6 +1240,14 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // Verification
         verified_by         : String(100);              // User who verified
         verified_at         : DateTime;                 // Verification timestamp
+
+        // ====================================================================
+        // WP-33 - equipment identity. meter_start and meter_end above are
+        // readings; neither says which meter produced them.
+        // ====================================================================
+        vehicle_id          : String(20);               // Delivery vehicle
+        meter_serial        : String(30);               // Meter that produced the readings
+
 }
 
 // ============================================================================
