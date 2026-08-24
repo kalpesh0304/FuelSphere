@@ -122,6 +122,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `EPD478` | WP-34 | `FUEL_DELIVERIES` | An unadjusted OUT minus IN is NOT OFFERED. With no APU cycle recorded the derivation is refused, because an absent cycle is not evidence the APU stayed off | Error |
 | `EPD479` | WP-34 | `FUEL_DELIVERIES` | An open APU cycle, or one carrying no burn figure, makes the turnaround total unknown rather than zero, and refuses the derivation | Error |
 | `EPD480` | WP-34 | `FUEL_DELIVERIES` | A derivation never replaces a measurement; a delivery already carrying a measured gauge pair is not re-derived | Error |
+| `EPD481` | WP-31 | `SOURCE_DOCUMENTS` | Image bytes arriving in an unrecognised shape are refused, never coerced. A hash computed from a coercion is indistinguishable from a hash computed from an image | Error |
 
 ### ENR4xx — Flight schedule enrichment
 

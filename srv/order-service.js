@@ -33,6 +33,7 @@ const {
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
+const { migrateDelivery } = require('./lib/signature-migration');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -640,6 +641,47 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 correctedQuantity: correctedQty,
                 referenceTemperature: refTemp,
                 message: `Temperature corrected from ${measuredQty} to ${correctedQty} ${uom} (factor: ${correctionFactor}, ΔT: ${(temp - refTemp).toFixed(1)}°C)`
+            };
+        });
+
+        // ====================================================================
+        // SIGNATURE MIGRATION - WP-31 step 2
+        //
+        // Moves the two ePOD signatures into SOURCE_DOCUMENTS and sets the
+        // citing fields, in that order and together. REMOVES NOTHING - the
+        // four old fields keep their values until step 4.
+        // ====================================================================
+
+        this.on('migrateSignatures', FuelDeliveries, async (req) => {
+            const delivery = await SELECT.one.from(FuelDeliveries).where({ ID: _id(req.params) });
+            if (!delivery) return req.error(404, 'Delivery not found');
+
+            const r = await migrateDelivery(delivery.ID);
+            if (r.error) return req.error(400, r.error);
+
+            const pick = (t) => r.created.find(c => c.side === t) || {};
+            const pilot = pick('SIGNATURE_PILOT');
+            const crew = pick('SIGNATURE_CREW');
+            const o = r.oldFieldsIntact;
+
+            return {
+                deliveryNumber: r.deliveryNumber,
+                createdCount: r.created.length,
+                skippedCount: r.skipped.length,
+                pilotDocument: pilot.documentId || null,
+                crewDocument: crew.documentId || null,
+                pilotHash: pilot.hash || null,
+                crewHash: crew.hash || null,
+                bytesStored: r.created.length ? r.created.every(c => c.bytesStored) : false,
+                // Reported from a re-read, not from the fact that nothing
+                // deleted them. Step 2's safety property is checked, not
+                // claimed.
+                oldFieldsIntact: o.pilot_signature || o.ground_crew_signature
+                    || o.signature_timestamp !== null || o.signature_location !== null,
+                detail: r.skipped.length
+                    ? `${r.created.length} created; skipped: `
+                      + r.skipped.map(s => `${s.side} (${s.reason})`).join(', ')
+                    : `${r.created.length} created. ${r.objectStore}`
             };
         });
 
