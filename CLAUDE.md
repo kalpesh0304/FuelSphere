@@ -55,14 +55,16 @@ Authoritative. Read before starting work.
 
 ### Services with handlers — BUILT
 
+> **Every line count on this page is a measurement dated 24 August 2026.** Ten were stale before that date — `burn-service.js` had grown from 1,177 to 1,554 and `schema.cds` from 4,381 to 5,462. **A figure that differs from this page has three possible causes, not two:** the page is stale, the page is right, or **both the page and your copy are stale and the code has moved past them.** Only measuring separates them.
+
 | Service | File | Lines | What works |
 |---|---|---|---|
-| Burn | `burn-service.js` | 1177 | ACARS and EFB ingest, Excel import, variance ladder, ROB entries, confirm, reject, `adjustROB`. 24 `.on` handlers |
-| Order | `order-service.js` | 867 | Order lifecycle with status guards, ePOD capture, temperature correction, delivery validation. 16 `.on`, 2 `.before`, 3 `.after` |
-| Planning | `planning-service.js` | 610 | Excel import of flight schedule and dispatch, auto-creation of draft orders. 2 `.on`, 1 `.after` |
-| Refueler | `refueler-service.js` | 235 | Supplier-side sales order lifecycle. 5 `.on`, 2 `.after` |
-| Master data | `master-data-service.js` | 227 | On-demand S/4 sync — countries, plants, suppliers. 4 `.on`, 3 `.before`, 7 `.after` |
-| Ticket | `ticket-service.js` | 173 | Ticket creation with auto-numbering. 6 `.on` |
+| Burn | `burn-service.js` | 1554 | ACARS and EFB ingest, Excel import, variance ladder, ROB entries, confirm, reject, `adjustROB`. 24 `.on` handlers |
+| Order | `order-service.js` | 1288 | Order lifecycle with status guards, ePOD capture, temperature correction, delivery validation. 16 `.on`, 2 `.before`, 3 `.after` |
+| Planning | `planning-service.js` | 649 | Excel import of flight schedule and dispatch, auto-creation of draft orders. 2 `.on`, 1 `.after` |
+| Refueler | `refueler-service.js` | 249 | Supplier-side sales order lifecycle. 5 `.on`, 2 `.after` |
+| Master data | `master-data-service.js` | 228 | On-demand S/4 sync — countries, plants, suppliers. 4 `.on`, 3 `.before`, 7 `.after` |
+| Ticket | `ticket-service.js` | 340 | Ticket creation with auto-numbering. 6 `.on` |
 
 3,289 lines of handler code. **57 `.on` handlers against 382 declared actions and functions.**
 
@@ -82,7 +84,7 @@ Entities exist and are seeded. OData actions are declared. **Calling one returns
 | Three-way match | Declared. No logic |
 | Duplicate detection | Declared. No logic. No unique constraint on invoice number |
 | SOX controls | Documented in section 9. **None enforced** |
-| RBAC | 93 occurrences of `'any'` across **69 grants**. Effectively open |
+| RBAC | **0 occurrences of `'any'` — CLOSED by WP-02.** 108 `to:` grants, and **0 `where:` clauses**, which is D14 and open |
 | Row-level security | **Zero `where:` clauses.** `CompanyCode`, `Plant`, `CostCenter` attributes declared and unused |
 | Scheduler | None. `derivation_schedule` and "daily sync" have no consumer |
 | Config tables | `TOLERANCE_RULES` (5 rows), `SOD_RULES` (7 rows), `ALLOCATION_RULES`, `INTEGRATION_CONFIGS` — populated, read by nothing |
@@ -102,8 +104,8 @@ Not ABAP — the equivalents are CDS entities in `db/schema.cds` under namespace
 
 ```
 db/
-  schema.cds          97 entities, 68 types, 2 aspects, 4381 lines
-  data/               79 seed CSVs, all semicolon-delimited.
+  schema.cds          97 entities, 68 types, 2 aspects, 5462 lines
+  data/               78 seed CSVs, all semicolon-delimited.
                       76 named fuelsphere-<UPPER_SNAKE>.csv;
                       3 named in PascalCase — fuelsphere-Airports.csv,
                       fuelsphere-FuelTypes.csv, fuelsphere-Suppliers.csv
@@ -114,7 +116,7 @@ srv/
                       382 action/function declarations
   *-service.js        6 implementations, 3289 lines total
   server.js           23 lines
-  authorization.cds   69 to: grants, 93 occurrences of 'any', 0 where: clauses
+  authorization.cds   108 to: grants, 0 occurrences of 'any', 0 where: clauses
   external/s4-sync.cds  service S2A, 2 entities
   config/             s4-sync-config.js, 159 lines
   *-fiori-annotations.cds   7 files, 0 entity definitions
@@ -378,7 +380,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | # | Defect |
 |---|---|
 | ~~D1~~ | ~~Master sync transaction wrapper commented out~~ — **NOT A DEFECT.** Measured under WP-01 on 16 Aug 2026. CAP wraps every inbound request in a managed transaction; bare `DELETE`/`INSERT` dispatch onto it and `req.error(500)` rolls back. Delete and insert are already atomic on the request path. **Restoring the wrapper breaks the sync** — see trap below. Residual risk only if `_syncFromS4` is called outside a request context |
-| D2 | 93 occurrences of `'any'` across 69 authorisation grants |
+| ~~D2~~ | **CLOSED by WP-02.** `'any'` now occurs **0 times**; 108 `to:` grants. The row described a fixed defect as live until 24 August |
 | D3 | ROB formula drops uplift, clamps negatives |
 | ~~D4~~ | **CLOSED** under WP-04. Shared allocator with an atomic counter, nine sites across five services |
 | D5 | No optimistic locking; status guards read-then-write |
@@ -390,7 +392,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **D19** | **NARROWED by the WP-21A closure survey. Two problems, not one.** **(a) Naming — decided.** `package.json` names `S2A` for `odata_api`, and `master-data-service.js:105` connects to it; `mta.yaml` provisions `S4HC_TECHNICAL` and `S4HC_USER`, neither referenced anywhere. **Point the code at `S4HC_TECHNICAL`** — background lookups with no user in the loop. Not the reverse: `S2A` is opaque, and renaming a destination to it would erase the technical-versus-principal-propagation distinction the two were created to express. One string. **(b) Environment — open.** **Neither provisioned destination declares a `URL`.** Both are `Type: HTTP`, `ProxyType: Internet`, with an authentication method and a description and nothing to point at. No S/4 tenant exists behind either, and no code change resolves it. **Caveat on (a):** a technical user for everything is right while FuelSphere holds its own authorisation model. If row-level security ever resolves against what a user may see **in S/4** rather than against FuelSphere's own attributes, `S4HC_USER` earns its place — and that is a decision, not a destination swap. Note before WP-14 |
 | **D25** | **79 enum-typed elements in the schema. Zero are enforced.** Declaring a CDS enum does **not** validate input — CAP only checks where `@assert.range` is present. Before annotation, a POST with `status='RETURNED'` against a newly declared enum returned **201**. This is the mechanism behind the whole enum-violation class WP-06 corrected: `SUBMITTED` could sit in seed data against an enum lacking the member because nothing ever checked. WP-09 enforced one field; the other 78 have a wide blast radius across writers and seed data. See WP-09B |
 | **D24** | **Three seed CSVs are dead, not misnamed.** `fuelsphere-Airports.csv`, `fuelsphere-FuelTypes.csv`, `fuelsphere-Suppliers.csv`. No matching entity exists under any name; headers are camelCase (`iataCode`, `specificEnergy`) from a different design; CAP has never loaded them. Live equivalents are `MASTER_AIRPORTS` and `MASTER_SUPPLIERS`; `FUEL_TYPES` has no counterpart at all. **Delete, do not rename** |
-| **D30** | **RESTATED after measurement. `@assert.range` ON NUMERIC BOUNDS IS INERT IN CAP 8.** Only enum membership is enforced — a POST with `temperature: 999` returns **201** against a `[-40, 50]` assertion, on unmodified `main`. Verified by isolation: the same numeric assertion on a **non-draft, unrelated entity** also does not fire, while an enum assertion on the same entity rejects correctly. Not draft, not the entity, not the projection — the type. **D30's original premise was wrong**: there were never two enforcers disagreeing. There is one handler check and an annotation that is decoration. **THREE numeric assertions existed**, not nine — a figure I asserted without measuring. WP-13 converted two to comments; **one remains, `ROB_LEDGER.closing_rob_kg [0, null]`**, and it is inert for a **second reason as well**: `@Common.FieldControl: #ReadOnly` strips the value before validation. `FB402` in the handler is what enforces it. Decision B8 speculated the ROB clamp might exist to satisfy that assertion — it could not have. **B8's decision stands on its own reasoning and WP-03 implemented it**; only the speculation was wrong |
+| **D30** | **Two thresholds are enforced twice, and config alone will not move them.** Temperature and density limits exist as literals in the handler **and** as `@assert.range` on `db/schema.cds`. Move the literal into configuration and **the annotation still enforces the old value**. **CORRECTED 24 August — an earlier restatement of this row claimed `@assert.range` is INERT on numeric bounds. THAT WAS FALSE and it was mine**: it contradicted a measurement already reported to me, in which `delay_minutes` with `[0, 100]` on a non-draft entity rejected 5000 with *"Value 5000 is not in specified range"*. Re-measured on CAP 8.9.9 in an isolated model: **numeric ranges enforce, and CAP names the range in the error.** **Three caveats, not inertness:** it fires on a non-draft write; on a **draft-enabled** entity it defers to `draftActivate`; and it **never** fires on `db.run`, which is how every handler here writes. Separately, the burn variance ladder is written out **three times in two forms** in `burn-service.js`, and `ToleranceType` has no member for temperature, density or burn variance | |
 | **D32** | **The shipped UI reads five fields that do not exist.** Invoicing reads `invoice_status` (the field is `status`), `supplier_name` (it is an association) and `total_amount` (the entity has `net_amount`, `tax_amount`, `gross_amount`). Consequence: **the Exception Queue always reads "No exceptions — all clear" whatever the data says**, Posted is always 0, and Pending always equals the total. Operations reads `b.aircraft_type` and `b.origin_airport_code` where OData emits `aircraft_type_code` and `origin_airport_ID`, so **two Aircraft columns are permanently `--`**. Admin's invoice KPI reads `invoice_status` and therefore counts every invoice, always. Found by the UI survey | 
 | **D33** | **There is no error surface in any of the five applications.** The `odata()` helper — written five times, identically — catches every failure and **returns `[]`**. A 401, a 500, a CSRF rejection and a genuinely empty table all render as "No records found". **Nothing anywhere tells a user that a call failed** | 
 | **D39** | **WP-05's exit criteria no longer hold on `main`.** `wp05-harness` runs 4 passing, 2 failing — `EXIT-2b` and `EXIT-2c` — and it fails **identically on unmodified `main` at `d250a2f`**, so it is not caused by any recent branch. **A merged package's criteria stopped holding and nothing caught it.** The regression suite runs each package's harness when that package is built and afterwards only when someone re-runs it; nothing re-runs an old harness on a schedule. **Needs diagnosis: which later package broke it, and whether the criterion or the behaviour is now wrong.** Found by WP-HDI's regression run | 
@@ -428,7 +430,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **A CDS annotation binds to the next declaration** | Inserting an entity between an annotation and its target silently reassigns it. WP-07 broke `Aircraft`'s draft enablement this way, and **`cds compile` returned 0** — only a service boot caught it. A clean compile is necessary, not sufficient |
 | **Harnesses must run one per process** | A batch run of all 24 reports **88 failures**. They are `cds.test()` instances colliding in one process, **not regressions** — each harness passes clean when run alone. **Anyone running the suite as a batch will conclude the build is broken.** One process per harness is the only run that means anything |
 | **`before CREATE` is not a guard on the entity** | Direct `INSERT` bypasses it. WP-07 found four order-creation paths, three writing directly; WP-04 found nine number-generation sites. Survey the writers |
-| **`@assert.range` enforces enums and NOT numeric bounds** | Measured under WP-13 on CAP 8. `@assert.range` on a numeric field is **decoration** — a POST outside the range returns 201. On an enum it rejects correctly. So D25's remedy works for the 79 enum-typed elements and **does nothing for the nine numeric assertions**, each of which needs a handler check or removal. **An annotation that looks like enforcement and is not is worse than no annotation** |
+| **`@assert.range` enforces BOTH numeric and enum — with three caveats** | Measured on CAP 8.9.9 in an isolated model. **It fires on a non-draft write** and names the range in the error. **On a draft-enabled entity it defers to `draftActivate`**, so a POST that returns 201 has not been validated yet. **And it never fires on `db.run`**, which is how every handler in this repository writes — so no annotation constrains an internal write. **An earlier version of this row claimed numeric bounds were inert. That was false**, and believing it would have meant writing handler guards that already exist in the annotation |
 | **Declaring a CDS enum does not enforce it** | CAP validates only where `@assert.range` is present. Without it an enum is documentation — any string is accepted. 79 enum-typed elements exist and 0 are enforced. **A change that declares an enum and stops there looks done and is not** |
 | **The two pricing families were not versions of one design** | Of `DERIVED_PRICE`'s 26 fields, 20 had no counterpart on `DERIVED_PRICES`. Four read paths were dropped in WP-08 because none exists. `MARKET_INDICES` has no forward composition to its values — the relationship is modelled only from the child |
 | **A defect's stated scope may understate it** | WP-02 found `authorization.cds` covers 4 of 15 services. WP-04 found nine number-generation sites across five services where the defect named three. Survey before fixing — a partial fix on a distributed defect looks complete and is not |
@@ -448,7 +450,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 **Do not:**
 
 - Rewrite an implemented handler. Extend it, and correct it only where it diverges from this document
-- Change an entity or field name — embedded in 185 projections and 79 seed files
+- Change an entity or field name — embedded in 185 projections and 78 seed files
 - Normalise enum casing across modules
 - Combine work packages in one branch
 - Invent a decision. If `00-DECISIONS.md` is silent, stop and ask
