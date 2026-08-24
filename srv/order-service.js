@@ -501,6 +501,16 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 modified_by: req.user.id
             });
 
+            // WP-31 step 3. The capture now produces DOCUMENTS as well, so a
+            // signature is evidenced the moment it is taken rather than only
+            // once a backfill runs.
+            //
+            // The four old fields above are STILL WRITTEN. Step 3 moves
+            // readers, not writers - the writer goes in step 4 with the
+            // fields it writes, and until then both shapes are live so
+            // nothing breaks while the readers move one at a time.
+            await migrateDelivery(delivery.ID);
+
             // Update parent order with PO number and status → Delivered
             await UPDATE(FuelOrders).where({ ID: order.ID }).set({
                 s4_po_number: s4PONumber,

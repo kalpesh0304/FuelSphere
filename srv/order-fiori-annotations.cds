@@ -754,8 +754,14 @@ annotate FuelOrderService.FuelDeliveries with @(
             Data: [
                 { Value: pilot_name, Label: 'Pilot Name' },
                 { Value: ground_crew_name, Label: 'Ground Crew Name' },
-                { Value: signature_timestamp, Label: 'Signature Time' },
-                { Value: signature_location, Label: 'Location' }
+                // WP-31 step 3. MOVED to the evidence layer. The facet still
+                // shows when and where the signature was taken; it reads
+                // captured_at and capture_location on the document instead of
+                // two columns on the delivery. Same purpose, new path.
+                { Value: signature_pilot_document.captured_at, Label: 'Signature Time' },
+                { Value: signature_pilot_document.capture_location, Label: 'Location' },
+                { Value: signature_pilot_document.image_uri, Label: 'Pilot Signature' },
+                { Value: signature_crew_document.image_uri, Label: 'Ground Crew Signature' }
             ]
         },
 
@@ -798,8 +804,23 @@ annotate FuelOrderService.FuelDeliveries with {
     driver_name         @title: 'Driver Name';
     pilot_name          @title: 'Pilot Name';
     ground_crew_name    @title: 'Ground Crew';
+    // WP-31 step 3. The READERS moved to the documents; the labels on the old
+    // fields STAY until step 4 removes the fields themselves.
+    //
+    // Dropping them early looked like a useful signal and was a regression:
+    // the fields are still exposed through the projection, so an unlabelled
+    // one renders its technical name to a user. WP-UI-02's harness caught it.
+    // A field that is still visible still needs a label, whatever the plan
+    // for it is.
     signature_timestamp @title: 'Signature Time' @Common.FieldControl: #ReadOnly;
     signature_location  @title: 'Location';
+    pilot_signature       @title: 'Pilot Signature (legacy)';
+    ground_crew_signature @title: 'Ground Crew Signature (legacy)';
+
+    signature_pilot_document @title: 'Pilot Signature';
+    signature_crew_document  @title: 'Ground Crew Signature';
+    gauge_before_document    @title: 'Gauge Before';
+    gauge_after_document     @title: 'Gauge After';
     s4_gr_number        @title: 'GR Number' @Common.FieldControl: #ReadOnly;
     s4_gr_year          @title: 'GR Year' @Common.FieldControl: #ReadOnly;
     s4_gr_item          @title: 'GR Item' @Common.FieldControl: #ReadOnly;
@@ -943,10 +964,36 @@ annotate FuelOrderService.FuelTickets with @(
 );
 
 // Field-level annotations for FuelTickets
+// WP-31. The evidence layer's own labels. Not covered by WP-UI-02's four
+// entities, but an unpoliced instance of a defect is still the defect.
+annotate FuelOrderService.SourceDocuments with {
+    ID               @UI.Hidden;
+    document_type    @title: 'Document Type';
+    image_uri        @title: 'Image';
+    image_hash       @title: 'Image Hash'       @Common.FieldControl: #ReadOnly;
+    capture_method   @title: 'Capture Method';
+    captured_by      @title: 'Captured By';
+    captured_at      @title: 'Captured At';
+    capture_station  @title: 'Station';
+    capture_location @title: 'Capture Location';
+    ocr_status       @title: 'OCR Status';
+    ocr_confidence   @title: 'OCR Confidence';
+    ocr_engine       @title: 'OCR Engine';
+    ocr_raw          @title: 'Raw OCR Output'   @Common.FieldControl: #ReadOnly;
+    confirmed_by     @title: 'Confirmed By';
+    confirmed_at     @title: 'Confirmed At';
+}
+
 annotate FuelOrderService.FuelTickets with {
     // WP-33
     vehicle_id                   @title: 'Vehicle';
     meter_serial                 @title: 'Meter Serial';
+    // WP-31. On the ASSOCIATION, because CAP propagates it to the generated
+    // foreign key - ticket_document_ID takes its label from here. Labelling
+    // the FK directly is what WP-33 got wrong.
+    ticket_document              @title: 'Ticket Image';
+    meter_document               @title: 'Meter Image';
+    ticket_capture_source        @title: 'Capture Source';
     ID                  @UI.Hidden;
     ticket_number       @title: 'Ticket Number' @mandatory;
     internal_number     @title: 'Internal Number' @Common.FieldControl: #ReadOnly;
@@ -1327,8 +1374,6 @@ annotate FuelOrderService.FuelDeliveries with {
 
     order               @title: 'Fuel Order';
     sales_order         @title: 'Sales Order';
-    pilot_signature     @title: 'Pilot Signature';
-    ground_crew_signature @title: 'Ground Crew Signature';
     created_at          @title: 'Created At';
     created_by          @title: 'Created By';
     modified_at         @title: 'Changed At';

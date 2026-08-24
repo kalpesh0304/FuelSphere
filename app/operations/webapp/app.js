@@ -104,7 +104,10 @@
         var [orders, flights, deliveries, tickets, dispatches, burns, robLedger] = await Promise.all([
             odata(ORDER_SVC + '/FuelOrders?$orderby=requested_date desc'),
             odata(ORDER_SVC + '/FlightSchedule?$orderby=flight_date desc,scheduled_departure asc'),
-            odata(ORDER_SVC + '/FuelDeliveries?$top=500'),
+            // WP-31 step 3. The signature is a document now, so expand it -
+            // without this the cell below reads undefined and renders PENDING
+            // for every delivery, for ever, without throwing.
+            odata(ORDER_SVC + '/FuelDeliveries?$top=500&$expand=signature_pilot_document($select=captured_at)'),
             odata(ORDER_SVC + '/FuelTickets?$top=500'),
             odata(ORDER_SVC + '/FlightDispatches?$top=500'),
             odata(BURN_SVC + '/FuelBurns?$orderby=burn_date desc'),
@@ -311,7 +314,7 @@
             var station = order ? order.station_code : '--';
             var ticket = tickets.find(function(t) { return t.delivery_ID === d.ID; });
 
-            var signedCell = d.signature_timestamp ?
+            var signedCell = (d.signature_pilot_document && d.signature_pilot_document.captured_at) ?
                 '<span class="badge badge-confirmed">SIGNED</span>' :
                 '<span class="badge badge-pending">PENDING</span>';
             var ticketCell = ticket ?
