@@ -70,9 +70,7 @@ entity SOURCE_DOCUMENTS : cuid, AuditTrail {
 | `CaptureMethod` | `MOBILE_CAMERA` · `UPLOAD` · `EMAIL` |
 | `OcrStatus` | `NOT_ATTEMPTED` · `READ` · `PARTIAL` · `FAILED` |
 
-**Every one needs `@assert.range`.** Per **D25** — a declared CDS enum enforces nothing without it.
-
-> **What the annotation does is stated in exactly one place: `CLAUDE.md`'s trap row.** Do not restate it here or anywhere else. An earlier version of this line paraphrased it, which made it the **seventh wording of one true claim** and dropped the caveats — **two of which bite this package.** It never fires on `db.run`, which is how the migration in step 2 writes, and it defers to `draftActivate` on a draft-enabled entity, which `FUEL_DELIVERIES` is — a composition child of `FUEL_ORDERS`. So neither the migration nor a draft POST is constrained by these annotations, and anything that must be guaranteed needs a handler. §5 states the same rule correctly for `ocr_confidence`.
+**Every one needs `@assert.range`.** WP-13 measured that a declared enum enforces nothing without it — and that it works on **both** enum membership and numeric bounds — D30 was corrected on 24 August after a false restatement claiming otherwise.
 
 ---
 
@@ -121,24 +119,14 @@ gauge_after_document  : Association to SOURCE_DOCUMENTS;
 ### On `FUEL_TICKETS` — the ticket and the meter
 
 ```cds
-ticket_document       : Association to SOURCE_DOCUMENTS;
-meter_document        : Association to SOURCE_DOCUMENTS;
-ticket_capture_source : CaptureSource;    // NEW. Beside ticket_source, not replacing it
+ticket_document : Association to SOURCE_DOCUMENTS;
+meter_document  : Association to SOURCE_DOCUMENTS;
+ticket_source   : TicketSource;
 ```
 
-> **CORRECTED 24 August, from the code.** An earlier version of this section declared `ticket_source : TicketSource` with values `OCR` / `MANUAL` / `ELECTRONIC`. **`TicketSource` does not exist anywhere in the repository**, and `ticket_source` is not that field:
->
-> ```cds
-> ticket_source : String(1) default 'M';    // IATA-04: M manual, E electronic
-> ```
->
-> **It is an IATA-04 standard code**, one character, and the 29 seeded rows carry `M` (25) and `E` (4). **It is not FuelSphere's to extend** — adding a third letter for OCR would put a local value into a field an external party reads by the standard's rules.
->
-> **So the provenance flag is a NEW field beside it**, and `ticket_source` is left exactly as it is. §8's line *"`ticket_source` already exists"* was true and misleading: it exists, and it cannot say a value was read off a photograph.
-
-| `CaptureSource` | |
+| `TicketSource` | |
 |---|---|
-| `OCR` | Photographed and read, then confirmed |
+| `OCR` | Photographed and read |
 | `MANUAL` | Keyed |
 | `ELECTRONIC` | The supplier sent a structured document |
 
@@ -177,9 +165,7 @@ photograph  →  OCR reads  →  person sees the read on screen
 
 `fob_source` gains **`OCR_CONFIRMED`**, taking the same tolerance as `ACARS`.
 
-> **RETRACTED 24 August. The earlier caveat here was false, and it was the same mistake twice.** It said `TOL-FOB-ACARS` carried an empty `tolerance_value` and that the 0.5% was not in `TOLERANCE_RULES` at all. **There is no `tolerance_value` column.** The row carries `upper_limit = 0.5000`, `is_percentage = true`, `floor_value = 50` — **the percentage is there and is wired.** What is empty is `value_number`, which belongs to the generic `row_kind` and is empty on every `TOLERANCE` row by design.
->
-> **A new `OCR_CONFIRMED` row copying ACARS copies 0.5% and a 50 kg floor, correctly.** The same false premise reached WP-34's brief and was caught there too — see §9's rule about proving an instrument before believing it.
+> **MEASURED 24 August, and only half of it is in the data.** `TOL-FOB-ACARS` carries `floor_value = 50` and **`tolerance_value` EMPTY** — as do all three FOB rows. **The 50 kg floor is confirmed; the 0.5% is not in `TOLERANCE_RULES` at all.** So a new `OCR_CONFIRMED` row copying ACARS would copy an empty percentage. **The reasoning below holds; the percentage needs a source**, like the confidence threshold in section 10.
 
 **The reason is rounding, not accuracy.** Decision C-5: the same load cell drives the ACARS downlink and the cockpit dial, so the instrument error is identical. What differs is the recording — a crew figure is written down to the nearest 100 kg, and an OCR read of the dial is to the kilogram.
 
@@ -191,9 +177,7 @@ Below a threshold, the value **cannot be accepted without explicit manual confir
 
 **The threshold belongs in `TOLERANCE_RULES`**, alongside everything else WP-13 collected. Not a literal.
 
-`ocr_confidence` needs a **handler** check, and **not for the reason a retracted claim of 24 August gave** — that `@assert.range` failed on numeric bounds. What the annotation does is in `CLAUDE.md`'s trap row and is not repeated here.
-
-**The reason is that the threshold is resolved from `TOLERANCE_RULES`, and an annotation is a compile-time literal that cannot read a store.** That reason holds whatever the annotation does, which is why it is the one worth stating.
+`ocr_confidence` needs a **handler** check — **not because `@assert.range` fails on a numeric bound, which is a claim that was retracted on 24 August.** It enforces. The reason is that **the threshold is resolved from `TOLERANCE_RULES` and an annotation is a compile-time literal that cannot read a store.**
 
 ---
 
@@ -227,14 +211,40 @@ Below a threshold, the value **cannot be accepted without explicit manual confir
 
 ---
 
+## 7A. The backfill runs BEFORE this version deploys
+
+**Inherent to a removal, obvious now, and invisible in six months.**
+
+Once the four fields are gone from `FUEL_DELIVERIES`, **no code can reach the old columns.** So the migration must run against real data **while the fields still exist** — which means it runs on the deployed version *before* this one, not on this one.
+
+> **Get the order wrong and the signatures are still in the database and unreachable.** Recoverable by hand, and nobody will know to look, because nothing throws — the documents simply will not exist and the KPI will count what it can see.
+
+**And no object store is provisioned.** `mta.yaml` carries hana, xsuaa, destination, application-logs and connectivity, and nothing else. `INT404 object store upload failed` is a designed code with nothing behind it, so `putUpload` reports `stored: false` rather than pretending. **The contract is built; the bytes do not move until a store exists.** Same shape as D19(b).
+
+### And nobody knows whether the backfill has run
+
+**This section records the ordering. It cannot record the fact.**
+
+Step 4 retired the backfill, so `createSignatureDocuments` now reads its bytes from the capture payload only. Correct for new captures — and it means **there is no code path that can read a pre-WP-31 signature at all.**
+
+| | |
+|---|---|
+| **The check** | Does any tenant hold signature bytes written before this version? |
+| **If none does** | The ordering is moot and this section is a precaution |
+| **If one does, and the backfill did not run** | Those signatures are in the database and **unreachable**. Recoverable by hand, **and nobody will know to look** — nothing throws, the documents simply do not exist, and the KPI counts what it can see |
+
+> **An operational check with a person attached, not a code one.** Worth noting that nothing in this repository has ever been deployed — no `gen/`, no `mta_archives/` — so the likely answer is that no such tenant exists. **Likely is not established.**
+
+---
+
 ## 8. What must be built
 
 | | |
 |---|---|
 | `SOURCE_DOCUMENTS` | New entity, four enums, `@assert.range` on each |
 | **One** field on `FLIGHT_SCHEDULE` | **`closure_document` only.** The other nine landed with WP-33 |
-| **Four** associations on `FUEL_DELIVERIES` | `gauge_before_document`, `gauge_after_document`, **`signature_pilot_document`, `signature_crew_document`**. And `OCR_CONFIRMED` on `FobSource` |
-| **Three** fields on `FUEL_TICKETS` | Two document associations **and `ticket_capture_source`.** `ticket_source` is IATA-04's `String(1)` and is **left alone** — see §3 |
+| Two associations on `FUEL_DELIVERIES` | And `OCR_CONFIRMED` on `FobSource` |
+| **Two** fields on `FUEL_TICKETS` | Two document associations. **`ticket_source` already exists** |
 | Confirmation handler | Raw read → person → stored value |
 | Confidence threshold | From `TOLERANCE_RULES`, handler-enforced |
 | Object store integration | `image_uri` and `image_hash` |
@@ -260,9 +270,7 @@ signature_timestamp   : Timestamp;
 signature_location    : String(100);    // GPS coordinates or location
 ```
 
-**No image URI exists anywhere.** All **five** `_uri` and `_url` hits across `db/` and `srv/` are endpoints, a navigation target, a source link and a runbook link — `target_url`, `source_url`, `endpoint_url` twice, `runbook_url`. **There is nothing to extend** — WP-31 builds.
-
-> **The count was seven and is five.** Measured 24 August. The substantive claim is unaffected — none of them is an image URI — but a count nobody re-measures is how a document starts drifting from the code it describes.
+**No image URI exists anywhere.** All seven `_uri` and `_url` hits are endpoints, navigation targets or a runbook link. **There is nothing to extend** — WP-31 builds.
 
 ### Two problems in what does exist
 
@@ -288,11 +296,6 @@ Fine for a signature at a few kilobytes. **A photographed tech log is 2 to 5 MB*
 | `signature_location` | Becomes `capture_location`, **a new field on `SOURCE_DOCUMENTS`** — GPS is worth having on every capture, not only signatures |
 | `ocr_status` | `NOT_ATTEMPTED`. **A signature is not read; it is held** |
 | `confirmed_by` | The signatory. Which is what a signature already means |
-| **How the document is REACHED** | **`signature_pilot_document` and `signature_crew_document` on `FUEL_DELIVERIES`** — see below |
-
-> **ADDED 24 August. Without these two fields the migration produces documents nothing can reach.** §2's rule is that a document is reached **only** through the field that cites it, and §2's own warning is that *"an unreferenced document is a photograph nobody can find."* An earlier version of this document listed **two** associations on `FUEL_DELIVERIES` — the gauge pair — and said only that the *"row keeps a reference"*, without saying which row. **After step 2 the migrated signatures would have been unreachable by the model's own rule, and step 4 would have removed the last thing pointing at them.**
->
-> **Four associations, not two**, and the resolution follows §2 rather than relaxing it for signatures.
 
 ### This is the first removal this project will make
 
@@ -320,9 +323,7 @@ signature_location
 | **3** | **Move every reader.** Handlers, projections, annotations, harnesses, seed CSVs. **The old fields are still there, so nothing breaks while this happens** |
 | **4** | Remove the four fields. **Only after step 3 proves zero readers remain** |
 
-> **A removal that fails loudly is recoverable. One that fails quietly is D32** — **five** UI bindings reading fields that never existed on `INVOICES`, rendering blank for months, and **the Exception Queue permanently claiming "No exceptions — all clear" whatever the data said.** Nobody noticed because nothing threw.
->
-> **This blockquote said three; §9 twelve lines below said five, and so does `CLAUDE.md`.** Corrected to five in both.
+> **A removal that fails loudly is recoverable. One that fails quietly is D32** — three UI bindings reading fields that never existed on `INVOICES`, rendering blank for months, and **the Exception Queue permanently claiming "No exceptions — all clear" whatever the data said.** Nobody noticed because nothing threw.
 
 **Step 3 is the whole package.** Steps 1, 2 and 4 are mechanical.
 
