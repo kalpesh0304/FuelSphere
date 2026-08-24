@@ -71,6 +71,8 @@ annotate PlanningService.FlightSchedule with @(
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightIdentification', Label: 'Identification' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#RouteInfo', Label: 'Route' },
+                    // WP-33. Beside the planned route, because it is the same fact observed.
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ActualRouting', Label: 'Actual Routing' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#AircraftInfo', Label: 'Aircraft' }
                 ]
             },
@@ -89,7 +91,11 @@ annotate PlanningService.FlightSchedule with @(
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ScheduledTimes', Label: 'Scheduled' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#EstimatedTimes', Label: 'Estimated' },
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ActualTimes', Label: 'Actual' }
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ActualTimes', Label: 'Actual' },
+                    // WP-33. Immediately after the Actual timestamps, because the four figures
+                    // are read AT those events - aobt / atot / aldt / aibt.
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOnBoard', Label: 'Fuel on Board' },
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#GroundHandover', Label: 'Ground Handover' }
                 ]
             },
             {
@@ -205,6 +211,44 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
+        // --- WP-33 ---------------------------------------------------------
+        // A label is not a placement. These three groups exist so the fields
+        // WP-33 adds are reachable, not merely titled.
+
+        // The four figures read at OUT / OFF / ON / IN, with the flag saying how
+        // they were obtained. WP-19 defines trip burn as OFF minus ON.
+        FieldGroup #FuelOnBoard: {
+            Data: [
+                { Value: fob_at_out_kg, Label: 'FOB at OUT (kg)' },
+                { Value: fob_at_off_kg, Label: 'FOB at OFF (kg)' },
+                { Value: fob_at_on_kg,  Label: 'FOB at ON (kg)' },
+                { Value: fob_at_in_kg,  Label: 'FOB at IN (kg)' },
+                { Value: fob_source,    Label: 'Reading Source' }
+            ]
+        },
+
+        // The two ground-gap boundaries. An empty timestamp is NOT a zero gap -
+        // it means there is no split point, which is a different answer.
+        FieldGroup #GroundHandover: {
+            Data: [
+                { Value: flight_closure_utc, Label: 'Flight Closure (UTC)' },
+                { Value: closure_source,     Label: 'Closure Source' },
+                { Value: flight_start_utc,   Label: 'Flight Start (UTC)' },
+                { Value: start_source,       Label: 'Start Source' }
+            ]
+        },
+
+        // Where the flight actually operated, as received and as resolved.
+        // Empty does NOT mean 'went as planned' - see the schema comment.
+        FieldGroup #ActualRouting: {
+            Data: [
+                { Value: actual_origin_airport,      Label: 'Actual Origin' },
+                { Value: actual_origin_ID,           Label: 'Actual Origin (resolved)' },
+                { Value: actual_destination_airport, Label: 'Actual Destination' },
+                { Value: actual_destination_ID,      Label: 'Actual Destination (resolved)' }
+            ]
+        },
+
         FieldGroup #LinkedFlightInfo: {
             Data: [
                 { Value: linked_flight_number, Label: 'Linked Flight Number' },
@@ -249,6 +293,24 @@ annotate PlanningService.FlightSchedule with @(
 
 annotate PlanningService.FlightSchedule with {
     ID                   @UI.Hidden;
+    // WP-33 - a label for every field the groups above place.
+    fob_at_out_kg                 @title: 'FOB at OUT (kg)';
+    fob_at_off_kg                 @title: 'FOB at OFF (kg)';
+    fob_at_on_kg                  @title: 'FOB at ON (kg)';
+    fob_at_in_kg                  @title: 'FOB at IN (kg)';
+    fob_source                    @title: 'Gauge Reading Source';
+    flight_closure_utc            @title: 'Flight Closure (UTC)';
+    closure_source                @title: 'Closure Source';
+    flight_start_utc              @title: 'Flight Start (UTC)';
+    start_source                  @title: 'Start Source';
+    // WP-33. The String(3) IATA codes carry the plain titles...
+    actual_origin_airport         @title: 'Actual Origin';
+    actual_destination_airport    @title: 'Actual Destination';
+    // ...and the titles go on the ASSOCIATIONS so CAP propagates them to the
+    // generated foreign keys actual_origin_ID / actual_destination_ID, which
+    // are the properties that actually render.
+    actual_origin                 @title: 'Actual Origin (resolved)';
+    actual_destination            @title: 'Actual Destination (resolved)';
     flight_number        @title: 'Flight Number';
     flight_date          @title: 'Date';
     aircraft_type        @title: 'Aircraft Type';
