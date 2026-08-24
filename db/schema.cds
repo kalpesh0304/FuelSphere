@@ -1255,6 +1255,25 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         signature_timestamp : Timestamp;                // Signature capture time
         signature_location  : String(100);              // GPS coordinates or location
 
+        // ====================================================================
+        // WP-31 step 2 - the evidence layer reaches this entity.
+        //
+        // FOUR associations, not two. The gauge pair evidences the readings;
+        // the signature pair is HOW THE MIGRATED SIGNATURES ARE REACHED AT
+        // ALL. SOURCE_DOCUMENTS holds no link back to its subject, so a
+        // document with no field citing it is a photograph nobody can find -
+        // and step 4 removes the last thing pointing at these.
+        //
+        // The four fields above are still here and still hold their values.
+        // They leave in step 4, and only once step 3 has proved zero readers
+        // remain. A removal that fails loudly is recoverable; one that fails
+        // quietly is D32.
+        // ====================================================================
+        gauge_before_document   : Association to SOURCE_DOCUMENTS;
+        gauge_after_document    : Association to SOURCE_DOCUMENTS;
+        signature_pilot_document : Association to SOURCE_DOCUMENTS;
+        signature_crew_document  : Association to SOURCE_DOCUMENTS;
+
         // S/4HANA References (populated after signature)
         s4_gr_number        : String(10);               // S/4HANA Material Document Number
         s4_gr_year          : String(4);                // Material Document Year
