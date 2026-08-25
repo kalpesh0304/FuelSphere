@@ -44,6 +44,83 @@ annotate PlanningService.FuelOrders with {
     requested_date   @title: 'Requested';
 };
 
+// ============================================================================
+// The aircraft register, reached from a flight.
+//
+// Package D exposed this entity on PlanningService, which opened the path and
+// annotated nothing - so a navigation arriving here would have found a page
+// with no header, no sections and no fields. Exposing a target is necessary
+// and not sufficient, the same way declaring an association is.
+//
+// DELIBERATELY THINNER THAN MasterDataService's. That service MAINTAINS the
+// register and shows the confirmation workflow; this one CONSUMES it, and a
+// planner opening a tail from a flight wants the operating facts.
+// ============================================================================
+annotate PlanningService.AircraftRegistrations with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Aircraft',
+            TypeNamePlural : 'Aircraft Register',
+            Title          : { Value: registration },
+            Description    : { Value: aircraft_type_code }
+        },
+        SelectionFields: [ registration, aircraft_type_code, record_status, operator_code ],
+        LineItem: [
+            { Value: registration,        Label: 'Registration',  ![@UI.Importance]: #High },
+            { Value: aircraft_type_code,  Label: 'Type',          ![@UI.Importance]: #High },
+            { Value: record_status,       Label: 'Record Status', ![@UI.Importance]: #High },
+            { Value: operator_code,       Label: 'Operator',      ![@UI.Importance]: #Medium },
+            { Value: apu_burn_rate_kg_hr, Label: 'APU Rate (kg/h)', ![@UI.Importance]: #Medium }
+        ],
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#RegStatus', Label: 'Status' }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'RegIdentity',
+              Target: '@UI.FieldGroup#RegIdentity', Label: 'Identity' },
+            { $Type: 'UI.ReferenceFacet', ID: 'RegPerformance',
+              Target: '@UI.FieldGroup#RegPerformance', Label: 'Performance' }
+        ],
+        FieldGroup #RegStatus: {
+            Data: [
+                // PROVISIONAL is not an error - a tail can be recorded before
+                // its paperwork completes, and fuel is ordered against it.
+                { Value: record_status, Label: 'Record Status' },
+                { Value: operator_code, Label: 'Operator' }
+            ]
+        },
+        FieldGroup #RegIdentity: {
+            Data: [
+                { Value: registration,       Label: 'Registration' },
+                { Value: aircraft_type_code, Label: 'Type' },
+                { Value: operator_code,      Label: 'Operator' },
+                { Value: on_own_aoc,         Label: 'On Own AOC' }
+            ]
+        },
+        FieldGroup #RegPerformance: {
+            Data: [
+                // The rate every APU figure in the seed derives from.
+                { Value: apu_burn_rate_kg_hr,     Label: 'APU Burn Rate (kg/h)' },
+                { Value: fuel_capacity_kg,        Label: 'Fuel Capacity (kg)' },
+                { Value: dry_operating_weight_kg, Label: 'Dry Operating Weight (kg)' },
+                { Value: performance_factor_pct,  Label: 'Performance Factor (%)' }
+            ]
+        }
+    }
+);
+
+annotate PlanningService.AircraftRegistrations with {
+    registration            @title: 'Registration';
+    aircraft_type_code      @title: 'Type';
+    record_status           @title: 'Record Status';
+    operator_code           @title: 'Operator';
+    on_own_aoc              @title: 'On Own AOC';
+    apu_burn_rate_kg_hr     @title: 'APU Burn Rate (kg/h)';
+    fuel_capacity_kg        @title: 'Fuel Capacity (kg)';
+    dry_operating_weight_kg @title: 'Dry Operating Weight (kg)';
+    performance_factor_pct  @title: 'Performance Factor (%)';
+};
+
 annotate PlanningService.FlightSchedule with @(
     UI: {
         // --- Header ---
@@ -205,10 +282,44 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
+        // ====================================================================
+        // BOTH FACTS, NOT ONE. WP-07B's convention is that the value AS
+        // RECEIVED and the value AS RESOLVED are different facts, and the case
+        // that matters most is when they disagree.
+        //
+        // Replacing the string with the association would hide that: an
+        // unresolved registration would render as an empty field with nothing
+        // saying a registration was received at all. A BLANK 'Aircraft' BESIDE
+        // A POPULATED 'Registration' IS A VISIBLE STATE THAT MEANS SOMETHING -
+        // the tail arrived on a feed and the register has never seen it. That
+        // is ACCEPT_PROVISIONAL made legible rather than silent.
+        //
+        // The link goes on the ASSOCIATION. The string stays text.
+        // ====================================================================
         FieldGroup #AircraftInfo: {
             Data: [
                 { Value: aircraft_type, Label: 'Aircraft Type' },
-                { Value: aircraft_reg, Label: 'Registration' }
+                // As received. Always present, never a link.
+                { Value: aircraft_reg, Label: 'Registration' },
+                // As resolved, AND CLICKABLE.
+                //
+                // DataFieldWithNavigationPath, not DataField. A plain
+                // `Value: tail_registration` emits UI.DataField and renders as
+                // a THIRD TEXT COLUMN - it looks like the fix and navigates
+                // nowhere. The record type is what makes the value a link, and
+                // Target names the association it follows.
+                //
+                // In-app navigation, not @Common.SemanticObject: a semantic
+                // object resolves through the launchpad's intent registry,
+                // which is not available here, so it would render as a link
+                // with nowhere to go.
+                {
+                    $Type  : 'UI.DataFieldWithNavigationPath',
+                    Value  : tail_registration,
+                    Label  : 'Aircraft',
+                    Target : tail,
+                    ![@UI.Importance]: #High
+                }
             ]
         },
 
