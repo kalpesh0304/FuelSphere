@@ -86,7 +86,9 @@ annotate BurnService.FuelBurns with @(
         FieldGroup #BurnQuantities: {
             Data: [
                 { Value: actual_burn_kg, Label: 'Actual Burn (kg)' },
-                { Value: planned_burn_kg, Label: 'Planned Burn (kg)' }
+                { Value: planned_burn_kg, Label: 'Planned Burn (kg)' },
+                { Value: apu_burn_kg, Label: 'APU in Block (kg)' },
+                { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
             ]
         },
 
@@ -133,6 +135,29 @@ annotate BurnService.FuelBurns with @(
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ReviewInfo', Label: 'Review' }
                 ]
             },
+            // ================================================================
+            // UI-B-03. WP-19 built the APU/engine split and nothing showed it.
+            //
+            // Both figures are on the same facet deliberately: engine burn is
+            // block MINUS apu, so reading one without the other invites the
+            // reader to treat the block figure as engine burn. And an unknown
+            // APU share makes the engine burn unknown too - null here means
+            // "not computed", never "zero".
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnSplit',
+                Target : '@UI.FieldGroup#BurnSplit',
+                Label  : 'APU and Engine Split'
+            },
+            // The tail this burn is on. A to-one association whose target is
+            // on this same service, which is what a ReferenceFacet needs.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnTail',
+                Target : 'tail/@UI.FieldGroup#RegistrationKey',
+                Label  : 'Aircraft Register'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'BurnAdmin',
@@ -140,6 +165,17 @@ annotate BurnService.FuelBurns with @(
                 Label  : 'Administration'
             }
         ],
+
+        FieldGroup #BurnSplit: {
+            Data: [
+                { Value: actual_burn_kg,  Label: 'Block Burn (kg)' },
+                { Value: apu_burn_kg,     Label: 'APU in Block (kg)' },
+                { Value: engine_burn_kg,  Label: 'Engine Burn (kg)' },
+                { Value: burn_time,       Label: 'Burn Time' },
+                { Value: finance_posted,  Label: 'Posted to Finance' },
+                { Value: finance_post_date, Label: 'Finance Post Date' }
+            ]
+        },
 
         // --- Field Groups ---
         FieldGroup #FlightInfo: {
@@ -241,6 +277,35 @@ annotate BurnService.FuelBurns with {
 // ============================================================================
 // ROB LEDGER - List Report + Object Page
 // ============================================================================
+
+// UI-B-03. BurnService exposes AircraftRegistrations but never annotated it,
+// so a facet pointing at the tail had nothing to target. The association was
+// real and its target was on the same service - what was missing was a field
+// group, which is annotation work rather than a schema change.
+annotate BurnService.AircraftRegistrations with @(
+    UI: {
+        FieldGroup #RegistrationKey: {
+            Data: [
+                { Value: registration,            Label: 'Registration' },
+                { Value: aircraft_type_code,      Label: 'Type' },
+                { Value: operator_code,           Label: 'Operator' },
+                // The rate every APU figure in this service derives from.
+                { Value: apu_burn_rate_kg_hr,     Label: 'APU Burn Rate (kg/h)' },
+                { Value: fuel_capacity_kg,        Label: 'Fuel Capacity (kg)' },
+                { Value: dry_operating_weight_kg, Label: 'Dry Operating Weight (kg)' }
+            ]
+        }
+    }
+);
+
+annotate BurnService.AircraftRegistrations with {
+    registration            @title: 'Registration';
+    aircraft_type_code      @title: 'Type';
+    operator_code           @title: 'Operator';
+    apu_burn_rate_kg_hr     @title: 'APU Burn Rate (kg/h)';
+    fuel_capacity_kg        @title: 'Fuel Capacity (kg)';
+    dry_operating_weight_kg @title: 'Dry Operating Weight (kg)';
+};
 
 annotate BurnService.ROBLedger with @(
     UI: {

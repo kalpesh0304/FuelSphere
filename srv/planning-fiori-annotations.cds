@@ -227,6 +227,18 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
+        // UI-B-03. WP-07B's convention: the association RESOLVES, the string
+        // beside it is what was RECEIVED. Both, because a station the master
+        // has never seen still has to be recordable.
+        FieldGroup #ActualStations: {
+            Data: [
+                { Value: actual_origin.iata_code,      Label: 'Actual Origin (resolved)' },
+                { Value: actual_origin_airport,        Label: 'Actual Origin (as received)' },
+                { Value: actual_destination.iata_code, Label: 'Actual Destination (resolved)' },
+                { Value: actual_destination_airport,   Label: 'Actual Destination (as received)' }
+            ]
+        },
+
         // The two ground-gap boundaries. An empty timestamp is NOT a zero gap -
         // it means there is no split point, which is a different answer.
         FieldGroup #GroundHandover: {
