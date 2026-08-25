@@ -14,6 +14,36 @@ using PlanningService from './planning-service';
 // FLIGHT SCHEDULE - List Report + Object Page
 // ============================================================================
 
+// PlanningService exposes FuelOrders and never gave it a LineItem, so a facet
+// listing a flight's orders had nothing to render. A LineItem here is
+// annotation work rather than a schema change - the projection already exists.
+annotate PlanningService.FuelOrders with @(
+    UI: {
+        // ONLY what this projection exposes. PlanningService.FuelOrders is a
+        // RESTRICTED projection - twelve elements, no uom_code and no
+        // ordered_quantity_kg - and a LineItem naming a field the projection
+        // does not carry fails the read, not just the column.
+        LineItem: [
+            { Value: order_number,     Label: 'Order Number',  ![@UI.Importance]: #High },
+            { Value: station_code,     Label: 'Station',       ![@UI.Importance]: #High },
+            { Value: ordered_quantity, Label: 'Quantity',      ![@UI.Importance]: #High },
+            { Value: total_amount,     Label: 'Total',         ![@UI.Importance]: #Medium },
+            { Value: currency_code,    Label: 'Currency',      ![@UI.Importance]: #Low },
+            { Value: status,           Label: 'Status',        ![@UI.Importance]: #High },
+            { Value: requested_date,   Label: 'Requested',     ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+annotate PlanningService.FuelOrders with {
+    order_number     @title: 'Order Number';
+    station_code     @title: 'Station';
+    ordered_quantity @title: 'Quantity';
+    total_amount     @title: 'Total';
+    currency_code    @title: 'Currency';
+    requested_date   @title: 'Requested';
+};
+
 annotate PlanningService.FlightSchedule with @(
     UI: {
         // --- Header ---
@@ -117,8 +147,15 @@ annotate PlanningService.FlightSchedule with @(
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'FuelOrderSection',
-                Label  : 'Fuel Order',
+                Label  : 'Fuel Orders',
                 Facets : [
+                    // A LIST, not a single order. The field group below reads
+                    // through `fuel_order`, which is a to-one over a
+                    // one-to-many condition and therefore shows one arbitrary
+                    // order - PR1041 has two. It is kept because the number is
+                    // useful at a glance; the list beside it is what is
+                    // complete.
+                    { $Type: 'UI.ReferenceFacet', Target: 'orders/@UI.LineItem', Label: 'All Orders for this Flight' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOrderInfo', Label: 'Order Details' }
                 ]
             },

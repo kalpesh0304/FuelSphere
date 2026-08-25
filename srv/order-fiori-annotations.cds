@@ -1112,6 +1112,30 @@ annotate FuelOrderService.FlightSchedule with @(
             { Value: scheduled_departure, Label: 'Departure' },
             { Value: scheduled_arrival, Label: 'Arrival' },
             { Value: status, Label: 'Status' }
+        ],
+
+        // ====================================================================
+        // This entity had a list and NO OBJECT PAGE SECTIONS AT ALL - opening
+        // a flight showed a header and nothing else.
+        //
+        // Both facets are LISTS. A flight can raise several orders and carry
+        // several dispatch plans, and the versioning fields only mean anything
+        // when the plans are seen together: v1 SUPERSEDED above v2 ACTIVE is
+        // the story, and one row cannot tell it.
+        // ====================================================================
+        Facets: [
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightOrders',
+                Target : 'orders/@UI.LineItem',
+                Label  : 'Fuel Orders'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightDispatchPlans',
+                Target : 'dispatches/@UI.LineItem',
+                Label  : 'Dispatch Plans'
+            }
         ]
     }
 );
