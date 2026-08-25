@@ -37,7 +37,7 @@ This specifies every value. **Nothing here is chosen to make a total work** — 
 
 | | |
 |---|---|
-| **`APU_USAGE`** | **Zero rows.** WP-19 built the entity and the derivation module; nothing feeds it. So `ground_burn_kg` cannot be computed and 250 kg is a typed number |
+| **`APU_USAGE`** | **CORRECTED 25 August " it has EIGHT rows, two of them AC410's own, seeded by WP-19.** I asserted zero without checking. **Adding two more would have derived 182.00 kg instead of 52.50** " inverting the check this package exists for. **Correct the two existing rows in place; do not add.** They carry the same local-wearing-a-`Z` times as everything else here |
 | **`FUEL_BURNS`** | No row for `AC410`. The block and trip figures have nowhere to live |
 | **`ROB_LEDGER`** | No chain for `C-FDMO`. The balance that ties the whole scenario together is absent |
 | **`SOURCE_DOCUMENTS`** | New from WP-31. No document for the ticket, the meter, the gauge readings or the tech log |
@@ -224,8 +224,8 @@ tail                     C-FDMO
 block_burn_kg            2280.00      = 4202.50 − 1922.50
 trip_burn_kg             2050.00      = 4052.50 − 2002.50
 taxi_burn_kg              230.00      = 150 out + 80 in
-apu_burn_in_block_kg       17.50      = 10 min × 105 ÷ 60
-engine_burn_kg           2262.50      = block − APU
+apu_burn_in_block_kg        0.00      NO CYCLE FALLS IN THE WINDOW
+engine_burn_kg           2280.00      = block − 0
 planned_burn_kg          2050.00      from trip_fuel_kg
 variance_kg                 0.00
 variance_status          NORMAL
@@ -233,6 +233,14 @@ data_source              ACARS
 ```
 
 **`block − trip = taxi`.** 2,280 − 2,050 = 230, and 150 + 80 = 230.
+
+### `apu_burn_in_block_kg` is zero, and an earlier draft said 17.50
+
+**That figure was invented.** It read *"10 min × 105 ÷ 60"* and **no cycle covers those ten minutes** — cycle 1 ends an hour before off-blocks, cycle 2 starts at on-blocks.
+
+**Zero is the honest answer, and a better one:** the aircraft ran its APU on the ground and not in the air, which is what an A320 on a fifty-minute sector does.
+
+> **Do not let `applyBurnSplit` overwrite it.** That function sums cycles **by phase** and would return 85.75, subtracting ground APU from a block burn that never contained it. **Defect D42** — the fix is a window, not a phase.
 
 ### Ledger — five rows, one chain
 
@@ -296,7 +304,7 @@ ledger row 5 closing                        1,889.25
 | 4 | `quantity_metered × density_value = quantity_kg` |
 | 5 | `fob_after − fob_before = fob_delta_kg` |
 | 6 | `ground_burn_kg` **derives from the `APU_USAGE` rows**, not from a literal |
-| 7 | `block_burn − trip_burn = taxi_burn` |
+| 7 | `block_burn − trip_burn = taxi_burn`, and **`apu_burn_in_block_kg` is 0.00** because no cycle falls between OUT and IN |
 | 8 | The ledger's five rows chain, and rows 3 and 5 match the delivery and the flight |
 | 9 | **Every `Z` timestamp is four hours ahead of its local counterpart** |
 | 10 | `recon_status` is `RECONCILED` and the variance is 0.76 |
