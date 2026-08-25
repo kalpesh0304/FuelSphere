@@ -149,6 +149,15 @@ annotate FuelOrderService.FuelOrders with @(
                 Target : '@UI.FieldGroup#S4References',
                 Label  : 'S/4HANA References'
             },
+            // UI-B-03. The dispatch plan this order was raised against. A
+            // to-one association whose target is on the same service, so the
+            // whole regulated stack is one click from the order.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'OrderDispatchPlan',
+                Target : 'dispatch_plan/@UI.FieldGroup#RegulatedStack',
+                Label  : 'Dispatch Plan'
+            },
             // Section 5: Fuel Deliveries (ePOD)
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -917,7 +926,11 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_timestamp, Label: 'Delivery Time' },
                 { Value: supplier_ticket_ref, Label: 'Supplier Reference' },
-                { Value: ticket_source, Label: 'Capture Source' },
+                { Value: ticket_source, Label: 'Ticket Source (IATA-04)' },
+            // UI-B-03. Beside ticket_source, never replacing it - that field
+            // is IATA-04's one-character code and belongs to an external
+            // standard. This one says how the VALUES were obtained.
+            { Value: ticket_capture_source, Label: 'Capture Source', ![@UI.Importance]: #Medium },
                 { Value: status, Label: 'Status' },
                 { Value: match_status, Label: 'Match Status' }
             ]
@@ -959,6 +972,76 @@ annotate FuelOrderService.FuelTickets with @(
 );
 
 // Field-level annotations for FuelTickets
+// ============================================================================
+// UI-B-03 / WP-31. SourceDocuments had fourteen labelled fields and no screen
+// at all - the entity was reachable and rendered nothing but keys.
+//
+// ocr_raw is deliberately NOT in the LineItem. It is audit-only, never read
+// downstream, and a column of raw OCR output invites somebody to read it as
+// the value. It sits on the object page where its label says what it is.
+// ============================================================================
+annotate FuelOrderService.SourceDocuments with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Source Document',
+            TypeNamePlural : 'Source Documents',
+            Title          : { Value: document_type },
+            Description    : { Value: image_uri }
+        },
+        SelectionFields: [ document_type, ocr_status, capture_method, capture_station ],
+        LineItem: [
+            { Value: document_type,   Label: 'Type',            ![@UI.Importance]: #High },
+            { Value: ocr_status,      Label: 'OCR Status',      ![@UI.Importance]: #High },
+            // A READ with no confirmer is a number nobody has looked at, and
+            // must not render like a confirmed one. Both columns, side by side.
+            { Value: ocr_confidence,  Label: 'Confidence',      ![@UI.Importance]: #High },
+            { Value: confirmed_by,    Label: 'Confirmed By',    ![@UI.Importance]: #High },
+            { Value: captured_by,     Label: 'Captured By',     ![@UI.Importance]: #Medium },
+            { Value: captured_at,     Label: 'Captured At',     ![@UI.Importance]: #Medium },
+            { Value: capture_station, Label: 'Station',         ![@UI.Importance]: #Medium },
+            { Value: capture_method,  Label: 'Method',          ![@UI.Importance]: #Low }
+        ],
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Capture',      Label: 'Capture' },
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Confirmation', Label: 'Confirmation' }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'Evidence',     Target: '@UI.FieldGroup#Evidence',     Label: 'The Image' },
+            { $Type: 'UI.ReferenceFacet', ID: 'OcrResult',    Target: '@UI.FieldGroup#OcrResult',    Label: 'OCR Result' },
+            { $Type: 'UI.ReferenceFacet', ID: 'CaptureWhere', Target: '@UI.FieldGroup#CaptureWhere', Label: 'Where and How' }
+        ],
+        FieldGroup #Capture: {
+            Data: [ { Value: captured_by, Label: 'Captured By' }, { Value: captured_at, Label: 'Captured At' } ]
+        },
+        FieldGroup #Confirmation: {
+            Data: [ { Value: confirmed_by, Label: 'Confirmed By' }, { Value: confirmed_at, Label: 'Confirmed At' } ]
+        },
+        FieldGroup #Evidence: {
+            Data: [
+                { Value: image_uri,  Label: 'Image URI' },
+                // The hash is what proves WHICH image the row referred to. A
+                // URI can be repointed; a hash cannot be talked out of.
+                { Value: image_hash, Label: 'Image Hash' }
+            ]
+        },
+        FieldGroup #OcrResult: {
+            Data: [
+                { Value: ocr_status,     Label: 'OCR Status' },
+                { Value: ocr_confidence, Label: 'Confidence' },
+                { Value: ocr_engine,     Label: 'Engine' },
+                { Value: ocr_raw,        Label: 'Raw Output (audit only)' }
+            ]
+        },
+        FieldGroup #CaptureWhere: {
+            Data: [
+                { Value: capture_method,   Label: 'Capture Method' },
+                { Value: capture_station,  Label: 'Station' },
+                { Value: capture_location, Label: 'GPS / Location' }
+            ]
+        }
+    }
+);
+
 // WP-31. The evidence layer's own labels. Not covered by WP-UI-02's four
 // entities, but an unpoliced instance of a defect is still the defect.
 annotate FuelOrderService.SourceDocuments with {
@@ -1017,6 +1100,9 @@ annotate FuelOrderService.FlightSchedule with @(
         },
 
         LineItem: [
+            // UI-B-03. ENR452: immutable through a tail swap, which is what
+            // makes it the join key rather than flight_number + date.
+            { Value: flight_leg_id, Label: 'Flight Leg ID', ![@UI.Importance]: #Medium },
             { Value: flight_number, Label: 'Flight Number' },
             { Value: flight_date, Label: 'Date' },
             { Value: aircraft_type, Label: 'Aircraft Type' },
@@ -1062,7 +1148,9 @@ annotate FuelOrderService.FlightDispatches with @(
             flight_number,
             flight_date,
             dispatch_source,
-            tail_number
+            tail_number,
+            plan_status,
+            plan_version_source
         ],
 
         // --- List Report Table ---
@@ -1074,6 +1162,10 @@ annotate FuelOrderService.FlightDispatches with @(
             { Value: atd, Label: 'ATD', ![@UI.Importance]: #Medium },
             { Value: ata, Label: 'ATA', ![@UI.Importance]: #Low },
             { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)', ![@UI.Importance]: #High },
+            // UI-B-03: the two figures the whole plan resolves to, in the list
+            // rather than one level down.
+            { Value: block_fuel_kg, Label: 'Block Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: required_uplift_kg, Label: 'Required Uplift (kg)', ![@UI.Importance]: #High },
             { Value: rob_departure_kg, Label: 'ROB Departure (kg)', ![@UI.Importance]: #Medium },
             { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
             { Value: dispatch_source, Label: 'Source', ![@UI.Importance]: #Medium },
@@ -1160,6 +1252,38 @@ annotate FuelOrderService.FlightDispatches with @(
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightData', Label: 'Flight Data' }
                 ]
             },
+            // ================================================================
+            // UI-B-03. THE REGULATED STACK AND THE PLAN VERSION.
+            //
+            // Seventeen fields carried a @title and no placement, so this
+            // screen was blank exactly where the fuel plan belongs. The stack
+            // is the reason FLIGHT_DISPATCH exists.
+            //
+            // Order follows the regulation rather than the schema: trip,
+            // contingency, alternate, final reserve, taxi, then the two
+            // discretionary terms, then the total they sum to. A reader
+            // checking the arithmetic reads down the column.
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'RegulatedStack',
+                Target : '@UI.FieldGroup#RegulatedStack',
+                Label  : 'Regulated Fuel Stack'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PlanVersion',
+                Target : '@UI.FieldGroup#PlanVersion',
+                Label  : 'Plan Version'
+            },
+            // The order this plan belongs to. A to-one association on the same
+            // service, which is what a ReferenceFacet needs.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DispatchOrder',
+                Target : 'fuel_order/@UI.FieldGroup#OrderDetails',
+                Label  : 'Fuel Order'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'DispatchAdmin',
@@ -1167,6 +1291,34 @@ annotate FuelOrderService.FlightDispatches with @(
                 Label  : 'Administration'
             }
         ],
+
+        FieldGroup #RegulatedStack: {
+            Data: [
+                { Value: trip_fuel_kg,        Label: 'Trip Fuel (kg)',        ![@UI.Importance]: #High },
+                { Value: contingency_fuel_kg, Label: 'Contingency (kg)',      ![@UI.Importance]: #High },
+                { Value: alternate_fuel_kg,   Label: 'Alternate (kg)',        ![@UI.Importance]: #High },
+                { Value: final_reserve_kg,    Label: 'Final Reserve (kg)',    ![@UI.Importance]: #High },
+                { Value: taxi_fuel_kg,        Label: 'Taxi (kg)',             ![@UI.Importance]: #Medium },
+                { Value: additional_fuel_kg,  Label: 'Additional (kg)',       ![@UI.Importance]: #Medium },
+                { Value: extra_fuel_kg,       Label: 'Extra (kg)',            ![@UI.Importance]: #Medium },
+                { Value: block_fuel_kg,       Label: 'Block Fuel (kg)',       ![@UI.Importance]: #High },
+                { Value: required_uplift_kg,  Label: 'Required Uplift (kg)',  ![@UI.Importance]: #High }
+            ]
+        },
+
+        FieldGroup #PlanVersion: {
+            Data: [
+                { Value: plan_group_id,       Label: 'Plan Family',           ![@UI.Importance]: #High },
+                { Value: plan_version,        Label: 'Version',               ![@UI.Importance]: #High },
+                { Value: plan_status,         Label: 'Status',                ![@UI.Importance]: #High },
+                // Load-bearing: where the version is ASSIGNED on receipt a gap
+                // cannot be detected at all, so version_gap_flag = false is
+                // ambiguous without it.
+                { Value: plan_version_source, Label: 'Version Source',        ![@UI.Importance]: #High },
+                { Value: version_gap_flag,    Label: 'Version Gap',           ![@UI.Importance]: #Medium },
+                { Value: versions_skipped,    Label: 'Versions Skipped',      ![@UI.Importance]: #Medium }
+            ]
+        },
 
         // --- Field Groups ---
         FieldGroup #DispatchID: {
