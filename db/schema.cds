@@ -537,7 +537,47 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         status              : FlightStatus default 'SCHEDULED'; // WP-09: was free String(20)
 
         // Fuel Order linkage (auto-created as Draft on upload)
+        //
+        // RETAINED, AND IT IS A TO-ONE OVER A ONE-TO-MANY CONDITION. Several
+        // handlers read fuel_order_ID, so it stays - but the ON condition can
+        // match more than one row and CAP returns an arbitrary one. PR1041
+        // already carries TWO orders in the seed, so this is measured rather
+        // than theoretical. Use `orders` below for anything that must be
+        // complete; treat this as "an order on this flight", never "the".
         fuel_order          : Association to FUEL_ORDERS on fuel_order.flight = $self;
+
+        // ====================================================================
+        // A FLIGHT MUST BE ABLE TO ENUMERATE ITS OWN RECORDS.
+        //
+        // Every link below existed in one direction only - the child pointed
+        // at the flight and the flight could not name its children. That is a
+        // modelling gap rather than a screen problem: "which orders were
+        // raised for this leg" is a question about the domain, and it had no
+        // answer that did not require querying the child table by hand.
+        //
+        // ASSOCIATION TO MANY, NOT COMPOSITION. These are independent records
+        // with their own lifecycles - an order is raised, approved, delivered
+        // and invoiced on its own track, and a composition would make deleting
+        // a flight delete its orders. Managed associations with an ON
+        // condition: no new column, no foreign key added anywhere, and the
+        // child keeps owning the relationship.
+        //
+        // DELIVERIES AND TICKETS ARE DELIBERATELY ABSENT. Neither carries a
+        // flight key at all - a delivery reaches its flight through its order
+        // (decision B2: the delivery hangs off the aircraft, and orders
+        // resolve transitively through the tickets) and a ticket through its
+        // order or its delivery. The only direct route would be a join on
+        // tail plus date, and MEASURED AGAINST THE SEED that over-matches on
+        // five of thirteen tail-date pairs - every one of those flights would
+        // list the other's fuel. A second route to the same row is a second
+        // thing that can disagree.
+        // ====================================================================
+        orders              : Association to many FUEL_ORDERS
+                                  on orders.flight = $self;
+        dispatches          : Association to many FLIGHT_DISPATCH
+                                  on dispatches.flight_schedule = $self;
+        burns               : Association to many FUEL_BURNS
+                                  on burns.flight = $self;
         fuel_order_number   : String(25);               // Denormalized for display
 
         // OPS-ESB ICD-inspired fields

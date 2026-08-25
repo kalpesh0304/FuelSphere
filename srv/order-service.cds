@@ -34,6 +34,11 @@ service FuelOrderService {
      * - Finance Controller: Read-only
      */
     @odata.draft.enabled
+    // FuelOrderService exposes FUEL_ORDERS twice - here and as
+    // CrewReviewQueue - so CAP cannot pick a target for the new
+    // FlightSchedule:orders association on its own. This is the canonical
+    // projection; the queue is a filtered view for one role.
+    @cds.redirection.target
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
         flight      : redirected to FlightSchedule,
