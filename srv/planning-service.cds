@@ -258,6 +258,31 @@ service PlanningService {
         manufacturer : redirected to Manufacturers
     };
 
+    // ========================================================================
+    // The aircraft REGISTER - the individual tail, not the type.
+    //
+    // WP-07B put `tail` on five entities across two services and neither
+    // service exposed the target, so the association resolved to nothing a
+    // user could open: a flight named its registration and offered no way to
+    // reach it. Five of the ten off-service associations found in the survey
+    // were this one link.
+    //
+    // @readonly deliberately. This service consumes the register; it does not
+    // maintain it. MasterDataService owns the writes.
+    // ========================================================================
+    @readonly
+    entity AircraftRegistrations as projection on db.AIRCRAFT_REGISTRATIONS {
+        *,
+        aircraft_type : redirected to Aircraft
+    };
+
+    // D43. FLIGHT_SCHEDULE.closure_document was projected here and its target
+    // was not, so the flight said its closure time was read from a photograph
+    // and offered no way to see the photograph. @readonly: the evidence is
+    // captured through FuelOrderService, which owns the write path.
+    @readonly
+    entity SourceDocuments as projection on db.SOURCE_DOCUMENTS;
+
     @readonly
     entity Manufacturers as projection on db.MANUFACTURE;
 

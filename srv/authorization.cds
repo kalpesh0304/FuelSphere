@@ -328,6 +328,14 @@ annotate FuelOrderService.Airports with @(restrict: [
     { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
 ]);
 
+// The aircraft register, newly reachable from a flight, a dispatch, a delivery
+// and a ticket. Read-only here - MasterDataService owns the writes - so the
+// grant mirrors the other consumed master entities above rather than
+// MasterDataAdmin.
+annotate FuelOrderService.AircraftRegistrations with @(restrict: [
+    { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
+]);
+
 annotate FuelOrderService.Suppliers with @(restrict: [
     { grant: 'READ', to: ['FuelOrderCreate', 'FuelOrderApprove', 'ePODCapture', 'ReportView', 'AdminAccess'] }
 ]);
