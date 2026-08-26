@@ -17,6 +17,57 @@ using PlanningService from './planning-service';
 // PlanningService exposes FuelOrders and never gave it a LineItem, so a facet
 // listing a flight's orders had nothing to render. A LineItem here is
 // annotation work rather than a schema change - the projection already exists.
+// ============================================================================
+// The dispatch plan, as a flight reaches it.
+//
+// PACKAGE B'S PER-SERVICE ANNOTATION WAS FORCED, NOT CHOSEN, and it has read
+// as a choice ever since. Measured in an isolated model: annotating
+// FuelOrderService.X does NOT propagate to PlanningService.X - sibling
+// projections of one entity inherit nothing from each other. Only an
+// annotation on the DATABASE entity propagates, and that route is worse here,
+// because every projection would then have to carry every field named and
+// nothing warns when one does not. PlanningService.FuelOrders exposes 12 of
+// FUEL_ORDERS' 52 elements.
+//
+// So this is not the duplication Package D rejected. That was a 49-element
+// annotation mirrored across services to maintain one screen. This is nine
+// columns written against a projection that exposes fifteen.
+// ============================================================================
+annotate PlanningService.FlightDispatches with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Dispatch Plan',
+            TypeNamePlural : 'Dispatch Plans',
+            Title          : { Value: plan_group_id },
+            Description    : { Value: plan_status }
+        },
+        LineItem: [
+            { Value: plan_version,       Label: 'Version',        ![@UI.Importance]: #High },
+            { Value: plan_status,        Label: 'Status',         ![@UI.Importance]: #High },
+            { Value: block_fuel_kg,      Label: 'Block (kg)',     ![@UI.Importance]: #High },
+            { Value: required_uplift_kg, Label: 'Uplift (kg)',    ![@UI.Importance]: #High },
+            { Value: rob_departure_kg,   Label: 'ROB Dep (kg)',   ![@UI.Importance]: #Medium },
+            { Value: alternate_airport,  Label: 'Alternate',      ![@UI.Importance]: #Medium },
+            { Value: tail_number,        Label: 'Tail',           ![@UI.Importance]: #Medium },
+            { Value: dispatch_source,    Label: 'Source',         ![@UI.Importance]: #Low },
+            { Value: dispatch_timestamp, Label: 'Issued',         ![@UI.Importance]: #Low }
+        ]
+    }
+);
+
+annotate PlanningService.FlightDispatches with {
+    plan_group_id       @title: 'Plan Family';
+    plan_version        @title: 'Version';
+    plan_status         @title: 'Status';
+    block_fuel_kg       @title: 'Block Fuel (kg)';
+    required_uplift_kg  @title: 'Required Uplift (kg)';
+    rob_departure_kg    @title: 'ROB at Departure (kg)';
+    alternate_airport   @title: 'Alternate';
+    tail_number         @title: 'Tail';
+    dispatch_source     @title: 'Source';
+    dispatch_timestamp  @title: 'Issued';
+};
+
 annotate PlanningService.FuelOrders with @(
     UI: {
         // ONLY what this projection exposes. PlanningService.FuelOrders is a
@@ -224,6 +275,12 @@ annotate PlanningService.FlightSchedule with @(
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DelayDetails', Label: 'Delay Details' }
                 ]
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DispatchPlans',
+                Target : 'dispatches/@UI.LineItem',
+                Label  : 'Dispatch Plans'
             },
             {
                 $Type  : 'UI.CollectionFacet',

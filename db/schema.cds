@@ -576,6 +576,18 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
                                   on orders.flight = $self;
         dispatches          : Association to many FLIGHT_DISPATCH
                                   on dispatches.flight_schedule = $self;
+        // DECLARED AND DELIBERATELY UNRENDERED. Two reasons, and the second
+        // is checkable.
+        //
+        // A burn is after the fact: a planner plans, an analyst reads burns,
+        // and the walkthrough already crosses to BurnService for those stops.
+        //
+        // And NO SERVICE exposes both FLIGHT_SCHEDULE and FUEL_BURNS
+        // navigably - all five services that project FLIGHT_SCHEDULE emit
+        // "No OData navigation property generated" for this element. Putting
+        // burns on the flight page therefore means a FOURTH projection of an
+        // entity BurnService owns and annotates, to serve a reader who is a
+        // different person. Same shape as the four Package D left closed.
         burns               : Association to many FUEL_BURNS
                                   on burns.flight = $self;
         fuel_order_number   : String(25);               // Denormalized for display
