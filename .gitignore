@@ -49,3 +49,4 @@ db.sqlite
 
 # added by cds
 .cdsrc-private.json
+test/.logs/
