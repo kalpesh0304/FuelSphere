@@ -30,7 +30,12 @@ annotate PlanningService.FuelOrders with @(
             { Value: total_amount,     Label: 'Total',         ![@UI.Importance]: #Medium },
             { Value: currency_code,    Label: 'Currency',      ![@UI.Importance]: #Low },
             { Value: status,           Label: 'Status',        ![@UI.Importance]: #High },
-            { Value: requested_date,   Label: 'Requested',     ![@UI.Importance]: #Medium }
+            { Value: requested_date,   Label: 'Requested',     ![@UI.Importance]: #Medium },
+            // D44 / 2. Carried over from #FuelOrderInfo, which read them
+            // through `fuel_order` - one arbitrary order where a flight has
+            // several. Here they belong to the order that owns them.
+            { Value: priority,         Label: 'Priority',      ![@UI.Importance]: #Medium },
+            { Value: notes,            Label: 'Notes',         ![@UI.Importance]: #Low }
         ]
     }
 );
@@ -154,7 +159,6 @@ annotate PlanningService.FlightSchedule with @(
             { Value: scheduled_departure, Label: 'Departure' },
             { Value: scheduled_arrival, Label: 'Arrival' },
             { Value: status, Label: 'Status' },
-            { Value: fuel_order_number, Label: 'Fuel Order' },
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'PlanningService.importFlightScheduleExcel',
@@ -226,14 +230,15 @@ annotate PlanningService.FlightSchedule with @(
                 ID     : 'FuelOrderSection',
                 Label  : 'Fuel Orders',
                 Facets : [
-                    // A LIST, not a single order. The field group below reads
-                    // through `fuel_order`, which is a to-one over a
-                    // one-to-many condition and therefore shows one arbitrary
-                    // order - PR1041 has two. It is kept because the number is
-                    // useful at a glance; the list beside it is what is
-                    // complete.
-                    { $Type: 'UI.ReferenceFacet', Target: 'orders/@UI.LineItem', Label: 'All Orders for this Flight' },
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FuelOrderInfo', Label: 'Order Details' }
+                    // D44. A LIST, AND ONLY A LIST.
+                    //
+                    // #FuelOrderInfo sat beside this and read through
+                    // `fuel_order` - a to-one over a one-to-many condition,
+                    // showing one arbitrary order where PR1041 has two. Its
+                    // two fields the list did not already carry, priority and
+                    // notes, moved onto the list. Nothing was lost and the
+                    // arbitrary row is gone.
+                    { $Type: 'UI.ReferenceFacet', Target: 'orders/@UI.LineItem', Label: 'All Orders for this Flight' }
                 ]
             },
             {
@@ -425,17 +430,6 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
-        FieldGroup #FuelOrderInfo: {
-            Data: [
-                { Value: fuel_order_number, Label: 'Fuel Order Number' },
-                { Value: fuel_order.status, Label: 'Order Status' },
-                { Value: fuel_order.station_code, Label: 'Station' },
-                { Value: fuel_order.ordered_quantity, Label: 'Ordered Quantity (KG)' },
-                { Value: fuel_order.priority, Label: 'Priority' },
-                { Value: fuel_order.notes, Label: 'Notes' }
-            ]
-        },
-
         FieldGroup #AdminInfo: {
             Data: [
                 { Value: created_at, Label: 'Created At' },
@@ -506,8 +500,12 @@ annotate PlanningService.FlightSchedule with {
     delay_code           @title: 'Delay Code';
     delay_minutes        @title: 'Delay (min)';
     cancellation_reason  @title: 'Cancellation Reason';
+    // The field stays and its title with it. It is a single denormalised
+    // value on an entity that can have several orders - the same cardinality
+    // problem in a different shape - and it is empty on every seeded flight,
+    // because its only writer is the auto-creation path. Off the page until
+    // it means something; not removed, because its naming is sound.
     fuel_order_number    @title: 'Fuel Order';
-    fuel_order           @title: 'Fuel Order';
     created_at           @title: 'Created At';
     created_by           @title: 'Created By';
     modified_at          @title: 'Modified At';
