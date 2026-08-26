@@ -590,6 +590,14 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
         // different person. Same shape as the four Package D left closed.
         burns               : Association to many FUEL_BURNS
                                   on burns.flight = $self;
+
+        // Through the views above, which do the hop the compiler will not
+        // allow an ON condition to do. Plain column comparison, foreign-key
+        // join, read-only.
+        deliveries          : Association to many FLIGHT_FUEL_DELIVERIES
+                                  on deliveries.flight_ID = ID;
+        tickets             : Association to many FLIGHT_FUEL_TICKETS
+                                  on tickets.flight_ID = ID;
         fuel_order_number   : String(25);               // Denormalized for display
 
         // OPS-ESB ICD-inspired fields
@@ -1535,6 +1543,81 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         meter_serial        : String(30);               // Meter that produced the readings
 
 }
+
+// ============================================================================
+// WHAT A FLIGHT REACHES - two views, and why they are views
+//
+// A flight cannot hold `deliveries` or `tickets` as an association. The
+// compiler refuses it:
+//
+//     Can follow managed association "FUEL_DELIVERIES:order" only to the
+//     keys of its target, not to "flight"
+//
+// An association's ON condition may follow a MANAGED association only to its
+// target's KEYS, and `flight` is not one. A derived to-one on the delivery
+// (`on flight.ID = order.flight_ID`) is refused for the same reason, so it is
+// a constraint rather than an awkwardness.
+//
+// A VIEW'S SELECT LIST HAS NO SUCH RESTRICTION. The hop happens here, and the
+// association that reaches the view then compares two PLAIN COLUMNS -
+// `deliveries.flight_ID = ID` - which is not following anything.
+//
+// THE JOIN IS ON A FOREIGN KEY, NOT A BUSINESS KEY. It resolves through
+// order_ID. A join on tail plus date over-matches on five of thirteen pairs
+// in this seed - every one of those flights would list the other's fuel.
+//
+// AND IT UNDER-MATCHES, DELIBERATELY. A delivery or ticket with no order has
+// a null flight_ID and appears under no flight. WP-10 allows a ticket without
+// an order on purpose, and S5 is a scenario built on it - fuel that arrived
+// with no order is not attributable to a flight through one.
+//
+// READ-ONLY. A view over a draft-enabled entity cannot be written through.
+// These exist to be looked at.
+// ============================================================================
+
+/**
+ * FLIGHT_FUEL_DELIVERIES - deliveries, as a flight reaches them.
+ */
+entity FLIGHT_FUEL_DELIVERIES as select from FUEL_DELIVERIES {
+    key ID,
+        order,
+        order.flight.ID       as flight_ID,
+        delivery_number,
+        delivery_date,
+        delivered_quantity,
+        uom_code,
+        fob_delta_kg,
+        fob_source,
+        recon_variance_kg,
+        recon_status,
+        supplier_count,
+        aircraft_reg,
+        tail
+};
+
+/**
+ * FLIGHT_FUEL_TICKETS - tickets, as a flight reaches them.
+ *
+ * `supplier_name` resolves TRANSITIVELY through the order, which is the only
+ * place it lives - FUEL_TICKETS has no supplier of its own. That is what
+ * makes an unmatched ticket's supplier genuinely unknown rather than blank.
+ */
+entity FLIGHT_FUEL_TICKETS as select from FUEL_TICKETS {
+    key ID,
+        order,
+        order.flight.ID              as flight_ID,
+        order.supplier.supplier_name as supplier_name : String(100),
+        ticket_number,
+        quantity_metered,
+        uom_code,
+        quantity_kg,
+        density_value,
+        match_status,
+        delivery_timestamp,
+        aircraft_reg,
+        tail,
+        delivery
+};
 
 // ============================================================================
 // FUEL SALES ORDERS (Supplier/Refueler Perspective - Scenario B)
