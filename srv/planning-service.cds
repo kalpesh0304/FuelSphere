@@ -226,6 +226,43 @@ service PlanningService {
     } excluding { fuel_order };
 
     /**
+     * FlightDispatches - the plan a flight was released against.
+     *
+     * PLANNING IS THE FLIGHT-CENTRIC SERVICE: it exposes, READ-ONLY, what a
+     * FLIGHT REACHES - not what any service owns. That is a boundary rather
+     * than the absence of one; it is simply not module ownership. The flight
+     * object page is a planning artefact and a planner wants the plan.
+     *
+     * FuelOrderService keeps its own FlightDispatches and its own facet. A
+     * fuel controller reaching a plan FROM AN ORDER is a different journey,
+     * and neither annotation is a copy of the other - each is written against
+     * what its own projection exposes.
+     *
+     * RESTRICTED ON PURPOSE. A flight's page wants the regulated stack and
+     * the release, not fifty columns. The restriction is what keeps the
+     * duplication small; it is only dangerous where the annotation lives on
+     * the DATABASE entity and every projection must carry every field named.
+     */
+    @readonly
+    entity FlightDispatches as projection on db.FLIGHT_DISPATCH {
+        key ID,
+        flight_number,
+        flight_date,
+        plan_group_id,
+        plan_version,
+        plan_status,
+        tail_number,
+        dispatch_qty_kg,
+        block_fuel_kg,
+        required_uplift_kg,
+        rob_departure_kg,
+        alternate_airport,
+        dispatch_source,
+        dispatch_timestamp,
+        flight_schedule : redirected to FlightSchedule
+    };
+
+    /**
      * FuelOrders - Read-only reference to fuel orders linked to flight schedules
      */
     @readonly
