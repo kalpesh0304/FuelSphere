@@ -26,8 +26,7 @@
     "start": "cds-serve",
     "watch": "cds watch",
     "dev": "npm rebuild 2>/dev/null; cds watch --port 4004",
-    "test": "cds bind --exec jest --silent",
-    "test:harness": "./test/run-harnesses.sh",
+    "test": "./test/run-harnesses.sh",
     "build": "cds build --production",
     "build:mta": "cds build --production && mbt build",
     "deploy": "cds deploy"

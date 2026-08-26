@@ -4,9 +4,12 @@ One harness per work package. Each asserts that package's exit criteria against
 a booted service and real data, and each is named for the package it belongs to.
 
 ```bash
-npm run test:harness              # all of them
+npm test                          # all of them
 ./test/run-harnesses.sh wp18 d44  # only the ones whose names match
 ```
+
+`npm test` pointed at `jest` for the life of the project, and jest was never
+installed — so the project's own test command had never run. It runs these now.
 
 ---
 
@@ -23,7 +26,8 @@ clean when run alone.
 the single most likely way to misread this directory, which is why the runner
 exists and why this paragraph is near the top.
 
-`run-harnesses.sh` exits with the **number of harnesses that failed**, so a
+`run-harnesses.sh` exits with the **number of harnesses that failed** (and `127`
+where a filter matched nothing — that must be distinguishable from one failure), so a
 caller can key on the exit code rather than parse the output.
 
 ---
