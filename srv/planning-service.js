@@ -24,7 +24,12 @@ module.exports = class PlanningService extends cds.ApplicationService {
         // ====================================================================
 
         this.after('CREATE', FlightSchedule, async (data, req) => {
-            if (!data || data.fuel_order_ID) return; // Already linked
+            // D44 / 3. The guard here read `data.fuel_order_ID` and returned
+            // "already linked". FLIGHT_SCHEDULE.fuel_order is UNMANAGED - an
+            // association with an `on` condition generates no foreign key - so
+            // no such column exists and the guard was always false. The comment
+            // was the worse half: it asserted a link the field cannot hold.
+            if (!data) return;
             try {
                 await this._createDraftOrder(data);
             } catch (e) {

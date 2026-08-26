@@ -211,13 +211,19 @@ service PlanningService {
      * FlightSchedule - Flight schedule management
      * Primary entity for flight schedule data, Excel import, and planning integration
      */
+    // D44. `fuel_order` is NOT exposed. It is a to-one over a one-to-many
+    // condition on the database entity - `on fuel_order.flight = $self` can
+    // match several rows and returns one arbitrarily - so a service that
+    // offers it invites the next reader to treat an arbitrary order as the
+    // order. `orders` is the complete set and is exposed in its place.
+    //
+    // The declaration stays in db/schema.cds, commented at the site.
     entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports,
-        fuel_order  : redirected to FuelOrders
-    };
+        destination : redirected to Airports
+    } excluding { fuel_order };
 
     /**
      * FuelOrders - Read-only reference to fuel orders linked to flight schedules

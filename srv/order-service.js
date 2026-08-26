@@ -910,25 +910,57 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // --- Pre-fetch reference data ---
             const { FLIGHT_SCHEDULE, FUEL_ORDERS, FLIGHT_DISPATCH } = cds.entities('fuelsphere');
 
-            // Build flight lookup map: "flight_number|flight_date" → { ID, fuel_order_ID }
+            // ----------------------------------------------------------------
+            // D44 / DSP458. A MAP KEYED ON A NON-KEY RESOLVES BY INSERTION
+            // ORDER, WHICH IS A COIN TOSS WITH A COMMENT.
+            //
+            // This map was keyed on `flight_number|flight_date` and held one
+            // record per key, so where two flight rows share a number and date
+            // the later one silently won. PR1041 on 1 April is two rows in the
+            // seed today, so this is measured rather than theoretical.
+            //
+            // ENR450 already says number plus date is not a key. The codebase
+            // raised the warning and this map ignored it.
+            //
+            // The key is flight_leg_id. The dispatch source carries no leg
+            // column - FLIGHT_NUMBER and FLIGHT_DATE are all it supplies - so
+            // the map is grouped rather than overwritten and the AMBIGUITY is
+            // what fails. One match resolves; several are refused by name.
+            // ----------------------------------------------------------------
             const flightRows = await SELECT.from(FLIGHT_SCHEDULE)
                 .columns('ID', 'flight_number', 'flight_date', 'flight_leg_id');
 
-            // Build reverse lookup from FUEL_ORDERS: flight_ID → fuel order ID
-            const fuelOrderRows = await SELECT.from(FUEL_ORDERS)
-                .columns('ID', 'flight_ID')
-                .where({ flight_ID: { '!=': null } });
-            const flightToFuelOrder = new Map(
-                fuelOrderRows.map(fo => [fo.flight_ID, fo.ID])
-            );
-
-            const flightMap = new Map(
-                flightRows.map(f => [`${f.flight_number}|${f.flight_date}`, {
+            const flightMap = new Map();
+            for (const f of flightRows) {
+                const key = `${f.flight_number}|${f.flight_date}`;
+                if (!flightMap.has(key)) flightMap.set(key, []);
+                flightMap.get(key).push({
                     ID: f.ID,
-                    flight_leg_id: f.flight_leg_id || null,   // WP-18: the plan family key
-                    fuel_order_ID: flightToFuelOrder.get(f.ID) || null
-                }])
-            );
+                    flight_leg_id: f.flight_leg_id || null    // WP-18: the plan family key
+                });
+            }
+
+            // D44 / WP-18 section 9.5. WHICH ORDER FULFILS A PLAN IS A
+            // RELATIONSHIP THE ORDER ITSELF RECORDS.
+            //
+            // The previous code scanned FUEL_ORDERS by flight_ID into a Map,
+            // which keeps whichever order came last where a flight has two -
+            // D44's defect reimplemented in JavaScript, and untouched by
+            // anything done to the association.
+            //
+            // dispatch_plan is the order's statement of which plan it was
+            // raised against. A re-plan inherits the order from the plan it
+            // supersedes; a plan family with no prior plan has no order to
+            // inherit, and a plan with no order is a REAL STATE - S6 is one
+            // deliberately. Where nothing matches, nothing is written.
+            const orderRows = await SELECT.from(FUEL_ORDERS)
+                .columns('ID', 'dispatch_plan_ID')
+                .where({ dispatch_plan_ID: { '!=': null } });
+            const ordersByPlan = new Map();
+            for (const o of orderRows) {
+                if (!ordersByPlan.has(o.dispatch_plan_ID)) ordersByPlan.set(o.dispatch_plan_ID, []);
+                ordersByPlan.get(o.dispatch_plan_ID).push(o.ID);
+            }
 
             // WP-18 / D27. Was a duplicate set keyed on
             // dispatch_order_id|flight_number|flight_date, used to SKIP.
@@ -1099,7 +1131,20 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     dispatchesSkipped++; continue;
                 }
 
-                const flightRecord = flightMap.get(flightKey);
+                // DSP458. Several flight rows share this number and date, and
+                // the source carries no leg id, so THE FLIGHT CANNOT BE
+                // IDENTIFIED. Refused by name rather than settled by order.
+                const candidates = flightMap.get(flightKey);
+                if (candidates.length > 1) {
+                    const legs = candidates.map(c => c.flight_leg_id || '(no leg id)').join(', ');
+                    errors.push({ row: rowNum, field: 'FLIGHT_NUMBER/FLIGHT_DATE',
+                        message: `DSP458: ${flightNumber} on ${flightDate} matches ${candidates.length} flight records `
+                               + `(${legs}). Flight number and date are not a key (ENR450) and the dispatch source `
+                               + `carries no leg id, so the flight cannot be identified. Not resolved.`,
+                        severity: 'ERROR' });
+                    dispatchesSkipped++; continue;
+                }
+                const flightRecord = candidates[0];
 
                 // WP-07B. Blockable: the flight has not departed.
                 const tailDecision = applyPolicy(
@@ -1133,6 +1178,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                         severity: 'WARNING' });
                     dispatchesSkipped++; continue;
                 }
+
+                // D44 / 1a. The order that fulfils this plan family, taken from
+                // the plan being superseded. Never "an order on this flight".
+                const inherited = active ? (ordersByPlan.get(active.ID) || []) : [];
+                if (inherited.length > 1) {
+                    errors.push({ row: rowNum, field: 'FUEL_ORDER_ID',
+                        message: `DSP458: plan ${planGroupId} is fulfilled by ${inherited.length} orders `
+                               + `(${inherited.join(', ')}), so the order cannot be identified. No order linked.`,
+                        severity: 'WARNING' });
+                }
+                const inheritedOrderId = inherited.length === 1 ? inherited[0] : null;
 
                 const version = classifyVersion(incomingVersion, active && active.plan_version);
                 if (version.version_gap_flag) {
@@ -1170,7 +1226,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     flight_number: flightNumber,
                     flight_date: flightDate,
                     flight_schedule_ID: flightRecord.ID,
-                    fuel_order_ID: flightRecord.fuel_order_ID || null,
+                    fuel_order_ID: inheritedOrderId,
                     tail_number: tailNumber,
                     tail_registration: tailDecision.tail_registration,
                     captain_id: captainId,
@@ -1191,8 +1247,8 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
                 // Track fuel order update. The dispatch mass travels with it so
                 // the order can be converted to volume where it has no quantity.
-                if (flightRecord.fuel_order_ID) {
-                    ordersToUpdate.set(flightRecord.fuel_order_ID, {
+                if (inheritedOrderId) {
+                    ordersToUpdate.set(inheritedOrderId, {
                         dispatchFuelOrderId: fuelOrderId,
                         dispatchQtyKg,
                         dispatchPlanId: newId   // WP-18 section 9.5
