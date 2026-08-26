@@ -159,6 +159,7 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `DSP455` | VR63 | `FLIGHT_DISPATCH` | A plan whose registration matches a pending unapplied tail change fails with LEG_STALE_PENDING_TAIL, not a generic mismatch | Error |
 | `DSP456` | VR98 | `FLIGHT_DISPATCH` | version_gap_flag and versions_skipped are stamped on the applied plan row and never back-updated | Error |
 | `DSP457` | VR99 | `FLIGHT_DISPATCH` | Variance analysis on a GAPPED leg is reported with a coverage qualifier, not as a clean figure | Warning |
+| `DSP458` | VR100 | `FLIGHT_DISPATCH` | A dispatch row whose flight number and date match more than one flight record is refused, not resolved. Number plus date is not a key (ENR450) and the dispatch source carries no leg id, so the flight cannot be identified. Also raised where more than one order claims the same plan | Error |
 
 ### FB4xx — Fuel burn
 
