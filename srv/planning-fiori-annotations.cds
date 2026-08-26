@@ -33,6 +33,86 @@ using PlanningService from './planning-service';
 // annotation mirrored across services to maintain one screen. This is nine
 // columns written against a projection that exposes fifteen.
 // ============================================================================
+// ============================================================================
+// The fuel that went into this aircraft for this leg.
+//
+// Both entities are VIEWS (db/schema.cds) and CAP AUTO-EXPOSED them - they are
+// association targets of FLIGHT_SCHEDULE, so they appear on every service that
+// exposes it, under their database names. Nothing here declares them; the
+// entity set name shows only in the URL, and the screen reads HeaderInfo.
+//
+// Columns chosen for a reader looking at a FLIGHT, not at a delivery. The
+// delivery's own object page already shows everything; this answers one
+// question and stops.
+// ============================================================================
+annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Delivery',
+            TypeNamePlural : 'Deliveries',
+            Title          : { Value: delivery_number },
+            Description    : { Value: recon_status }
+        },
+        LineItem: [
+            { Value: delivery_number,    Label: 'Delivery',        ![@UI.Importance]: #High },
+            { Value: delivered_quantity, Label: 'Delivered',       ![@UI.Importance]: #High },
+            { Value: fob_delta_kg,       Label: 'Gauge Delta (kg)',![@UI.Importance]: #High },
+            // NOT_RECONCILED must never read as a pass. Unknown is not agreement.
+            { Value: recon_variance_kg,  Label: 'Variance (kg)',   ![@UI.Importance]: #High },
+            { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #High },
+            { Value: fob_source,         Label: 'Gauge Source',    ![@UI.Importance]: #Medium },
+            { Value: supplier_count,     Label: 'Suppliers',       ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
+    delivery_number    @title: 'Delivery';
+    delivery_date      @title: 'Date';
+    delivered_quantity @title: 'Delivered';
+    fob_delta_kg       @title: 'Gauge Delta (kg)';
+    fob_source         @title: 'Gauge Source';
+    recon_variance_kg  @title: 'Variance (kg)';
+    recon_status       @title: 'Reconciliation';
+    supplier_count     @title: 'Suppliers';
+    aircraft_reg       @title: 'Registration';
+};
+
+annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Ticket',
+            TypeNamePlural : 'Fuel Tickets',
+            Title          : { Value: ticket_number },
+            Description    : { Value: supplier_name }
+        },
+        LineItem: [
+            { Value: ticket_number,      Label: 'Ticket',          ![@UI.Importance]: #High },
+            { Value: quantity_metered,   Label: 'Metered',         ![@UI.Importance]: #High },
+            { Value: quantity_kg,        Label: 'Mass (kg)',       ![@UI.Importance]: #High },
+            // Resolves TRANSITIVELY through the order. Blank means unmatched,
+            // and unknown is not the same as none.
+            { Value: supplier_name,      Label: 'Supplier',        ![@UI.Importance]: #High },
+            { Value: match_status,       Label: 'Match',           ![@UI.Importance]: #High },
+            // uplift_sequence does not exist on FUEL_TICKETS. The timestamp is
+            // what makes two tickets on one order read as one uplift split
+            // across two bowsers rather than two unrelated events.
+            { Value: delivery_timestamp, Label: 'Delivered At',    ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+annotate PlanningService.FLIGHT_FUEL_TICKETS with {
+    ticket_number      @title: 'Ticket';
+    quantity_metered   @title: 'Metered';
+    quantity_kg        @title: 'Mass (kg)';
+    supplier_name      @title: 'Supplier';
+    match_status       @title: 'Match';
+    delivery_timestamp @title: 'Delivered At';
+    density_value      @title: 'Density';
+    aircraft_reg       @title: 'Registration';
+};
+
 annotate PlanningService.FlightDispatches with @(
     UI: {
         HeaderInfo: {
@@ -275,6 +355,18 @@ annotate PlanningService.FlightSchedule with @(
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DelayDetails', Label: 'Delay Details' }
                 ]
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightDeliveries',
+                Target : 'deliveries/@UI.LineItem',
+                Label  : 'Deliveries'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightTickets',
+                Target : 'tickets/@UI.LineItem',
+                Label  : 'Fuel Tickets'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
