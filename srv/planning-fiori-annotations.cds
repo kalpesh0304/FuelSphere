@@ -150,6 +150,25 @@ annotate PlanningService.FlightDispatches with {
 
 annotate PlanningService.FuelOrders with @(
     UI: {
+        // ====================================================================
+        // THE ORDER'S FLIGHT, AND WHY THIS ONE FACET LIVES ON A DIFFERENT
+        // SERVICE FROM ITS SIBLINGS.
+        //
+        // Both PlanningService and FuelOrderService carry `flight` on their
+        // FuelOrders. Only one can render it: a to-one facet must name a
+        // FieldGroup, and FuelOrderService.FlightSchedule has a LineItem and
+        // NO FieldGroup, while PlanningService.FlightSchedule has sixteen.
+        //
+        // THAT IS NOT A DESIGN CHOICE BEING HONOURED. It is a historical
+        // accident - two ends annotated years apart for unrelated reasons -
+        // that now decides which screen can show the link. Someone will ask
+        // why this facet is not beside the other two; the answer is not a
+        // principle, and it is written here so nobody looks for one.
+        // ====================================================================
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'OrderFlight',
+              Target: 'flight/@UI.FieldGroup#FlightIdentification', Label: 'Flight' }
+        ],
         // ONLY what this projection exposes. PlanningService.FuelOrders is a
         // RESTRICTED projection - twelve elements, no uom_code and no
         // ordered_quantity_kg - and a LineItem naming a field the projection

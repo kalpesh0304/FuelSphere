@@ -685,6 +685,16 @@ annotate FuelOrderService.FuelDeliveries with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Reconciliation',
                 Label  : 'FOB Reconciliation'
+            },
+            // The order this delivery was made against. The navigation worked
+            // and had no section. `tail` is NOT here - FuelOrderService has
+            // no annotation block for AircraftRegistrations, so that facet
+            // would render empty.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DeliveryOrder',
+                Target : 'order/@UI.FieldGroup#OrderDetails',
+                Label  : 'Fuel Order'
             }
         ],
 
@@ -912,6 +922,22 @@ annotate FuelOrderService.FuelTickets with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Verification',
                 Label  : 'Verification'
+            },
+            // A ticket's two ends. The delivery is where its mass is
+            // reconciled against the gauge; the order is what it was raised
+            // against - and where its SUPPLIER lives, since FUEL_TICKETS has
+            // none of its own.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'TicketDelivery',
+                Target : 'delivery/@UI.FieldGroup#Reconciliation',
+                Label  : 'Delivery Reconciliation'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'TicketOrder',
+                Target : 'order/@UI.FieldGroup#OrderDetails',
+                Label  : 'Fuel Order'
             }
         ],
 

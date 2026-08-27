@@ -403,6 +403,29 @@ annotate BurnService.ROBLedger with @(
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#AdjustmentDetails', Label: 'Adjustment' }
                 ]
             },
+            // ================================================================
+            // WHERE A LEDGER ROW CAME FROM. Both navigations already worked;
+            // neither had a section, so a viewer reached them only by editing
+            // a URL - a screen that looks finished and is not.
+            //
+            // Only these two of ROB_LEDGER's five. fuel_delivery, flight and
+            // airport point at BurnService.FuelDeliveries, .FlightSchedule
+            // and .Airports, which have NO ANNOTATION BLOCK AT ALL - a facet
+            // there would resolve to nothing and render as an empty section,
+            // which is indistinguishable from the four other causes of one.
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ROBSourceBurn',
+                Target : 'fuel_burn/@UI.FieldGroup#BurnQuantities',
+                Label  : 'Burn Behind This Entry'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ROBTail',
+                Target : 'tail/@UI.FieldGroup#RegistrationKey',
+                Label  : 'Aircraft'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'ROBAdmin',
@@ -586,7 +609,12 @@ annotate BurnService.ApuUsage with @(
         Facets: [
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Cycle',      Label: 'Cycle' },
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Derivation', Label: 'Derivation' },
-            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Allocation', Label: 'Cost Allocation' }
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Allocation', Label: 'Cost Allocation' },
+            // The rate every APU figure derives from lives on the register row.
+            // `flight` is NOT here: BurnService.FlightSchedule has no
+            // annotation block, so that facet would render empty.
+            { $Type: 'UI.ReferenceFacet', ID: 'ApuTail',
+              Target: 'tail/@UI.FieldGroup#RegistrationKey', Label: 'Aircraft' }
         ],
         FieldGroup#Cycle: {
             Label: 'Cycle',
