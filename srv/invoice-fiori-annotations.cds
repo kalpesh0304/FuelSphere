@@ -387,3 +387,315 @@ annotate InvoiceService.Invoices with {
         }
     );
 };
+
+// ============================================================================
+// FOUR BLOCKS FOR ENTITIES THE SERVICE EXPOSED AND NEVER ANNOTATED.
+//
+// InvoiceExceptions, InvoiceCheckRegistry and ToleranceRules were all exposed
+// with no annotation at all, so the Exception Worklist and the check panel had
+// nowhere to land. FuelTickets was not exposed, so InvoiceItems.ticket
+// resolved to nothing.
+//
+// Every field named here was checked against ITS OWN projection before being
+// written. A LineItem naming a field the projection lacks fails the whole
+// read, not the column, and four new blocks is four chances at it.
+// ============================================================================
+
+annotate InvoiceService.InvoiceExceptions with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Exception',
+            TypeNamePlural : 'Exception Worklist',
+            Title          : { Value: check_code },
+            Description    : { Value: message }
+        },
+        // SEVERITY BEFORE AGE. A hard error found this morning outranks a
+        // warning from last week, and sorting by age would bury the gate.
+        PresentationVariant: {
+            SortOrder: [
+                { Property: severity,    Descending: false },
+                { Property: detected_at, Descending: true }
+            ],
+            Visualizations: ['@UI.LineItem']
+        },
+        SelectionFields: [ severity, check_group, status, is_gating, check_code ],
+        LineItem: [
+            { Value: severity,        Label: 'Severity',   ![@UI.Importance]: #High },
+            { Value: check_code,      Label: 'Check',      ![@UI.Importance]: #High },
+            { Value: message,         Label: 'What happened', ![@UI.Importance]: #High },
+            { Value: line_number,     Label: 'Line',       ![@UI.Importance]: #Medium },
+            { Value: is_gating,       Label: 'Gating',     ![@UI.Importance]: #High },
+            // THE ANSWER TO "IS THE THRESHOLD HARDCODED", without anyone
+            // having to ask. TOLERANCE_LADDER means a configured rung decided
+            // this; REGISTRY_DEFAULT means the registry did.
+            { Value: severity_source, Label: 'Decided by', ![@UI.Importance]: #High },
+            { Value: status,          Label: 'Status',     ![@UI.Importance]: #Medium },
+            { Value: detected_at,     Label: 'Detected',   ![@UI.Importance]: #Low }
+        ],
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ExcVerdict', Label: 'Verdict' }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'ExcEvidence',
+              Target: '@UI.FieldGroup#ExcEvidence', Label: 'Evidence' },
+            { $Type: 'UI.ReferenceFacet', ID: 'ExcLifecycle',
+              Target: '@UI.FieldGroup#ExcLifecycle', Label: 'Lifecycle' }
+        ],
+        FieldGroup #ExcVerdict: {
+            Data: [
+                { Value: severity,        Label: 'Severity' },
+                { Value: severity_source, Label: 'Decided by' },
+                { Value: is_gating,       Label: 'Gating' }
+            ]
+        },
+        FieldGroup #ExcEvidence: {
+            Data: [
+                { Value: message,           Label: 'What happened' },
+                { Value: observed_value,    Label: 'Invoice said' },
+                { Value: expected_value,    Label: 'FuelSphere resolved' },
+                { Value: variance_value,    Label: 'Variance' },
+                { Value: variance_pct,      Label: 'Variance %' },
+                // The rung's value where a ladder resolved. Null where the
+                // registry decided, which is the distinction that matters.
+                { Value: threshold_crossed, Label: 'Threshold crossed' }
+            ]
+        },
+        FieldGroup #ExcLifecycle: {
+            Data: [
+                { Value: status,         Label: 'Status' },
+                { Value: detected_at,    Label: 'Detected' },
+                { Value: detected_by,    Label: 'Detected by' },
+                { Value: cleared_at,     Label: 'Cleared' },
+                { Value: cleared_reason, Label: 'Why it stopped being true' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.InvoiceExceptions with {
+    check_code        @title: 'Check';
+    check_group       @title: 'Group';
+    severity          @title: 'Severity';
+    severity_source   @title: 'Decided by';
+    message           @title: 'What happened';
+    line_number       @title: 'Line';
+    observed_value    @title: 'Invoice said';
+    expected_value    @title: 'FuelSphere resolved';
+    variance_value    @title: 'Variance';
+    variance_pct      @title: 'Variance %';
+    threshold_crossed @title: 'Threshold crossed';
+    is_gating         @title: 'Gating';
+    detected_at       @title: 'Detected';
+    detected_by       @title: 'Detected by';
+    cleared_at        @title: 'Cleared';
+    cleared_reason    @title: 'Why it stopped being true';
+};
+
+// ============================================================================
+// THE CHECK PANEL - all 22, and PASSED BY ABSENCE.
+//
+// Section 2A. The registry is the list of every check that RAN; the exceptions
+// are the ones that FAILED. A check appearing here and not among an invoice's
+// exceptions passed - which is why the panel defaults to the failures and a
+// toggle shows all twenty-two.
+//
+// "Checked and clean" and "never checked" must not look alike. They do not:
+// checksRegistered and checksSkipped are on the run, gate_evaluated_at and the
+// three counts are on the invoice, and INVOICE_EXCEPTIONS holds failures only
+// because severity and message are mandatory on it. The evidence of a clean
+// run belongs on the thing that was run against.
+// ============================================================================
+annotate InvoiceService.InvoiceCheckRegistry with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Check',
+            TypeNamePlural : 'Check Registry',
+            Title          : { Value: check_code },
+            Description    : { Value: check_name }
+        },
+        PresentationVariant: {
+            SortOrder: [ { Property: check_group, Descending: false },
+                         { Property: check_code,  Descending: false } ],
+            Visualizations: ['@UI.LineItem']
+        },
+        SelectionFields: [ check_group, default_severity, is_bypassable, is_implemented ],
+        LineItem: [
+            { Value: check_code,          Label: 'Check',      ![@UI.Importance]: #High },
+            { Value: check_name,          Label: 'Name',       ![@UI.Importance]: #High },
+            { Value: check_group,         Label: 'Group',      ![@UI.Importance]: #High },
+            { Value: default_severity,    Label: 'Default severity', ![@UI.Importance]: #High },
+            // Bypassable EXACTLY where the default is SOFT_ERROR: bypass is
+            // refused on a HARD error, and a WARNING does not gate so
+            // bypassing one would mean nothing.
+            { Value: is_bypassable,       Label: 'Bypassable', ![@UI.Importance]: #Medium },
+            { Value: tolerance_rule_code, Label: 'Tolerance',  ![@UI.Importance]: #Medium },
+            // A check absent from the registry DOES NOT RUN, and one marked
+            // not implemented is skipped and SAYS SO rather than passing.
+            { Value: is_implemented,      Label: 'Implemented',![@UI.Importance]: #Medium }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'CheckWhat',
+              Target: '@UI.FieldGroup#CheckWhat', Label: 'What it checks' },
+            { $Type: 'UI.ReferenceFacet', ID: 'CheckConfig',
+              Target: '@UI.FieldGroup#CheckConfig', Label: 'Configuration' }
+        ],
+        FieldGroup #CheckWhat: {
+            Data: [
+                { Value: check_code,        Label: 'Check' },
+                { Value: check_name,        Label: 'Name' },
+                { Value: check_description, Label: 'Description' },
+                { Value: check_group,       Label: 'Group' }
+            ]
+        },
+        FieldGroup #CheckConfig: {
+            Data: [
+                { Value: default_severity,       Label: 'Default severity' },
+                { Value: tolerance_rule_code,    Label: 'Tolerance rule' },
+                { Value: is_bypassable,          Label: 'Bypassable' },
+                { Value: bypass_scope,           Label: 'Bypass scope' },
+                { Value: is_implemented,         Label: 'Implemented' },
+                { Value: not_implemented_reason, Label: 'If not, why' },
+                { Value: valid_from,             Label: 'Valid from' },
+                { Value: valid_to,               Label: 'Valid to' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.InvoiceCheckRegistry with {
+    check_code             @title: 'Check';
+    check_name             @title: 'Name';
+    check_description      @title: 'Description';
+    check_group            @title: 'Group';
+    default_severity       @title: 'Default severity';
+    tolerance_rule_code    @title: 'Tolerance rule';
+    is_bypassable          @title: 'Bypassable';
+    bypass_scope           @title: 'Bypass scope';
+    is_implemented         @title: 'Implemented';
+    not_implemented_reason @title: 'If not, why';
+};
+
+// ============================================================================
+// THE THRESHOLDS THEMSELVES. Where a SOFT_ERROR came from, one click on.
+// ============================================================================
+annotate InvoiceService.ToleranceRules with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Tolerance Rule',
+            TypeNamePlural : 'Tolerances',
+            Title          : { Value: rule_code },
+            Description    : { Value: rule_name }
+        },
+        SelectionFields: [ applies_to, tolerance_type, company_code, station_code ],
+        LineItem: [
+            { Value: rule_code,          Label: 'Rule',      ![@UI.Importance]: #High },
+            { Value: rule_name,          Label: 'Name',      ![@UI.Importance]: #High },
+            { Value: applies_to,         Label: 'Applies to',![@UI.Importance]: #High },
+            { Value: tolerance_type,     Label: 'Type',      ![@UI.Importance]: #High },
+            { Value: warning_threshold,  Label: 'Warning',   ![@UI.Importance]: #High },
+            { Value: error_threshold,    Label: 'Soft',      ![@UI.Importance]: #High },
+            { Value: critical_threshold, Label: 'Hard',      ![@UI.Importance]: #High },
+            { Value: is_percentage,      Label: 'Percent',   ![@UI.Importance]: #Medium },
+            // CFG401: the highest-specificity row whose scope matches, and
+            // priority is the column that carries it - lower is higher.
+            { Value: priority,           Label: 'Priority',  ![@UI.Importance]: #Medium }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'TolLadder',
+              Target: '@UI.FieldGroup#TolLadder', Label: 'The ladder' },
+            { $Type: 'UI.ReferenceFacet', ID: 'TolScope',
+              Target: '@UI.FieldGroup#TolScope', Label: 'Scope and validity' }
+        ],
+        FieldGroup #TolLadder: {
+            Data: [
+                { Value: warning_threshold,     Label: 'Warning rung' },
+                { Value: error_threshold,       Label: 'Soft rung' },
+                { Value: critical_threshold,    Label: 'Hard rung' },
+                { Value: is_percentage,         Label: 'Percentage' },
+                { Value: floor_value,           Label: 'Floor' },
+                { Value: floor_uom,             Label: 'Floor unit' },
+                { Value: block_on_exceed,       Label: 'Blocks on exceed' },
+                { Value: require_dual_approval, Label: 'Dual approval' }
+            ]
+        },
+        FieldGroup #TolScope: {
+            Data: [
+                { Value: applies_to,     Label: 'Applies to' },
+                { Value: tolerance_type, Label: 'Type' },
+                { Value: company_code,   Label: 'Company' },
+                { Value: station_code,   Label: 'Station' },
+                { Value: priority,       Label: 'Priority' },
+                { Value: valid_from,     Label: 'Valid from' },
+                { Value: valid_to,       Label: 'Valid to' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.ToleranceRules with {
+    rule_code            @title: 'Rule';
+    rule_name            @title: 'Name';
+    applies_to           @title: 'Applies to';
+    tolerance_type       @title: 'Type';
+    warning_threshold    @title: 'Warning rung';
+    error_threshold      @title: 'Soft rung';
+    critical_threshold   @title: 'Hard rung';
+    is_percentage        @title: 'Percentage';
+    floor_value          @title: 'Floor';
+    floor_uom            @title: 'Floor unit';
+    block_on_exceed      @title: 'Blocks on exceed';
+    require_dual_approval @title: 'Dual approval';
+    priority             @title: 'Priority';
+};
+
+// ============================================================================
+// THE TICKET - the leg nothing else can match, sized to an invoice reader.
+// ============================================================================
+annotate InvoiceService.FuelTickets with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Ticket',
+            TypeNamePlural : 'Fuel Tickets',
+            Title          : { Value: ticket_number },
+            Description    : { Value: aircraft_reg }
+        },
+        LineItem: [
+            { Value: ticket_number,      Label: 'Ticket',     ![@UI.Importance]: #High },
+            { Value: quantity_metered,   Label: 'Metered',    ![@UI.Importance]: #High },
+            { Value: quantity_kg,        Label: 'Mass (kg)',  ![@UI.Importance]: #High },
+            { Value: density_value,      Label: 'Density',    ![@UI.Importance]: #Medium },
+            { Value: aircraft_reg,       Label: 'Aircraft',   ![@UI.Importance]: #High },
+            { Value: flight_number,      Label: 'Flight',     ![@UI.Importance]: #High },
+            { Value: match_status,       Label: 'Match',      ![@UI.Importance]: #Medium }
+        ],
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'TicketFuel',
+              Target: '@UI.FieldGroup#TicketFuel', Label: 'What fuel was this' }
+        ],
+        FieldGroup #TicketFuel: {
+            Data: [
+                { Value: ticket_number,      Label: 'Ticket' },
+                { Value: quantity_metered,   Label: 'Metered' },
+                { Value: uom_code,           Label: 'Unit' },
+                // The conversion, so the mass is explainable rather than
+                // asserted: metered x density = kg.
+                { Value: density_value,      Label: 'Density' },
+                { Value: quantity_kg,        Label: 'Mass (kg)' },
+                { Value: aircraft_reg,       Label: 'Aircraft' },
+                { Value: flight_number,      Label: 'Flight' },
+                { Value: delivery_timestamp, Label: 'Delivered at' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.FuelTickets with {
+    ticket_number      @title: 'Ticket';
+    quantity_metered   @title: 'Metered';
+    quantity_kg        @title: 'Mass (kg)';
+    density_value      @title: 'Density';
+    aircraft_reg       @title: 'Aircraft';
+    flight_number      @title: 'Flight';
+    match_status       @title: 'Match';
+    delivery_timestamp @title: 'Delivered at';
+};
