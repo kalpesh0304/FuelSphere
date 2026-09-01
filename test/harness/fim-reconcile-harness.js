@@ -243,6 +243,30 @@ describe('FIM — Reconcile Invoice', () => {
       'a rung that does not name its threshold cannot be argued with');
     out(`  ladder: ${rungs.map(e => `L${e.line_number} ${e.severity}@${e.threshold_crossed}`).join('  ')}`);
 
+    // EVERY RUNG NAMES THE SAME RULE, AND CAN REACH IT. Four rungs across two
+    // invoices resolving from ONE configuration row is what makes the ladder
+    // read as configuration rather than as a coincidence of one document -
+    // and an exception that says TOLERANCE_LADDER without naming WHICH row
+    // cannot be argued with. The association existed and was on no facet.
+    const lad = (await test.GET(`${O}/InvoiceExceptions?$filter=severity_source eq 'TOLERANCE_LADDER'`
+      + `&$select=check_code,severity,line_number,threshold_crossed`
+      + `&$expand=tolerance_rule($select=rule_code,warning_threshold,error_threshold,critical_threshold),`
+      + `invoice_item($select=line_number)&$orderby=threshold_crossed`)).data.value;
+    assert.ok(lad.length >= 4, 'the ladder must be demonstrated on more than one invoice');
+    for (const e of lad) {
+      assert.ok(e.tolerance_rule, `${e.check_code} L${e.line_number}: names a ladder and no rule`);
+      assert.ok(e.invoice_item, `${e.check_code} L${e.line_number}: cannot reach the line it was raised against`);
+    }
+    const codes = new Set(lad.map(e => e.tolerance_rule.rule_code));
+    assert.strictEqual(codes.size, 1,
+      'all four rungs must resolve from ONE rule row - that is what makes it configuration');
+    const r0 = lad[0].tolerance_rule;
+    const invs = new Set((await test.GET(`${O}/InvoiceExceptions?$filter=severity_source eq 'TOLERANCE_LADDER'`
+      + `&$expand=invoice($select=invoice_number)`)).data.value.map(e => e.invoice.invoice_number));
+    assert.ok(invs.size >= 2, 'one invoice showing a ladder reads as that document, not as configuration');
+    out(`  ladder rule: ${[...codes][0]} ${r0.warning_threshold}/${r0.error_threshold}/${r0.critical_threshold}`
+      + ` — ${lad.length} rungs across ${invs.size} invoices, all one row`);
+
     // INV465: the line must carry BOTH PO numbers, which is the whole finding.
     const l = (await test.GET(`${O}/InvoiceItems?$filter=po_number eq '4500999999'`
       + `&$select=line_number,po_number,resolved_po_number,ticket_number`)).data.value[0];

@@ -664,7 +664,32 @@ annotate InvoiceService.InvoiceExceptions with @(
                 { Value: variance_pct,      Label: 'Variance %' },
                 // The rung's value where a ladder resolved. Null where the
                 // registry decided, which is the distinction that matters.
-                { Value: threshold_crossed, Label: 'Threshold crossed' }
+                { Value: threshold_crossed, Label: 'Threshold crossed' },
+
+                // WHICH ROW DECIDED IT. severity_source says A LADDER decided
+                // and threshold_crossed says what it crossed; neither says
+                // WHICH rule, and the standing convention is that a resolved
+                // value records the configuration row behind it. The
+                // association existed and pointed at an exposed entity - it
+                // was simply on no facet, so the one thing an argued-with
+                // severity needs was a URL away.
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: tolerance_rule.rule_code,
+                    Label: 'Rule that decided it',
+                    Target: tolerance_rule
+                },
+                { Value: tolerance_rule.rule_name, Label: 'Rule name' },
+
+                // AND THE LINE IT WAS RAISED AGAINST. line_number is a bare
+                // integer; without this an exception on line 30 could not be
+                // opened, only read about.
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: line_number,
+                    Label: 'Line',
+                    Target: invoice_item
+                }
             ]
         },
         FieldGroup #ExcLifecycle: {
