@@ -163,6 +163,9 @@ annotate MasterDataService.AircraftRegistrations with {
     dry_operating_weight_kg @title: 'Dry Operating Weight (kg)';
     fuel_capacity_kg        @title: 'Fuel Capacity (kg)';
     apu_burn_rate_kg_hr     @title: 'APU Burn Rate (kg/h)';
+    // Blank means the provenance is unrecorded, which is a question
+    // rather than a default. See the schema comment at the field.
+    apu_rate_source         @title: 'APU Rate Source';
     performance_factor_pct  @title: 'Performance Factor (%)';
     on_own_aoc              @title: 'On Own AOC';
     cost_object_type        @title: 'Cost Object Type';
