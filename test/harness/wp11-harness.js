@@ -120,15 +120,22 @@ describe('WP-11 — litres (A2)', function () {
             const h = lines[0].split(';');
             const iu = h.indexOf('uom_code');
             const ic = h.indexOf('created_by');
-            // Third rewrite of this filter, so it stops enumerating.
-            //   v1 excluded 'WP12_SEED'          -> broke on WP-17
-            //   v2 excluded /WP(1[1-9]|[2-9]\d)_SEED/ -> broke on WPDEMO01_SEED
-            // The rows this criterion is about are the ones that existed when
-            // WP-11 ran: everything seeded before it, plus WP06_SEED. Any
-            // other WP-prefixed creator is a later package by definition, so
-            // match that shape rather than listing the packages.
-            const later = /^WP(?!06_SEED$)/;
-            const pre = lines.slice(1).map(r => r.split(';')).filter(f => !later.test(f[ic]));
+            // FOURTH rewrite, and the first that keys on the MARKER rather
+            // than on a package's name.
+            //   v1 excluded 'WP12_SEED'                -> broke on WP-17
+            //   v2 excluded /WP(1[1-9]|[2-9]\d)_SEED/  -> broke on WPDEMO01_SEED
+            //   v3 excluded /^WP(?!06_SEED$)/          -> broke on S5_SEED,
+            //       which is a scenario seed rather than a package one and so
+            //       carries no WP prefix at all
+            //
+            // Each version enumerated a NAMING CONVENTION and broke when the
+            // next one appeared. The property is not "which package" - it is
+            // "was this row PUT HERE BY A SEED", and every seeding creator
+            // ends in _SEED while the rows that predate WP-11 carry a station
+            // address. WP06_SEED is the one seed that existed when WP-11 ran.
+            const later = /_SEED$/;
+            const wasHereForWP11 = (cb) => cb === 'WP06_SEED' || !later.test(cb);
+            const pre = lines.slice(1).map(r => r.split(';')).filter(f => wasHereForWP11(f[ic]));
             const vals = pre.map(f => f[iu]);
             const distinct = [...new Set(vals)];
             const added = lines.length - 1 - pre.length;

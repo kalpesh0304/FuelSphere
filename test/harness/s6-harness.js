@@ -1,8 +1,8 @@
 /**
  * S6 — the provisional-register refusal scenario.
  *
- * PR501, 7 April, MNL->SIN, on RP-C8805 — a tail the register holds as
- * PROVISIONAL, and which already carries the 5 April defuel.
+ * AC418, 10 April, YYZ->YVR, on C-GLTA — an A321 the register holds as
+ * PROVISIONAL, seeded beside S1, S2 and S3 rather than in Manila.
  *
  * The scenario is PLAN ALLOWED, ORDER REFUSED. It is not a fuel-flow
  * scenario: if the order is refused there is no ticket, no delivery and no
@@ -36,7 +36,7 @@ async function call(fn) {
     }
 }
 const MANDATORY = { ordered_quantity: 2121, requested_date: '2026-04-07',
-                    unit_price: 0.85, station_code: 'MNL' };
+                    unit_price: 0.85, station_code: 'YYZ' };
 /**
  * FuelOrders is DRAFT-ENABLED, so a POST to the collection creates a draft and
  * returns 201 without firing `before CREATE`. The A4 gate sits on that event,
@@ -56,36 +56,36 @@ async function createOrder(flightId) {
 }
 
 const s6 = () => (await0 => 0, db().then(d => d.run(
-    SELECT.one.from(FLIGHTS).where({ flight_number: 'PR501' }))));
+    SELECT.one.from(FLIGHTS).where({ flight_number: 'AC418' }))));
 
 describe('S6 — plan allowed, order refused', () => {
 
   it('EXIT-1  the FLIGHT lands on a PROVISIONAL tail — the first in the seed', async () => {
     const f = await s6();
-    assert.ok(f, 'PR501 not seeded');
+    assert.ok(f, 'AC418 not seeded');
     const reg = await (await db()).run(
       SELECT.one.from(REGISTER).where({ registration: f.tail_registration }));
     assert.ok(reg, 'the tail must be IN the register - that is what makes it provisional');
     assert.strictEqual(reg.record_status, 'PROVISIONAL');
     assert.strictEqual(f.tail_registration, f.aircraft_reg,
       'a provisional tail RESOLVES - applyPolicy never reads record_status');
-    out(`PR501 ${f.flight_date} ${f.origin_airport}->${f.destination_airport} `
+    out(`AC418 ${f.flight_date} ${f.origin_airport}->${f.destination_airport} `
       + `tail=${f.tail_registration} record_status=${reg.record_status}`);
   });
 
   it('EXIT-2  the PLAN is allowed, and its stack DERIVES', async () => {
     const { deriveStack } = require(`${PROJECT}/srv/lib/dispatch-plan`);
     const d = await (await db()).run(
-      SELECT.one.from(DISPATCH).where({ flight_number: 'PR501' }));
+      SELECT.one.from(DISPATCH).where({ flight_number: 'AC418' }));
     assert.ok(d, 'no dispatch plan - "plan allowed" is half the scenario');
-    const ROB_AFTER_DEFUEL = 6500;
-    const derived = deriveStack(d, ROB_AFTER_DEFUEL);
+    const ROB_AT_GATE = 1800;   // a fresh registration has no ROB history
+    const derived = deriveStack(d, ROB_AT_GATE);
     assert.strictEqual(Number(d.block_fuel_kg), derived.block_fuel_kg,
       'block must be the sum of the seven components (DSP450), never keyed');
     assert.strictEqual(Number(d.required_uplift_kg), derived.required_uplift_kg,
       'required uplift must be block less fuel on board (DSP451)');
     out(`block=${derived.block_fuel_kg} = sum(7)  |  uplift=${derived.required_uplift_kg} `
-      + `= block - ${ROB_AFTER_DEFUEL} (the 5 April defuel)`);
+      + `= block - ${ROB_AT_GATE} (a fresh tail, so the uplift is unavoidable)`);
   });
 
   it('EXIT-3  the ORDER is refused — MDM402', async () => {
@@ -93,7 +93,7 @@ describe('S6 — plan allowed, order refused', () => {
     const r = await createOrder(f.ID);
     assert.strictEqual(r.status, 409, `expected 409, got ${r.status}`);
     assert.match(r.msg, /MDM402/, 'the refusal must carry its code');
-    assert.match(r.msg, /RP-C8805/, 'and must name the tail');
+    assert.match(r.msg, /C-GLTA/, 'and must name the tail');
     out(`POST FuelOrders -> ${r.status} :: ${r.msg.slice(0, 96)}`);
   });
 
@@ -102,7 +102,7 @@ describe('S6 — plan allowed, order refused', () => {
     const orders = await (await db()).run(SELECT.from(ORDERS).where({ flight_ID: f.ID }));
     assert.strictEqual(orders.length, 0, 'S6 must carry no order - the code refuses to create one');
     const d = await (await db()).run(
-      SELECT.one.from(DISPATCH).where({ flight_number: 'PR501' }));
+      SELECT.one.from(DISPATCH).where({ flight_number: 'AC418' }));
     // dispatch_order_id is "the commercial commitment, set on confirmation"
     // (dispatch-plan.js). Empty because MDM402 refused it. Every other
     // dispatch row carries one because every other flight has an order.
@@ -117,7 +117,7 @@ describe('S6 — plan allowed, order refused', () => {
 
   it('EXIT-5  contingency is 5% of TRIP, not of block', async () => {
     const d = await (await db()).run(
-      SELECT.one.from(DISPATCH).where({ flight_number: 'PR501' }));
+      SELECT.one.from(DISPATCH).where({ flight_number: 'AC418' }));
     const trip = Number(d.trip_fuel_kg), cont = Number(d.contingency_fuel_kg);
     const blk  = Number(d.block_fuel_kg);
     assert.ok(Math.abs(cont / trip - 0.05) < 1e-4,
