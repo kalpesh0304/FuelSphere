@@ -271,6 +271,9 @@ annotate PlanningService.AircraftRegistrations with {
     operator_code           @title: 'Operator';
     on_own_aoc              @title: 'On Own AOC';
     apu_burn_rate_kg_hr     @title: 'APU Burn Rate (kg/h)';
+    // Blank means the provenance is unrecorded, which is a question
+    // rather than a default. See the schema comment at the field.
+    apu_rate_source         @title: 'APU Rate Source';
     fuel_capacity_kg        @title: 'Fuel Capacity (kg)';
     dry_operating_weight_kg @title: 'Dry Operating Weight (kg)';
     performance_factor_pct  @title: 'Performance Factor (%)';
