@@ -173,6 +173,15 @@ entity AIRCRAFT_MASTER : ActiveStatus, AuditTrail {
  * gated. A tail seen for the first time on a ticket is recorded, because the
  * fuel is already in the tanks; what it cannot yet do is carry an order.
  */
+/**
+ * Where a tail's APU burn rate came from. Blank means unrecorded.
+ */
+type ApuRateSource : String(12) enum {
+    Register  = 'REGISTER';    // taken from a rate already held for this type
+    Proposed  = 'PROPOSED';    // no precedent in the register. NOT measured
+    Published = 'PUBLISHED';   // a manufacturer or operator figure
+}
+
 type AircraftRecordStatus : String(20) enum {
     Provisional = 'PROVISIONAL';   // Auto-created. Ticket capture allowed, order creation blocked
     Confirmed   = 'CONFIRMED';     // Identity verified. Orders unblocked
@@ -213,6 +222,29 @@ entity AIRCRAFT_REGISTRATIONS : ActiveStatus, AuditTrail {
         dry_operating_weight_kg : Decimal(15,2);
         fuel_capacity_kg        : Decimal(15,2);   // Overrides the type value where tanks differ
         apu_burn_rate_kg_hr     : Decimal(8,2);    // Never metered; APU burn derives from this. Unused until WP-19
+
+        // ====================================================================
+        // WHERE THAT RATE CAME FROM. Every ground burn derives from it, and a
+        // proposed figure is only better than a wrong one if it is marked.
+        //
+        // The August 2026 schedule brought nine rates for three types with no
+        // precedent in this register - B38M, DH8D, CRJ9 - and the existing
+        // rates cannot be extrapolated from: A220 65, A320 105, A330 95, and
+        // published figures put the A320 at 126 and the A330 at 140, which is
+        // 83% and 68%. No single ratio, so no rule to apply.
+        //
+        // Blank on the fifteen rows that predate this: their provenance is
+        // genuinely unrecorded, and marking them REGISTER would be circular.
+        // An absent source is a question; a proposed rate that looks measured
+        // is an answer nobody checked.
+        //
+        // NOT ON AIRCRAFT_MASTER. The type master has no APU field and that is
+        // design rather than omission - apu-burn.js reads the per-tail rate and
+        // nothing else. A type-level rate would be a second place holding one
+        // fact, able to disagree the moment a tail's rate is corrected.
+        // ====================================================================
+        @assert.range: true   // D25: a CDS enum is advisory without this
+        apu_rate_source     : ApuRateSource;
         performance_factor_pct  : Decimal(6,3);    // Actual over planned burn. Drifts per tail
 
         // Lifecycle - decision A4, provisional master data
