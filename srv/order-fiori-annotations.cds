@@ -695,6 +695,12 @@ annotate FuelOrderService.FuelDeliveries with @(
                 ID     : 'DeliveryOrder',
                 Target : 'order/@UI.FieldGroup#OrderDetails',
                 Label  : 'Fuel Order'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DeliveryTail',
+                Target : 'tail/@UI.FieldGroup#RegistrationKey',
+                Label  : 'Aircraft'
             }
         ],
 
@@ -938,6 +944,12 @@ annotate FuelOrderService.FuelTickets with @(
                 ID     : 'TicketOrder',
                 Target : 'order/@UI.FieldGroup#OrderDetails',
                 Label  : 'Fuel Order'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'TicketTail',
+                Target : 'tail/@UI.FieldGroup#RegistrationKey',
+                Label  : 'Aircraft'
             }
         ],
 
@@ -1656,3 +1668,35 @@ annotate FuelOrderService.FuelTickets    with { tail @title: 'Aircraft (Register
 annotate FuelOrderService.FuelDeliveries with { tail @title: 'Aircraft (Register)'; };
 annotate FuelOrderService.FlightSchedule with { tail @title: 'Aircraft (Register)'; };
 annotate FuelOrderService.FlightDispatches with { tail @title: 'Aircraft (Register)'; };
+
+// ============================================================================
+// FuelOrderService projects AIRCRAFT_REGISTRATIONS and annotated it not at
+// all, so `tail` on a ticket and on a delivery resolved and had nowhere to
+// land.
+//
+// #RegistrationKey carries the SAME NAME AND THE SAME FOUR FACTS as
+// BurnService's block. Deliberate: a reader moving between services should
+// not find the aircraft described differently in each. Identical where the
+// reader does not differ.
+// ============================================================================
+annotate FuelOrderService.AircraftRegistrations with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Aircraft',
+            TypeNamePlural : 'Aircraft Register',
+            Title          : { Value: registration },
+            Description    : { Value: aircraft_type_code }
+        },
+        FieldGroup #RegistrationKey: {
+            Data: [
+                { Value: registration,       Label: 'Registration' },
+                { Value: aircraft_type_code, Label: 'Type' },
+                // PROVISIONAL blocks order creation (MDM402) and does not
+                // block ticket capture. Both pages that reach this block are
+                // capture pages.
+                { Value: record_status,      Label: 'Record Status' },
+                { Value: operator_code,      Label: 'Operator' }
+            ]
+        }
+    }
+);

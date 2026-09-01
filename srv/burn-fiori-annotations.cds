@@ -158,6 +158,14 @@ annotate BurnService.FuelBurns with @(
                 Target : 'tail/@UI.FieldGroup#RegistrationKey',
                 Label  : 'Aircraft Register'
             },
+            // A burn's flight. The navigation worked and had no section
+            // because BurnService.FlightSchedule had no annotation block.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnFlight',
+                Target : 'flight/@UI.FieldGroup#BurnFlightIdentity',
+                Label  : 'Flight'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'BurnAdmin',
@@ -426,6 +434,26 @@ annotate BurnService.ROBLedger with @(
                 Target : 'tail/@UI.FieldGroup#RegistrationKey',
                 Label  : 'Aircraft'
             },
+            // The three that package one left out. Their targets now carry a
+            // block, written at the end of this file.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ROBSourceDelivery',
+                Target : 'fuel_delivery/@UI.FieldGroup#BurnDeliveryReconciliation',
+                Label  : 'Uplift Behind This Entry'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ROBFlight',
+                Target : 'flight/@UI.FieldGroup#BurnFlightIdentity',
+                Label  : 'Flight'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ROBAirport',
+                Target : 'airport/@UI.FieldGroup#AirportKey',
+                Label  : 'Station'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'ROBAdmin',
@@ -614,7 +642,9 @@ annotate BurnService.ApuUsage with @(
             // `flight` is NOT here: BurnService.FlightSchedule has no
             // annotation block, so that facet would render empty.
             { $Type: 'UI.ReferenceFacet', ID: 'ApuTail',
-              Target: 'tail/@UI.FieldGroup#RegistrationKey', Label: 'Aircraft' }
+              Target: 'tail/@UI.FieldGroup#RegistrationKey', Label: 'Aircraft' },
+            { $Type: 'UI.ReferenceFacet', ID: 'ApuFlight',
+              Target: 'flight/@UI.FieldGroup#BurnFlightIdentity', Label: 'Flight' }
         ],
         FieldGroup#Cycle: {
             Label: 'Cycle',
@@ -669,3 +699,108 @@ annotate BurnService.ApuUsage with {
     modified_at         @title: 'Changed At';
     modified_by         @title: 'Changed By';
 };
+
+// ============================================================================
+// THREE BLOCKS FOR ENTITIES ANOTHER SERVICE OWNS AND ANNOTATES.
+//
+// BurnService projects FLIGHT_SCHEDULE, FUEL_DELIVERIES and MASTER_AIRPORTS
+// and annotated none of them, so five navigations that already resolved had
+// nowhere to land. A facet pointed at an unannotated target renders as an
+// empty section - and an empty section now has five causes that look alike.
+//
+// SMALLER WHERE THE READER DIFFERS, IDENTICAL WHERE THEY DO NOT. Not always
+// smaller. The next person will see one block copied field-for-field and
+// three shrunk, and should not go looking for a principle that is not there:
+//
+//   #BurnFlightRoute takes aobt/aibt, NOT the scheduled pair Planning's
+//   #RouteInfo uses. A burn is measured between OUT and IN, so the actuals
+//   are the times that explain it. Copying Planning's sixteen groups would
+//   have carried the wrong pair across silently, and it would have LOOKED
+//   correct - two time fields, plausibly labelled, describing something this
+//   page is not about.
+//
+//   #BurnDeliveryReconciliation mirrors FuelOrderService's #Reconciliation
+//   field-for-field ON PURPOSE. It is the same five facts, and renaming them
+//   would invent a difference that is not there.
+//
+// HeaderInfo on each. A navigated-to page without one has no title, which
+// reads as a broken link rather than a missing annotation.
+// ============================================================================
+
+annotate BurnService.FlightSchedule with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Flight',
+            TypeNamePlural : 'Flights',
+            Title          : { Value: flight_number },
+            Description    : { Value: flight_date }
+        },
+        FieldGroup #BurnFlightIdentity: {
+            Data: [
+                { Value: flight_number, Label: 'Flight' },
+                { Value: flight_date,   Label: 'Date' },
+                { Value: airline_code,  Label: 'Airline' },
+                { Value: aircraft_reg,  Label: 'Registration' },
+                { Value: status,        Label: 'Status' }
+            ]
+        },
+        FieldGroup #BurnFlightRoute: {
+            Data: [
+                { Value: origin_airport,      Label: 'Origin' },
+                { Value: destination_airport, Label: 'Destination' },
+                // OUT and IN. Block burn is fob_OUT - fob_IN, so these are
+                // the times the figure is measured between.
+                { Value: aobt,                Label: 'Off Blocks (actual)' },
+                { Value: aibt,                Label: 'On Blocks (actual)' },
+                { Value: actual_block_mins,   Label: 'Block Time (min)' }
+            ]
+        }
+    }
+);
+
+annotate BurnService.FuelDeliveries with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Delivery',
+            TypeNamePlural : 'Deliveries',
+            Title          : { Value: delivery_number },
+            Description    : { Value: recon_status }
+        },
+        FieldGroup #BurnDeliveryReconciliation: {
+            Data: [
+                { Value: recon_status,      Label: 'Reconciliation' },
+                { Value: recon_variance_kg, Label: 'Variance (kg)' },
+                { Value: fob_source,        Label: 'Gauge Source' },
+                { Value: fob_delta_kg,      Label: 'Gauge Delta (kg)' },
+                { Value: supplier_count,    Label: 'Suppliers' }
+            ]
+        },
+        FieldGroup #BurnDeliveryUplift: {
+            Data: [
+                { Value: delivery_number,    Label: 'Delivery' },
+                { Value: delivery_date,      Label: 'Date' },
+                { Value: delivered_quantity, Label: 'Delivered' },
+                { Value: uom_code,           Label: 'Unit' }
+            ]
+        }
+    }
+);
+
+annotate BurnService.Airports with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Airport',
+            TypeNamePlural : 'Airports',
+            Title          : { Value: iata_code },
+            Description    : { Value: airport_name }
+        },
+        FieldGroup #AirportKey: {
+            Data: [
+                { Value: iata_code,    Label: 'IATA' },
+                { Value: airport_name, Label: 'Airport' },
+                { Value: city,         Label: 'City' },
+                { Value: country_code, Label: 'Country' }
+            ]
+        }
+    }
+);
