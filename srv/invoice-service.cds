@@ -300,6 +300,35 @@ service InvoiceService {
         order : redirected to FuelOrders
     };
 
+    /**
+     * FuelTickets - the leg nothing else in the landscape can match.
+     *
+     * InvoiceItems.ticket already navigated; the target was not exposed here,
+     * so it resolved to nothing and a facet on it would have rendered empty.
+     * A line that reaches its delivery and its order and stops short of the
+     * ticket is an AP screen with extra steps.
+     *
+     * RESTRICTED AND SIZED TO THE READER. An invoice reader asks "what fuel
+     * was this" - the ticket's number, what the meter said, what that is in
+     * mass, the density that converted it, and which aircraft and flight it
+     * went into. Not the ticket's own object page in miniature. Same argument
+     * as aobt/aibt on BurnService: different reader, different facts.
+     */
+    @readonly
+    entity FuelTickets as projection on db.FUEL_TICKETS {
+        key ID,
+        ticket_number,
+        quantity_metered,
+        uom_code,
+        quantity_kg,
+        density_value,
+        aircraft_reg,
+        flight_number,
+        match_status,
+        delivery_timestamp,
+        order : redirected to FuelOrders
+    };
+
     @readonly
     entity Contracts as projection on db.MASTER_CONTRACTS {
         *,
