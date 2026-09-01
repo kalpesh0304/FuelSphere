@@ -1,5 +1,5 @@
-type_code;model;manufacturer;dow_kg;mtow_kg;mzfw_kg;mlw_kg;seats;cruise_burn_kgph;fuel_capacity_kg;apu_burn_rate_kg_hr;apu_rate_source;min_turn_minutes
-A223;A220-300;Airbus;38000;67585;57600;58740;137;2100;17200;90;ESTIMATE;45
-B38M;737 MAX 8;Boeing;45500;82600;65952;69308;169;2450;20600;110;PUBLISHED;45
-DH8D;Dash 8-400;De Havilland Canada;17900;29257;28009;28009;78;800;5318;60;ESTIMATE;30
-CRJ9;CRJ900;Bombardier;21845;38330;34065;34065;76;1400;8800;70;ESTIMATE;30
+type_code;model;manufacturer;dow_kg;mtow_kg;mzfw_kg;mlw_kg;seats;cruise_burn_kgph;fuel_capacity_kg;min_turn_minutes
+A223;A220-300;Airbus;38000;67585;57600;58740;137;2100;17200;45
+B38M;737 MAX 8;Boeing;45500;82600;65952;69308;169;2450;20600;45
+DH8D;Dash 8-400;De Havilland Canada;17900;29257;28009;28009;78;800;5318;30
+CRJ9;CRJ900;Bombardier;21845;38330;34065;34065;76;1400;8800;30
