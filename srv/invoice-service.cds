@@ -42,7 +42,66 @@ service InvoiceService {
         duplicate_of    : redirected to Invoices,
         items           : redirected to InvoiceItems,
         matches         : redirected to InvoiceMatches,
-        approvals       : redirected to InvoiceApprovals
+        approvals       : redirected to InvoiceApprovals,
+
+        // --------------------------------------------------------------
+        // FOUR CRITICALITY ELEMENTS. THREE OF THEM WERE ANNOTATED BEFORE
+        // THEY EXISTED.
+        //
+        // statusCriticality, approvalCriticality and matchingCriticality
+        // are referenced SIX TIMES in invoice-fiori-annotations.cds and
+        // existed nowhere - not on the entity, not on this projection,
+        // not in the emitted EDMX.
+        //
+        // THE COMPILER DOES NOT WARN. A dangling path inside a record is
+        // emitted verbatim as Path="statusCriticality"; Fiori resolves it
+        // to undefined and renders no colour. The same file's dangling
+        // `contract` value help DID warn, because that is the
+        // `annotate ... element` form. One form is checked, the other is
+        // not, and the unchecked one looks finished.
+        //
+        // gateCriticality is new and is the one that carries the screen.
+        // NOT_CHECKED must never read as CLEAR - the schema comment on
+        // PostingGate says so in words, and this says it in colour.
+        // Neutral, not green.
+        //
+        // 0 neutral - 1 negative - 2 critical - 3 positive.
+        // --------------------------------------------------------------
+
+        // Money moved = green. Cancelled = red. In flight = grey.
+        // Deliberately NOT a progress bar: DRAFT, SUBMITTED and VERIFIED
+        // are all neutral because none of them is a verdict.
+        case status
+            when 'POSTED'    then 3
+            when 'PAID'      then 3
+            when 'CANCELLED' then 1
+            else 0
+        end as statusCriticality : Integer,
+
+        case approval_status
+            when 'APPROVED'  then 3
+            when 'REJECTED'  then 1
+            when 'ESCALATED' then 2
+            else 0
+        end as approvalCriticality : Integer,
+
+        // EXCEPTION is red; the three variance states are orange because a
+        // variance within tolerance is a finding, not a failure; UNMATCHED
+        // is grey because nothing has been asserted yet.
+        case match_status
+            when 'MATCHED'        then 3
+            when 'EXCEPTION'      then 1
+            when 'PARTIAL_MATCH'  then 2
+            when 'PRICE_VARIANCE' then 2
+            when 'QTY_VARIANCE'   then 2
+            else 0
+        end as matchingCriticality : Integer,
+
+        case posting_gate
+            when 'CLEAR' then 3
+            when 'GATED' then 1
+            else 0
+        end as gateCriticality : Integer
     } actions {
         /**
          * Check for duplicate invoice
@@ -128,7 +187,34 @@ service InvoiceService {
         product     : redirected to Products,
         uom         : redirected to UnitsOfMeasure,
         delivery    : redirected to FuelDeliveries,
-        fuel_order  : redirected to FuelOrders
+        fuel_order  : redirected to FuelOrders,
+
+        // A line that resolved to a ticket is green whichever key got it
+        // there; one that did not is red, because an unresolved line is the
+        // single most common reason an invoice is gated. TICKET_NUMBER and
+        // TICKET_ID are both successes and are NOT coloured differently -
+        // resolution_source itself carries which, and colour that encodes
+        // two facts encodes neither.
+        // SEARCHED case, not a simple one. `case resolution_source when
+        // null then 0` NEVER MATCHES - SQL compares NULL with = and gets
+        // unknown, so every unresolved line fell through to the else and
+        // rendered GREEN. Caught by reading the values back against a
+        // column that is null on all 21 rows before the run.
+        case
+            when resolution_source is null          then 0
+            when resolution_source =  'UNRESOLVED'  then 1
+            else 3
+        end as resolutionCriticality : Integer,
+
+        // The stated PO against the resolved one - INV465. Orange rather
+        // than red: the supplier quoted a PO we can see is wrong, and we
+        // resolved the right one anyway, so the invoice is still payable.
+        case
+            when resolved_po_number is null then 0
+            when po_number is null          then 0
+            when po_number <> resolved_po_number then 2
+            else 3
+        end as poAgreementCriticality : Integer
     } actions {
         /**
          * Match single line item
@@ -191,7 +277,26 @@ service InvoiceService {
         *,
         invoice        : redirected to Invoices,
         invoice_item   : redirected to InvoiceItems,
-        tolerance_rule : redirected to ToleranceRules
+        tolerance_rule : redirected to ToleranceRules,
+
+        // The three rungs, in colour. WARNING is NEUTRAL, not green: a
+        // warning is recorded and never gating, and green would read as
+        // "checked and fine" for a row that exists precisely because
+        // something was worth saying.
+        case severity
+            when 'HARD_ERROR' then 1
+            when 'SOFT_ERROR' then 2
+            else 0
+        end as severityCriticality : Integer,
+
+        // BYPASSED is orange, never green. It is still true and someone
+        // accepted it anyway - the schema comment on ExceptionStatus makes
+        // the same distinction in words.
+        case status
+            when 'CLEARED'  then 3
+            when 'BYPASSED' then 2
+            else 0
+        end as lifecycleCriticality : Integer
     } actions {
         /**
          * Bypass a SOFT error. Single-person and recorded.
