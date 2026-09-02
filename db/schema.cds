@@ -5557,6 +5557,25 @@ entity MARKET_INDICES : cuid, ActiveStatus, AuditTrail {
         min_expected_value  : Decimal(15,4);                 // Minimum plausible value
         max_expected_value  : Decimal(15,4);                 // Maximum plausible value
         max_daily_change_pct : Decimal(5,2);                 // Max % change threshold
+
+        // -------------------------------------------------------------------
+        // THE FORWARD COMPOSITION THAT WAS NEVER MODELLED.
+        //
+        // MARKET_INDEX_VALUES has named its parent since it was written
+        // (`market_index : Association to MARKET_INDICES`) and the parent has
+        // never named its children. So `values/@UI.LineItem` - the "Historical
+        // Values" facet on every market index object page - resolved to
+        // nothing, and the section has always rendered empty.
+        //
+        // The modelling gap was already recorded as a trap: "MARKET_INDICES
+        // has no forward composition to its values - the relationship is
+        // modelled only from the child." What was NOT recorded is that a
+        // FACET WAS WRITTEN AGAINST IT ANYWAY, which is how a note about the
+        // model became a blank section on a screen.
+        //
+        // Found by the repository-wide annotation sweep (D50).
+        // -------------------------------------------------------------------
+        values              : Composition of many MARKET_INDEX_VALUES on values.market_index = $self;
 }
 
 /**
