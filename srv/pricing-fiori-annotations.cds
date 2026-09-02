@@ -201,7 +201,11 @@ annotate PricingService.PricingFormulas with @(
             TypeName       : 'Pricing Formula',
             TypeNamePlural : 'Pricing Formulas',
             Title          : { Value: formula_name },
-            Description    : { Value: formula_code },
+            // formula_code DOES NOT EXIST. The element is formula_id, which
+            // the LineItem two blocks down already uses and labels "Formula
+            // Code" - so the name in the label was written into the path.
+            // Every Pricing Formula object page has had a blank description.
+            Description    : { Value: formula_id },
             ImageUrl       : 'sap-icon://simulate'
         },
 
