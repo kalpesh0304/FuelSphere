@@ -38,7 +38,10 @@ annotate InvoiceService.Invoices with @(
             invoice_date,
             status,
             approval_status,
-            match_status
+            match_status,
+            // The reconcile filter. Without it the worklist cannot be
+            // narrowed to the invoices that are actually stuck.
+            posting_gate
         ],
 
         LineItem: [
@@ -66,6 +69,21 @@ annotate InvoiceService.Invoices with @(
                 ![@UI.Importance]: #Medium
             },
             { Value: due_date, Label: 'Due Date', ![@UI.Importance]: #Medium },
+
+            // THE VERDICT, IN THE LIST. An AP clerk opening this screen is
+            // asking which invoices are stuck, and until now the list could
+            // not answer - posting_gate and its three counters were on the
+            // entity and on no screen at all.
+            {
+                Value: posting_gate,
+                Label: 'Posting Gate',
+                Criticality: gateCriticality,
+                ![@UI.Importance]: #High
+            },
+            { Value: open_hard_count, Label: 'Hard', ![@UI.Importance]: #High },
+            { Value: open_soft_count, Label: 'Soft', ![@UI.Importance]: #Medium },
+            { Value: warning_count,   Label: 'Warnings', ![@UI.Importance]: #Low },
+
             { Value: s4_document_number, Label: 'S/4 Doc', ![@UI.Importance]: #Low }
         ],
 
@@ -77,6 +95,13 @@ annotate InvoiceService.Invoices with @(
         },
 
         HeaderFacets: [
+            // FIRST, because it is the answer to the question the screen is
+            // open to settle.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#PostingGate',
+                Label  : 'Posting Gate'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#InvoiceStatus',
@@ -93,6 +118,23 @@ annotate InvoiceService.Invoices with @(
                 Label  : 'Matching'
             }
         ],
+
+        // WHY THE GATE IS ITS OWN GROUP AND NOT A LINE IN #InvoiceStatus.
+        // status is where the invoice is in its own lifecycle; posting_gate
+        // is whether FuelSphere will let it leave. A SUBMITTED invoice with
+        // four hard errors is both, and collapsing them would lose the one
+        // the reader came for.
+        FieldGroup#PostingGate: {
+            Data: [
+                { Value: posting_gate, Label: 'Gate', Criticality: gateCriticality },
+                { Value: open_hard_count, Label: 'Hard errors' },
+                { Value: open_soft_count, Label: 'Soft errors' },
+                { Value: warning_count, Label: 'Warnings' },
+                // WITHOUT THIS THE VERDICT IS UNDATED, and an undated verdict
+                // on a document that changes is not evidence of anything.
+                { Value: gate_evaluated_at, Label: 'Last evaluated' }
+            ]
+        },
 
         FieldGroup#InvoiceStatus: {
             Data: [
@@ -147,6 +189,45 @@ annotate InvoiceService.Invoices with @(
                 Label  : 'Line Items',
                 Target : 'items/@UI.LineItem'
             },
+
+            // ----------------------------------------------------------
+            // THE ARGUMENT. Four facets that existed as data and as no
+            // screen. `exceptions` is a composition on INVOICES and a
+            // navigation property in the emitted EDMX; nothing pointed at
+            // it, so twenty-five raised exceptions were reachable only by
+            // typing an OData URL.
+            // ----------------------------------------------------------
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'Exceptions',
+                Label  : 'Checks that fired',
+                Target : 'exceptions/@UI.LineItem'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'StatedVsDerived',
+                Label  : 'Stated against derived',
+                Target : '@UI.FieldGroup#StatedVsDerived'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ThreeWayMatchLines',
+                Label  : 'Match evidence',
+                Target : 'matches/@UI.LineItem'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ApprovalTrail',
+                Label  : 'Approval trail',
+                Target : 'approvals/@UI.LineItem'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DuplicateCheck',
+                Label  : 'Duplicate',
+                Target : '@UI.FieldGroup#Duplicate'
+            },
+
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'S4Integration',
@@ -198,6 +279,44 @@ annotate InvoiceService.Invoices with @(
                 { Value: currency_code, Label: 'Currency' },
                 { Value: discount_percent, Label: 'Discount %' },
                 { Value: discount_date, Label: 'Discount Date' }
+            ]
+        },
+
+        // INV454 AND INV460, SIDE BY SIDE. The whole point of keeping
+        // stated_* beside the derived figures is that the two can disagree,
+        // and the disagreement is the finding. Showing only one of them
+        // makes both checks unreadable: a reader looking at "header total
+        // differs from the sum of lines" had one number and no other.
+        //
+        // The derived figures are OUTPUTS OF THE RUN, so a null here means
+        // the registry has not run - not that the invoice is worth nothing.
+        // gate_evaluated_at above says which.
+        FieldGroup#StatedVsDerived: {
+            Label: 'Stated against derived',
+            Data: [
+                { Value: stated_net_amount, Label: 'Net - stated by supplier' },
+                { Value: net_amount, Label: 'Net - derived from lines' },
+                { Value: stated_gross_amount, Label: 'Gross - stated by supplier' },
+                { Value: gross_amount, Label: 'Gross - derived from lines' },
+                { Value: tax_amount, Label: 'Tax - derived from lines' },
+                { Value: stated_line_count, Label: 'Lines - stated by supplier' },
+                { Value: currency_code, Label: 'Currency' }
+            ]
+        },
+
+        // INV405 / INV473. is_duplicate and duplicate_of are on the entity
+        // and were on no screen, so an invoice flagged as a duplicate looked
+        // identical to one that was not.
+        FieldGroup#Duplicate: {
+            Label: 'Duplicate',
+            Data: [
+                { Value: is_duplicate, Label: 'Flagged as duplicate' },
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: duplicate_of.invoice_number,
+                    Label: 'Original invoice',
+                    Target: duplicate_of
+                }
             ]
         },
 
@@ -304,6 +423,31 @@ annotate InvoiceService.InvoiceItems with @(
             { Value: quantity, Label: 'Quantity', ![@UI.Importance]: #High },
             { Value: unit_price, Label: 'Unit Price', ![@UI.Importance]: #High },
             { Value: net_amount, Label: 'Net Amount', ![@UI.Importance]: #High },
+
+            // ------------------------------------------------------------
+            // WHAT THE SUPPLIER QUOTED, AND WHAT IT RESOLVED TO.
+            //
+            // ticket_number is the key the supplier actually references -
+            // they do not know our PO - and it was on the entity, in the
+            // seed and on no screen. Six checks in the RESOLUTION group
+            // (INV450, 462, 463, 464, 465, 466) all read from these three
+            // fields, and every one of them was unreadable on the line it
+            // was raised against.
+            // ------------------------------------------------------------
+            {
+                $Type : 'UI.DataFieldWithNavigationPath',
+                Value : ticket_number,
+                Label : 'Ticket stated',
+                Target: ticket,
+                ![@UI.Importance]: #High
+            },
+            {
+                Value: resolution_source,
+                Label: 'Resolved by',
+                Criticality: resolutionCriticality,
+                ![@UI.Importance]: #High
+            },
+
             { Value: tax_code, Label: 'Tax Code', ![@UI.Importance]: #Medium },
             { Value: tax_amount, Label: 'Tax Amount', ![@UI.Importance]: #Medium },
             { Value: po_number, Label: 'PO Number', ![@UI.Importance]: #Low },
@@ -319,9 +463,25 @@ annotate InvoiceService.InvoiceItems with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemResolution',
+                Label  : 'Resolution',
+                Target : '@UI.FieldGroup#ItemResolution'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
                 ID     : 'Matching',
                 Label  : 'Matching',
                 Target : '@UI.FieldGroup#ItemMatching'
+            },
+            // The last hop. FuelTickets was exposed on this service for
+            // exactly this facet; its #TicketFuel group is metered x density
+            // = kg, which is the only place on an AP screen where the volume
+            // the supplier billed meets the mass the aircraft received.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemTicket',
+                Label  : 'The fuel behind this line',
+                Target : 'ticket/@UI.FieldGroup#TicketFuel'
             }
         ],
 
@@ -338,6 +498,44 @@ annotate InvoiceService.InvoiceItems with @(
                 { Value: tax_amount, Label: 'Tax Amount' },
                 { Value: cost_center, Label: 'Cost Center' },
                 { Value: gl_account, Label: 'G/L Account' }
+            ]
+        },
+
+        // WHERE INV465 FINALLY HAS BOTH ITS NUMBERS. The exception reads
+        // "line states PO 4500999999; the ticket resolves to PO 4500210010",
+        // and until this group existed the screen carried only the first of
+        // the two. An exception naming a value the screen cannot show is an
+        // assertion the reader has to take on trust.
+        FieldGroup#ItemResolution: {
+            Label: 'Resolution',
+            Data: [
+                { Value: ticket_number, Label: 'Ticket stated on the document' },
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: ticket.ticket_number,
+                    Label: 'Ticket it resolved to',
+                    Target: ticket
+                },
+                { Value: resolution_source, Label: 'Resolved by', Criticality: resolutionCriticality },
+                { Value: po_number, Label: 'PO stated on the document' },
+                {
+                    Value: resolved_po_number,
+                    Label: 'PO reached through the ticket',
+                    Criticality: poAgreementCriticality
+                },
+                { Value: resolved_gr_number, Label: 'GR reached through the ticket' },
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: delivery.delivery_number,
+                    Label: 'Goods receipt',
+                    Target: delivery
+                },
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: fuel_order.order_number,
+                    Label: 'Fuel order',
+                    Target: fuel_order
+                }
             ]
         },
 
@@ -371,21 +569,15 @@ annotate InvoiceService.Invoices with {
         }
     );
 
-    contract @(
-        Common: {
-            Text: contract.contract_number,
-            TextArrangement: #TextFirst,
-            ValueList: {
-                Label: 'Contracts',
-                CollectionPath: 'Contracts',
-                Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: contract_ID, ValueListProperty: 'ID' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'contract_number' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'contract_name' }
-                ]
-            }
-        }
-    );
+    // REMOVED: a value help for `contract`, which INVOICES does not have.
+    // The compiler warned on every build - "Artifact InvoiceService.Invoices
+    // has no element contract" - and it was the ONLY warning this file
+    // produced, so it was the only dangling reference anyone could see. The
+    // six dangling Criticality paths beside it warned about nothing.
+    //
+    // An invoice reaches its contract THROUGH the line's fuel_order, which
+    // is a real path; the header has no contract of its own and inventing
+    // one to satisfy this annotation would have been the wrong repair.
 };
 
 // ============================================================================
@@ -420,7 +612,15 @@ annotate InvoiceService.InvoiceExceptions with @(
         },
         SelectionFields: [ severity, check_group, status, is_gating, check_code ],
         LineItem: [
-            { Value: severity,        Label: 'Severity',   ![@UI.Importance]: #High },
+            {
+                Value: severity,
+                Label: 'Severity',
+                // WARNING is neutral, not green. See severityCriticality in
+                // invoice-service.cds: a row exists because something was
+                // worth saying, and green would read as "checked and fine".
+                Criticality: severityCriticality,
+                ![@UI.Importance]: #High
+            },
             { Value: check_code,      Label: 'Check',      ![@UI.Importance]: #High },
             { Value: message,         Label: 'What happened', ![@UI.Importance]: #High },
             { Value: line_number,     Label: 'Line',       ![@UI.Importance]: #Medium },
@@ -429,7 +629,14 @@ annotate InvoiceService.InvoiceExceptions with @(
             // having to ask. TOLERANCE_LADDER means a configured rung decided
             // this; REGISTRY_DEFAULT means the registry did.
             { Value: severity_source, Label: 'Decided by', ![@UI.Importance]: #High },
-            { Value: status,          Label: 'Status',     ![@UI.Importance]: #Medium },
+            {
+                Value: status,
+                Label: 'Status',
+                // BYPASSED is orange, never green - it is still true and
+                // someone accepted it anyway.
+                Criticality: lifecycleCriticality,
+                ![@UI.Importance]: #Medium
+            },
             { Value: detected_at,     Label: 'Detected',   ![@UI.Importance]: #Low }
         ],
         HeaderFacets: [
@@ -457,7 +664,32 @@ annotate InvoiceService.InvoiceExceptions with @(
                 { Value: variance_pct,      Label: 'Variance %' },
                 // The rung's value where a ladder resolved. Null where the
                 // registry decided, which is the distinction that matters.
-                { Value: threshold_crossed, Label: 'Threshold crossed' }
+                { Value: threshold_crossed, Label: 'Threshold crossed' },
+
+                // WHICH ROW DECIDED IT. severity_source says A LADDER decided
+                // and threshold_crossed says what it crossed; neither says
+                // WHICH rule, and the standing convention is that a resolved
+                // value records the configuration row behind it. The
+                // association existed and pointed at an exposed entity - it
+                // was simply on no facet, so the one thing an argued-with
+                // severity needs was a URL away.
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: tolerance_rule.rule_code,
+                    Label: 'Rule that decided it',
+                    Target: tolerance_rule
+                },
+                { Value: tolerance_rule.rule_name, Label: 'Rule name' },
+
+                // AND THE LINE IT WAS RAISED AGAINST. line_number is a bare
+                // integer; without this an exception on line 30 could not be
+                // opened, only read about.
+                {
+                    $Type: 'UI.DataFieldWithNavigationPath',
+                    Value: line_number,
+                    Label: 'Line',
+                    Target: invoice_item
+                }
             ]
         },
         FieldGroup #ExcLifecycle: {
@@ -698,4 +930,209 @@ annotate InvoiceService.FuelTickets with {
     flight_number      @title: 'Flight';
     match_status       @title: 'Match';
     delivery_timestamp @title: 'Delivered at';
+};
+
+// ============================================================================
+// THE TWO COMPOSITIONS THAT CARRIED ROWS AND HAD NO SCREEN.
+//
+// InvoiceMatches (2 rows) and InvoiceApprovals (3 rows) are exposed, read-only
+// and were never annotated, so the two facets added to the invoice object page
+// above would have rendered as empty shells. A facet pointing at an entity
+// with no LineItem is worse than no facet: it asserts there is nothing there.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// INVOICE MATCHES - the three-way match record, PO against GR against invoice
+//
+// This is the LEGACY match record, written by executeThreeWayMatch, and it is
+// NOT what validateForPosting produces. Both are kept and neither is renamed:
+// the checks are FuelSphere's own pre-posting gate, and the match is the
+// PO/GR/invoice reconciliation SAP performs at MIRO. Showing them on separate
+// facets is the honest arrangement - collapsing them would imply one supersedes
+// the other, and the decision on which survives has not been taken.
+// ----------------------------------------------------------------------------
+annotate InvoiceService.InvoiceMatches with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Match',
+            TypeNamePlural : 'Match Evidence',
+            Title          : { Value: po_number },
+            Description    : { Value: match_status }
+        },
+
+        LineItem: [
+            { Value: po_number,             Label: 'PO',           ![@UI.Importance]: #High },
+            { Value: gr_number,             Label: 'GR',           ![@UI.Importance]: #High },
+            { Value: po_quantity,           Label: 'PO qty',       ![@UI.Importance]: #High },
+            { Value: gr_quantity,           Label: 'GR qty',       ![@UI.Importance]: #High },
+            { Value: inv_quantity,          Label: 'Invoiced qty', ![@UI.Importance]: #High },
+            { Value: quantity_variance_pct, Label: 'Qty var %',    ![@UI.Importance]: #High },
+            { Value: price_variance_pct,    Label: 'Price var %',  ![@UI.Importance]: #High },
+            { Value: within_tolerance,      Label: 'In tolerance', ![@UI.Importance]: #High },
+            { Value: match_status,          Label: 'Status',       ![@UI.Importance]: #Medium },
+            { Value: match_date,            Label: 'Matched',      ![@UI.Importance]: #Low }
+        ],
+
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'MatchThree',
+              Target: '@UI.FieldGroup#MatchThreeWay', Label: 'PO, GR and invoice' },
+            { $Type: 'UI.ReferenceFacet', ID: 'MatchVerdict',
+              Target: '@UI.FieldGroup#MatchVerdict', Label: 'Variance and verdict' }
+        ],
+
+        // THE THREE LEGS IN COLUMNS, not three separate groups. The reader is
+        // comparing them; putting each on its own facet would make the one
+        // comparison the entity exists for the hardest thing on the screen.
+        FieldGroup#MatchThreeWay: {
+            Data: [
+                { Value: po_number, Label: 'PO number' },
+                { Value: po_item, Label: 'PO item' },
+                { Value: po_quantity, Label: 'PO quantity' },
+                { Value: po_price, Label: 'PO price' },
+                { Value: po_amount, Label: 'PO amount' },
+                { Value: gr_number, Label: 'GR number' },
+                { Value: gr_item, Label: 'GR item' },
+                { Value: gr_year, Label: 'GR year' },
+                { Value: gr_quantity, Label: 'GR quantity' },
+                { Value: gr_date, Label: 'GR date' },
+                { Value: inv_quantity, Label: 'Invoiced quantity' },
+                { Value: inv_price, Label: 'Invoiced price' },
+                { Value: inv_amount, Label: 'Invoiced amount' }
+            ]
+        },
+
+        FieldGroup#MatchVerdict: {
+            Data: [
+                { Value: quantity_variance, Label: 'Quantity variance' },
+                { Value: quantity_variance_pct, Label: 'Quantity variance %' },
+                { Value: price_variance, Label: 'Price variance' },
+                { Value: price_variance_pct, Label: 'Price variance %' },
+                { Value: amount_variance, Label: 'Amount variance' },
+                { Value: match_status, Label: 'Match status' },
+                { Value: within_tolerance, Label: 'Within tolerance' },
+                // WHICH ROW DECIDED IT. The same recording convention as
+                // severity_source on an exception: a verdict that does not
+                // name the configuration behind it cannot be argued with.
+                { Value: tolerance_rule.rule_code, Label: 'Tolerance rule applied' },
+                { Value: matched_by, Label: 'Matched by' },
+                { Value: match_date, Label: 'Matched at' },
+                { Value: match_notes, Label: 'Notes' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.InvoiceMatches with {
+    ID                   @UI.Hidden;
+    invoice              @title: 'Invoice';
+    invoice_item         @title: 'Invoice Line';
+    po_number            @title: 'PO Number';
+    po_item              @title: 'PO Item';
+    po_quantity          @title: 'PO Quantity';
+    po_price             @title: 'PO Price';
+    po_amount            @title: 'PO Amount';
+    gr_number            @title: 'GR Number';
+    gr_year              @title: 'GR Year';
+    gr_item              @title: 'GR Item';
+    gr_quantity          @title: 'GR Quantity';
+    gr_date              @title: 'GR Date';
+    inv_quantity         @title: 'Invoiced Quantity';
+    inv_price            @title: 'Invoiced Price';
+    inv_amount           @title: 'Invoiced Amount';
+    quantity_variance    @title: 'Quantity Variance';
+    quantity_variance_pct @title: 'Quantity Variance %';
+    price_variance       @title: 'Price Variance';
+    price_variance_pct   @title: 'Price Variance %';
+    amount_variance      @title: 'Amount Variance';
+    match_status         @title: 'Match Status';
+    match_date           @title: 'Matched At';
+    matched_by           @title: 'Matched By';
+    tolerance_rule       @title: 'Tolerance Rule';
+    within_tolerance     @title: 'Within Tolerance';
+    match_notes          @title: 'Notes' @UI.MultiLineText;
+};
+
+// ----------------------------------------------------------------------------
+// INVOICE APPROVALS - SOX control INV-007, the approval audit trail
+//
+// Ordered by sequence ASCENDING, which is the reverse of every other worklist
+// in this file. An audit trail is read forwards: the argument is what happened
+// and in what order, and newest-first would show the outcome before the reason.
+// ----------------------------------------------------------------------------
+annotate InvoiceService.InvoiceApprovals with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Approval Step',
+            TypeNamePlural : 'Approval Trail',
+            Title          : { Value: action },
+            Description    : { Value: action_by }
+        },
+
+        PresentationVariant: {
+            SortOrder: [ { Property: sequence, Descending: false } ],
+            Visualizations: ['@UI.LineItem']
+        },
+
+        LineItem: [
+            { Value: sequence,        Label: 'Step',    ![@UI.Importance]: #High },
+            { Value: action,          Label: 'Action',  ![@UI.Importance]: #High },
+            { Value: action_by,       Label: 'By',      ![@UI.Importance]: #High },
+            { Value: action_date,     Label: 'When',    ![@UI.Importance]: #High },
+            { Value: comments,        Label: 'Comment', ![@UI.Importance]: #High },
+            { Value: invoice_amount,  Label: 'Amount',  ![@UI.Importance]: #Medium },
+            { Value: variance_amount, Label: 'Variance',![@UI.Importance]: #Medium },
+            { Value: within_limit,    Label: 'In limit',![@UI.Importance]: #Medium }
+        ],
+
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'ApprovalAct',
+              Target: '@UI.FieldGroup#ApprovalAct', Label: 'What was done' },
+            { $Type: 'UI.ReferenceFacet', ID: 'ApprovalLimit',
+              Target: '@UI.FieldGroup#ApprovalLimit', Label: 'Authority and escalation' }
+        ],
+
+        FieldGroup#ApprovalAct: {
+            Data: [
+                { Value: sequence, Label: 'Step' },
+                { Value: action, Label: 'Action' },
+                { Value: action_by, Label: 'Performed by' },
+                { Value: action_date, Label: 'Performed at' },
+                { Value: comments, Label: 'Comment' },
+                { Value: rejection_reason, Label: 'Rejection reason' }
+            ]
+        },
+
+        // INV-008, approval value limits per role. approver_limit and
+        // within_limit are null on all three seeded rows because no limit is
+        // enforced anywhere - the fields are shown ANYWAY, empty, because a
+        // control that is designed and not built should read as absent rather
+        // than be invisible.
+        FieldGroup#ApprovalLimit: {
+            Data: [
+                { Value: invoice_amount, Label: 'Invoice amount' },
+                { Value: variance_amount, Label: 'Variance amount' },
+                { Value: approver_limit, Label: 'Approver limit' },
+                { Value: within_limit, Label: 'Within limit' },
+                { Value: escalated_to, Label: 'Escalated to' },
+                { Value: escalation_reason, Label: 'Escalation reason' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.InvoiceApprovals with {
+    ID                @UI.Hidden;
+    invoice           @title: 'Invoice';
+    sequence          @title: 'Step';
+    action            @title: 'Action';
+    action_date       @title: 'Performed At';
+    action_by         @title: 'Performed By';
+    comments          @title: 'Comment' @UI.MultiLineText;
+    rejection_reason  @title: 'Rejection Reason' @UI.MultiLineText;
+    invoice_amount    @title: 'Invoice Amount';
+    variance_amount   @title: 'Variance Amount';
+    approver_limit    @title: 'Approver Limit';
+    within_limit      @title: 'Within Limit';
+    escalated_to      @title: 'Escalated To';
+    escalation_reason @title: 'Escalation Reason' @UI.MultiLineText;
 };

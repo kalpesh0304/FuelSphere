@@ -38,7 +38,24 @@ describe('WP-21A — invoice validation and the posting gate', function () {
 it('EXIT-1 — an invoice with hard errors is CAPTURED, exceptions against it, posting gated', async () => {
     const before = await invoice(S2);
     assert.ok(before, 'the invoice exists before validation — capture was never blocked');
-    assert.strictEqual(before.posting_gate, 'NOT_CHECKED', 'and NOT_CHECKED is not CLEAR');
+
+    // REPOINTED. This asserted `before.posting_gate === 'NOT_CHECKED'`, which
+    // was a statement about WHAT THE SEED HAPPENED TO CONTAIN. The seed now
+    // carries the verdict so the demo can stay read-only, and the criterion
+    // failed on a deliberate data change rather than on any behaviour.
+    //
+    // The relationship it was reaching for is that NOT_CHECKED IS NOT CLEAR
+    // and the gate is COMPUTED rather than stored. Demonstrating the
+    // transition proves both, and proves more than the original: put the row
+    // back to unchecked, confirm it reads NOT_CHECKED and not CLEAR, then run.
+    await (await db()).run(UPDATE('fuelsphere.INVOICES').set({
+        posting_gate: 'NOT_CHECKED', gate_evaluated_at: null,
+        open_hard_count: 0, open_soft_count: 0, warning_count: 0
+    }).where({ ID: S2 }));
+    const reset = await invoice(S2);
+    assert.strictEqual(reset.posting_gate, 'NOT_CHECKED');
+    assert.notStrictEqual(reset.posting_gate, 'CLEAR', 'and NOT_CHECKED is not CLEAR');
+    out(`reset to ${reset.posting_gate} before the run, so the gate below is computed`);
 
     const { data } = await validate(S2);
     out(`${data.invoiceNumber}: gate=${data.postingGate} canPost=${data.canPost}`);
@@ -302,17 +319,33 @@ it('EXIT-8 — a provisional price raises the WARNING and NO price variance', as
 
 // ======================================================================
 it('EXIT-9 — the header total derives from lines, and the three readers still work', async () => {
-    // Assert "seeded as null" against THE SEED FILE, not the live row. Earlier
-    // criteria have already validated S1, which derives the total — asserting
-    // on live state here would be asserting against something this suite
-    // changed, and it would pass or fail on test ORDER rather than on the seed.
+    // REPOINTED. This read the SEED FILE and asserted net_amount was the empty
+    // string — "seeded EMPTY, a total is an output of capture". That was a
+    // statement about the seed's contents standing in for one about the code,
+    // and the seed now carries the derived total as a cached computation so
+    // the demo can stay read-only.
+    //
+    // The relationship is that THE TOTAL IS AN OUTPUT: whatever the header
+    // holds, a run replaces it with the sum of the lines. Blanking the live
+    // row and watching it come back is a direct demonstration of that, where
+    // reading a blank cell in a CSV was an inference from it.
+    //
+    // stated_net_amount stays asserted from the seed file, because THAT one
+    // genuinely is an input and nothing derives it.
     const fs0=require('fs');
     const csv=fs0.readFileSync(`${PROJECT}/db/data/fuelsphere-INVOICES.csv`,'utf8').trim().split('\n');
     const hdr=csv[0].split(';');
     const seedRow=csv.slice(1).map(l=>l.split(';')).find(c=>c[hdr.indexOf('invoice_number')]==='INV-WFS-2026W21-001');
     out(`seed row: net_amount="${seedRow[hdr.indexOf('net_amount')]}" stated_net_amount="${seedRow[hdr.indexOf('stated_net_amount')]}"`);
-    assert.strictEqual(seedRow[hdr.indexOf('net_amount')], '', 'seeded EMPTY — a total is an output of capture');
-    assert.notStrictEqual(seedRow[hdr.indexOf('stated_net_amount')], '', 'while the stated figure IS seeded');
+    assert.notStrictEqual(seedRow[hdr.indexOf('stated_net_amount')], '',
+        'the STATED figure is an input and must be seeded');
+
+    // Blank the derived total, and require the run to put it back.
+    await (await db()).run(UPDATE('fuelsphere.INVOICES')
+        .set({ net_amount: null, gross_amount: null }).where({ ID: S1 }));
+    const blanked = await invoice(S1);
+    assert.strictEqual(blanked.net_amount, null, 'instrument check: the blanking did not take');
+    out(`  header net_amount blanked to null before the run`);
 
     const before = await invoice(S1);
     const { data } = await validate(S1);
