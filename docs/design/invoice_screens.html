@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SUPERSEDED · FuelSphere · Invoice and Payment</title>
+<style>
+:root{
+  --blue:#0070F2; --blue-d:#0064D9; --blue-l:#EBF8FF;
+  --bg:#F5F6F7; --card:#FFFFFF; --line:#D9D9D9; --line-l:#EAECEE;
+  --ink:#1D2D3E; --ink-2:#556B82; --ink-3:#758CA4;
+  --shell:#354A5F;
+  --neg:#AA0808; --neg-bg:#FFEBEB;
+  --crit:#E76500; --crit-bg:#FFF8E1;
+  --pos:#256F3A; --pos-bg:#F0FDF4;
+  --info:#0070F2; --info-bg:#EBF8FF;
+  --f:"72","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --m:"Consolas","SF Mono","Menlo",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.4}
+
+/* shell */
+.shell{background:var(--shell);color:#fff;height:44px;display:flex;align-items:center;
+  padding:0 16px;gap:16px;position:sticky;top:0;z-index:50}
+.shell .logo{font-weight:700;letter-spacing:.02em;font-size:15px}
+.shell .crumb{color:#B8C6D4;font-size:13px}
+.shell .spacer{flex:1}
+.shell .who{font-size:12px;color:#B8C6D4}
+.shell .avatar{width:26px;height:26px;border-radius:50%;background:#5B7189;
+  display:grid;place-items:center;font-size:11px;font-weight:600}
+
+/* app tabs */
+.apptabs{background:var(--card);border-bottom:1px solid var(--line);
+  display:flex;gap:0;padding:0 16px;position:sticky;top:44px;z-index:40}
+.apptab{padding:12px 18px 10px;font-size:14px;color:var(--ink-2);cursor:pointer;
+  border-bottom:3px solid transparent;white-space:nowrap}
+.apptab:hover{color:var(--ink)}
+.apptab.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.apptab .n{display:inline-block;margin-left:7px;background:var(--line-l);color:var(--ink-2);
+  border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600}
+.apptab.on .n{background:var(--blue);color:#fff}
+
+.page{padding:12px 16px 40px}
+.hidden{display:none}
+
+/* filter bar */
+.fb{background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px;margin-bottom:10px}
+.fb .row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:3px;min-width:130px}
+.fld label{font-size:11px;color:var(--ink-3)}
+.fld .box{border:1px solid #89919A;border-bottom:2px solid #556B82;border-radius:4px;
+  background:#fff;padding:5px 8px;font-size:13px;min-height:28px;display:flex;
+  align-items:center;justify-content:space-between;gap:6px;color:var(--ink)}
+.fld .box.set{border-color:var(--blue);border-bottom-color:var(--blue);background:var(--blue-l)}
+.fld .box .car{color:var(--ink-3);font-size:9px}
+.fb .go{margin-left:auto;display:flex;gap:8px}
+.btn{border:1px solid var(--blue);background:transparent;color:var(--blue);
+  border-radius:4px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:var(--f)}
+.btn:hover{background:var(--blue-l)}
+.btn.pri{background:var(--blue);color:#fff}
+.btn.pri:hover{background:var(--blue-d)}
+.btn.gh{border-color:transparent;color:var(--blue)}
+.fb .note{margin-top:9px;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:7px}
+.chip{background:var(--blue-l);color:var(--blue-d);border:1px solid #B3DAFF;
+  border-radius:12px;padding:2px 9px;font-size:11.5px;display:inline-flex;align-items:center;gap:6px}
+.chip .x{cursor:pointer;font-size:13px;line-height:1;opacity:.7}
+
+/* table card */
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card .top{padding:11px 14px;border-bottom:1px solid var(--line-l);
+  display:flex;align-items:center;gap:10px}
+.card .top h2{font-size:15px;font-weight:700}
+.card .top .cnt{color:var(--ink-2);font-weight:400;font-size:14px}
+.card .top .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11.5px;color:var(--ink-2);font-weight:600;
+  padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:#FAFAFA}
+th.r,td.r{text-align:right}
+td{padding:9px 12px;border-bottom:1px solid var(--line-l);font-size:13px;vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#F2F7FD}
+tbody tr:last-child td{border-bottom:none}
+.mono{font-family:var(--m);font-size:12.5px}
+.sub{color:var(--ink-3);font-size:11.5px}
+
+/* status */
+.st{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
+.st::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.st.neg::before{background:var(--neg)} .st.neg{color:var(--neg)}
+.st.crit::before{background:var(--crit)} .st.crit{color:#8F4000}
+.st.pos::before{background:var(--pos)} .st.pos{color:var(--pos)}
+.st.info::before{background:var(--info)} .st.info{color:var(--blue-d)}
+.st.none::before{background:#9AA6B2} .st.none{color:var(--ink-2)}
+.sev{display:inline-block;border-radius:3px;padding:2px 8px;font-size:11px;
+  font-weight:700;letter-spacing:.03em}
+.sev.h{background:var(--neg-bg);color:var(--neg);border:1px solid #F5C2C2}
+.sev.s{background:var(--crit-bg);color:#8F4000;border:1px solid #F3D9A0}
+.sev.w{background:var(--info-bg);color:var(--blue-d);border:1px solid #B3DAFF}
+.cnt-b{display:inline-block;min-width:20px;text-align:center;border-radius:10px;
+  padding:1px 7px;font-size:11.5px;font-weight:700}
+.cnt-b.neg{background:var(--neg-bg);color:var(--neg)}
+.cnt-b.crit{background:var(--crit-bg);color:#8F4000}
+.cnt-b.w{background:var(--info-bg);color:var(--blue-d)}
+.cnt-b.z{background:var(--line-l);color:var(--ink-3)}
+.lnk{color:var(--blue);text-decoration:none}
+.lnk:hover{text-decoration:underline}
+
+/* sub tabs (payment) */
+.subtabs{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--card);
+  border-radius:8px 8px 0 0;padding:0 6px}
+.subtab{padding:11px 16px 9px;font-size:13.5px;color:var(--ink-2);cursor:pointer;
+  border-bottom:3px solid transparent}
+.subtab.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.subtab .n{margin-left:6px;font-size:11px;font-weight:700}
+.subtab.on .n{color:var(--blue)}
+
+/* object page */
+.op{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100;display:none}
+.op.show{display:block}
+.op .sheet{position:absolute;right:0;top:0;bottom:0;width:min(1080px,94vw);
+  background:var(--bg);overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,.18)}
+.ophdr{background:var(--card);border-bottom:1px solid var(--line);padding:14px 20px 0}
+.ophdr .close{float:right;cursor:pointer;color:var(--ink-2);font-size:20px;
+  line-height:1;padding:2px 6px}
+.ophdr .ttl{font-size:12px;color:var(--ink-3)}
+.ophdr h1{font-size:20px;font-weight:700;margin:2px 0 3px}
+.ophdr .meta{color:var(--ink-2);font-size:13px;margin-bottom:12px}
+.ophdr .kpis{display:flex;gap:34px;padding-bottom:14px;flex-wrap:wrap}
+.kpi .k{font-size:11px;color:var(--ink-3);margin-bottom:2px}
+.kpi .v{font-size:17px;font-weight:700}
+.kpi .v.mono{font-family:var(--m);font-size:16px}
+.anchor{display:flex;gap:0;border-top:1px solid var(--line-l);overflow-x:auto}
+.anchor a{padding:10px 14px;font-size:13px;color:var(--ink-2);white-space:nowrap;
+  text-decoration:none;border-bottom:3px solid transparent}
+.anchor a.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.opbody{padding:14px 20px 60px;display:flex;flex-direction:column;gap:12px}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.sec>h3{font-size:14px;font-weight:700;padding:12px 14px;border-bottom:1px solid var(--line-l);
+  display:flex;align-items:center;gap:9px}
+.sec>h3 .num{background:var(--line-l);color:var(--ink-2);border-radius:3px;
+  padding:1px 6px;font-size:11px;font-family:var(--m)}
+.sec .body{padding:12px 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:11px 26px}
+.f .k{font-size:11px;color:var(--ink-3);margin-bottom:1px}
+.f .v{font-size:13.5px}
+.f .v.mono{font-family:var(--m);font-size:13px}
+.callout{background:#FAFBFC;border-left:3px solid var(--blue);padding:10px 13px;
+  font-size:12.5px;color:var(--ink-2);margin:0 14px 13px;border-radius:0 4px 4px 0}
+.callout b{color:var(--ink)}
+.callout.warn{border-left-color:var(--crit);background:var(--crit-bg)}
+.empty{padding:20px 14px;color:var(--ink-3);font-size:13px;text-align:center}
+
+/* design notes */
+.dn{background:#FFFDF5;border:1px dashed #E0C97F;border-radius:8px;padding:11px 14px;
+  margin-bottom:10px;font-size:12.5px;color:#6B5A22}
+.dn b{color:#4A3D10}
+.dn .lbl{display:inline-block;background:#E0C97F;color:#4A3D10;border-radius:3px;
+  padding:1px 7px;font-size:10.5px;font-weight:700;letter-spacing:.04em;margin-right:8px}
+</style>
+</head>
+<body>
+
+<div style="background:#8F4000;color:#fff;padding:11px 16px;font-family:'72','Segoe UI',Arial,sans-serif;font-size:13px;line-height:1.5">
+  <b style="letter-spacing:.03em">SUPERSEDED &middot; 26 August 2026</b> &mdash;
+  replaced by <b>idr_screens.html</b>, which models the INCOMING DOCUMENT as the subject
+  rather than the invoice. A supplier's invoice number is not unique across suppliers, and a
+  document can arrive before anyone knows who sent it.
+  <br>
+  <span style="opacity:.85">
+  The Worklist and object page here map to the IDR list and detail.
+  The Exceptions screen is replaced by the IDR detail's validation section, which shows
+  <b>all 22 rules with a persisted status</b> rather than failures only.
+  <b>One thing here is not superseded and has never been scoped:</b> Payment Status,
+  <i>claim windows closing</i> &mdash; the other three tabs are covered by the ticket coverage report.
+  </span>
+</div>
+<div class="shell">
+  <div class="logo">FuelSphere</div>
+  <div class="crumb">Invoice &amp; Payment</div>
+  <div class="spacer"></div>
+  <div class="who">A. Rajan · Fuel Finance</div>
+  <div class="avatar">AR</div>
+</div>
+
+<div class="apptabs">
+  <div class="apptab on" data-app="wl">Invoice Worklist <span class="n">4</span></div>
+  <div class="apptab" data-app="ex">Exceptions <span class="n">5</span></div>
+  <div class="apptab" data-app="pay">Payment Status <span class="n">9</span></div>
+</div>
+
+<!-- ================= WORKLIST ================= -->
+<div class="page" id="app-wl">
+
+  <div class="dn"><span class="lbl">DESIGN NOTE</span>
+    <b>Opens filtered, and the filter is visible.</b> A verifier's day is the invoices that stopped.
+    The default is <span class="mono">status IN (Submitted, Exception, Blocked)</span> — removable,
+    and shown as a chip so nobody mistakes this for the whole dataset.</div>
+
+  <div class="fb">
+    <div class="row">
+      <div class="fld"><label>Status</label><div class="box set">Needs action <span class="car">▼</span></div></div>
+      <div class="fld"><label>Supplier</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Station</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Invoice date</label><div class="box">Last 90 days <span class="car">▼</span></div></div>
+      <div class="fld"><label>Severity present</label><div class="box">Any <span class="car">▼</span></div></div>
+      <div class="go">
+        <button class="btn gh">Adapt Filters</button>
+        <button class="btn pri">Go</button>
+      </div>
+    </div>
+    <div class="note">
+      <span class="chip">Status: Submitted, Exception, Blocked <span class="x">✕</span></span>
+      <span>4 of 27 invoices · <a class="lnk" href="#">show all</a></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="top">
+      <h2>Invoices <span class="cnt">(4)</span></h2>
+      <div class="sp"></div>
+      <button class="btn gh">Export</button>
+      <button class="btn">Post</button>
+      <button class="btn">Return to Vendor</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Invoice</th><th>Supplier</th><th>Invoice date</th><th>Received</th>
+        <th>Station</th><th class="r">Gross</th><th>Status</th>
+        <th class="r">Exceptions</th><th class="r">Age</th>
+      </tr></thead>
+      <tbody>
+        <tr onclick="openOP()">
+          <td class="mono">WFS-2026-04-4471</td><td>World Fuel Services</td>
+          <td>14 Apr 2026</td><td>16 Apr 2026</td><td class="mono">YYZ</td>
+          <td class="r mono">9,033.28 CAD</td>
+          <td><span class="st neg">Exception</span></td>
+          <td class="r"><span class="cnt-b neg">4</span></td><td class="r">12 d</td>
+        </tr>
+        <tr>
+          <td class="mono">SHL-2026-04-1190</td><td>Shell Aviation</td>
+          <td>13 Apr 2026</td><td>15 Apr 2026</td><td class="mono">YYZ</td>
+          <td class="r mono">1,166.11 CAD</td>
+          <td><span class="st crit">Exception</span></td>
+          <td class="r"><span class="cnt-b crit">1</span></td><td class="r">13 d</td>
+        </tr>
+        <tr>
+          <td class="mono">BPA-2026-04-8823</td><td>BP Aviation UK</td>
+          <td>15 Apr 2026</td><td>17 Apr 2026</td><td class="mono">LHR</td>
+          <td class="r mono">29,847.62 CAD</td>
+          <td><span class="st info">Submitted</span></td>
+          <td class="r"><span class="cnt-b w">1</span></td><td class="r">11 d</td>
+        </tr>
+        <tr>
+          <td class="mono">MEN-2026-04-0334</td><td>Menzies Aviation</td>
+          <td>11 Apr 2026</td><td>12 Apr 2026</td><td class="mono">YVR</td>
+          <td class="r mono">3,177.81 CAD</td>
+          <td><span class="st info">Submitted</span></td>
+          <td class="r"><span class="cnt-b z">0</span></td><td class="r">16 d</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dn" style="margin-top:10px"><span class="lbl">DESIGN NOTE</span>
+    <b>The exception count carries the highest severity, not the number.</b>
+    WFS-4471 has four exceptions and one of them is hard — the row is red because
+    <b>one line cannot post</b>, and the count happens to be four. Shell has one soft error
+    and is amber. BP has one warning and is blue: recorded, visible, does not gate.</div>
+</div>
+
+<!-- ================= EXCEPTIONS ================= -->
+<div class="page hidden" id="app-ex">
+
+  <div class="dn"><span class="lbl">DESIGN NOTE</span>
+    <b>A separate screen, and it is line-level.</b> An exception belongs to a line, not an invoice —
+    an invoice with four exceptions is four pieces of work, possibly for different people.
+    Sorted <b>severity first, then age</b>: a hard error blocks posting and an old warning does not.</div>
+
+  <div class="fb">
+    <div class="row">
+      <div class="fld"><label>Severity</label><div class="box set">Hard, Soft <span class="car">▼</span></div></div>
+      <div class="fld"><label>Status</label><div class="box set">Open <span class="car">▼</span></div></div>
+      <div class="fld"><label>Check code</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Supplier</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="go"><button class="btn gh">Adapt Filters</button><button class="btn pri">Go</button></div>
+    </div>
+    <div class="note">
+      <span class="chip">Severity: Hard, Soft <span class="x">✕</span></span>
+      <span class="chip">Status: Open <span class="x">✕</span></span>
+      <span>5 of 11 · <a class="lnk" href="#">include warnings</a></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="top">
+      <h2>Open exceptions <span class="cnt">(5)</span></h2>
+      <div class="sp"></div>
+      <button class="btn">Bypass…</button>
+      <button class="btn">Return to Vendor</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Severity</th><th>Check</th><th>Invoice</th><th class="r">Line</th>
+        <th>Expected</th><th>Actual</th><th class="r">Variance</th>
+        <th>Fuel</th><th class="r">Age</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="sev h">HARD</span></td>
+          <td><span class="mono">INV405</span><div class="sub">Ticket already invoiced</div></td>
+          <td class="mono">WFS-2026-04-4471</td><td class="r">4</td>
+          <td class="mono">—</td><td class="mono">8801-2261</td><td class="r mono">—</td>
+          <td><a class="lnk mono" href="#">8801-2261</a><div class="sub">also on line 1</div></td>
+          <td class="r">12 d</td>
+        </tr>
+        <tr>
+          <td><span class="sev s">SOFT</span></td>
+          <td><span class="mono">INV403</span><div class="sub">Unit price above contract</div></td>
+          <td class="mono">WFS-2026-04-4471</td><td class="r">3</td>
+          <td class="mono">0.7100</td><td class="mono">0.7285</td>
+          <td class="r mono">+2.82 %</td>
+          <td><a class="lnk mono" href="#">8801-2263</a><div class="sub">AC412 · C-FDMP</div></td>
+          <td class="r">12 d</td>
+        </tr>
+        <tr>
+          <td><span class="sev s">SOFT</span></td>
+          <td><span class="mono">INV403</span><div class="sub">Unit price above contract</div></td>
+          <td class="mono">SHL-2026-04-1190</td><td class="r">1</td>
+          <td class="mono">0.7050</td><td class="mono">0.7290</td>
+          <td class="r mono">+3.40 %</td>
+          <td><a class="lnk mono" href="#">SHL-9902</a><div class="sub">AC856 · C-GDMS</div></td>
+          <td class="r">13 d</td>
+        </tr>
+        <tr>
+          <td><span class="sev s">SOFT</span></td>
+          <td><span class="mono">INV404</span><div class="sub">Quantity variance vs goods receipt</div></td>
+          <td class="mono">WFS-2026-04-4472</td><td class="r">2</td>
+          <td class="mono">2,884.00 L</td><td class="mono">3,060.00 L</td>
+          <td class="r mono">+6.10 %</td>
+          <td><a class="lnk mono" href="#">8801-2270</a><div class="sub">no gauge reading</div></td>
+          <td class="r">9 d</td>
+        </tr>
+        <tr>
+          <td><span class="sev h">HARD</span></td>
+          <td><span class="mono">INV401</span><div class="sub">Purchase order not found</div></td>
+          <td class="mono">SHL-2026-04-1191</td><td class="r">1</td>
+          <td class="mono">—</td><td class="mono">4500009944</td><td class="r mono">—</td>
+          <td><span class="sub">unmatched — no ticket</span></td>
+          <td class="r">6 d</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dn" style="margin-top:10px"><span class="lbl">DESIGN NOTE</span>
+    <b>The Fuel column is why this screen lives in FuelSphere.</b>
+    A price variance of 2.82 % is a number. The same variance with one click to the ticket,
+    the delivery that measured it and the flight that burned it is a supplier conversation.
+    <br><br>
+    <b>Three severities, three permissions.</b> A warning is recorded and does not gate.
+    A soft error gates and an authorised user may release it, with who, when and <b>why</b> recorded.
+    A hard error <b>cannot be bypassed by anyone</b> — it needs a corrected invoice.
+    The Bypass button is disabled on a hard row rather than hidden, so the rule is visible.</div>
+</div>
+
+<!-- ================= PAYMENT ================= -->
+<div class="page hidden" id="app-pay">
+
+  <div class="dn"><span class="lbl">DESIGN NOTE</span>
+    <b>Four tabs, not one list — two of the four are not invoices.</b>
+    <i>Not billed</i> and <i>Claim expiring</i> live on the delivery. A union would flatten four
+    different things into a shape none of them has. They share a page because they share a question.
+    <br><br>
+    <b>Sorted by time remaining, not by age.</b> A claim window is a deadline. An ageing report
+    sorts the oldest to the top and lets the urgent one fall through.</div>
+
+  <div class="subtabs">
+    <div class="subtab on" data-pay="nb">Not billed <span class="n">3</span></div>
+    <div class="subtab" data-pay="up">Unposted <span class="n">2</span></div>
+    <div class="subtab" data-pay="un">Unpaid <span class="n">3</span></div>
+    <div class="subtab" data-pay="cl">Claim expiring <span class="n">1</span></div>
+  </div>
+
+  <div class="card" style="border-radius:0 0 8px 8px;border-top:none">
+    <!-- not billed -->
+    <div id="pay-nb">
+      <div class="top"><h2>Fuel delivered, not yet invoiced <span class="cnt">(3)</span></h2>
+        <div class="sp"></div><button class="btn gh">Export</button></div>
+      <table>
+        <thead><tr><th>Delivery</th><th>Date</th><th>Station</th><th>Tail</th>
+          <th>Supplier</th><th class="r">Quantity</th><th class="r">Est. value</th>
+          <th class="r">Days</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">EPD-YYZ-20260410-0002</td><td>10 Apr 2026</td>
+            <td class="mono">YYZ</td><td class="mono">C-FDMO</td><td>World Fuel Services</td>
+            <td class="r mono">750.00 L</td><td class="r mono">532.50 CAD</td>
+            <td class="r"><span class="st crit">45</span></td></tr>
+          <tr><td class="mono">EPD-YVR-20260408-0011</td><td>8 Apr 2026</td>
+            <td class="mono">YVR</td><td class="mono">C-FDMP</td><td>Menzies Aviation</td>
+            <td class="r mono">4,120.00 L</td><td class="r mono">2,925.20 CAD</td>
+            <td class="r"><span class="st crit">47</span></td></tr>
+          <tr><td class="mono">EPD-MNL-20260405-0003</td><td>5 Apr 2026</td>
+            <td class="mono">MNL</td><td class="mono">RP-C8805</td><td>—</td>
+            <td class="r mono">2,500.00 L</td><td class="r mono">—</td>
+            <td class="r"><span class="st neg">50</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>This is not an error. It is an exposure.</b>
+        Fuel already burned that nobody has billed for — and a later period must not double-pay it.
+        The MNL row has no supplier because the ticket is unmatched: it reached no order,
+        so nothing resolves a price.</div>
+    </div>
+
+    <!-- unposted -->
+    <div id="pay-up" class="hidden">
+      <div class="top"><h2>Held, cannot post <span class="cnt">(2)</span></h2>
+        <div class="sp"></div><button class="btn gh">Export</button></div>
+      <table>
+        <thead><tr><th>Invoice</th><th>Supplier</th><th class="r">Gross</th>
+          <th>Blocking check</th><th>Severity</th><th class="r">Days held</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">WFS-2026-04-4471</td><td>World Fuel Services</td>
+            <td class="r mono">9,033.28 CAD</td>
+            <td><span class="mono">INV405</span> Ticket already invoiced</td>
+            <td><span class="sev h">HARD</span></td><td class="r">12</td></tr>
+          <tr><td class="mono">SHL-2026-04-1191</td><td>Shell Aviation</td>
+            <td class="r mono">4,412.90 CAD</td>
+            <td><span class="mono">INV401</span> Purchase order not found</td>
+            <td><span class="sev h">HARD</span></td><td class="r">6</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn"><b>Both are hard errors, so neither can be released here.</b>
+        Each needs a corrected invoice from the vendor. The screen offers no bypass —
+        showing an action that cannot succeed is worse than showing none.</div>
+    </div>
+
+    <!-- unpaid -->
+    <div id="pay-un" class="hidden">
+      <div class="top"><h2>Posted, awaiting payment <span class="cnt">(3)</span></h2>
+        <div class="sp"></div><button class="btn gh">Export</button></div>
+      <table>
+        <thead><tr><th>Invoice</th><th>Supplier</th><th class="r">Gross</th>
+          <th>Posted</th><th>Terms</th><th>Due</th><th class="r">Days to due</th>
+          <th>FI document</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">WFS-2026-02-4390</td><td>World Fuel Services</td>
+            <td class="r mono">18,204.55 CAD</td><td>28 Mar 2026</td><td class="mono">NET30</td>
+            <td>27 Apr 2026</td><td class="r"><span class="st crit">8</span></td>
+            <td class="mono">5100002211</td></tr>
+          <tr><td class="mono">BPA-2026-03-8801</td><td>BP Aviation UK</td>
+            <td class="r mono">41,930.08 CAD</td><td>2 Apr 2026</td><td class="mono">NET30</td>
+            <td>2 May 2026</td><td class="r"><span class="st pos">13</span></td>
+            <td class="mono">5100002240</td></tr>
+          <tr><td class="mono">MEN-2026-03-0301</td><td>Menzies Aviation</td>
+            <td class="r mono">6,880.14 CAD</td><td>5 Apr 2026</td><td class="mono">NET45</td>
+            <td>20 May 2026</td><td class="r"><span class="st pos">31</span></td>
+            <td class="mono">5100002255</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- claim -->
+    <div id="pay-cl" class="hidden">
+      <div class="top"><h2>Claim windows closing <span class="cnt">(1)</span></h2>
+        <div class="sp"></div><button class="btn gh">Export</button></div>
+      <table>
+        <thead><tr><th>Delivery</th><th>Date</th><th>Tail</th><th>Claim type</th>
+          <th class="r">Variance</th><th>Window closes</th><th class="r">Days left</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">EPD-YYZ-20260410-0003</td><td>10 Apr 2026</td>
+            <td class="mono">C-FDMP</td><td>Short delivery</td>
+            <td class="r mono">120.76 kg</td><td>25 Apr 2026</td>
+            <td class="r"><span class="st neg">4</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn"><b>Payment is not held for a discrepancy.</b>
+        The supplier is paid on metered volume and the dispute runs on its own track.
+        If payment could simply be withheld, a fifteen-day notification deadline
+        would be pointless — and this tab would not need to exist.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= OBJECT PAGE ================= -->
+<div class="op" id="op">
+  <div class="sheet">
+    <div class="ophdr">
+      <span class="close" onclick="closeOP()">✕</span>
+      <div class="ttl">Supplier Invoice</div>
+      <h1>WFS-2026-04-4471</h1>
+      <div class="meta">World Fuel Services Canada · YYZ · received 16 Apr 2026</div>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Gross amount</div><div class="v mono">9,033.28 CAD</div></div>
+        <div class="kpi"><div class="k">Status</div><div class="v"><span class="st neg">Exception</span></div></div>
+        <div class="kpi"><div class="k">Exceptions</div><div class="v"><span class="cnt-b neg">4</span>
+          <span style="font-size:12px;font-weight:400;color:var(--ink-2)">1 hard · 2 soft · 1 warning</span></div></div>
+        <div class="kpi"><div class="k">Lines</div><div class="v">4</div></div>
+        <div class="kpi"><div class="k">Match</div><div class="v"><span class="st crit">Partial</span></div></div>
+      </div>
+      <div class="anchor">
+        <a class="on" href="#">Invoice details</a><a href="#">Lines</a><a href="#">Exceptions</a>
+        <a href="#">Matching</a><a href="#">Fuel context</a><a href="#">Approvals</a>
+        <a href="#">Payment</a><a href="#">Documents</a>
+      </div>
+    </div>
+
+    <div class="opbody">
+      <div class="sec"><h3><span class="num">2</span> Invoice details</h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">Supplier invoice number</div><div class="v mono">WFS-2026-04-4471</div></div>
+          <div class="f"><div class="k">Supplier</div><div class="v"><a class="lnk" href="#">World Fuel Services Canada</a></div></div>
+          <div class="f"><div class="k">Contract</div><div class="v"><a class="lnk mono" href="#">AC-WFS-2025-001</a></div></div>
+          <div class="f"><div class="k">Invoice date</div><div class="v">14 Apr 2026</div></div>
+          <div class="f"><div class="k">Received</div><div class="v">16 Apr 2026</div></div>
+          <div class="f"><div class="k">Currency</div><div class="v mono">CAD</div></div>
+          <div class="f"><div class="k">Payment terms</div><div class="v mono">NET30</div></div>
+          <div class="f"><div class="k">Net · Tax · Gross</div><div class="v mono">8,600.27 · 433.01 · 9,033.28</div></div>
+        </div></div>
+      </div>
+
+      <div class="sec"><h3><span class="num">3</span> Lines <span class="sub" style="font-weight:400">(4)</span></h3>
+        <table>
+          <thead><tr><th class="r">#</th><th>Ticket</th><th class="r">Quantity</th>
+            <th class="r">GR quantity</th><th class="r">Unit price</th><th class="r">Value</th>
+            <th>Check</th></tr></thead>
+          <tbody>
+            <tr><td class="r">1</td><td class="mono">8801-2261</td><td class="r mono">3,254.00 L</td>
+              <td class="r mono">3,254.00 L</td><td class="r mono">0.7100</td>
+              <td class="r mono">2,310.34</td><td><span class="st pos">Clear</span></td></tr>
+            <tr><td class="r">2</td><td class="mono">8801-2262</td><td class="r mono">3,260.00 L</td>
+              <td class="r mono">3,254.00 L</td><td class="r mono">0.7100</td>
+              <td class="r mono">2,314.60</td><td><span class="sev w">WARNING</span></td></tr>
+            <tr><td class="r">3</td><td class="mono">8801-2263</td><td class="r mono">2,900.00 L</td>
+              <td class="r mono">2,900.00 L</td><td class="r mono">0.7285</td>
+              <td class="r mono">2,112.65</td><td><span class="sev s">SOFT</span></td></tr>
+            <tr><td class="r">4</td><td class="mono">8801-2261</td><td class="r mono">3,254.00 L</td>
+              <td class="r mono">3,254.00 L</td><td class="r mono">0.7100</td>
+              <td class="r mono">2,310.34</td><td><span class="sev h">HARD</span></td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><b>Line 4 is a valid line in the wrong place.</b>
+          Right quantity, right price, right ticket — wrong because it is the second occurrence
+          of ticket 8801-2261. No matcher finds it, which is why it is a separate check on three keys.</div>
+      </div>
+
+      <div class="sec"><h3><span class="num">4</span> Exceptions <span class="sub" style="font-weight:400">(4)</span></h3>
+        <table>
+          <thead><tr><th>Severity</th><th>Check</th><th class="r">Line</th>
+            <th>Expected</th><th>Actual</th><th>Status</th><th>Bypass</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sev h">HARD</span></td>
+              <td><span class="mono">INV405</span> Ticket already invoiced</td><td class="r">4</td>
+              <td class="mono">—</td><td class="mono">8801-2261</td>
+              <td><span class="st neg">Open</span></td>
+              <td class="sub">Cannot be bypassed</td></tr>
+            <tr><td><span class="sev s">SOFT</span></td>
+              <td><span class="mono">INV403</span> Unit price above contract</td><td class="r">3</td>
+              <td class="mono">0.7100</td><td class="mono">0.7285</td>
+              <td><span class="st crit">Open</span></td>
+              <td><a class="lnk" href="#">Bypass…</a></td></tr>
+            <tr><td><span class="sev w">WARNING</span></td>
+              <td><span class="mono">INV404</span> Quantity vs goods receipt</td><td class="r">2</td>
+              <td class="mono">3,254.00 L</td><td class="mono">3,260.00 L</td>
+              <td><span class="st info">Recorded</span></td>
+              <td class="sub">Does not gate</td></tr>
+            <tr><td><span class="sev w">WARNING</span></td>
+              <td><span class="mono">INV407</span> Tax code differs from prior period</td><td class="r">—</td>
+              <td class="mono">CA-GST5</td><td class="mono">CA-HST13</td>
+              <td><span class="st info">Recorded</span></td>
+              <td class="sub">Does not gate</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sec"><h3><span class="num">5</span> Matching <span class="sub" style="font-weight:400">SAP Document AI</span></h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">Purchase order</div><div class="v mono">4500009912</div></div>
+          <div class="f"><div class="k">Goods receipt</div><div class="v mono">5000004471</div></div>
+          <div class="f"><div class="k">Match result</div><div class="v"><span class="st crit">Partial — 3 of 4 lines</span></div></div>
+          <div class="f"><div class="k">Confidence</div><div class="v mono">0.94</div></div>
+        </div></div>
+        <div class="callout"><b>The match is Document AI's, not FuelSphere's.</b>
+          This section reports what it returned. A three-way match view built here would
+          disagree with SAP eventually, and nobody would know which was right.</div>
+      </div>
+
+      <div class="sec"><h3><span class="num">6</span> Fuel context</h3>
+        <table>
+          <thead><tr><th class="r">Line</th><th>Ticket</th><th>Delivery</th><th>Order</th>
+            <th>Flight</th><th>Tail</th><th class="r">Metered</th><th class="r">By gauge</th>
+            <th>Reconciliation</th></tr></thead>
+          <tbody>
+            <tr><td class="r">1</td><td><a class="lnk mono" href="#">8801-2261</a></td>
+              <td><a class="lnk mono" href="#">EPD-YYZ-…-0001</a></td>
+              <td><a class="lnk mono" href="#">FO-YYZ-…-001</a></td>
+              <td><a class="lnk mono" href="#">AC410</a></td><td><a class="lnk mono" href="#">C-FDMO</a></td>
+              <td class="r mono">2,305.76 kg</td><td class="r mono">2,305.00 kg</td>
+              <td><span class="st pos">Reconciled</span></td></tr>
+            <tr><td class="r">3</td><td><a class="lnk mono" href="#">8801-2263</a></td>
+              <td><a class="lnk mono" href="#">EPD-YYZ-…-0003</a></td>
+              <td><a class="lnk mono" href="#">FO-YYZ-…-003</a></td>
+              <td><a class="lnk mono" href="#">AC412</a></td><td><a class="lnk mono" href="#">C-FDMP</a></td>
+              <td class="r mono">2,305.76 kg</td><td class="r mono">2,185.00 kg</td>
+              <td><span class="st neg">Variance 120.76</span></td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><b>This is what nothing else in the landscape can supply.</b>
+          Line 3 is priced 2.82 % above contract <i>and</i> its delivery is 120.76 kg short by gauge.
+          Two independent findings on one line — and the second is only visible from here.</div>
+      </div>
+
+      <div class="sec"><h3><span class="num">7</span> Approvals</h3>
+        <div class="empty">No approval recorded. Posting is blocked by a hard error on line 4.</div>
+      </div>
+
+      <div class="sec"><h3><span class="num">8</span> Payment</h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">Posting status</div><div class="v"><span class="st neg">Not posted</span></div></div>
+          <div class="f"><div class="k">FI document</div><div class="v sub">—</div></div>
+          <div class="f"><div class="k">Due date</div><div class="v sub">— set on posting</div></div>
+          <div class="f"><div class="k">Held for</div><div class="v">12 days</div></div>
+        </div></div>
+      </div>
+
+      <div class="sec"><h3><span class="num">9</span> Documents</h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">Supplier invoice</div>
+            <div class="v"><a class="lnk" href="#">WFS-4471.pdf</a> <span class="sub">· OCR read · confirmed</span></div></div>
+          <div class="f"><div class="k">Fuel ticket 8801-2261</div>
+            <div class="v"><a class="lnk" href="#">photograph</a> <span class="sub">· OCR read · confirmed</span></div></div>
+          <div class="f"><div class="k">Bowser meter</div>
+            <div class="v"><a class="lnk" href="#">photograph</a> <span class="sub">· OCR read · confirmed</span></div></div>
+        </div></div>
+        <div class="callout"><b>The image is the compliance record, not a convenience.</b>
+          A disputed figure has a photograph behind it eighteen months later.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.apptab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.apptab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  ['wl','ex','pay'].forEach(k=>document.getElementById('app-'+k)
+    .classList.toggle('hidden', k!==t.dataset.app));
+}));
+document.querySelectorAll('.subtab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.subtab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  ['nb','up','un','cl'].forEach(k=>document.getElementById('pay-'+k)
+    .classList.toggle('hidden', k!==t.dataset.pay));
+}));
+function openOP(){document.getElementById('op').classList.add('show')}
+function closeOP(){document.getElementById('op').classList.remove('show')}
+document.getElementById('op').addEventListener('click',e=>{
+  if(e.target.id==='op') closeOP();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOP()});
+</script>
+</body>
+</html>
