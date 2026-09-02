@@ -84,7 +84,33 @@ service PricingService {
         *,
         currency : redirected to Currencies,
         uom : redirected to UnitsOfMeasure,
-        components : redirected to FormulaComponents
+        components : redirected to FormulaComponents,
+
+        // ------------------------------------------------------------------
+        // statusCriticality was referenced TWICE in
+        // pricing-fiori-annotations.cds and existed nowhere. Same mechanism
+        // as InvoiceService: a dangling path inside a record compiles clean,
+        // emits Path="statusCriticality" verbatim, and Fiori resolves it to
+        // undefined - so the status column and the header both rendered grey.
+        //
+        // ON THE PATTERN: four services (MasterData, FuelOrder, Refueler,
+        // Ticket) declare `virtual null as ...Criticality` and populate it in
+        // an `after READ` handler. That works and is NOT being changed. This
+        // uses a CALCULATED ELEMENT instead, for two reasons: it needs no
+        // handler, and it can be FILTERED AND SORTED ON - $filter runs in the
+        // database before an after-READ handler ever sees the row, so a
+        // virtual criticality can be displayed and never queried. Flagged as
+        // a convention question rather than settled here.
+        //
+        // 0 neutral - 1 negative - 2 critical - 3 positive.
+        // ------------------------------------------------------------------
+        case status
+            when 'ACTIVE'           then 3
+            when 'EXPIRED'          then 1
+            when 'ARCHIVED'         then 1
+            when 'PENDING_APPROVAL' then 2
+            else 0
+        end as statusCriticality : Integer
     } actions {
         /**
          * Submit formula for approval
@@ -160,7 +186,15 @@ service PricingService {
     entity MarketIndices as projection on db.MARKET_INDICES {
         *,
         currency : redirected to Currencies,
-        uom : redirected to UnitsOfMeasure
+        uom : redirected to UnitsOfMeasure,
+        values   : redirected to MarketIndexValues,
+
+        // activeCriticality was referenced twice and existed nowhere. Same
+        // mechanism, same fix - see PricingFormulas above.
+        case is_active
+            when true then 3
+            else 1
+        end as activeCriticality : Integer
     } actions {
         /**
          * Import index values from file
