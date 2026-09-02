@@ -85,6 +85,39 @@ service RefuelerService {
         *, virtual null as statusCriticality : Integer
     };
 
+    /**
+     * SourceDocuments - the evidence layer, exposed so the delivery can reach
+     * it.
+     *
+     * WP-31 step 3 MOVED the signature time and location off FUEL_DELIVERIES
+     * and onto the pilot signature document, and said so in a comment beside
+     * the annotation that reads them:
+     *
+     *     signature_pilot_document.captured_at
+     *     signature_pilot_document.capture_location
+     *
+     * The move was deliberate; EXPOSING THE TARGET WAS FORGOTTEN. The
+     * compiler emitted "No OData navigation property generated, target
+     * SOURCE_DOCUMENTS is outside of service RefuelerService" - a warning
+     * about the ASSOCIATION - and said nothing at all about the two
+     * annotations, so the Digital Signatures group has shown two permanently
+     * blank fields since WP-31.
+     *
+     * NOT A PARTY BOUNDARY. D43 left four such gaps closed deliberately, one
+     * of them because exposing the supplier's own sales order on the
+     * airline's order service crosses between parties rather than between
+     * modules. This is the opposite case: the signature is the evidence for
+     * THIS delivery, the refueller is the party who witnessed its capture,
+     * and SOURCE_DOCUMENTS is already exposed on FuelOrderService and
+     * PlanningService. A third exposure of the same entity is the precedent,
+     * not a departure from it.
+     *
+     * Read-only, because the refueller reads this evidence and does not
+     * author it.
+     */
+    @readonly
+    entity SourceDocuments as projection on db.SOURCE_DOCUMENTS;
+
     // ========================================================================
     // UPLIFT HISTORY (Read-only view of posted/verified deliveries)
     // ========================================================================
