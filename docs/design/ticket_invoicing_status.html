@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FuelSphere · Ticket Invoicing Status</title>
+<style>
+:root{
+  --blue:#0070F2;--blue-d:#0064D9;--blue-l:#EBF8FF;
+  --bg:#F5F6F7;--card:#FFFFFF;--line:#D9D9D9;--line-l:#EAECEE;
+  --ink:#1D2D3E;--ink-2:#556B82;--ink-3:#758CA4;--shell:#354A5F;
+  --neg:#AA0808;--neg-bg:#FFEBEB;--crit:#E76500;--crit-bg:#FFF8E1;
+  --pos:#256F3A;--pos-bg:#F0FDF4;--info:#0070F2;--info-bg:#EBF8FF;
+  --f:"72","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --m:"Consolas","SF Mono","Menlo",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.4}
+.shell{background:var(--shell);color:#fff;height:44px;display:flex;align-items:center;
+  padding:0 16px;gap:16px;position:sticky;top:0;z-index:60}
+.shell .logo{font-weight:700;font-size:15px}
+.shell .crumb{color:#B8C6D4;font-size:13px}
+.shell .sp{flex:1}
+.shell .who{font-size:12px;color:#B8C6D4}
+.shell .av{width:26px;height:26px;border-radius:50%;background:#5B7189;display:grid;
+  place-items:center;font-size:11px;font-weight:600}
+.page{padding:12px 16px 40px}
+.hidden{display:none!important}
+
+.fb{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px}
+.fb .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:3px;min-width:126px}
+.fld label{font-size:11px;color:var(--ink-3)}
+.fld .box{border:1px solid #89919A;border-bottom:2px solid #556B82;border-radius:4px;background:#fff;
+  padding:5px 8px;font-size:13px;min-height:28px;display:flex;align-items:center;
+  justify-content:space-between;gap:6px}
+.fld .box.set{border-color:var(--blue);border-bottom-color:var(--blue);background:var(--blue-l)}
+.fld .box .car{color:var(--ink-3);font-size:9px}
+.fb .go{margin-left:auto;display:flex;gap:8px}
+.btn{border:1px solid var(--blue);background:transparent;color:var(--blue);border-radius:4px;
+  padding:6px 14px;font-size:13px;cursor:pointer;font-family:var(--f)}
+.btn:hover{background:var(--blue-l)}
+.btn.pri{background:var(--blue);color:#fff}.btn.pri:hover{background:var(--blue-d)}
+.btn.gh{border-color:transparent}
+.fb .note{margin-top:9px;font-size:12px;color:var(--ink-2);display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.chip{background:var(--blue-l);color:var(--blue-d);border:1px solid #B3DAFF;border-radius:12px;
+  padding:2px 9px;font-size:11.5px;display:inline-flex;gap:6px;align-items:center}
+.chip .x{cursor:pointer;opacity:.7}
+
+/* summary tiles */
+.tiles{display:flex;gap:10px;margin-bottom:10px}
+.tile{flex:1;background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:13px 15px;cursor:pointer;position:relative;overflow:hidden}
+.tile:hover{background:#FBFCFD}
+.tile.on{box-shadow:inset 0 0 0 2px var(--blue)}
+.tile .bar{position:absolute;left:0;top:0;right:0;height:4px}
+.tile .n{font-size:28px;font-weight:700;font-family:var(--m);line-height:1.1;margin-top:4px}
+.tile .l{font-size:12.5px;font-weight:600;margin-top:3px}
+.tile .d{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.tile .v{font-size:12.5px;font-family:var(--m);margin-top:6px;color:var(--ink-2)}
+.tile.nr .bar{background:var(--neg)} .tile.nr .n{color:var(--neg)}
+.tile.ip .bar{background:var(--crit)} .tile.ip .n{color:var(--crit)}
+.tile.po .bar{background:var(--pos)} .tile.po .n{color:var(--pos)}
+.tile.al .bar{background:var(--ink-3)} .tile.al .n{color:var(--ink)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card .top{padding:11px 14px;border-bottom:1px solid var(--line-l);display:flex;align-items:center;gap:10px}
+.card .top h2{font-size:15px;font-weight:700}
+.card .top .cnt{color:var(--ink-2);font-weight:400}
+.card .top .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11.5px;color:var(--ink-2);font-weight:600;padding:8px 11px;
+  border-bottom:1px solid var(--line);white-space:nowrap;background:#FAFAFA}
+th.r,td.r{text-align:right}
+td{padding:9px 11px;border-bottom:1px solid var(--line-l);font-size:13px;vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#F2F7FD}
+tbody tr:last-child td{border-bottom:none}
+.mono{font-family:var(--m);font-size:12.5px}
+.sub{color:var(--ink-3);font-size:11.5px}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap}
+.st::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.st.neg::before{background:var(--neg)}.st.neg{color:var(--neg)}
+.st.crit::before{background:var(--crit)}.st.crit{color:#8F4000}
+.st.pos::before{background:var(--pos)}.st.pos{color:var(--pos)}
+.st.none::before{background:#9AA6B2}.st.none{color:var(--ink-2)}
+.est{display:inline-block;background:#F0F2F4;color:var(--ink-3);border:1px solid var(--line);
+  border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:5px}
+.lnk{color:var(--blue);text-decoration:none}.lnk:hover{text-decoration:underline}
+
+/* detail */
+.op{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100;display:none}
+.op.show{display:block}
+.op .sheet{position:absolute;right:0;top:0;bottom:0;width:min(1020px,95vw);background:var(--bg);
+  overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,.18)}
+.ophdr{background:var(--card);border-bottom:1px solid var(--line);padding:14px 20px}
+.ophdr .close{float:right;cursor:pointer;color:var(--ink-2);font-size:20px;padding:2px 6px}
+.ophdr .ttl{font-size:12px;color:var(--ink-3)}
+.ophdr h1{font-size:19px;font-weight:700;margin:2px 0 3px;font-family:var(--m)}
+.ophdr .meta{color:var(--ink-2);font-size:13px;margin-bottom:12px}
+.ophdr .kpis{display:flex;gap:30px;flex-wrap:wrap}
+.kpi .k{font-size:11px;color:var(--ink-3);margin-bottom:2px}
+.kpi .v{font-size:16px;font-weight:700}
+.kpi .v.mono{font-family:var(--m);font-size:15px}
+.opbody{padding:14px 20px 60px;display:flex;flex-direction:column;gap:12px}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:8px}
+.sec>h3{font-size:14px;font-weight:700;padding:12px 14px;border-bottom:1px solid var(--line-l);
+  display:flex;align-items:center;gap:9px}
+.sec>h3 .num{background:var(--line-l);color:var(--ink-2);border-radius:3px;padding:1px 6px;
+  font-size:11px;font-family:var(--m)}
+.sec .body{padding:12px 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:11px 24px}
+.f .k{font-size:11px;color:var(--ink-3);margin-bottom:1px}
+.f .v{font-size:13.5px}
+.f .v.mono{font-family:var(--m);font-size:13px}
+.callout{background:#FAFBFC;border-left:3px solid var(--blue);padding:10px 13px;font-size:12.5px;
+  color:var(--ink-2);margin:0 14px 13px;border-radius:0 4px 4px 0}
+.callout b{color:var(--ink)}
+.callout.warn{border-left-color:var(--crit);background:var(--crit-bg)}
+
+/* chain */
+.chain{display:flex;align-items:stretch;gap:0;padding:14px}
+.node{flex:1;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:#FAFBFC}
+.node.gap{border-style:dashed;background:#FFF;border-color:var(--neg)}
+.node .t{font-size:10.5px;color:var(--ink-3);font-family:var(--m);margin-bottom:3px}
+.node .v{font-size:13px;font-family:var(--m);font-weight:700}
+.node .d{font-size:11px;color:var(--ink-2);margin-top:3px}
+.node.gap .v{color:var(--neg)}
+.arw{display:grid;place-items:center;width:26px;color:var(--ink-3);font-size:15px}
+.dn{background:#FFFDF5;border:1px dashed #E0C97F;border-radius:8px;padding:11px 14px;
+  margin-bottom:10px;font-size:12.5px;color:#6B5A22}
+.dn b{color:#4A3D10}
+.dn .lbl{display:inline-block;background:#E0C97F;color:#4A3D10;border-radius:3px;
+  padding:1px 7px;font-size:10.5px;font-weight:700;margin-right:8px}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="logo">FuelSphere</div>
+  <div class="crumb">Ticket Invoicing Status</div>
+  <div class="sp"></div>
+  <div class="who">A. Rajan · Fuel Controller</div>
+  <div class="av">AR</div>
+</div>
+
+<div class="page">
+
+  <div class="dn"><span class="lbl">DESIGN NOTE</span>
+    <b>This is the only screen that starts from the fuel.</b> Every other invoice view asks
+    <i>what is wrong with this document</i>. This one asks <b>have we been billed for what we
+    uplifted</b> — and the most valuable rows are the ones with no invoice at all, which no
+    invoice-side screen can show because there is nothing there to list.</div>
+
+  <div class="fb">
+    <div class="row">
+      <div class="fld"><label>Status</label><div class="box set">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Station</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Supplier</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Carrier</label><div class="box">All <span class="car">▼</span></div></div>
+      <div class="fld"><label>Flight date</label><div class="box set">Apr 2026 <span class="car">▼</span></div></div>
+      <div class="fld"><label>Flight number</label><div class="box"><span class="sub">any</span> <span class="car">▼</span></div></div>
+      <div class="fld"><label>Vendor invoice no.</label><div class="box"><span class="sub">any</span> <span class="car">▼</span></div></div>
+      <div class="fld"><label>FS invoice no.</label><div class="box"><span class="sub">any</span> <span class="car">▼</span></div></div>
+      <div class="go"><button class="btn gh">Adapt Filters</button><button class="btn pri">Go</button></div>
+    </div>
+    <div class="note">
+      <span class="chip">Flight date: April 2026 <span class="x">✕</span></span>
+      <span>7 tickets · 46,634.60 kg uplifted</span>
+    </div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile al on" data-f="all"><div class="bar"></div>
+      <div class="n">7</div><div class="l">All tickets</div>
+      <div class="d">uplifted in the period</div>
+      <div class="v">46,634.60 kg</div></div>
+    <div class="tile nr" data-f="NR"><div class="bar"></div>
+      <div class="n">2</div><div class="l">Invoice not received</div>
+      <div class="d">fuel burned, nobody has billed</div>
+      <div class="v">1,599.00 kg <span class="est">EST 1,136 CAD</span></div></div>
+    <div class="tile ip" data-f="IP"><div class="bar"></div>
+      <div class="n">4</div><div class="l">Processing in progress</div>
+      <div class="d">on an IDR, not yet posted</div>
+      <div class="v">44,329.60 kg · 41,472.12 CAD</div></div>
+    <div class="tile po" data-f="PO"><div class="bar"></div>
+      <div class="n">1</div><div class="l">Invoice posted</div>
+      <div class="d">MIRO document exists</div>
+      <div class="v">706.00 kg · 501.26 CAD</div></div>
+  </div>
+
+  <div class="card">
+    <div class="top"><h2>Tickets <span class="cnt" id="cnt">(7)</span></h2>
+      <div class="sp"></div><button class="btn gh">Export</button></div>
+    <table id="tt">
+      <thead><tr>
+        <th>Ticket</th><th>Date</th><th>Stn</th><th>Supplier</th>
+        <th>Flight</th><th>Tail</th><th>Car</th>
+        <th class="r">Quantity</th><th class="r">Value</th>
+        <th>Status</th><th>FS invoice</th><th>Vendor ref</th><th class="r">Age</th>
+      </tr></thead>
+      <tbody>
+        <tr data-s="NR" onclick="openOP()">
+          <td class="mono">WFS-YUL-20260410-77</td><td>10 Apr</td><td class="mono">YUL</td>
+          <td>World Fuel</td><td class="mono">—</td><td class="mono">C-FDMO</td><td class="mono">AC</td>
+          <td class="r mono">999.38 kg<div class="sub">1,250.00 L</div></td>
+          <td class="r mono">—<span class="est">NO PRICE</span></td>
+          <td><span class="st neg">Not received</span><div class="sub">no order · unmatched</div></td>
+          <td class="sub">—</td><td class="sub">—</td>
+          <td class="r"><span class="st neg">47 d</span></td></tr>
+        <tr data-s="NR">
+          <td class="mono">WFS-YYZ-20260412-05</td><td>12 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC118</td><td class="mono">C-GROV</td><td class="mono">AC</td>
+          <td class="r mono">599.62 kg<div class="sub">750.00 L</div></td>
+          <td class="r mono">532.50<span class="est">EST</span></td>
+          <td><span class="st neg">Not received</span></td>
+          <td class="sub">—</td><td class="sub">—</td>
+          <td class="r"><span class="st crit">45 d</span></td></tr>
+
+        <tr data-s="IP">
+          <td class="mono">WFS-YYZ-20260410-11</td><td>10 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC410</td><td class="mono">C-FDMO</td><td class="mono">AC</td>
+          <td class="r mono">2,305.76 kg<div class="sub">2,884.00 L</div></td>
+          <td class="r mono">2,050.11</td>
+          <td><span class="st neg">In progress</span><div class="sub">blocked · 3 hard</div></td>
+          <td><a class="lnk mono" href="#">IDR-2026-000102</a></td>
+          <td class="mono">WFS-INV-102</td><td class="r">45 d</td></tr>
+        <tr data-s="IP">
+          <td class="mono">WFS-YYZ-20260410-31</td><td>10 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC412</td><td class="mono">C-FDMP</td><td class="mono">AC</td>
+          <td class="r mono">2,305.76 kg<div class="sub">2,884.00 L</div></td>
+          <td class="r mono">2,045.69</td>
+          <td><span class="st crit">In progress</span><div class="sub">validated · awaiting approval</div></td>
+          <td><a class="lnk mono" href="#">IDR-2026-000101</a></td>
+          <td class="mono">WFS-INV-101</td><td class="r">45 d</td></tr>
+        <tr data-s="IP">
+          <td class="mono">WFS-YYZ-20260410-21</td><td>10 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC856</td><td class="mono">C-GDMS</td><td class="mono">AC</td>
+          <td class="r mono">25,542.40 kg<div class="sub">32,000.00 L</div></td>
+          <td class="r mono">22,720.00</td>
+          <td><span class="st crit">In progress</span><div class="sub">blocked · 2 soft</div></td>
+          <td><a class="lnk mono" href="#">IDR-2026-000103</a></td>
+          <td class="mono">WFS-INV-103</td><td class="r">45 d</td></tr>
+        <tr data-s="IP">
+          <td class="mono">WFS-YYZ-20260410-22</td><td>10 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC856</td><td class="mono">C-GDMS</td><td class="mono">AC</td>
+          <td class="r mono">16,482.83 kg<div class="sub">20,650.00 L</div></td>
+          <td class="r mono">14,661.50</td>
+          <td><span class="st crit">In progress</span><div class="sub">blocked · 2 soft</div></td>
+          <td><a class="lnk mono" href="#">IDR-2026-000103</a></td>
+          <td class="mono">WFS-INV-103</td><td class="r">45 d</td></tr>
+
+        <tr data-s="PO">
+          <td class="mono">WFS-YYZ-20260402-88</td><td>2 Apr</td><td class="mono">YYZ</td>
+          <td>World Fuel</td><td class="mono">AC104</td><td class="mono">C-GNBN</td><td class="mono">AC</td>
+          <td class="r mono">706.00 kg<div class="sub">883.00 L</div></td>
+          <td class="r mono">501.26</td>
+          <td><span class="st pos">Posted</span><div class="sub">MIRO 5105600418</div></td>
+          <td><a class="lnk mono" href="#">IDR-2026-000064</a></td>
+          <td class="mono">WFS-INV-064</td><td class="r">55 d</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="dn" style="margin-top:10px"><span class="lbl">DESIGN NOTE</span>
+    <b>An estimated value is marked, always.</b> Two rows carry <span class="est">EST</span> —
+    one priced from the contract, one with <span class="est">NO PRICE</span> because the ticket
+    reached no order and nothing resolves a supplier.
+    <b>An estimate that looks invoiced is a number nobody can defend</b>, and the exposure figure
+    on the tile is the sum of estimates rather than of facts.</div>
+</div>
+
+<!-- ===== DETAIL ===== -->
+<div class="op" id="op">
+  <div class="sheet">
+    <div class="ophdr">
+      <span class="close" onclick="closeOP()">✕</span>
+      <div class="ttl">Fuel Ticket · invoicing status</div>
+      <h1>WFS-YUL-20260410-77</h1>
+      <div class="meta">World Fuel Services · YUL · 10 April 2026 · C-FDMO</div>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Metered</div><div class="v mono">1,250.00 LTR</div></div>
+        <div class="kpi"><div class="k">Mass</div><div class="v mono">999.38 kg</div></div>
+        <div class="kpi"><div class="k">Status</div><div class="v"><span class="st neg">Not received</span></div></div>
+        <div class="kpi"><div class="k">Age</div><div class="v" style="color:var(--neg)">47 days</div></div>
+        <div class="kpi"><div class="k">Value</div><div class="v sub" style="font-weight:400">no price resolves</div></div>
+      </div>
+    </div>
+
+    <div class="opbody">
+      <div class="sec"><h3><span class="num">1</span> The chain, and where it stops</h3>
+        <div class="chain">
+          <div class="node"><div class="t">TICKET</div><div class="v">…-77</div>
+            <div class="d">1,250 L × 0.7995<br>= 999.38 kg</div></div>
+          <div class="arw">→</div>
+          <div class="node"><div class="t">DELIVERY</div><div class="v">EPD-…-0005</div>
+            <div class="d">gauge 4,900 → 5,500<br>NOT_ATTRIBUTABLE</div></div>
+          <div class="arw">→</div>
+          <div class="node gap"><div class="t">ORDER</div><div class="v">none</div>
+            <div class="d">verbal top-up<br>UNMATCHED</div></div>
+          <div class="arw">→</div>
+          <div class="node gap"><div class="t">IDR</div><div class="v">none</div>
+            <div class="d">no invoice line<br>references this ticket</div></div>
+          <div class="arw">→</div>
+          <div class="node gap"><div class="t">POSTING</div><div class="v">none</div>
+            <div class="d">—</div></div>
+        </div>
+        <div class="callout warn"><b>The chain stops at the order, and that is why there is no price.</b>
+          The supplier resolves through the order; no order means the supplier set is unknown rather
+          than a set of one — so no contract resolves, and nothing can estimate a value.
+          <b>Attaching this ticket to an order would allocate an internal number, resolve the supplier
+          and make the delivery reconcile.</b></div>
+      </div>
+
+      <div class="sec"><h3><span class="num">2</span> Fuel context</h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">Ticket number</div><div class="v mono">WFS-YUL-20260410-77</div></div>
+          <div class="f"><div class="k">FS internal number</div><div class="v sub">— not allocated</div></div>
+          <div class="f"><div class="k">Uplift date</div><div class="v">10 April 2026</div></div>
+          <div class="f"><div class="k">Station</div><div class="v"><a class="lnk mono" href="#">YUL</a></div></div>
+          <div class="f"><div class="k">Tail</div><div class="v"><a class="lnk mono" href="#">C-FDMO</a> <span class="sub">A320</span></div></div>
+          <div class="f"><div class="k">Carrier</div><div class="v mono">AC</div></div>
+          <div class="f"><div class="k">Flight</div><div class="v sub">— no order, no flight</div></div>
+          <div class="f"><div class="k">Metered · density</div><div class="v mono">1,250.00 L · 0.7995 MEA</div></div>
+          <div class="f"><div class="k">Mass</div><div class="v mono">999.38 kg</div></div>
+          <div class="f"><div class="k">Match status</div><div class="v"><span class="st crit">UNMATCHED</span></div></div>
+        </div></div>
+      </div>
+
+      <div class="sec"><h3><span class="num">3</span> Invoicing</h3>
+        <div class="body"><div class="grid">
+          <div class="f"><div class="k">FS invoice number</div><div class="v sub">—</div></div>
+          <div class="f"><div class="k">Vendor invoice number</div><div class="v sub">—</div></div>
+          <div class="f"><div class="k">IDR</div><div class="v sub">—</div></div>
+          <div class="f"><div class="k">MIRO document</div><div class="v sub">—</div></div>
+          <div class="f"><div class="k">Days since uplift</div><div class="v" style="color:var(--neg)">47</div></div>
+          <div class="f"><div class="k">Estimated value</div><div class="v sub">no contract resolves</div></div>
+        </div></div>
+        <div class="callout"><b>This is not an error. It is an exposure.</b>
+          Fuel already burned that nobody has billed for — and a later period must not double-pay it.
+          The action is to attach the ticket to an order, not to chase an invoice that may never come.</div>
+      </div>
+
+      <div class="sec"><h3><span class="num">4</span> Actions</h3>
+        <div class="body" style="display:flex;gap:8px">
+          <button class="btn pri">Attach to order…</button>
+          <button class="btn">Create incremental order</button>
+          <button class="btn gh">Mark as no-charge</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const rows=()=>document.querySelectorAll('#tt tbody tr');
+function filt(f){
+  let n=0;
+  rows().forEach(r=>{const show = f==='all'||r.dataset.s===f;
+    r.classList.toggle('hidden',!show); if(show)n++;});
+  document.querySelectorAll('.tile').forEach(t=>t.classList.toggle('on',t.dataset.f===f));
+  document.getElementById('cnt').textContent='('+n+')';
+}
+document.querySelectorAll('.tile').forEach(t=>t.addEventListener('click',()=>filt(t.dataset.f)));
+function openOP(){document.getElementById('op').classList.add('show')}
+function closeOP(){document.getElementById('op').classList.remove('show')}
+document.getElementById('op').addEventListener('click',e=>{if(e.target.id==='op')closeOP()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOP()});
+</script>
+</body>
+</html>
