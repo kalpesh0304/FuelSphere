@@ -26,6 +26,20 @@ and `sap.ovp` are not published to public npm — only `@openui5/sap.ui.core` is
 and it carries neither. There is no offline path. The app renders on a machine
 with ordinary internet access.
 
+## If it does not load
+
+The UI5 version comes from `minUI5Version` in `webapp/manifest.json`, currently
+**1.136.0**, and the proxy fetches it from `https://ui5.sap.com`. That version
+could not be confirmed as available from the build container, because the CDN
+is blocked there — the dev server logs
+`Unable to check if the 1.136.0 is available on the SAPUI5 SDK`.
+
+If the page loads blank, lower `minUI5Version`. It is a one-line change and
+nothing else depends on it.
+
+Two other warnings on startup are expected and harmless: a missing
+`libsecret` credential store, and the version check above.
+
 ## How the card is verified without looking at it
 
 `test/harness/e2a-ovp-card-harness.js`, six criteria. The two that matter:
