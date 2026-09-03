@@ -265,9 +265,117 @@ async function qualityGuard(req) {
     }
 }
 
+// ===========================================================================
+// 5. THE GENERIC EFFECTIVE-DATED RESOLVER
+//
+// WHY THIS EXISTS BESIDE resolveParameter AND resolveToleranceRule, RATHER
+// THAN INSTEAD OF THEM.
+//
+// Both of those read ONE hardcoded entity, TOLERANCE_RULES, and both already
+// resolve by date and priority correctly. What neither can do is answer the
+// same question about a DIFFERENT entity - and five consumers now need
+// exactly that:
+//
+//     tail            -> AIRCRAFT_PERFORMANCE
+//     flight          -> FLIGHT_FUELLING_PROFILE
+//     flight/station  -> DESIGNATED_SUPPLIERS
+//     tail            -> carrier assignment
+//     contract        -> carrier
+//
+// SO THIS IS NOT A NEW RULE. It is inScope() - the same filter, the same
+// specificity-then-priority ordering, the same open-ended handling - pointed
+// at an entity the caller names. One rule, learned once, and the day it is
+// wrong it is wrong in one place.
+//
+// THE ONE REAL DIFFERENCE: A MISS IS A NORMAL OUTCOME.
+//
+// resolveParameter calls a miss a configuration defect, and it is right to:
+// CFG401 requires a global row to always exist, so nothing resolving means
+// somebody deleted it. That reasoning does NOT carry across. An undesignated
+// station has no DESIGNATED_SUPPLIERS row and never should; the order is
+// created with an empty supplier and a person fills it in. A tail with no
+// AIRCRAFT_PERFORMANCE row is the opposite - there, absence IS a defect.
+//
+// The resolver cannot know which, so it REPORTS ABSENCE AND THE CALLER
+// DECIDES. It never throws and it never invents a fallback. Picking "any
+// contract at that station" because nothing was designated is the join that
+// over-matches, in a new place.
+// ===========================================================================
+
+/**
+ * Resolve at most one effective-dated row from any entity.
+ *
+ * Always returns an object. `resolved` is the only thing to branch on.
+ *
+ *   { resolved: true,  row, evidence }
+ *   { resolved: false, row: null, reason, evidence: { as_of, candidates: 0 } }
+ *
+ * @param entity      fully qualified CDS entity name
+ * @param where       exact-match filter applied in the database
+ * @param scope       the values being resolved FOR, e.g. { station_code: 'YYZ' }
+ * @param scopeFields which columns on the row carry scope. A row leaving one
+ *                    unset matches anything, which is what makes it a default
+ * @param asOfDate    THE TRANSACTION DATE, never the query date (CFG402).
+ *                    Defaults to today only because a caller with no date has
+ *                    no better answer - it is not a recommendation
+ * @param tie         optional comparator applied BEFORE priority, for a
+ *                    discriminator that outranks it. resolveToleranceRule uses
+ *                    applies_to this way
+ */
+async function resolveEffective({ entity, where = {}, scope = {}, scopeFields = [],
+                                  asOfDate = null, tie = null, tx = null }) {
+    if (!entity) throw new Error('resolveEffective: entity is required');
+    const db = tx || cds.db;
+    const asOf = d(asOfDate) || today();
+
+    const rows = await db.run(
+        Object.keys(where).length
+            ? SELECT.from(entity).where(where)
+            : SELECT.from(entity));
+
+    let eligible = inScope(rows, scope, asOf, scopeFields);
+    // Applied AFTER inScope so it reorders only rows already in scope, and
+    // BEFORE the pick so it outranks priority. A stable sort keeps
+    // specificity-then-priority intact wherever the comparator is neutral.
+    if (tie && eligible.length > 1) eligible = [...eligible].sort(tie);
+
+    if (!eligible.length) {
+        return {
+            resolved: false, row: null,
+            // NOT an error code. A miss here is a fact about the data, and
+            // the caller decides whether it is a problem.
+            reason: `No effective row in ${entity} for `
+                  + `${JSON.stringify(scope)} as at ${asOf}`,
+            evidence: { source: entity, as_of: asOf, candidates: 0,
+                        scanned: rows.length }
+        };
+    }
+
+    const row = eligible[0];
+    return {
+        resolved: true, row,
+        // WHICH ROW ANSWERED, and why it beat the others. Same convention as
+        // severity_source and conversion_source: a resolved value that cannot
+        // name its source cannot be argued with.
+        evidence: {
+            source: entity,
+            row_id: row.ID ?? null,
+            specificity: scopeFields.filter(f => row[f]).length,
+            scope_matched: Object.fromEntries(
+                scopeFields.map(f => [f, row[f] ?? null])),
+            priority: row.priority ?? null,
+            valid_from: d(row.valid_from),
+            valid_to: d(row.valid_to),
+            as_of: asOf,
+            candidates: eligible.length,
+            scanned: rows.length
+        }
+    };
+}
+
 module.exports = {
     ERR, BURN_STATUS, QUALITY_CHECKS, qualityGuard,
     resolveParameter, resolveToleranceRule,
     withinBand, effectiveTolerance, burnVarianceStatus,
-    inScope
+    inScope, resolveEffective
 };

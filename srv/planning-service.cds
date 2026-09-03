@@ -326,6 +326,48 @@ service PlanningService {
     @readonly
     entity SourceDocuments as projection on db.SOURCE_DOCUMENTS;
 
+    /**
+     * FlightFuelDeliveries - the reconciliation verdict, per flight.
+     *
+     * DECLARED RATHER THAN LEFT AUTO-EXPOSED. CAP already surfaced this view
+     * here as an association target of FlightSchedule, under its database
+     * name and without anyone naming it - D47's second kind, which "arrives
+     * with the entity" rather than being decided.
+     *
+     * The Flight Fuel Overview's FUEL STATUS card binds to it, and an
+     * annotation cannot be written against a name nobody declared. Declaring
+     * it makes the exposure a decision with a line behind it, which is what
+     * D47 asked for.
+     *
+     * DECLARED UNDER THE DATABASE NAME, DELIBERATELY. Naming it
+     * FlightFuelDeliveries reads better and is a BREAKING RENAME: the
+     * auto-exposed entity is already called FLIGHT_FUEL_DELIVERIES in the
+     * emitted EDMX, two annotate blocks in planning-fiori-annotations.cds
+     * already target that name, and FlightSchedule.deliveries already
+     * navigates to it. The compiler warned about ONE of the two blocks - the
+     * `annotate ... with { element }` form - and said nothing about the
+     * `annotate ... with @( ... )` term block, which is the D50 asymmetry in
+     * a third variant.
+     *
+     * @cds.autoexpose IS REQUIRED AND IS NOT COSMETIC. CAP marks a view it
+     * auto-exposed as @cds.autoexposed, and its auth layer REFUSES A DIRECT
+     * READ of any such entity - `@cds.autoexposed && !@cds.autoexpose` returns
+     * 405 "not explicitly exposed as part of the service"
+     * (libx/_runtime/common/generic/auth/utils.js). The entity is in the
+     * metadata, has an EntitySet, carries annotations, and cannot be read.
+     *
+     * That sharpens D47's second kind: an auto-exposed view is not merely
+     * "declared everywhere and navigable nowhere", it is ADDRESSABLE NOWHERE.
+     * A Fiori facet reaching it through a navigation works; an OVP card
+     * naming the entity set gets 405, and the card renders empty with no
+     * error a viewer can see.
+     *
+     * @readonly because the view is derived; FuelOrderService owns the write.
+     */
+    @readonly
+    @cds.autoexpose
+    entity FLIGHT_FUEL_DELIVERIES as projection on db.FLIGHT_FUEL_DELIVERIES;
+
     @readonly
     entity Manufacturers as projection on db.MANUFACTURE;
 
