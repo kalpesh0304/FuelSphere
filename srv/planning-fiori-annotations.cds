@@ -62,6 +62,34 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
             { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #High },
             { Value: fob_source,         Label: 'Gauge Source',    ![@UI.Importance]: #Medium },
             { Value: supplier_count,     Label: 'Suppliers',       ![@UI.Importance]: #Medium }
+        ],
+
+        // ------------------------------------------------------------------
+        // THE FUEL STATUS CARD on the Flight Fuel Overview.
+        //
+        // A QUALIFIER, not the plain LineItem, because a card must say LESS
+        // than a table. The unqualified LineItem above is the delivery list
+        // inside a flight; this is the verdict, and a verdict with seven
+        // columns is a table with a title.
+        //
+        // WHAT IS DELIBERATELY ABSENT, so nobody reads the card as complete:
+        // the mockup also shows "by meter" and "tolerance". By-meter is the
+        // ticket total and is not on this view - it is derivable as
+        // fob_delta_kg + recon_variance_kg, but a derived headline needs a
+        // decision about where it is computed rather than an arithmetic
+        // coincidence in an annotation. Tolerance resolves from
+        // TOLERANCE_RULES through resolveEffective and is not a column
+        // anywhere. Both belong to E2b.
+        //
+        // NOT_RECONCILED must never read as a pass. Unknown is not agreement,
+        // which is why recon_status is on the card rather than a tick.
+        // ------------------------------------------------------------------
+        LineItem #FuelStatusCard: [
+            { Value: recon_status,      Label: 'Reconciliation',   ![@UI.Importance]: #High },
+            { Value: fob_delta_kg,      Label: 'By gauge (kg)',    ![@UI.Importance]: #High },
+            { Value: recon_variance_kg, Label: 'Variance (kg)',    ![@UI.Importance]: #High },
+            { Value: delivery_number,   Label: 'Delivery',         ![@UI.Importance]: #Medium },
+            { Value: fob_source,        Label: 'Gauge source',     ![@UI.Importance]: #Medium }
         ]
     }
 );
