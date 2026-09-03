@@ -100,17 +100,16 @@ module.exports = class MasterDataService extends cds.ApplicationService {
 
         try {
             // ------------------------------------------------------------------
-            // STEP 1: Connect to S4 via BTP destination S4HC_TECHNICAL, the
-            // technical user. No user is in the loop on a master data sync.
+            // STEP 1: Connect to S4 via BTP Destination S2A
             // ------------------------------------------------------------------
-            LOG.info(`[${entityType}] Connecting to S4 via destination S4HC_TECHNICAL...`);
+            LOG.info(`[${entityType}] Connecting to S4 via destination S2A...`);
             const s2a = await cds.connect.to('odata_api');
 
             // ------------------------------------------------------------------
             // STEP 2: Fetch data from S4 API
             // ------------------------------------------------------------------
             LOG.info(`[${entityType}] Fetching from S4: ${config.apiPath}`);
-            console.log(`Connection to S4 via destination S4HC_TECHNICAL successful, fetching from S4: ${config.apiPath}`);
+            console.log(`Connection to S4 via destination S2A successful and Fetching data from S4: ${config.apiPath}`);
             let s4Data = [];
 
             try {
