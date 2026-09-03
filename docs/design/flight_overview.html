@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FuelSphere · Flight Fuel Overview</title>
+<style>
+:root{
+  --blue:#0070F2;--blue-d:#0064D9;--blue-l:#EBF8FF;
+  --bg:#F5F6F7;--card:#FFFFFF;--line:#D9D9D9;--line-l:#EAECEE;
+  --ink:#1D2D3E;--ink-2:#556B82;--ink-3:#758CA4;--shell:#354A5F;
+  --navy:#0B2545;--mid:#134074;
+  --neg:#AA0808;--neg-bg:#FFEBEB;--crit:#E76500;--crit-bg:#FFF8E1;
+  --pos:#256F3A;--pos-bg:#F0FDF4;--amber:#E8A33D;
+  --f:"72","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --m:"Consolas","SF Mono","Menlo",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:13.5px;line-height:1.4}
+.shell{background:var(--shell);color:#fff;height:44px;display:flex;align-items:center;
+  padding:0 16px;gap:16px;position:sticky;top:0;z-index:60}
+.shell .logo{font-weight:700;font-size:15px}
+.shell .crumb{color:#B8C6D4;font-size:13px}
+.shell .sp{flex:1}
+.shell .who{font-size:12px;color:#B8C6D4}
+.shell .av{width:26px;height:26px;border-radius:50%;background:#5B7189;display:grid;
+  place-items:center;font-size:11px;font-weight:600}
+.page{padding:12px 16px 40px}
+
+/* identity strip */
+.ident{background:var(--navy);border-radius:8px;padding:14px 18px;margin-bottom:11px;color:#fff}
+.ident .top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:9px}
+.ident h1{font-size:24px;font-weight:700;font-family:var(--m);letter-spacing:.01em}
+.ident .rt{font-size:17px;font-family:var(--m);color:#B8C6D4}
+.ident .dt{font-size:14px;color:#8FA5BD}
+.ident .sp{flex:1}
+.ident .tags{display:flex;gap:7px}
+.tag{border-radius:12px;padding:3px 11px;font-size:11px;font-weight:700;letter-spacing:.03em}
+.tag.ok{background:#1D5C3E;color:#9FE3BE}
+.tag.am{background:#7A5410;color:#FFD98A}
+.tag.nu{background:#2B4A70;color:#B8C6D4}
+.ident .row{display:flex;gap:0;flex-wrap:wrap;border-top:1px solid #2B4A70;padding-top:10px}
+.iq{padding-right:26px;margin-right:26px;border-right:1px solid #2B4A70}
+.iq:last-child{border-right:none}
+.iq .k{font-size:10.5px;color:#7F97B5;margin-bottom:2px}
+.iq .v{font-size:14px;font-family:var(--m);font-weight:700}
+
+/* card grid */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  display:flex;flex-direction:column}
+.c.w2{grid-column:span 2}
+.c .bar{height:3px}
+.c h3{font-size:11px;font-weight:700;font-family:var(--m);letter-spacing:.04em;
+  padding:10px 13px 0;display:flex;align-items:center;gap:8px}
+.c h3 .sp{flex:1}
+.c h3 .n{font-size:10.5px;color:var(--ink-3);font-weight:400;font-family:var(--f)}
+.c .b{padding:9px 13px 12px;flex:1}
+.c .ft{border-top:1px solid var(--line-l);padding:9px 13px;background:#FAFBFC;
+  display:flex;align-items:center;gap:8px}
+.c .ft .l{font-size:11px;color:var(--ink-3)}
+.c .ft .sp{flex:1}
+.c .ft .v{font-family:var(--m);font-weight:700;font-size:14px}
+
+.kv{display:flex;justify-content:space-between;gap:12px;padding:2.5px 0;font-size:12.5px}
+.kv .k{color:var(--ink-2)}
+.kv .v{font-family:var(--m);text-align:right;white-space:nowrap}
+.kv.b .k{color:var(--ink);font-weight:600}
+.kv.b .v{font-weight:700}
+.rule{height:1px;background:var(--line-l);margin:7px 0}
+.sub{color:var(--ink-3);font-size:11px}
+.lnk{color:var(--blue);text-decoration:none}.lnk:hover{text-decoration:underline}
+.mono{font-family:var(--m)}
+
+.pill{display:inline-block;border-radius:12px;padding:3px 11px;font-size:11px;font-weight:700}
+.pill.ok{background:var(--pos);color:#fff}
+.pill.no{background:var(--neg);color:#fff}
+.pill.am{background:var(--crit);color:#fff}
+.pill.nu{background:#E4E8EC;color:var(--ink-2)}
+
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10px;color:var(--ink-3);font-weight:600;padding:4px 0;
+  border-bottom:1px solid var(--line-l);text-transform:uppercase;letter-spacing:.03em}
+th.r,td.r{text-align:right}
+td{padding:5px 0;font-size:12.5px;border-bottom:1px solid var(--line-l)}
+tr:last-child td{border-bottom:none}
+
+/* contacts */
+.ct{padding:6px 0;border-bottom:1px solid var(--line-l)}
+.ct:last-child{border-bottom:none}
+.ct .r1{display:flex;justify-content:space-between;gap:8px}
+.ct .role{font-size:10px;font-family:var(--m);color:var(--amber);font-weight:700;letter-spacing:.04em}
+.ct .nm{font-size:12.5px;font-weight:600}
+.ct .ph{font-family:var(--m);font-size:12px;color:var(--blue)}
+.ct .em{font-size:11px;color:var(--ink-3)}
+
+/* timeline */
+.tl{display:flex;gap:0;padding:4px 0}
+.tp{flex:1;text-align:center;position:relative}
+.tp::after{content:"";position:absolute;top:9px;left:50%;right:-50%;height:1px;background:var(--line)}
+.tp:last-child::after{display:none}
+.tp .d{width:9px;height:9px;border-radius:50%;background:var(--mid);margin:5px auto 5px;position:relative;z-index:2}
+.tp.cl .d{background:var(--amber)}
+.tp .l{font-size:9.5px;font-family:var(--m);font-weight:700;color:var(--ink-2)}
+.tp .t{font-size:11px;font-family:var(--m);margin-top:2px}
+.tp .f{font-size:11px;font-family:var(--m);font-weight:700;margin-top:1px}
+
+.dn{background:#FFFDF5;border:1px dashed #E0C97F;border-radius:8px;padding:10px 14px;
+  margin-bottom:11px;font-size:12.5px;color:#6B5A22}
+.dn b{color:#4A3D10}
+.dn .lbl{display:inline-block;background:#E0C97F;color:#4A3D10;border-radius:3px;
+  padding:1px 7px;font-size:10.5px;font-weight:700;margin-right:8px}
+@media(max-width:1100px){.grid{grid-template-columns:repeat(2,1fr)}.c.w2{grid-column:span 2}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="logo">FuelSphere</div>
+  <div class="crumb">Flight Fuel Overview</div>
+  <div class="sp"></div>
+  <div class="who">A. Rajan · Fuel Planner · YYZ</div>
+  <div class="av">AR</div>
+</div>
+
+<div class="page">
+
+  <div class="dn"><span class="lbl">DESIGN NOTE</span>
+    <b>An overview page is cards, and the scenario slides already are cards.</b> The format
+    translates directly. What the slides did not carry — flight number, date, stations, supplier,
+    contacts, gate — is what a planner needs first, so it sits in the identity strip and the top row.
+    <b>Every card drills to the screen it summarises.</b></div>
+
+  <!-- IDENTITY -->
+  <div class="ident">
+    <div class="top">
+      <h1>AC410</h1>
+      <div class="rt">YYZ → YUL</div>
+      <div class="dt">Friday 10 April 2026</div>
+      <div class="sp"></div>
+      <div class="tags">
+        <span class="tag ok">ARRIVED</span>
+        <span class="tag ok">FUELLING REQUIRED</span>
+        <span class="tag nu">OWN METAL</span>
+      </div>
+    </div>
+    <div class="row">
+      <div class="iq"><div class="k">TAIL</div><div class="v">C-FDMO</div></div>
+      <div class="iq"><div class="k">TYPE</div><div class="v">A320</div></div>
+      <div class="iq"><div class="k">CARRIER</div><div class="v">AC</div></div>
+      <div class="iq"><div class="k">TERMINAL · GATE</div><div class="v">T1 · D28</div></div>
+      <div class="iq"><div class="k">STAND</div><div class="v">D28</div></div>
+      <div class="iq"><div class="k">STD · STA  UTC</div><div class="v">11:15 · 12:35</div></div>
+      <div class="iq"><div class="k">SUPPLIER</div><div class="v">World Fuel Services</div></div>
+      <div class="iq"><div class="k">INTO-PLANE</div><div class="v">Menzies Aviation</div></div>
+      <div class="iq"><div class="k">LINKED</div><div class="v">AC411 · YUL → YYZ</div></div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- FUEL STATUS -->
+    <div class="c">
+      <div class="bar" style="background:var(--pos)"></div>
+      <h3>FUEL STATUS<span class="sp"></span><span class="n">the verdict</span></h3>
+      <div class="b">
+        <div class="kv"><span class="k">by meter</span><span class="v">2,305.76 kg</span></div>
+        <div class="kv"><span class="k">by gauge</span><span class="v">2,305.00 kg</span></div>
+        <div class="rule"></div>
+        <div class="kv b"><span class="k">variance</span><span class="v">0.76 kg</span></div>
+        <div class="kv"><span class="k">tolerance</span><span class="v">50.00 kg</span></div>
+        <div class="kv"><span class="k sub">the floor governs — 0.5% is 12 kg</span><span class="v"></span></div>
+      </div>
+      <div class="ft"><span class="l">RECONCILIATION</span><span class="sp"></span>
+        <span class="pill ok">RECONCILED</span></div>
+    </div>
+
+    <!-- DISPATCH -->
+    <div class="c">
+      <div class="bar" style="background:var(--mid)"></div>
+      <h3>DISPATCH PLAN<span class="sp"></span><span class="n">v1 · ACTIVE</span></h3>
+      <div class="b">
+        <div class="kv"><span class="k">trip fuel</span><span class="v">2,050.00</span></div>
+        <div class="kv"><span class="k">contingency · 5% of trip</span><span class="v">102.50</span></div>
+        <div class="kv"><span class="k">alternate YOW</span><span class="v">700.00</span></div>
+        <div class="kv"><span class="k">final reserve · 30 min</span><span class="v">1,150.00</span></div>
+        <div class="kv"><span class="k">taxi</span><span class="v">200.00</span></div>
+        <div class="rule"></div>
+        <div class="kv b"><span class="k">block fuel</span><span class="v">4,202.50</span></div>
+        <div class="kv"><span class="k">less fob at arrival</span><span class="v">1,897.50</span></div>
+      </div>
+      <div class="ft"><span class="l">REQUIRED UPLIFT</span><span class="sp"></span>
+        <span class="v">2,305.00 kg</span></div>
+    </div>
+
+    <!-- AIRCRAFT -->
+    <div class="c">
+      <div class="bar" style="background:var(--ink-3)"></div>
+      <h3>AIRCRAFT<span class="sp"></span><span class="n">as at 10 Apr</span></h3>
+      <div class="b">
+        <div class="kv"><span class="k">MTOW</span><span class="v">78,000 kg</span></div>
+        <div class="kv"><span class="k">MLW</span><span class="v">66,000 kg</span></div>
+        <div class="kv"><span class="k">MZFW</span><span class="v">62,500 kg</span></div>
+        <div class="kv"><span class="k">DOW</span><span class="v">42,800 kg</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span class="k">fuel capacity</span><span class="v">19,100 kg</span></div>
+        <div class="kv"><span class="k">engine burn</span><span class="v">2,460 kg/h</span></div>
+        <div class="kv"><span class="k">APU burn</span><span class="v">105 kg/h</span></div>
+      </div>
+      <div class="ft"><span class="l">REGISTER</span><span class="sp"></span>
+        <span class="pill ok">CONFIRMED</span></div>
+    </div>
+
+    <!-- SUPPLIER + AGENT -->
+    <div class="c w2">
+      <div class="bar" style="background:var(--amber)"></div>
+      <h3>SUPPLIER &amp; INTO-PLANE AGENT<span class="sp"></span>
+        <span class="n">designated for this flight · valid from 1 Jan 2026</span></h3>
+      <div class="b" style="display:grid;grid-template-columns:1fr 1fr;gap:0 22px">
+        <div>
+          <div class="kv b"><span class="k">World Fuel Services Canada</span>
+            <span class="v sub">WFS001</span></div>
+          <div class="kv"><span class="k">contract</span><span class="v">AC-WFS-2025-001</span></div>
+          <div class="kv"><span class="k">performs uplift</span><span class="v">NO</span></div>
+          <div class="rule"></div>
+          <div class="ct"><div class="r1"><span class="role">INVOICING</span>
+            <span class="ph">+1 416 555 0142</span></div>
+            <div class="nm">D. Sinclair</div><div class="em">ap.canada@wfscorp.example</div></div>
+          <div class="ct"><div class="r1"><span class="role">DISPUTES</span>
+            <span class="ph">+1 416 555 0177</span></div>
+            <div class="nm">M. Okonjo</div><div class="em">claims.na@wfscorp.example</div></div>
+        </div>
+        <div>
+          <div class="kv b"><span class="k">Menzies Aviation</span>
+            <span class="v sub">MENZ01 · AGENT</span></div>
+          <div class="kv"><span class="k">contract</span><span class="v">AC-MENZ-2025-004</span></div>
+          <div class="kv"><span class="k">station</span><span class="v">YYZ</span></div>
+          <div class="rule"></div>
+          <div class="ct"><div class="r1"><span class="role">UPLIFT · 24H</span>
+            <span class="ph">+1 416 555 0900</span></div>
+            <div class="nm">Ramp control, YYZ T1</div><div class="em">yyz.fuel@menzies.example</div></div>
+          <div class="ct"><div class="r1"><span class="role">SUPERVISOR</span>
+            <span class="ph">+1 416 555 0918</span></div>
+            <div class="nm">J. Whitfield</div><div class="em">j.whitfield@menzies.example</div></div>
+        </div>
+      </div>
+      <div class="ft"><span class="l sub">The supplier does not perform the uplift, so the uplift contact belongs to the agent.
+        Invoicing and disputes stay with the supplier.</span></div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="c">
+      <div class="bar" style="background:var(--blue)"></div>
+      <h3>FUEL ORDERS<span class="sp"></span><span class="n">1</span></h3>
+      <div class="b">
+        <table>
+          <thead><tr><th>Order</th><th class="r">Ordered</th><th class="r">kg</th><th>Status</th></tr></thead>
+          <tbody><tr>
+            <td><a class="lnk mono" href="#">FO-YYZ-…-001</a></td>
+            <td class="r mono">2,881.25 L</td><td class="r mono">2,305.00</td>
+            <td><span class="sub">Delivered</span></td></tr>
+          </tbody>
+        </table>
+        <div class="rule"></div>
+        <div class="kv"><span class="k">conversion density</span><span class="v">0.8000 kg/L</span></div>
+        <div class="kv"><span class="k">source</span><span class="v">UOM_MASTER</span></div>
+        <div class="kv"><span class="k">unit price</span><span class="v">0.7100 CAD/L</span></div>
+      </div>
+      <div class="ft"><span class="l">ORDER VALUE</span><span class="sp"></span>
+        <span class="v">2,045.69 CAD</span></div>
+    </div>
+
+    <!-- TICKETS -->
+    <div class="c">
+      <div class="bar" style="background:var(--amber)"></div>
+      <h3>FUEL TICKETS<span class="sp"></span><span class="n">1 · one bowser</span></h3>
+      <div class="b">
+        <table>
+          <thead><tr><th>Ticket</th><th class="r">Metered</th><th class="r">Density</th><th class="r">kg</th></tr></thead>
+          <tbody><tr>
+            <td><a class="lnk mono" href="#">…-11</a></td>
+            <td class="r mono">2,884.00 L</td><td class="r mono">0.7995</td>
+            <td class="r mono">2,305.76</td></tr>
+          </tbody>
+        </table>
+        <div class="rule"></div>
+        <div class="kv"><span class="k">meter start · end</span><span class="v">100,000 · 102,884</span></div>
+        <div class="kv"><span class="k">basis</span><span class="v">MEA · 11.5 °C</span></div>
+        <div class="kv"><span class="k">vehicle · meter</span><span class="v">BW-YYZ-101 · MTR-8842</span></div>
+      </div>
+      <div class="ft"><span class="l">BY METER</span><span class="sp"></span>
+        <span class="v">2,305.76 kg</span></div>
+    </div>
+
+    <!-- DELIVERY -->
+    <div class="c">
+      <div class="bar" style="background:var(--blue)"></div>
+      <h3>DELIVERY<span class="sp"></span><span class="n">EPD-YYZ-…-0001</span></h3>
+      <div class="b">
+        <div class="kv"><span class="k">fob at arrival</span><span class="v">1,950.00</span></div>
+        <div class="kv"><span class="k">ground burn · APU 30 min</span><span class="v">−52.50</span></div>
+        <div class="kv b"><span class="k">fob before refuelling</span><span class="v">1,897.50</span></div>
+        <div class="kv b"><span class="k">fob after refuelling</span><span class="v">4,202.50</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span class="k">source</span><span class="v">ACARS</span></div>
+        <div class="kv"><span class="k">refuel window</span><span class="v">10:20 – 10:45 Z</span></div>
+        <div class="kv"><span class="k">supplier count</span><span class="v">1</span></div>
+      </div>
+      <div class="ft"><span class="l">BY GAUGE</span><span class="sp"></span>
+        <span class="v">2,305.00 kg</span></div>
+    </div>
+
+    <!-- BURN -->
+    <div class="c w2">
+      <div class="bar" style="background:var(--mid)"></div>
+      <h3>BURN<span class="sp"></span><span class="n">times UTC · fuel on board, kg</span></h3>
+      <div class="b">
+        <div class="tl">
+          <div class="tp"><div class="l">PREV CLOSE</div><div class="d"></div>
+            <div class="t">09 Apr 23:40</div><div class="f">1,950.00</div></div>
+          <div class="tp"><div class="l">OUT</div><div class="d"></div>
+            <div class="t">11:20</div><div class="f">4,202.50</div></div>
+          <div class="tp"><div class="l">OFF</div><div class="d"></div>
+            <div class="t">11:35</div><div class="f">4,052.50</div></div>
+          <div class="tp"><div class="l">ON</div><div class="d"></div>
+            <div class="t">12:25</div><div class="f">2,002.50</div></div>
+          <div class="tp"><div class="l">IN</div><div class="d"></div>
+            <div class="t">12:33</div><div class="f">1,922.50</div></div>
+          <div class="tp cl"><div class="l">CLOSURE</div><div class="d"></div>
+            <div class="t">12:52</div><div class="f">1,889.25</div></div>
+        </div>
+        <div class="rule"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 22px">
+          <div>
+            <div class="kv b"><span class="k">block burn</span><span class="v">2,280.00</span></div>
+            <div class="kv"><span class="k">trip burn</span><span class="v">2,050.00</span></div>
+            <div class="kv"><span class="k">taxi · 15 + 8 min</span><span class="v">230.00</span></div>
+          </div>
+          <div>
+            <div class="kv"><span class="k">APU in block</span><span class="v">0.00</span></div>
+            <div class="kv b"><span class="k">engine burn</span><span class="v">2,280.00</span></div>
+            <div class="kv"><span class="k sub">no cycle falls between OUT and IN</span><span class="v"></span></div>
+          </div>
+          <div>
+            <div class="kv"><span class="k">ground YYZ · 30 min</span><span class="v">52.50</span></div>
+            <div class="kv"><span class="k">ground YUL · 19 min</span><span class="v">33.25</span></div>
+            <div class="kv"><span class="k sub">split at flight closure</span><span class="v"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ft"><span class="l">PLANNED 2,050.00 · ACTUAL TRIP 2,050.00</span><span class="sp"></span>
+        <span class="pill ok">NORMAL</span></div>
+    </div>
+
+    <!-- INVOICING -->
+    <div class="c">
+      <div class="bar" style="background:var(--crit)"></div>
+      <h3>INVOICING<span class="sp"></span><span class="n">this flight's fuel</span></h3>
+      <div class="b">
+        <div class="kv"><span class="k">IDR</span><span class="v"><a class="lnk" href="#">IDR-2026-000102</a></span></div>
+        <div class="kv"><span class="k">vendor reference</span><span class="v">WFS-INV-102</span></div>
+        <div class="kv"><span class="k">invoiced value</span><span class="v">2,050.11 CAD</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span class="k">validation</span><span class="v">3 hard</span></div>
+        <div class="kv"><span class="k">three-way match</span><span class="v">not matched</span></div>
+        <div class="kv"><span class="k">days since uplift</span><span class="v">45</span></div>
+      </div>
+      <div class="ft"><span class="l">POSTING</span><span class="sp"></span>
+        <span class="pill no">BLOCKED</span></div>
+    </div>
+  </div>
+
+  <div class="dn" style="margin-top:11px"><span class="lbl">DESIGN NOTE</span>
+    <b>Nine cards, and the order is the planner's not the model's.</b>
+    Fuel status first because it is the question. Dispatch and aircraft next because they explain
+    the quantity. Supplier and agent wide, because contacts are what a planner reaches for at 05:00
+    and <i>time is of the essence</i>. Orders, tickets and delivery in the sequence the fuel took.
+    Burn wide because it carries a timeline. Invoicing last, because it arrives weeks later.
+    <br><br>
+    <b>Every figure here is from the seed and recomputes.</b> 2,305.76 is 2,884 × 0.7995.
+    2,305.00 is 4,202.50 − 1,897.50. The stack sums to block fuel. Block burn less trip burn is
+    taxi, at both ends.</div>
+</div>
+</body>
+</html>
