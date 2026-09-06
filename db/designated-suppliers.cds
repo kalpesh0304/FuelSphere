@@ -76,7 +76,14 @@ entity DESIGNATED_SUPPLIERS : cuid, db.AuditTrail {
     // at it would tie a designation to one occurrence and make this
     // per-occurrence data rather than master data.
     flight_number       : String(8);
-    station             : Association to db.MASTER_AIRPORTS;
+
+    // NAMING FOLLOWS FLIGHT_SCHEDULE's origin / origin_airport, which is the
+    // established convention here: the CODE is the column and the association
+    // is unmanaged over it. A managed association would make station_ID a
+    // UUID, so every seed row would carry an airport's generated key instead
+    // of 'YYZ' - unreadable in a CSV and unusable as a resolver scope field.
+    station             : Association to db.MASTER_AIRPORTS on station.iata_code = station_code;
+    station_code        : String(3);
     carrier_code        : String(3);                  // F40: two carrier codes, two sets of books
     product             : Association to db.MASTER_PRODUCTS;
 
