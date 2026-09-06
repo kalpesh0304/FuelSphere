@@ -40,7 +40,14 @@ const AXIS = { FLIGHT: 'FLIGHT', STATION: 'STATION', NONE: 'NONE' };
  *   { resolved: true,  axis, row, evidence }
  *   { resolved: false, axis: 'NONE', row: null, reason, evidence }
  *
- * @param flightNumber  e.g. 'AC410'. Optional - a station-only caller omits it
+ * @param flightNumber  the flight NUMBER, not a schedule row. Optional - a
+ *                  station-only caller omits it.
+ *                  NO EXAMPLE VALUE HERE ON PURPOSE: a flight number is
+ *                  indistinguishable from an error code by shape, and
+ *                  code-gate.js matches /\b[A-Z]{2,4}\d{3}\b/ across every
+ *                  handler file, so a real one written here fails the gate
+ *                  as an undocumented error code. It did, twice - the second
+ *                  time inside the comment explaining the first.
  * @param stationCode   IATA, e.g. 'YYZ'
  * @param asOfDate      THE FLIGHT DATE, never today
  * @param carrierCode   F40 - a group with two carrier codes has two answers

@@ -340,6 +340,12 @@ annotate FuelOrderService.FuelOrders with {
     order_relationship           @title: 'Order Relationship';
     is_tankering                 @title: 'Tankering';
     tankering_sectors            @title: 'Tankering Sectors';
+    // WP-D. The @title goes on the ASSOCIATION, exactly as parent_order above:
+    // CAP propagates it to the generated foreign key, which is the property
+    // that renders. ui02 EXIT-2 caught both of these emitting
+    // into_plane_agent_ID and into_plane_contract_ID as their technical names.
+    into_plane_agent             @title: 'Into-Plane Agent';
+    into_plane_contract          @title: 'Into-Plane Contract';
     ID              @UI.Hidden;
     order_number    @title: 'Order Number' @Common.FieldControl: #ReadOnly;
     station_code    @title: 'Station' @mandatory;
