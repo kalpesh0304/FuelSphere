@@ -84,8 +84,30 @@ entity DESIGNATED_SUPPLIERS : cuid, db.AuditTrail {
     // of 'YYZ' - unreadable in a CSV and unusable as a resolver scope field.
     station             : Association to db.MASTER_AIRPORTS on station.iata_code = station_code;
     station_code        : String(3);
-    carrier_code        : String(3);                  // F40: two carrier codes, two sets of books
-    product             : Association to db.MASTER_PRODUCTS;
+    // F40: a group operating two carrier codes has two sets of books, so the
+    // same flight number can resolve differently per carrier.
+    //
+    // SCOPING BY CARRIER IS UNEXERCISED BY DATA. The seed holds one carrier,
+    // and seeding a second is not one row - it needs flights, tails, contracts
+    // and a company code, and FuelSphere has no carrier entity to hang them
+    // on. So this is a scope field that costs nothing and has never been
+    // tested; the first multi-carrier tenant is its first test. Said here and
+    // asserted in the harness, because an untested path that SAYS SO is a
+    // different thing from one that looks tested.
+    carrier_code        : String(3);
+
+    // NO `product` COLUMN, AND IT WAS CONSIDERED.
+    //
+    // The 1 September brief lists product as an axis. There are three products
+    // in the model, every order uses one, and nothing would read the column -
+    // which is the state this repository has caught four times.
+    //
+    // And it would not be free. A null product would be indistinguishable from
+    // "any product" and from "nobody filled it in" - the same ambiguity
+    // supplier_performs_uplift exists below to resolve.
+    //
+    // Add it when SAF arrives. That is when a station genuinely designates one
+    // supplier for Jet A-1 and another for a blend, and the axis becomes real.
 
     // ---- WHO ------------------------------------------------------------
     supplier            : Association to db.MASTER_SUPPLIERS @mandatory;

@@ -19,14 +19,26 @@ using { fuelsphere as db } from './schema';
  * remaining LF. One entity, supplier_type = AGENT, parent_supplier set where
  * the agent bills through the supplier rather than directly.
  *
- * NOTE ON supplier_type. It is String(20) with a comment reading
- * "EXTERNAL / INTO_PLANE", not an enum — so widening its documented domain to
- * include AGENT, TRADER and REFINER costs nothing and enforces nothing. That
- * is D25's general case (79 enum-typed elements, 0 enforced) arriving as the
- * absence of an enum rather than an unenforced one. Making it an enum with
- * @assert.range is a separate decision with a seed implication: all ten
- * existing rows read EXTERNAL, which would have to stay a member.
+ * AND supplier_type IS NOT MADE MULTI-VALUED. A party playing two roles at two
+ * stations would need it PER STATION, and per-station is the designation
+ * again. So the column stays what it is, and its description now says what it
+ * is not:
+ *
+ *   "A coarse label about the company. Where a party plays different roles at
+ *    different stations, the DESIGNATION says which - this does not."
+ *
+ * Without that, someone reads EXTERNAL on MENZ001 and concludes it is never an
+ * agent. It is the into-plane agent at YYZ today, in DESIGNATED_SUPPLIERS, and
+ * the supplier at YVR on orders that already exist.
+ *
+ * It is String(20) and not an enum, so widening its documented domain costs
+ * nothing and enforces nothing - D25's general case arriving as the ABSENCE of
+ * an enum rather than an unenforced one.
  */
+annotate db.MASTER_SUPPLIERS with {
+    supplier_type @description: 'A coarse label about the company. Where a party plays different roles at different stations, the DESIGNATION says which - this does not.';
+};
+
 extend db.MASTER_SUPPLIERS with {
     iata_code       : String(3);      // Two-character IATA fuel code where the supplier has one
     icao_code       : String(4);

@@ -143,7 +143,33 @@ describe('D — who fuels this flight', () => {
     out(`AC101 priority ${r.row.priority} beats LHR station priority ${station.priority} on AXIS`);
   });
 
-  it('EXIT-8  RESOLVED, NEVER COPIED — the designation is not denormalised anywhere', async () => {
+  it('EXIT-8  carrier scoping is UNEXERCISED BY DATA, and says so', async () => {
+    // NOT A PASSING TEST DRESSED AS COVERAGE. carrier_code is a scope field on
+    // the entity and on every resolver call, and the seed holds ONE carrier -
+    // so no call has ever had to choose between two. This criterion asserts
+    // the GAP so it cannot be mistaken for coverage.
+    //
+    // Seeding a second carrier is not one row: it needs flights, tails,
+    // contracts and a company code, and FuelSphere has no carrier entity to
+    // hang them on. The first multi-carrier tenant is this path's first test.
+    const rows = await (await db()).run(SELECT.from('fuelsphere.DESIGNATED_SUPPLIERS'));
+    const carriers = new Set(rows.map(r => r.carrier_code).filter(Boolean));
+    assert.strictEqual(carriers.size, 1,
+      `the seed now holds ${carriers.size} carriers - carrier scoping has become testable `
+    + `and this criterion should be replaced by one that tests it`);
+
+    // What CAN be shown today: the field is carried into the resolution and
+    // reaches the evidence, so a second carrier would have something to act on.
+    const r = await resolveDesignation({ flightNumber: 'AC410', stationCode: 'YYZ',
+        asOfDate: '2026-04-10', carrierCode: 'AC' });
+    assert.strictEqual(r.resolved, true);
+    assert.ok('carrier_code' in r.evidence.scope_matched,
+      'carrier_code is not among the scope fields the resolver reports');
+    out(`carrier scoping UNTESTED: ${carriers.size} carrier in the seed (${[...carriers]}); `
+      + `the field reaches evidence.scope_matched and nothing has had to choose`);
+  });
+
+  it('EXIT-9  RESOLVED, NEVER COPIED — the designation is not denormalised anywhere', async () => {
     // A supplier changes a number and every flight shows the new one. A copy
     // shows the old one forever and nothing says which is current.
     const m = await cds.load(`${PROJECT}/db`);
