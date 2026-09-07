@@ -453,7 +453,7 @@ annotate InvoiceService.Invoices with {
     gate_evaluated_at    @title: 'Gate Evaluated';
 
     match_status         @title: 'Match Status'
-                         @Common.QuickInfo: 'Whether the three-way match succeeded — purchase order, goods receipt and invoice. INDEPENDENT OF THE POSTING GATE, which is what actually blocks posting: an invoice can be MATCHED and still be GATED, because the match succeeded and the validation rules did not. MATCHED does not mean posted.';
+                         @Common.QuickInfo: 'Whether the three-way match succeeded — purchase order, goods receipt and invoice. INDEPENDENT OF THE POSTING GATE, which is what actually blocks posting: an invoice can be MATCHED and still be GATED, because the match succeeded and the validation rules did not. MATCHED does not mean posted. AND THIS VALUE IS NOT RECOMPUTED: FuelSphere does not perform the three-way match — SAP does, at MIRO — so unlike the Posting Gate beside it, this does not change when you run Validate.';
     price_variance       @title: 'Price Variance' @Measures.ISOCurrency: currency_code;
     quantity_variance    @title: 'Quantity Variance';
     variance_percentage  @title: 'Variance %';

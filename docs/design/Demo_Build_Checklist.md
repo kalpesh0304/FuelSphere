@@ -345,6 +345,27 @@ Mockup: `docs/design/flight_overview.html`
 - [x] **The rest of the row hangs together: 13 of 14 consistency checks pass and the failure IS `INV469`.** The invoice agrees with `INVOICE_MATCHES` on five of five fields; the match agrees with the PO on six of six. That is what makes it a scenario rather than a seed value
 - [x] **There is exactly ONE such row.** Measured across all 13 invoices. A plural reading of the screen is a misread, not a second case
 
+### The fourth leg — one sentence, and it is the module's entire case
+
+**"The three-way match passes this line. The fourth leg does not."**
+
+- [x] **The match's zero variance is CAUSED by the thing INV469 objects to.** Measured on the same row:
+
+| | compares | result |
+|---|---|---|
+| the three-way match | invoice against **PO** | `amount_variance = 0` |
+| `INV469` | invoice against **itself** | 17 short |
+
+- [x] **Both are right about different pairs of numbers.** The match agrees *precisely because* the amount was computed from the ordered quantity — **and the PO carries that quantity too.**
+- [x] **So a three-way match CANNOT catch an amount derived from the wrong quantity.** Not "does not today" — *cannot*, structurally, because the erroneous figure and the reference agree by construction. The fourth leg — the invoice against the delivery FuelSphere holds — is the only leg that sees it
+- [x] **This is the argument for the fourth leg made by DATA rather than by design.** It is stronger than the HLD's version because nothing here is asserted: `2200 × 0.85 = 1870 = po_amount = inv_amount`, and `2180 × 0.85 = 1853 ≠ 1870`
+
+### Which gate computes, and which is a stored value
+
+- [x] **Say this if both gates are on screen.** `posting_gate` and its five counters are **recomputed on every Validate**. `match_status` is **seeded and never recomputed** — nothing in `srv/` writes `INVOICES.match_status`, and `executeThreeWayMatch` says so itself: *"FuelSphere does not perform the three-way match; SAP does, at MIRO."*
+- [x] **A viewer watching one gate change under Validate and the other never change has no way to know which is which.** It is a header value that LOOKS computed, on a screen where the other gate is
+- [x] **Unverified rather than incorrect.** It agrees with its `INVOICE_MATCHES` row on both seeded rows. **Not a fix — a label**
+
 ### And if someone reads MATCHED as POSTED — they already have
 
 - [x] **Two gate-shaped columns side by side, one green and one red, invite that reading.** It happened once and the reading was reasonable
