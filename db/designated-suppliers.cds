@@ -134,3 +134,33 @@ entity DESIGNATED_SUPPLIERS : cuid, db.AuditTrail {
 
     notes               : String(500);
 }
+
+// ============================================================================
+// THE FLIGHT RESOLVES ITS DESIGNATION. IT DOES NOT COPY IT.
+//
+// A supplier changes a number and every flight shows the new one. A
+// denormalised copy shows the old one forever and nothing says which is
+// current - so this is an association, and FLIGHT_SCHEDULE gains no supplier
+// column. d-designated-suppliers-harness EXIT-9 asserts that.
+//
+// IT LIVES HERE AND NOT IN schema.cds, and not by preference. schema.cds
+// cannot see DESIGNATED_SUPPLIERS: this file imports schema.cds, so the
+// dependency runs one way and the base file has no name for the new entity.
+// `extend` from this side is the only direction that compiles.
+//
+// AND IT CARRIES THE FLIGHT AXIS ONLY. An `on` condition is a join, and a
+// join cannot say "the flight row, ELSE the station row" - the cascade is
+// query order, which is exactly why designation-resolver.js is JavaScript.
+// So this resolves 1 of 22 seeded flights, and the other 21 fall to the
+// station rung, which needs its own association or the resolver.
+//
+// The date is deliberately NOT in the condition either. Adding
+// `valid_from <= flight_date` narrows a row set; it does not pick one, and a
+// screen binding to several rows would show a designation that expired
+// beside one that did not.
+// ============================================================================
+extend db.FLIGHT_SCHEDULE with {
+    designation : Association to many DESIGNATED_SUPPLIERS
+                  on  designation.flight_number = flight_number
+                  and designation.station_code  = origin_airport;
+}
