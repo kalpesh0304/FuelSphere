@@ -334,6 +334,13 @@ Mockup: `docs/design/flight_overview.html`
 - [x] **8 · Burn** — **double width.** The OOOI timeline, block/trip/taxi, and the ground split at closure
 - [x] **9 · Invoicing** — the IDR, the vendor reference, and the posting gate
 
+### If the counters are on screen, say this out loud
+
+**Two sentences, and both are true. The counter is honest; the inference from it is the dangerous part.**
+
+- [x] **"Five passed, one failed, and sixteen nobody looked at."** On `INV-BPUK-20260325-001` a join-by-absence dashboard shows **21 green**. Sixteen rules never ran, because the line has no ticket number and INV462, INV463, INV464 and INV466 then have nothing to evaluate. **The grey count rises with the severity of the first failure** — measured: 14 grey at rung 1, 12, 11, 6, and 3 on a fully resolved line, with zero variance inside each. The worse the document, the more the join overstates
+- [x] **"Three not checked on a clean invoice, and two of them are because no contract breakdown exists."** `component_breakdown` is null on all six `DERIVED_PRICES` rows, so INV471 and INV472 have never run on any line — **D54**. That is a standing gap in the data, not a fact about the invoice being shown. **Say it rather than letting someone read "three" as close enough**
+- [ ] **Do not author a breakdown to improve the number.** It would be the first figure in this system typed to make a screen look better, and it is exactly what the counters exist to prevent. `idr-rule-status-harness` EXIT-10 fails the day a real one is authored, and asks for a test of the comparison instead
 ### The one posted-and-gated row — say this, it is the strongest thing in the module
 
 **`INV-WFS-20260324-001`. GATED, POSTED and MATCHED at once, and every part of that is true.**

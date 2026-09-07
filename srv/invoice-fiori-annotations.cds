@@ -1340,11 +1340,26 @@ annotate InvoiceService.IdrRuleStatus with {
 
 // And on the five counters, for the same reason.
 annotate InvoiceService.Invoices with {
-    rules_evaluated      @title: 'Rules Run';
-    rules_passed         @title: 'Passed';
-    rules_failed         @title: 'Failed';
-    rules_bypassed       @title: 'Bypassed';
+    rules_evaluated      @title: 'Rules Run'
+                         @Common.QuickInfo: 'How many rule evaluations this run performed. A line rule is evaluated once per line, so this is larger than the number of registered rules on a multi-line document.';
+    rules_passed         @title: 'Passed'
+                         @Common.QuickInfo: 'Ran and cleared.';
+    rules_failed         @title: 'Failed'
+                         @Common.QuickInfo: 'Raised and open. Every one appears in the Exceptions list with its evidence.';
+    rules_bypassed       @title: 'Bypassed'
+                         @Common.QuickInfo: 'Raised and released by a person, with a reason. Still true.';
+
     // NOT "Not Applicable". The technical term reads as dismissible; this is
     // the number that says how much of the verdict rests on nothing.
-    rules_not_applicable @title: 'Not Checked';
+    //
+    // AND THE QUICKINFO CARRIES THE WARNING, because the counter is honest
+    // and the inference from it is the dangerous part. A clean invoice reads
+    // "3 not checked" and someone calls that close enough.
+    //
+    // The text names WHERE the answer is rather than WHAT it is. Writing
+    // "3 because no contract breakdown exists" here would be true today and
+    // stale the day one is authored - and D54 is a data gap that will close.
+    // The Rules table carries the reason per rule and cannot go stale.
+    rules_not_applicable @title: 'Not Checked'
+                         @Common.QuickInfo: 'Rules that DID NOT RUN on this document. This is not a pass - nothing looked at them. Open "Rules - what ran and what did not" for the reason on each; several are standing gaps in the data rather than facts about this invoice.';
 }

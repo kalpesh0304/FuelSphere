@@ -224,6 +224,14 @@ service PlanningService {
     // order. `orders` is the complete set and is exposed in its place.
     //
     // The declaration stays in db/schema.cds, commented at the site.
+    // THE CANONICAL PROJECTION OF FLIGHT_SCHEDULE ON THIS SERVICE.
+    //
+    // FlightAircraft also projects it, so CAP cannot pick a redirection
+    // target for PlanningVersions:based_on_schedule on its own and refuses
+    // to guess. Pinned HERE rather than there, which preserves where every
+    // existing navigation already points - the alternative silently moves
+    // them to a narrow card view.
+    @cds.redirection.target
     entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
         *,
         aircraft    : redirected to Aircraft,
@@ -276,6 +284,25 @@ service PlanningService {
         key ID,
         order_number,
         flight : redirected to FlightSchedule,
+
+        // THE GLOBAL FILTER'S NAMES, so the Fuel Orders card filters to the
+        // flight the page is about.
+        //
+        // The projection carried `flight` (a navigation) and station_code and
+        // NONE of the filter's field names. An OVP propagates by MATCHING
+        // PROPERTY NAMES, so the overlap was zero and the card would have
+        // shown all 25 orders on a page about one flight.
+        //
+        // I checked for a flight REFERENCE first and reported this entity
+        // ready. That is a different question from whether it carries the
+        // name the filter propagates BY - the same shape as asserting an
+        // entity has rows rather than the rows the card will show.
+        flight.flight_number       as flight_number,
+        flight.flight_date         as flight_date,
+        flight.origin_airport      as origin_airport,
+        flight.destination_airport as destination_airport,
+        flight.airline_code        as airline_code,
+
         status,
         station_code,
         ordered_quantity,
@@ -355,12 +382,33 @@ service PlanningService {
      * `annotate ... with @( ... )` term block, which is the D50 asymmetry in
      * a third variant.
      *
-     * @cds.autoexpose IS REQUIRED AND IS NOT COSMETIC. CAP marks a view it
-     * auto-exposed as @cds.autoexposed, and its auth layer REFUSES A DIRECT
-     * READ of any such entity - `@cds.autoexposed && !@cds.autoexpose` returns
-     * 405 "not explicitly exposed as part of the service"
+     * @cds.autoexpose IS REDUNDANT HERE, AND THE ORIGINAL NOTE SAID
+     * OTHERWISE. CORRECTED BY A PLANT, E2b.
+     *
+     * The mechanism is real: CAP marks a view it auto-exposed as
+     * @cds.autoexposed, and the auth layer refuses a direct read of any such
+     * entity - `@cds.autoexposed && !@cds.autoexpose` returns 405 "not
+     * explicitly exposed as part of the service"
      * (libx/_runtime/common/generic/auth/utils.js). The entity is in the
      * metadata, has an EntitySet, carries annotations, and cannot be read.
+     *
+     * WHAT WAS WRONG WAS WHICH LINE FIXES IT. Removing @cds.autoexpose from
+     * this block and re-reading gives 200, not 405 - measured. It is the
+     * EXPLICIT `entity ... as projection on ...` DECLARATION that makes the
+     * set addressable; once that exists the entity is no longer merely
+     * auto-exposed, so the guard never applies. Both changes were made in
+     * one commit and the annotation got the credit.
+     *
+     * The 405 is still reachable and still bites: CONTRACT_LOCATIONS,
+     * CONTRACT_PRODUCTS and FORMULA_COMPONENTS return it on this service
+     * today, because nothing declares them. e2b-eight-cards-harness EXIT-2
+     * is planted against one of those rather than against this block, which
+     * is the difference between a criterion that fires and one that reads
+     * as though it would.
+     *
+     * KEPT rather than removed: it is harmless, it documents the intent, and
+     * it is what makes the exposure survive a future refactor that drops the
+     * explicit declaration.
      *
      * That sharpens D47's second kind: an auto-exposed view is not merely
      * "declared everywhere and navigable nowhere", it is ADDRESSABLE NOWHERE.
@@ -370,8 +418,14 @@ service PlanningService {
      *
      * @readonly because the view is derived; FuelOrderService owns the write.
      */
+    // AND THE CANONICAL PROJECTION OF FUEL_DELIVERIES, for the same reason
+    // and with the same preference: FLIGHT_FUEL_TICKETS:delivery already
+    // resolves here, and pinning the new full FuelDeliveries instead would
+    // move it. Reachability was the thing being added; where existing
+    // navigations point was not up for change in this package.
     @readonly
     @cds.autoexpose
+    @cds.redirection.target
     entity FLIGHT_FUEL_DELIVERIES as projection on db.FLIGHT_FUEL_DELIVERIES;
 
     /**
@@ -390,6 +444,102 @@ service PlanningService {
     @readonly
     @cds.autoexpose
     entity FLIGHT_FUEL_TICKETS as projection on db.FLIGHT_FUEL_TICKETS;
+
+    /**
+     * FlightAircraft - the tail, filterable by the flight.
+     *
+     * The Aircraft card cannot bind to AircraftRegistrations: that entity
+     * carries no flight reference of any kind, so the global filter overlaps
+     * it on nothing and the card would render all 31 tails on a page about
+     * one flight. A card that ignores the filter is a card about something
+     * else.
+     *
+     * Nor a static strip - the identity strip already carries tail and type,
+     * so a strip duplicates it. And this is the card that GAINS MLW, MZFW and
+     * engine_burn_rate_kgph the day work package B lands: a header would have
+     * to become a card that day, a card gains three columns.
+     */
+    /**
+     * FlightDesignation - both axes, so the card is not empty on 20 flights.
+     *
+     * The Supplier and Into-Plane Agent card cannot bind DesignatedSuppliers:
+     * filtered by flight_number it sees flight-scoped rows only, and just TWO
+     * of twenty-two flights have one. The rest resolve to a station default,
+     * whose flight_number is null. Measured before the card was written.
+     */
+    @readonly
+    entity FlightDesignation as projection on ds.FLIGHT_DESIGNATION {
+        *,
+        supplier         : redirected to Suppliers,
+        into_plane_agent : redirected to Suppliers
+    };
+
+    @readonly
+    entity FlightAircraft as projection on db.FLIGHT_AIRCRAFT {
+        *,
+        tail : redirected to AircraftRegistrations
+    };
+
+    /**
+     * FuelDeliveries and FuelBurns - EXPOSED, and the boundary is stated.
+     *
+     * PlanningService exposes, READ-ONLY, WHAT A FLIGHT REACHES. A flight
+     * reaches its delivery and its burn, so both are here.
+     *
+     * FuelBurns REVERSES a decision recorded at db/schema.cds on the `burns`
+     * association, and the reasons it gave are answered rather than ignored:
+     *
+     *   "a burn is after the fact, a different reader"  - ownership is not
+     *   reachability. BurnService still owns FUEL_BURNS: the handlers, the
+     *   variance ladder and every write path stay there. This is @readonly.
+     *
+     *   "no service exposes both navigably"             - that was a
+     *   consequence of nobody having decided to, not an independent
+     *   obstacle. The decision is now taken and written here.
+     *
+     *   "it would grant a different reader access"      - a projection grants
+     *   nothing @restrict does not. The authorisation point settles it.
+     *
+     * FuelDeliveries has the same justification and no reversal to record:
+     * it was simply never on this service.
+     *
+     * INVOICES IS DELIBERATELY NOT HERE. An airline planner's overview
+     * reaching the invoicing entity is a MODULE boundary rather than a
+     * convenience, and the invoicing story has its own screens. A planner
+     * asking "has this been billed" is the coverage report, which starts
+     * from the ticket rather than from the flight. THAT IS WHY THE PAGE HAS
+     * EIGHT CARDS AND THE MOCKUP SHOWS NINE.
+     */
+    // BOTH CARRY THE GLOBAL FILTER'S NAMES, for the reason written on
+    // FuelOrders above. Exposing an entity makes its card ADDRESSABLE;
+    // carrying these names makes the card ABOUT THIS FLIGHT. They are
+    // separate steps and only doing the first leaves a card that renders
+    // all 26 deliveries on a page about one leg.
+    //
+    // FuelBurns already had origin_airport and destination_airport of its
+    // own - two of the seven - which is exactly the partial overlap that
+    // looks like it works until someone filters on a flight number.
+    @readonly
+    entity FuelDeliveries as projection on db.FUEL_DELIVERIES {
+        *,
+        order : redirected to FuelOrders,
+        tail  : redirected to AircraftRegistrations,
+        order.flight.flight_number       as flight_number,
+        order.flight.flight_date         as flight_date,
+        order.flight.origin_airport      as origin_airport,
+        order.flight.destination_airport as destination_airport,
+        order.flight.airline_code        as airline_code
+    };
+
+    @readonly
+    entity FuelBurns as projection on db.FUEL_BURNS {
+        *,
+        flight : redirected to FlightSchedule,
+        tail   : redirected to AircraftRegistrations,
+        flight.flight_number       as flight_number,
+        flight.flight_date         as flight_date,
+        flight.airline_code        as airline_code
+    };
 
     /**
      * DesignatedSuppliers — who fuels this flight, at this station, on this date.

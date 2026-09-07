@@ -912,3 +912,168 @@ annotate PlanningService.Suppliers with {
     supplier_code @title: 'Supplier Code';
     supplier_type @title: 'Supplier Type';
 };
+
+// ===========================================================================
+// E2b — THE FLIGHT FUEL OVERVIEW'S REMAINING SEVEN CARDS
+//
+// EIGHT CARDS, NOT NINE. The mockup shows nine; card 9 (Invoicing) is
+// deliberately absent because an airline planner's overview reaching the
+// invoicing entity is a MODULE boundary rather than a convenience. The
+// reason lives at the exposure site in planning-service.cds, where it reads
+// as a decision; here it would read as a gap.
+//
+// EVERY CARD BELOW BINDS AN ENTITY THAT CARRIES THE GLOBAL FILTER'S NAMES.
+// That was not true of four of them before this package: an OVP propagates
+// its filter BY MATCHING PROPERTY NAMES, FlightSchedule's key is ID, and
+// the filter bar therefore never emits flight_ID. An entity carrying only
+// flight_ID overlaps the filter on nothing and its card shows the fleet.
+// ===========================================================================
+
+// ---- CARD 2 · DISPATCH PLAN ----------------------------------------------
+// The stack that sums, and the required uplift. FLIGHT_DISPATCH holds a
+// single dispatch_qty_kg with no term breakdown (trip/taxi/contingency/
+// alternate/reserve/extra), so the card shows what exists rather than the
+// six-term stack the design describes. Stating that here rather than
+// rendering five blank columns.
+annotate PlanningService.FlightDispatches with @(
+    UI.LineItem #DispatchCard: [
+        { Value: plan_version,       Label: 'Version' },
+        { Value: plan_status,        Label: 'Status' },
+        { Value: dispatch_qty_kg,    Label: 'Dispatch (kg)' },
+        { Value: block_fuel_kg,      Label: 'Block (kg)' },
+        { Value: required_uplift_kg, Label: 'Required uplift (kg)' },
+        { Value: rob_departure_kg,   Label: 'ROB at departure (kg)' }
+    ]
+);
+
+// ---- CARD 3 · AIRCRAFT ---------------------------------------------------
+// MLW, MZFW and engine_burn_rate_kgph are NOWHERE IN THE MODEL - not on the
+// tail, not on the type. They arrive with work package B and they arrive
+// here, which is why this is a card rather than a header strip: a strip
+// would have to become a card that day.
+//
+// mtow_kg and cruise_burn_kgph are on the TYPE, not the registration, so
+// they are the same figure for every tail of that type. dow_kg and
+// fuel_capacity_kg are per-tail.
+annotate PlanningService.FlightAircraft with @(
+    UI.LineItem #AircraftCard: [
+        { Value: registration,        Label: 'Tail' },
+        { Value: tail_type_code,      Label: 'Type' },
+        { Value: mtow_kg,             Label: 'MTOW (kg)' },
+        { Value: dow_kg,              Label: 'DOW (kg)' },
+        { Value: fuel_capacity_kg,    Label: 'Fuel capacity (kg)' },
+        { Value: apu_burn_rate_kg_hr, Label: 'APU burn (kg/h)' },
+        { Value: cruise_burn_kgph,    Label: 'Cruise burn (kg/h)' }
+    ]
+);
+
+// ---- CARD 4 · SUPPLIER AND INTO-PLANE AGENT ------------------------------
+// BOTH AXES, AND `axis` IS THE FIRST COLUMN. The card's entire point,
+// decided 1 September, is that the station default stays visible when a
+// flight-level designation exists. Binding DesignatedSuppliers directly
+// would have hidden it on twenty of twenty-two flights, because a station
+// default's flight_number is null and the filter excludes it.
+//
+// Sorted so FLIGHT precedes STATION - alphabetical here, and that is an
+// accident worth naming rather than relying on: it is right today and would
+// break the day an axis is added. The sort is deliberate and the order is
+// FLIGHT first because it is the one that governs.
+annotate PlanningService.FlightDesignation with @(
+    UI.LineItem #DesignationCard: [
+        { Value: axis,             Label: 'Applies by' },
+        { Value: supplier.supplier_name,         Label: 'Supplier' },
+        { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent' },
+        { Value: station_code,     Label: 'Station' },
+        { Value: designation_type, Label: 'Type' },
+        { Value: priority,         Label: 'Priority' }
+    ]
+);
+
+// ---- CARD 5 · FUEL ORDERS ------------------------------------------------
+annotate PlanningService.FuelOrders with @(
+    UI.LineItem #OrdersCard: [
+        { Value: order_number,     Label: 'Order' },
+        { Value: status,           Label: 'Status' },
+        { Value: station_code,     Label: 'Station' },
+        { Value: ordered_quantity, Label: 'Ordered' },
+        { Value: unit_price,       Label: 'Unit price' },
+        { Value: total_amount,     Label: 'Total' }
+    ]
+);
+
+// ---- CARD 6 · FUEL TICKETS -----------------------------------------------
+annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
+    UI.LineItem #TicketsCard: [
+        { Value: ticket_number,      Label: 'Ticket' },
+        { Value: supplier_name,      Label: 'Supplier' },
+        { Value: quantity_metered,   Label: 'Metered' },
+        { Value: uom_code,           Label: 'UoM' },
+        { Value: quantity_kg,        Label: 'Mass (kg)' },
+        { Value: match_status,       Label: 'Match' },
+        { Value: delivery_timestamp, Label: 'Delivered' }
+    ]
+);
+
+// ---- CARD 7 · DELIVERY ---------------------------------------------------
+// The gauge pair, the refuel window, the supplier count. DISTINCT FROM
+// CARD 1, which binds the narrow FLIGHT_FUEL_DELIVERIES view and answers
+// "what is the reconciliation verdict". This answers "what physically
+// happened at the aircraft", and needs fields that view does not carry.
+annotate PlanningService.FuelDeliveries with @(
+    UI.LineItem #DeliveryCard: [
+        { Value: delivery_number,  Label: 'Delivery' },
+        { Value: fob_before_kg,    Label: 'FOB before (kg)' },
+        { Value: fob_after_kg,     Label: 'FOB after (kg)' },
+        { Value: refuel_start_utc, Label: 'Refuel start' },
+        { Value: refuel_end_utc,   Label: 'Refuel end' },
+        { Value: supplier_count,   Label: 'Suppliers' },
+        { Value: delivery_method,  Label: 'Method' }
+    ]
+);
+
+// ---- CARD 8 · BURN -------------------------------------------------------
+// The reversal. BurnService still OWNS this entity - handlers, the variance
+// ladder, every write path - and the Planning projection is @readonly.
+// Ownership and reachability are different questions.
+//
+// engine_burn_kg and apu_burn_kg are the WP-19/WP-34 split at closure, and
+// D42 is open against applyBurnSplit: ground APU is subtracted from block
+// burn, which never contained it. The figure is shown as stored; the defect
+// is recorded, not papered over on the card.
+annotate PlanningService.FuelBurns with @(
+    UI.LineItem #BurnCard: [
+        { Value: burn_date,       Label: 'Burn date' },
+        { Value: planned_burn_kg, Label: 'Planned (kg)' },
+        { Value: actual_burn_kg,  Label: 'Actual (kg)' },
+        { Value: variance_kg,     Label: 'Variance (kg)' },
+        { Value: variance_status, Label: 'Verdict' },
+        { Value: engine_burn_kg,  Label: 'Engine (kg)' },
+        { Value: apu_burn_kg,     Label: 'APU (kg)' }
+    ]
+);
+
+// Titles on every field these cards bind, because a card column falls back
+// to the technical name and ui02 EXIT-2c ratchets exactly this.
+annotate PlanningService.FlightDesignation with {
+    axis             @title: 'Applies By';
+    station_code     @title: 'Station';
+    carrier_code     @title: 'Carrier';
+    designation_type @title: 'Designation Type';
+    priority         @title: 'Priority';
+    valid_from       @title: 'Valid From';
+    valid_to         @title: 'Valid To';
+    flight_number    @title: 'Flight Number';
+    flight_date      @title: 'Flight Date';
+}
+annotate PlanningService.FlightAircraft with {
+    registration        @title: 'Tail';
+    tail_type_code      @title: 'Aircraft Type';
+    mtow_kg             @title: 'MTOW (kg)';
+    dow_kg              @title: 'Dry Operating Weight (kg)';
+    fuel_capacity_kg    @title: 'Fuel Capacity (kg)';
+    apu_burn_rate_kg_hr @title: 'APU Burn Rate (kg/h)';
+    cruise_burn_kgph    @title: 'Cruise Burn (kg/h)';
+    aircraft_model      @title: 'Aircraft Model';
+    flight_number       @title: 'Flight Number';
+    flight_date         @title: 'Flight Date';
+}
