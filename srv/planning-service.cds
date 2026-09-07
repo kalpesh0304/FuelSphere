@@ -23,6 +23,7 @@ using { fuelsphere as db } from '../db/schema';
 // while `cds serve` succeeds, because serve loads all of db/ and srv/ and
 // compile does not. A model that boots and will not compile.
 using { fuelsphere as ds } from '../db/designated-suppliers';
+using { fuelsphere as sc } from '../db/supplier-contacts';
 
 @path: '/odata/v4/planning'
 service PlanningService {
@@ -473,6 +474,29 @@ service PlanningService {
         supplier         : redirected to Suppliers,
         into_plane_agent : redirected to Suppliers
     };
+
+    /**
+     * SupplierRoleContacts — FOUR ROWS PER SUPPLIER, ALWAYS.
+     *
+     * The strip that lets somebody ring at 05:00. A role with no contact is
+     * a ROW reading "none recorded", not an absence: a missing row is
+     * invisible, and the SME asked for these twice.
+     *
+     * The primary only, with other_count beside it, because the strip exists
+     * to be scanned - and a strip showing one contact with no sign of a
+     * second is the same silence as an Aircraft card that omits MLW.
+     */
+    @readonly
+    entity SupplierRoleContacts as projection on sc.SUPPLIER_ROLE_CONTACTS;
+
+    @readonly
+    entity SupplierContacts as projection on sc.SUPPLIER_CONTACTS {
+        *,
+        supplier : redirected to Suppliers
+    };
+
+    @readonly
+    entity ContactRoles as projection on sc.CONTACT_ROLES;
 
     @readonly
     entity FlightAircraft as projection on db.FLIGHT_AIRCRAFT {
