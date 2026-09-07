@@ -341,6 +341,44 @@ Mockup: `docs/design/flight_overview.html`
 - [x] **"Five passed, one failed, and sixteen nobody looked at."** On `INV-BPUK-20260325-001` a join-by-absence dashboard shows **21 green**. Sixteen rules never ran, because the line has no ticket number and INV462, INV463, INV464 and INV466 then have nothing to evaluate. **The grey count rises with the severity of the first failure** — measured: 14 grey at rung 1, 12, 11, 6, and 3 on a fully resolved line, with zero variance inside each. The worse the document, the more the join overstates
 - [x] **"Three not checked on a clean invoice, and two of them are because no contract breakdown exists."** `component_breakdown` is null on all six `DERIVED_PRICES` rows, so INV471 and INV472 have never run on any line — **D54**. That is a standing gap in the data, not a fact about the invoice being shown. **Say it rather than letting someone read "three" as close enough**
 - [ ] **Do not author a breakdown to improve the number.** It would be the first figure in this system typed to make a screen look better, and it is exactly what the counters exist to prevent. `idr-rule-status-harness` EXIT-10 fails the day a real one is authored, and asks for a test of the comparison instead
+### The one posted-and-gated row — say this, it is the strongest thing in the module
+
+**`INV-WFS-20260324-001`. GATED, POSTED and MATCHED at once, and every part of that is true.**
+
+- [x] **"This posted before the check existed, and the check now disagrees."** It answers the question the airline actually has: **what have we already paid that was wrong.** Not a hypothetical and not a rule demonstration — a document that reached MIRO and is now contradicted
+- [x] **The line bills 2,180 kg at 0.85 and states 1,870 — which is 2,200 × 0.85, the ORDERED quantity, not the delivered one.** `INV469` catches it. Measured rather than asserted: `stated 1870 = ORDERED × price YES` / `= DELIVERED × price no`
+- [x] **The timeline holds without the note.** Posted **2026-03-25**; `INV469` entered the registry **2026-04-15**, three weeks later; the gate was first evaluated **2026-09-01**; `detected_by = VALIDATE_FOR_POSTING`. **So POSTED beside an open hard error is not a claim that a blocker was overridden — it is a claim that THE RULE IS YOUNGER THAN THE POSTING**, and the dates carry it
+- [x] **That distinction matters because this repository has now found five notes that said something the data contradicted.** A note is a claim; timestamps are evidence. This row has both, and the evidence stands alone
+- [x] **The rest of the row hangs together: 13 of 14 consistency checks pass and the failure IS `INV469`.** The invoice agrees with `INVOICE_MATCHES` on five of five fields; the match agrees with the PO on six of six. That is what makes it a scenario rather than a seed value
+- [x] **There is exactly ONE such row.** Measured across all 13 invoices. A plural reading of the screen is a misread, not a second case
+
+### The fourth leg — one sentence, and it is the module's entire case
+
+**"The three-way match passes this line. The fourth leg does not."**
+
+- [x] **The match's zero variance is CAUSED by the thing INV469 objects to.** Measured on the same row:
+
+| | compares | result |
+|---|---|---|
+| the three-way match | invoice against **PO** | `amount_variance = 0` |
+| `INV469` | invoice against **itself** | 17 short |
+
+- [x] **Both are right about different pairs of numbers.** The match agrees *precisely because* the amount was computed from the ordered quantity — **and the PO carries that quantity too.**
+- [x] **So a three-way match CANNOT catch an amount derived from the wrong quantity.** Not "does not today" — *cannot*, structurally, because the erroneous figure and the reference agree by construction. The fourth leg — the invoice against the delivery FuelSphere holds — is the only leg that sees it
+- [x] **This is the argument for the fourth leg made by DATA rather than by design.** It is stronger than the HLD's version because nothing here is asserted: `2200 × 0.85 = 1870 = po_amount = inv_amount`, and `2180 × 0.85 = 1853 ≠ 1870`
+
+### Which gate computes, and which is a stored value
+
+- [x] **Say this if both gates are on screen.** `posting_gate` and its five counters are **recomputed on every Validate**. `match_status` is **seeded and never recomputed** — nothing in `srv/` writes `INVOICES.match_status`, and `executeThreeWayMatch` says so itself: *"FuelSphere does not perform the three-way match; SAP does, at MIRO."*
+- [x] **A viewer watching one gate change under Validate and the other never change has no way to know which is which.** It is a header value that LOOKS computed, on a screen where the other gate is
+- [x] **Unverified rather than incorrect.** It agrees with its `INVOICE_MATCHES` row on both seeded rows. **Not a fix — a label**
+
+### And if someone reads MATCHED as POSTED — they already have
+
+- [x] **Two gate-shaped columns side by side, one green and one red, invite that reading.** It happened once and the reading was reasonable
+- [x] **The two gates fail independently by design:** the three-way match succeeded and the validation rules did not. **MATCHED does not mean posted**
+- [x] The QuickInfo now says so **on both columns**, where the misread happens, rather than only here
+- [ ] **Caveat if asked:** nothing computes `INVOICES.match_status` — it is seeded and never recomputed, and `executeThreeWayMatch` says so itself: *"FuelSphere does not perform the three-way match; SAP does, at MIRO."* It agrees with its `INVOICE_MATCHES` row on both seeded rows, so nothing is wrong; it is **unverified rather than incorrect**
 
 
 ### Two things the supplier card does deliberately
