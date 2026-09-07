@@ -334,6 +334,25 @@ Mockup: `docs/design/flight_overview.html`
 - [x] **8 · Burn** — **double width.** The OOOI timeline, block/trip/taxi, and the ground split at closure
 - [x] **9 · Invoicing** — the IDR, the vendor reference, and the posting gate
 
+### The one posted-and-gated row — say this, it is the strongest thing in the module
+
+**`INV-WFS-20260324-001`. GATED, POSTED and MATCHED at once, and every part of that is true.**
+
+- [x] **"This posted before the check existed, and the check now disagrees."** It answers the question the airline actually has: **what have we already paid that was wrong.** Not a hypothetical and not a rule demonstration — a document that reached MIRO and is now contradicted
+- [x] **The line bills 2,180 kg at 0.85 and states 1,870 — which is 2,200 × 0.85, the ORDERED quantity, not the delivered one.** `INV469` catches it. Measured rather than asserted: `stated 1870 = ORDERED × price YES` / `= DELIVERED × price no`
+- [x] **The timeline holds without the note.** Posted **2026-03-25**; `INV469` entered the registry **2026-04-15**, three weeks later; the gate was first evaluated **2026-09-01**; `detected_by = VALIDATE_FOR_POSTING`. **So POSTED beside an open hard error is not a claim that a blocker was overridden — it is a claim that THE RULE IS YOUNGER THAN THE POSTING**, and the dates carry it
+- [x] **That distinction matters because this repository has now found five notes that said something the data contradicted.** A note is a claim; timestamps are evidence. This row has both, and the evidence stands alone
+- [x] **The rest of the row hangs together: 13 of 14 consistency checks pass and the failure IS `INV469`.** The invoice agrees with `INVOICE_MATCHES` on five of five fields; the match agrees with the PO on six of six. That is what makes it a scenario rather than a seed value
+- [x] **There is exactly ONE such row.** Measured across all 13 invoices. A plural reading of the screen is a misread, not a second case
+
+### And if someone reads MATCHED as POSTED — they already have
+
+- [x] **Two gate-shaped columns side by side, one green and one red, invite that reading.** It happened once and the reading was reasonable
+- [x] **The two gates fail independently by design:** the three-way match succeeded and the validation rules did not. **MATCHED does not mean posted**
+- [x] The QuickInfo now says so **on both columns**, where the misread happens, rather than only here
+- [ ] **Caveat if asked:** nothing computes `INVOICES.match_status` — it is seeded and never recomputed, and `executeThreeWayMatch` says so itself: *"FuelSphere does not perform the three-way match; SAP does, at MIRO."* It agrees with its `INVOICE_MATCHES` row on both seeded rows, so nothing is wrong; it is **unverified rather than incorrect**
+
+
 ### Two things the supplier card does deliberately
 
 - [x] **`performs uplift: NO`** → the **uplift contact sits with the AGENT**; invoicing and disputes stay with the supplier

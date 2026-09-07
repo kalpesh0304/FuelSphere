@@ -265,7 +265,6 @@ describe('WP-UI-02 — labels', function () {
         // frozen nine phantom defects into the file as accepted.
         const KNOWN = new Set([
             'InvoiceService.Invoices -> supplier_ID',
-            'InvoiceService.Invoices -> posting_gate',
             'InvoiceService.InvoiceExceptions -> status',
             'InvoiceService.ToleranceRules -> company_code',
             'InvoiceService.ToleranceRules -> station_code',

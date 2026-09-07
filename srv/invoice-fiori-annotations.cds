@@ -434,7 +434,26 @@ annotate InvoiceService.Invoices with {
     payment_terms        @title: 'Payment Terms';
     discount_percent     @title: 'Discount %';
     discount_date        @title: 'Discount Date';
-    match_status         @title: 'Match Status';
+    // THE COLUMN THE MISREAD HAPPENS ON.
+    //
+    // "MATCHED" sits beside "GATED" in the same list, one green and one red,
+    // and to anyone not told the two are independent that reads as a
+    // contradiction - or worse, as POSTED. It has already been read that
+    // way once, and the reading was reasonable: two gate-shaped columns
+    // side by side invite it unless the labels do the work.
+    //
+    // The text goes HERE rather than in a document, because here is where
+    // the misread happens.
+    // AND THE GATE, FROM THE OTHER SIDE. It had no @title at all - it was on
+    // ui02 EXIT-2c's known-unlabelled list, so the filter rendered as
+    // "posting_gate". That entry comes off the list in this change, which is
+    // the ratchet doing its job rather than an unrelated edit.
+    posting_gate         @title: 'Posting Gate'
+                         @Common.QuickInfo: 'Whether FuelSphere will let this invoice post. Separate from Match Status and from Status: the three-way match can succeed while the validation rules fail, and this is the one that blocks. GATED never means the match failed.';
+    gate_evaluated_at    @title: 'Gate Evaluated';
+
+    match_status         @title: 'Match Status'
+                         @Common.QuickInfo: 'Whether the three-way match succeeded — purchase order, goods receipt and invoice. INDEPENDENT OF THE POSTING GATE, which is what actually blocks posting: an invoice can be MATCHED and still be GATED, because the match succeeded and the validation rules did not. MATCHED does not mean posted.';
     price_variance       @title: 'Price Variance' @Measures.ISOCurrency: currency_code;
     quantity_variance    @title: 'Quantity Variance';
     variance_percentage  @title: 'Variance %';
