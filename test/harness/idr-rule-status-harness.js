@@ -96,8 +96,17 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
         // invoices while INV470 was missing from ten of them and INV452 from
         // one. Both came from an edit that aborted after its first change.
         const d = await db();
-        const registry = [...(await C.loadRegistry('2026-09-01')).keys()];
-        const lineRules = registry.filter(c => !HEADER_RULES.includes(c));
+        // UNIMPLEMENTED RULES ARE HEADER-LEVEL, ALWAYS. A rule nothing calls
+        // did not fail to apply to a LINE - it did not run at all, so it
+        // gets one verdict per document rather than one per line. INV453 is
+        // the first: registered with is_implemented = false so the gap
+        // between the 23 the specification names and the 22 the code runs
+        // is visible rather than silent.
+        const reg = await C.loadRegistry('2026-09-01');
+        const registry = [...reg.keys()];
+        const unimplemented = registry.filter(c => C.notImplemented(reg.get(c)));
+        const headerRules = [...HEADER_RULES, ...unimplemented];
+        const lineRules = registry.filter(c => !headerRules.includes(c));
         assert.ok(registry.length >= 20 && lineRules.length >= 15,
             `instrument check: registry looks wrong — ${registry.length} rules, ${lineRules.length} line rules`);
 
@@ -111,7 +120,7 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
             const have = new Set(rows.map(r => `${r.check_code}|${r.invoice_item_ID || ''}`));
 
             const missing = [];
-            for (const c of HEADER_RULES) if (!have.has(`${c}|`)) missing.push(`${c} (header)`);
+            for (const c of headerRules) if (!have.has(`${c}|`)) missing.push(`${c} (header)`);
             for (const it of items) for (const c of lineRules)
                 if (!have.has(`${c}|${it.ID}`)) missing.push(`${c} line ${it.line_number}`);
             assert.strictEqual(missing.length, 0,
@@ -121,12 +130,13 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
 
             const dupes = rows.length - have.size;
             assert.strictEqual(dupes, 0, `${inv.invoice_number}: ${dupes} duplicate verdict(s)`);
-            assert.strictEqual(rows.length, HEADER_RULES.length + lineRules.length * items.length,
+            assert.strictEqual(rows.length, headerRules.length + lineRules.length * items.length,
                 `${inv.invoice_number}: ${rows.length} verdicts, expected `
-              + `${HEADER_RULES.length} + ${lineRules.length} x ${items.length} lines`);
+              + `${headerRules.length} + ${lineRules.length} x ${items.length} lines`);
             checked++;
         }
-        out(`${checked} invoices complete: ${HEADER_RULES.length} header + ${lineRules.length} line rules x lines, `
+        out(`${checked} invoices complete: ${headerRules.length} header (incl. ${unimplemented.length} `
+          + `unimplemented: ${unimplemented.join(',') || 'none'}) + ${lineRules.length} line rules x lines, `
           + `no gaps, no duplicates`);
     });
 

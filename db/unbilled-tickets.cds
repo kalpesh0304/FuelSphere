@@ -131,9 +131,35 @@ entity UNBILLED_TICKETS as select from db.FUEL_TICKETS as t {
         t.delivery_timestamp,
         virtual null as age_days : Integer,
 
+        // KILOGRAMS LEAD. Money follows mass, not count: sixteen unbilled
+        // tickets could be sixteen small top-ups or one widebody uplift,
+        // and the mass is the exposure regardless of how many pieces of
+        // paper it arrived on. The count is the WORK; the mass is the MONEY.
         t.quantity_kg,
         t.uom_code,
         t.quantity_metered,
+
+        // AN ESTIMATE, AND IT IS MARKED AS ONE.
+        //
+        // The order's unit price is what FuelSphere expects to be charged,
+        // not what a supplier has charged - nothing has been invoiced, so
+        // there is no actual. Presenting it unmarked would put a number in
+        // a money column that no document supports.
+        //
+        // NULL WHERE NOTHING RESOLVES, NEVER ZERO. An UNBILLABLE ticket has
+        // no order, so no supplier and no contract, so no price - the same
+        // "no price resolves" the mockup carries. And SUP-MNL-12004 has no
+        // quantity either, so it cannot be estimated by mass OR by value:
+        // the one row in the set that is unquantified in both directions.
+        t.order.unit_price                     as est_unit_price : Decimal(15,4),
+        t.quantity_kg * t.order.unit_price     as est_value      : Decimal(15,2),
+        t.order.currency_code                  as est_currency   : String(3),
+        case
+            when not exists t.order        then 'NO_ORDER'
+            when t.order.unit_price is null then 'NO_PRICE'
+            when t.quantity_kg is null      then 'NO_QUANTITY'
+            else                                 'ORDER_PRICE'
+        end as est_basis : String(12),
         t.flight_number,
         t.aircraft_reg,
         t.match_status,
