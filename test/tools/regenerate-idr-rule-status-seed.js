@@ -1,3 +1,29 @@
+/**
+ * REGENERATE db/data/fuelsphere-IDR_RULE_STATUS.csv AND THE FIVE COUNTERS.
+ *
+ *     npx cds deploy --to sqlite:db.sqlite     <- FIRST. NOT OPTIONAL.
+ *     node test/tools/regenerate-idr-rule-status-seed.js
+ *
+ * RUN IT AGAINST A CLEAN DEPLOY, ALWAYS. The first generation of this seed
+ * was thrown away because it ran against a database where
+ * validateForPosting had already fired over HTTP: INVOICE_EXCEPTIONS then
+ * carried RUNTIME uuids rather than the seeded e0c00000- ones, so every
+ * exception_ID written here would have dangled the moment anyone deployed
+ * afresh - a reference resolving to nothing, arriving in data rather than
+ * in an annotation path.
+ *
+ * The output is checked by idr-rule-status-harness EXIT-3, which compares
+ * THIS CSV against what a run computes, so a seed regenerated from a dirty
+ * database fails there rather than reaching a screen.
+ *
+ * The counters go to /tmp/counters.json for fuelsphere-INVOICES.csv; that
+ * half is applied by hand and is checked by EXIT-1.
+ *
+ * It was committed by accident under test/.probe in the seeding commit.
+ * Kept rather than deleted, because a re-seed is a real operation and the
+ * clean-deploy requirement above is the whole reason to have it written
+ * down instead of reinvented.
+ */
 const cds = require('@sap/cds');
 const fs = require('fs');
 (async () => {
