@@ -1614,6 +1614,31 @@ entity FLIGHT_FUEL_DELIVERIES as select from FUEL_DELIVERIES {
     key ID,
         order,
         order.flight.ID       as flight_ID,
+
+        // ------------------------------------------------------------------
+        // THE GLOBAL FILTER'S FIELDS, CARRIED BY NAME.
+        //
+        // An OVP propagates its global filter to a card BY MATCHING PROPERTY
+        // NAMES on the card's entity. The filter bar is built from
+        // FlightSchedule's SelectionFields - flight_number, flight_date,
+        // origin_airport and the rest - and this view carried flight_ID and
+        // none of them. Zero overlap, so nothing propagated: the page filtered
+        // to AC412 and the card went on showing all 26 deliveries.
+        //
+        // AN OVERVIEW PAGE FOR ONE FLIGHT WHOSE CARDS DO NOT FILTER TO THAT
+        // FLIGHT IS NINE CARDS ABOUT THE FLEET, and the filter bar is
+        // decoration. So the view carries the names rather than the card
+        // carrying a note explaining why it ignores the filter.
+        //
+        // flight_date is the FLIGHT's date and is not delivery_date. A
+        // delivery can be logged after midnight; the filter means the flight.
+        // ------------------------------------------------------------------
+        order.flight.flight_number      as flight_number,
+        order.flight.flight_date        as flight_date,
+        order.flight.origin_airport     as origin_airport,
+        order.flight.destination_airport as destination_airport,
+        order.flight.airline_code       as airline_code,
+
         delivery_number,
         delivery_date,
         delivered_quantity,
