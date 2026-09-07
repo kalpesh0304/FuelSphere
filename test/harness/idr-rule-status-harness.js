@@ -262,6 +262,78 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
           + `${ranks.join(',')}; no blank cell in any visible row`);
     });
 
+    it('EXIT-8  GREY IS DETERMINED BY CASCADE DEPTH — same depth, same grey, exactly', async () => {
+        // THE ARGUMENT FOR THE STATUS COLUMN, AS A MEASUREMENT.
+        //
+        // "A join cannot say WHEN a rule passed" is true and weak. The strong
+        // form: the number of rules a join would have shown green RISES WITH
+        // THE SEVERITY OF THE FIRST FAILURE, because each rung is applicable
+        // only if the one above it succeeded. The worse the document, the
+        // more the join overstates - least trustworthy exactly where it
+        // matters most.
+        //
+        // WHAT THIS ASSERTS, AND WHAT IT DOES NOT.
+        //
+        // It first asserted monotonicity, and A PLANT SHOWED THAT CANNOT
+        // FAIL. Ungating rung 5 from rung 4 broke the gating and left the
+        // means still descending (6 -> 5, still under 11); removing the
+        // gating ENTIRELY also left them descending. Monotonicity is a
+        // property of "downstream checks need upstream results", which is
+        // the data flow rather than the code, so asserting it guards
+        // nothing. EXIT-3 caught that plant, one criterion earlier.
+        //
+        // So this asserts the sharper thing the measurement actually showed:
+        // ZERO VARIANCE WITHIN EACH DEPTH. Grey is not correlated with
+        // cascade depth, it is DETERMINED by it - every line failing at rung
+        // 1 carries exactly 14, every fully-resolved line exactly 3. That
+        // fails the moment a rule's applicability depends on anything other
+        // than how far the cascade got, which is a real change and one
+        // nobody would announce.
+        const d = await db();
+        const CASCADE = ['INV450','INV462','INV463','INV464','INV466'];
+        const rows = await d.run(SELECT.from('fuelsphere.IDR_RULE_STATUS')
+            .columns('invoice_item_ID','line_number','check_code','status')
+            .where({ invoice_item_ID: { '!=': null } }));
+        const byLine = new Map();
+        for (const r of rows) {
+            if (!byLine.has(r.invoice_item_ID)) byLine.set(r.invoice_item_ID, []);
+            byLine.get(r.invoice_item_ID).push(r);
+        }
+        assert.ok(byLine.size >= 10, `instrument check: only ${byLine.size} lines to measure over`);
+
+        const bucket = new Map();
+        for (const [id, rs] of byLine) {
+            let depth = CASCADE.length;
+            for (let i = 0; i < CASCADE.length; i++) {
+                const v = rs.find(r => r.check_code === CASCADE[i]);
+                if (v && v.status === 'FAILED') { depth = i; break; }
+            }
+            if (!bucket.has(depth)) bucket.set(depth, []);
+            bucket.get(depth).push({ id, na: rs.filter(r => r.status === 'NOT_APPLICABLE').length });
+        }
+        const seen = [...bucket.keys()].sort((a, b) => a - b);
+        assert.ok(seen.length >= 3,
+            `instrument check: lines fail at only ${seen.length} distinct depth(s), so this proves little`);
+
+        const report = [];
+        let prev = Infinity;
+        for (const dep of seen) {
+            const b = bucket.get(dep);
+            const counts = [...new Set(b.map(x => x.na))];
+            const label = dep === CASCADE.length ? 'resolved' : `rung${dep + 1}`;
+            assert.strictEqual(counts.length, 1,
+                `${b.length} lines all first fail at ${label} and carry DIFFERENT grey counts `
+              + `(${counts.sort((a,c)=>a-c).join(', ')}). Applicability has started depending on something `
+              + `other than how far the cascade got, and whatever that something is, nobody wrote it down.`);
+            report.push(`${label}=${counts[0]}`);
+            // Monotonicity is reported, not guarded - see the note above.
+            assert.ok(counts[0] <= prev, `grey rose at ${label}`);
+            prev = counts[0];
+        }
+        out(`${byLine.size} lines, grey per line by first failing rung: ${report.join('  ')} `
+          + `— exact within each depth`);
+    });
+
     it('EXIT-7  the exceptions raised are UNCHANGED by the verdict recorder', async () => {
         // The recorder restructured every check site. This is the criterion
         // that says the restructure was additive: same exceptions, same
