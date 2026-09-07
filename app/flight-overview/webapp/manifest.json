@@ -107,10 +107,11 @@
           "subTitle": "the reconciliation verdict, per delivery",
           "entitySet": "FLIGHT_FUEL_DELIVERIES",
           "annotationPath": "com.sap.vocabularies.UI.v1.LineItem#FuelStatusCard",
-          "listType": "condensed",
+          "listType": "extended",
           "listFlavor": "standard",
-          "sortBy": "delivery_date",
-          "sortOrder": "descending"
+          "sortBy": "recon_variance_kg",
+          "sortOrder": "descending",
+          "valueSelectionInfo": "sorted by variance, largest first"
         }
       }
     },

@@ -892,3 +892,23 @@ annotate PlanningService.AircraftRegistrations with @(
         }
     }
 );
+
+// ============================================================================
+// A — THE FILTER BAR'S LABEL.
+//
+// SelectionFields carries NO inline label. A LineItem entry can say
+// `{ Value: x, Label: 'Y' }` and that renders; a filter field has only the
+// PROPERTY'S label, so a property with none shows its technical name.
+//
+// That is why the flight list's supplier filter rendered as "supplier_name"
+// while every LineItem column beside it read correctly - the columns carry
+// inline labels and the filter cannot.
+//
+// PlanningService.Suppliers/supplier_name carried only Common.FieldControl,
+// from @mandatory, and no Common.Label at all.
+// ============================================================================
+annotate PlanningService.Suppliers with {
+    supplier_name @title: 'Supplier';
+    supplier_code @title: 'Supplier Code';
+    supplier_type @title: 'Supplier Type';
+};
