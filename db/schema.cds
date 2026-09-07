@@ -608,18 +608,27 @@ entity FLIGHT_SCHEDULE : cuid, AuditTrail {
                                   on orders.flight = $self;
         dispatches          : Association to many FLIGHT_DISPATCH
                                   on dispatches.flight_schedule = $self;
-        // DECLARED AND DELIBERATELY UNRENDERED. Two reasons, and the second
-        // is checkable.
+        // REVERSED. RENDERED ON PlanningService SINCE E2b.
         //
-        // A burn is after the fact: a planner plans, an analyst reads burns,
-        // and the walkthrough already crosses to BurnService for those stops.
+        // WHAT THIS SAID, AND WHY IT WAS CLOSED. Two reasons: a burn is after
+        // the fact - a planner plans, an analyst reads burns - and NO SERVICE
+        // exposed both FLIGHT_SCHEDULE and FUEL_BURNS navigably, so all five
+        // projections emitted "No OData navigation property generated" for
+        // this element. Rendering it meant a fourth projection of an entity
+        // BurnService owns, to serve a reader who is a different person.
         //
-        // And NO SERVICE exposes both FLIGHT_SCHEDULE and FUEL_BURNS
-        // navigably - all five services that project FLIGHT_SCHEDULE emit
-        // "No OData navigation property generated" for this element. Putting
-        // burns on the flight page therefore means a FOURTH projection of an
-        // entity BurnService owns and annotates, to serve a reader who is a
-        // different person. Same shape as the four Package D left closed.
+        // WHAT CHANGED. The second reason was a consequence of the first, not
+        // an independent one - nothing exposed the pair because nobody had
+        // decided to. The decision is now taken and stated: PlanningService
+        // exposes, READ-ONLY, what a flight reaches. A flight reaches its
+        // burn. The authorisation point settles the "different reader"
+        // objection - a projection does not grant anything @restrict does not.
+        //
+        // WHAT DID NOT CHANGE. BurnService still OWNS this entity: it holds
+        // the handlers, the variance ladder and the write paths. The Planning
+        // projection is @readonly and annotated for one card. Ownership and
+        // reachability are different questions, and conflating them is what
+        // kept this closed.
         burns               : Association to many FUEL_BURNS
                                   on burns.flight = $self;
 
@@ -1663,6 +1672,23 @@ entity FLIGHT_FUEL_TICKETS as select from FUEL_TICKETS {
     key ID,
         order,
         order.flight.ID              as flight_ID,
+
+        // THE GLOBAL FILTER'S NAMES, for the reason written out on
+        // FLIGHT_FUEL_DELIVERIES above. flight_ID IS NOT ONE OF THEM: the
+        // OVP filter bar is built from FlightSchedule's SelectionFields, and
+        // FlightSchedule's key is ID, so it never emits flight_ID. A view
+        // carrying only flight_ID overlaps the filter on NOTHING and the
+        // card shows all 30 tickets on a page about one flight.
+        //
+        // That was measured rather than reasoned: checking that the entity
+        // had a flight reference is a different question from checking that
+        // it has the name the filter propagates BY.
+        order.flight.flight_number       as flight_number,
+        order.flight.flight_date         as flight_date,
+        order.flight.origin_airport      as origin_airport,
+        order.flight.destination_airport as destination_airport,
+        order.flight.airline_code        as airline_code,
+
         order.supplier.supplier_name as supplier_name : String(100),
         ticket_number,
         quantity_metered,
@@ -1674,6 +1700,60 @@ entity FLIGHT_FUEL_TICKETS as select from FUEL_TICKETS {
         aircraft_reg,
         tail,
         delivery
+};
+
+/**
+ * FLIGHT_AIRCRAFT - the tail, reachable from the flight AND filterable by it.
+ *
+ * WHY A VIEW RATHER THAN A STRIP. The overview page's identity strip already
+ * carries tail and type, so a static strip duplicates it. And a card that
+ * ignores the global filter is a card about something else - on
+ * AIRCRAFT_REGISTRATIONS, which carries no flight reference at all, the
+ * Aircraft card would render the whole 31-tail fleet on a page about one
+ * flight.
+ *
+ * WHY IT WANTS TO BE A REAL CARD. MLW, MZFW and engine_burn_rate_kgph are
+ * NOWHERE IN THE MODEL today - not on the tail, not on the type. They arrive
+ * with work package B, and they arrive HERE. A header strip would have to
+ * become a card on that day; a card gains three columns.
+ *
+ * MTOW is the one that exists, and it is on AIRCRAFT_MASTER (the TYPE), not
+ * on the registration - so it is reached through the type and is the same
+ * figure for every tail of that type. That is a fact about the model, not a
+ * shortcut: the day B lands a per-tail MTOW, this line changes and nothing
+ * else does.
+ */
+entity FLIGHT_AIRCRAFT as select from FLIGHT_SCHEDULE {
+    key ID                          as flight_ID,
+
+        // The global filter's names, carried for propagation. Unlike the two
+        // views above this entity IS the flight, so they are its own columns
+        // rather than a two-hop reach.
+        flight_number,
+        flight_date,
+        origin_airport,
+        destination_airport,
+        airline_code,
+        aircraft_type,
+
+        // The tail, and what the model actually holds about it.
+        tail,
+        tail.registration              as registration,
+        tail.aircraft_type_code        as tail_type_code,
+        tail.dry_operating_weight_kg   as dow_kg,
+        tail.fuel_capacity_kg          as fuel_capacity_kg,
+        tail.apu_burn_rate_kg_hr       as apu_burn_rate_kg_hr,
+
+        // ON THE TYPE, NOT THE REGISTRATION, and this is measured rather
+        // than assumed: AIRCRAFT_REGISTRATIONS carries dry_operating_weight_kg,
+        // fuel_capacity_kg and apu_burn_rate_kg_hr; mtow_kg and
+        // cruise_burn_kgph live on AIRCRAFT_MASTER, the TYPE. So MTOW is the
+        // same figure for every tail of a type. A fact about the model, not
+        // a shortcut - the day B lands a per-tail MTOW this line changes and
+        // nothing else does.
+        tail.aircraft_type.mtow_kg       as mtow_kg,
+        tail.aircraft_type.cruise_burn_kgph as cruise_burn_kgph,
+        tail.aircraft_type.aircraft_model   as aircraft_model
 };
 
 // ============================================================================
