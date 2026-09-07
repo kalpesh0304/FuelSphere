@@ -84,6 +84,20 @@ annotate InvoiceService.Invoices with @(
             { Value: open_soft_count, Label: 'Soft', ![@UI.Importance]: #Medium },
             { Value: warning_count,   Label: 'Warnings', ![@UI.Importance]: #Low },
 
+            // COVERAGE, WHICH THE THREE COUNTS ABOVE CANNOT EXPRESS.
+            //
+            // They count OPEN EXCEPTIONS. A document with zero hard, zero
+            // soft and zero warnings reads as fully checked and clean, and
+            // on INV-BPUK it is neither: sixteen of its twenty-two rules
+            // NEVER RAN. "Not checked" and "checked and fine" look
+            // identical in those three columns and are not the same news.
+            //
+            // Passed and Not checked are next to each other deliberately.
+            // The pair is the reading; either alone misleads.
+            { Value: rules_passed,         Label: 'Passed',      ![@UI.Importance]: #High },
+            { Value: rules_not_applicable, Label: 'Not checked', ![@UI.Importance]: #High },
+            { Value: rules_evaluated,      Label: 'Rules run',   ![@UI.Importance]: #Medium },
+
             { Value: s4_document_number, Label: 'S/4 Doc', ![@UI.Importance]: #Low }
         ],
 
@@ -116,8 +130,34 @@ annotate InvoiceService.Invoices with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#MatchingStatus',
                 Label  : 'Matching'
+            },
+            // SECOND IN READING ORDER AFTER THE GATE, because the gate says
+            // whether the document may post and this says how much of that
+            // verdict rests on anything having been looked at.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#RuleCoverage',
+                Label  : 'Rule coverage'
             }
         ],
+
+        // THE FIVE, AND THEY SUM. Shown together because the sum is the
+        // reading: a document with 5 passed and 16 not checked is not the
+        // same document as one with 21 passed, and the three exception
+        // counts above cannot tell them apart.
+        FieldGroup#RuleCoverage: {
+            Data: [
+                { Value: rules_evaluated,      Label: 'Rules run' },
+                { Value: rules_passed,         Label: 'Passed' },
+                { Value: rules_failed,         Label: 'Failed' },
+                { Value: rules_bypassed,       Label: 'Bypassed' },
+                // LAST AND NAMED PLAINLY. "Not applicable" is the technical
+                // term and reads as dismissible; "Not checked" is what it
+                // means to the person deciding whether to trust the verdict.
+                { Value: rules_not_applicable, Label: 'Not checked' },
+                { Value: gate_evaluated_at,    Label: 'Last run' }
+            ]
+        },
 
         // WHY THE GATE IS ITS OWN GROUP AND NOT A LINE IN #InvoiceStatus.
         // status is where the invoice is in its own lifecycle; posting_gate
@@ -202,6 +242,19 @@ annotate InvoiceService.Invoices with @(
                 ID     : 'Exceptions',
                 Label  : 'Checks that fired',
                 Target : 'exceptions/@UI.LineItem'
+            },
+            // THE FULL RULE TABLE, IMMEDIATELY AFTER THE EXCEPTIONS.
+            //
+            // The exceptions facet above answers "what is wrong". This one
+            // answers "what was looked at", and the two are different
+            // questions - which is the entire point. A clerk reading only
+            // the exception list sees one red row on INV-BPUK and cannot
+            // tell that sixteen rules never ran.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'RuleStatuses',
+                Label  : 'Rules — what ran and what did not',
+                Target : 'rule_statuses/@UI.LineItem'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -1136,3 +1189,143 @@ annotate InvoiceService.InvoiceApprovals with {
     escalated_to      @title: 'Escalated To';
     escalation_reason @title: 'Escalation Reason' @UI.MultiLineText;
 };
+
+// ===========================================================================
+// IDR RULE STATUS — WHAT RAN, WHAT PASSED, AND WHAT NOBODY LOOKED AT
+//
+// The table INVOICE_EXCEPTIONS cannot be. An exception exists because
+// something was wrong; these rows exist whatever happened, so the screen can
+// say that a rule PASSED and — the member that justifies the entity — that a
+// rule NEVER RAN.
+//
+// The colour carries the finding. NOT_APPLICABLE is NEUTRAL, never green:
+// green would say "checked and fine" about a rule nothing evaluated, which
+// is the join-by-absence error rendered in CSS.
+// ===========================================================================
+annotate InvoiceService.IdrRuleStatus with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Rule Verdict',
+            TypeNamePlural : 'Rule Verdicts',
+            Title          : { Value: check_code },
+            Description    : { Value: status }
+        },
+
+        // Usable as a list in its own right, so the coverage question can be
+        // asked ACROSS documents: every NOT_APPLICABLE on every invoice is
+        // one filter away. The entity is addressable (200, measured), which
+        // is what makes this more than decoration.
+        SelectionFields: [ check_code, check_group, status, invoice_ID ],
+
+        LineItem: [
+            { Value: check_code,  Label: 'Check', ![@UI.Importance]: #High },
+            { Value: rule.check_name, Label: 'What it checks', ![@UI.Importance]: #High },
+            { Value: check_group, Label: 'Group', ![@UI.Importance]: #Medium },
+            { Value: line_number, Label: 'Line', ![@UI.Importance]: #Medium },
+            {
+                Value: status,
+                Label: 'Verdict',
+                Criticality: statusCriticality,
+                ![@UI.Importance]: #High
+            },
+            // Null on anything that did not fail, and that is right: severity
+            // is a property of a finding, not of a rule that passed.
+            { Value: severity, Label: 'Severity', ![@UI.Importance]: #Medium },
+
+            // THE COLUMN THAT MAKES NOT_APPLICABLE READABLE. Without it the
+            // verdict is a grey word and a clerk has to guess whether the
+            // rule was irrelevant or whether the document defeated it.
+            { Value: na_reason, Label: 'Why it did not run', ![@UI.Importance]: #High },
+            { Value: message,   Label: 'Detail', ![@UI.Importance]: #Medium },
+            { Value: evaluated_at, Label: 'Evaluated', ![@UI.Importance]: #Low }
+        ],
+
+        PresentationVariant: {
+            // FAILED, then NOT_APPLICABLE, then BYPASSED, then PASSED.
+            //
+            // ON verdictRank AND NOT ON statusCriticality. Criticality was
+            // the obvious key and it is wrong: the palette runs 0 neutral,
+            // 1 red, 2 orange, 3 green, so ascending would put the SIXTEEN
+            // GREY ROWS ABOVE THE ONE RED ONE on INV-BPUK. Measured by
+            // running the query, not by reading the annotation.
+            //
+            // Not `status` either - that is FAILED, NOT_APPLICABLE, PASSED
+            // by alphabetical accident, right today and silently wrong the
+            // day a verdict is added.
+            //
+            // NOT_APPLICABLE sits SECOND deliberately. A clerk who reads
+            // only the reds has exactly the blind spot the exception list
+            // already gave them; the grey rows are what this table is for.
+            SortOrder: [
+                { Property: verdictRank, Descending: false },
+                { Property: line_number, Descending: false },
+                { Property: check_code,  Descending: false }
+            ],
+            Visualizations: [ '@UI.LineItem' ]
+        },
+
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'RuleVerdict',
+              Target: '@UI.FieldGroup#RuleVerdict', Label: 'Verdict' },
+            { $Type: 'UI.ReferenceFacet', ID: 'RuleContext',
+              Target: '@UI.FieldGroup#RuleContext', Label: 'What was evaluated' }
+        ],
+
+        FieldGroup#RuleVerdict: {
+            Data: [
+                { Value: check_code, Label: 'Check' },
+                { Value: status, Label: 'Verdict', Criticality: statusCriticality },
+                { Value: severity, Label: 'Severity' },
+                { Value: severity_source, Label: 'Severity from' },
+                { Value: na_reason, Label: 'Why it did not run' },
+                { Value: message, Label: 'Detail' }
+            ]
+        },
+
+        FieldGroup#RuleContext: {
+            Data: [
+                { Value: invoice.invoice_number, Label: 'Invoice' },
+                { Value: line_number, Label: 'Line' },
+                { Value: check_group, Label: 'Group' },
+                { Value: evaluated_at, Label: 'Evaluated at' },
+                { Value: evaluated_by, Label: 'Evaluated by' },
+                { Value: bypassed_by, Label: 'Bypassed by' },
+                { Value: bypassed_at, Label: 'Bypassed at' },
+                { Value: bypass_reason, Label: 'Bypass reason' }
+            ]
+        }
+    }
+);
+
+// Titles on every field, because a SelectionFields entry carries no inline
+// label and a filter with a technical name is the ui02 finding.
+annotate InvoiceService.IdrRuleStatus with {
+    check_code      @title: 'Check';
+    check_group     @title: 'Check Group';
+    line_number     @title: 'Line';
+    status          @title: 'Verdict';
+    severity        @title: 'Severity';
+    severity_source @title: 'Severity From';
+    na_reason       @title: 'Why It Did Not Run';
+    message         @title: 'Detail';
+    evaluated_at    @title: 'Evaluated At';
+    evaluated_by    @title: 'Evaluated By';
+    bypassed_by     @title: 'Bypassed By';
+    bypassed_at     @title: 'Bypassed At';
+    bypass_reason   @title: 'Bypass Reason';
+    invoice         @title: 'Invoice';
+    invoice_item    @title: 'Invoice Line';
+    rule            @title: 'Registry Rule';
+    exception       @title: 'Exception';
+}
+
+// And on the five counters, for the same reason.
+annotate InvoiceService.Invoices with {
+    rules_evaluated      @title: 'Rules Run';
+    rules_passed         @title: 'Passed';
+    rules_failed         @title: 'Failed';
+    rules_bypassed       @title: 'Bypassed';
+    // NOT "Not Applicable". The technical term reads as dismissible; this is
+    // the number that says how much of the verdict rests on nothing.
+    rules_not_applicable @title: 'Not Checked';
+}

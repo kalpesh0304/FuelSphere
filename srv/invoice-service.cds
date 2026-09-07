@@ -16,6 +16,15 @@
 
 using { fuelsphere as db } from '../db/schema';
 
+// THE NEW FILE MUST BE NAMED HERE OR THE GATE CANNOT SEE IT.
+//
+// `cds serve` loads all of db/ and srv/; `cds compile srv` loads only what
+// srv/ imports. Without this line the server would serve IDR_RULE_STATUS
+// correctly over HTTP while `cds compile srv` reported "Artifact has not
+// been found" - the recorded trap, and the dangerous way round, because the
+// running server is right and the gate is wrong.
+using { fuelsphere as idr } from '../db/idr-rule-status';
+
 @path: '/odata/v4/invoice'
 service InvoiceService {
 
@@ -327,6 +336,74 @@ service InvoiceService {
     };
 
     /**
+     * IdrRuleStatus - ONE ROW PER DOCUMENT PER APPLICABLE RULE
+     *
+     * The verdict of a run, for EVERY rule, including the ones that produced
+     * nothing. InvoiceExceptions carries the evidence of a failure; this
+     * carries what happened to each rule, and its reason for existing is the
+     * member the exception table cannot hold: NOT_APPLICABLE.
+     *
+     * Read-only over OData. These rows are the output of runChecks and
+     * writing one by hand would assert that a rule was evaluated when it was
+     * not - which is the exact claim this entity exists to make trustworthy.
+     */
+    @readonly
+    entity IdrRuleStatus as projection on idr.IDR_RULE_STATUS {
+        *,
+        invoice      : redirected to Invoices,
+        invoice_item : redirected to InvoiceItems,
+        rule         : redirected to InvoiceCheckRegistry,
+        exception    : redirected to InvoiceExceptions,
+
+        // THE FOUR VERDICTS IN COLOUR, AND NOT_APPLICABLE IS NOT GREEN.
+        //
+        // 0 is NEUTRAL - grey. A rule that did not apply is neither good nor
+        // bad news and colouring it green is the join-by-absence error
+        // rendered in CSS: it would say "checked and fine" about a rule that
+        // never ran. That is the whole finding, so the palette has to carry
+        // it too.
+        //
+        // BYPASSED is orange, never green, following lifecycleCriticality on
+        // InvoiceExceptions: still true, and someone accepted it anyway.
+        case status
+            when 'PASSED'   then 3
+            when 'FAILED'   then 1
+            when 'BYPASSED' then 2
+            else 0
+        end as statusCriticality : Integer,
+
+        // A SORT RANK, BECAUSE CRITICALITY IS NOT ONE.
+        //
+        // Sorting on statusCriticality ascending was the obvious move and it
+        // is WRONG, which executing the binding is what showed: the palette
+        // runs 0 neutral, 1 red, 2 orange, 3 green, so ascending puts the
+        // SIXTEEN GREY ROWS ABOVE THE ONE RED ONE and buries the finding
+        // under the thing the finding is about. Criticality orders by colour
+        // and colour is not urgency - 0 sits below 1 only because "neutral"
+        // was assigned the spare number.
+        //
+        // The reading order is a decision, and it is this:
+        //
+        //   1 FAILED          what is wrong
+        //   2 NOT_APPLICABLE  what nobody looked at - second because it is
+        //                     the whole point of the table, and a clerk who
+        //                     reads only the reds has the same blind spot
+        //                     the exception list already gave them
+        //   3 BYPASSED        what was released, and by whom
+        //   4 PASSED          what is fine, and it goes last
+        //
+        // Calculated rather than virtual so it can be sorted on at all:
+        // $orderby runs in the database, before an after-READ handler would
+        // ever see the row.
+        case status
+            when 'FAILED'         then 1
+            when 'NOT_APPLICABLE' then 2
+            when 'BYPASSED'       then 3
+            else 4
+        end as verdictRank : Integer
+    };
+
+    /**
      * ToleranceRules - Variance Tolerance Configuration
      * Admin only - Finance Manager role
      *
@@ -552,6 +629,21 @@ service InvoiceService {
         canPost             : Boolean;
         checksRegistered    : Integer;      // How many rows the registry held
         checksSkipped       : Integer;      // Registered but not implemented
+
+        // THE FIVE COUNTERS, AND THE POINT IS THAT THEY SUM.
+        //
+        //     rulesEvaluated = passed + failed + bypassed + notApplicable
+        //
+        // checksRegistered is NOT one of them and is not their total: a
+        // line rule is evaluated once per line, so twenty-two registered
+        // rules give seventy-three verdicts on a four-line document. The
+        // registry says what COULD run; these say what DID.
+        rulesEvaluated      : Integer;
+        rulesPassed         : Integer;
+        rulesFailed         : Integer;
+        rulesBypassed       : Integer;
+        rulesNotApplicable  : Integer;      // NOT a pass. Nothing looked at it
+
         exceptionsRaised    : Integer;
         hardErrors          : Integer;
         softErrors          : Integer;
