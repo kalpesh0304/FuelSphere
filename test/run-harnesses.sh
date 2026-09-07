@@ -47,6 +47,27 @@ for f in "${files[@]}"; do
     pass_total=$(( pass_total + ${pass:-0} ))
     fail_total=$(( fail_total + ${fail:-0} ))
     [ "$code" -ne 0 ] && failed_files=$(( failed_files + 1 ))
+
+    # A HARNESS MOCHA CANNOT SEE IS NOT A PASSING HARNESS.
+    #
+    # ovp-manifest-harness was written with node:test. Run under mocha it
+    # registered no mocha tests, so mocha printed "0 passing", its six
+    # criteria ran inside node:test's own runner, and this script reported
+    # `ovp-manifest-harness 0 0 0` - indistinguishable from a clean run.
+    #
+    # Worse, it could not turn the suite red: node:test sets
+    # process.exitCode = 1 on failure and mocha then exits 0 because ITS
+    # failure count is zero. Measured with a planted assertion.
+    #
+    # Zero and zero is therefore an ERROR, not a pass. Form-agnostic on
+    # purpose: it catches node:test, a mistyped describe, and any future
+    # runner mocha does not speak, without knowing about any of them.
+    if [ "${pass:-0}" -eq 0 ] && [ "${fail:-0}" -eq 0 ]; then
+        printf '%-26s %-6s %-12s %s\n' "$n" "$code" "NO-TESTS" "mocha saw no tests"
+        failed_files=$(( failed_files + 1 ))
+        continue
+    fi
+
     printf '%-26s %-6s %-12s %s\n' "$n" "$code" "${pass:-0}" "${fail:-0}"
 done
 
