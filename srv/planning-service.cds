@@ -368,6 +368,23 @@ service PlanningService {
     @cds.autoexpose
     entity FLIGHT_FUEL_DELIVERIES as projection on db.FLIGHT_FUEL_DELIVERIES;
 
+    /**
+     * FlightFuelTickets - the metered leg, per flight.
+     *
+     * THE TWIN OF THE ABOVE, and unaddressable for the same reason: CAP
+     * auto-exposed it as an association target of FlightSchedule, marked it
+     * @cds.autoexposed, and its auth layer then returns 405 on any direct
+     * read. The Flight Fuel Overview's FUEL TICKETS card names this entity
+     * set, so without this it would render empty with no error a viewer can
+     * see.
+     *
+     * Found by sweeping every entity set on every service for addressability
+     * BEFORE the remaining cards were written, rather than after.
+     */
+    @readonly
+    @cds.autoexpose
+    entity FLIGHT_FUEL_TICKETS as projection on db.FLIGHT_FUEL_TICKETS;
+
     @readonly
     entity Manufacturers as projection on db.MANUFACTURE;
 
