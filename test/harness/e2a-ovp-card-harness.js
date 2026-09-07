@@ -52,14 +52,29 @@ describe('E2a — the one-card OVP', () => {
     out(`sap.ovp present, libs include sap.ovp, bound to ${m['sap.app'].dataSources.mainService.uri}`);
   });
 
-  it('EXIT-2  exactly one card, and it names an entity set and an annotation', () => {
+  it('EXIT-2  the FUEL STATUS card is first and well-formed', () => {
+    // THIS ASSERTED "exactly one card" AND WAS RIGHT WHEN WRITTEN. E2b added
+    // seven more and it began failing on correct work - a merged package's
+    // criterion no longer holding, which is D39's shape caught the same hour
+    // rather than months later.
+    //
+    // Narrowed rather than deleted: the rest of this file is about THE FUEL
+    // STATUS CARD specifically, and EXIT-5b deliberately pins that card's
+    // sort argument where it cannot be deleted alongside the change. The
+    // card COUNT now belongs to e2b-eight-cards-harness EXIT-1, which owns
+    // the eight-not-nine decision.
     const cards = manifest()['sap.ovp'].cards;
     const names = Object.keys(cards);
-    assert.strictEqual(names.length, 1, `expected one card, found ${names.length}`);
-    const s = cards[names[0]].settings;
+    assert.ok(names.length >= 1, 'the page has no cards at all');
+    const first = names[0];
+    assert.ok(/fuelStatus/i.test(first),
+      `the first card is "${first}", not the fuel status card. It is first because it is the `
+    + `verdict - the answer to the question the page is open to settle. Reordering it is a `
+    + `decision about what a planner reads first.`);
+    const s = cards[first].settings;
     assert.ok(s.entitySet, 'the card names no entity set');
     assert.ok(s.annotationPath, 'the card names no annotation');
-    out(`${names[0]}: ${s.entitySet} / ${s.annotationPath}`);
+    out(`${names.length} card(s); first is ${first}: ${s.entitySet} / ${s.annotationPath}`);
   });
 
   it('EXIT-3  THE ANNOTATION EXISTS — checked in the emitted EDMX, with the qualifier', () => {

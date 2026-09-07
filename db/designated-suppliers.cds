@@ -237,6 +237,17 @@ entity FLIGHT_DESIGNATION as select from db.FLIGHT_SCHEDULE as f
         case when d.flight_number is null then 'STATION' else 'FLIGHT' end
                           as axis : String(8),
 
+        // AN EXPLICIT READING ORDER, NOT THE ALPHABET.
+        //
+        // 'FLIGHT' < 'STATION' is true and sorting on `axis` would work
+        // today - by alphabetical accident, and silently wrong the day a
+        // third axis is added. That is the recorded trap, and naming it in a
+        // comment while relying on it anyway is not answering it.
+        //
+        // FLIGHT first because it is the axis that GOVERNS where both exist.
+        case when d.flight_number is null then 2 else 1 end
+                          as axis_rank : Integer,
+
         d.station_code,
         d.carrier_code,
         d.designation_type,

@@ -382,12 +382,33 @@ service PlanningService {
      * `annotate ... with @( ... )` term block, which is the D50 asymmetry in
      * a third variant.
      *
-     * @cds.autoexpose IS REQUIRED AND IS NOT COSMETIC. CAP marks a view it
-     * auto-exposed as @cds.autoexposed, and its auth layer REFUSES A DIRECT
-     * READ of any such entity - `@cds.autoexposed && !@cds.autoexpose` returns
-     * 405 "not explicitly exposed as part of the service"
+     * @cds.autoexpose IS REDUNDANT HERE, AND THE ORIGINAL NOTE SAID
+     * OTHERWISE. CORRECTED BY A PLANT, E2b.
+     *
+     * The mechanism is real: CAP marks a view it auto-exposed as
+     * @cds.autoexposed, and the auth layer refuses a direct read of any such
+     * entity - `@cds.autoexposed && !@cds.autoexpose` returns 405 "not
+     * explicitly exposed as part of the service"
      * (libx/_runtime/common/generic/auth/utils.js). The entity is in the
      * metadata, has an EntitySet, carries annotations, and cannot be read.
+     *
+     * WHAT WAS WRONG WAS WHICH LINE FIXES IT. Removing @cds.autoexpose from
+     * this block and re-reading gives 200, not 405 - measured. It is the
+     * EXPLICIT `entity ... as projection on ...` DECLARATION that makes the
+     * set addressable; once that exists the entity is no longer merely
+     * auto-exposed, so the guard never applies. Both changes were made in
+     * one commit and the annotation got the credit.
+     *
+     * The 405 is still reachable and still bites: CONTRACT_LOCATIONS,
+     * CONTRACT_PRODUCTS and FORMULA_COMPONENTS return it on this service
+     * today, because nothing declares them. e2b-eight-cards-harness EXIT-2
+     * is planted against one of those rather than against this block, which
+     * is the difference between a criterion that fires and one that reads
+     * as though it would.
+     *
+     * KEPT rather than removed: it is harmless, it documents the intent, and
+     * it is what makes the exposure survive a future refactor that drops the
+     * explicit declaration.
      *
      * That sharpens D47's second kind: an auto-exposed view is not merely
      * "declared everywhere and navigable nowhere", it is ADDRESSABLE NOWHERE.
