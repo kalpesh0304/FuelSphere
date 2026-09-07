@@ -108,7 +108,18 @@ describe('E2a — the one-card OVP', () => {
     out(`${paths.length} fields, all present: ${paths.join(', ')}`);
   });
 
-  it('EXIT-5  THE BINDING RETURNS ROWS — the check a person looking cannot make', async () => {
+  it('EXIT-5  THE ROWS THE CARD WILL SHOW — not the rows the entity has', async () => {
+    // THE RULE THIS CRITERION GOT WRONG FIRST TIME, AND THE ONE THE REMAINING
+    // EIGHT CARDS NEED.
+    //
+    // It used to assert "at least one row has a value in each field" across
+    // the whole entity. True, useless, and it never looked at WHAT THE TOP
+    // ROWS WOULD BE. The card shows five; the assertion looked at twenty-six.
+    // It printed `first: recon_status=NOT_RECONCILED fob_delta_kg=null` and
+    // the criterion passed anyway.
+    //
+    // A card criterion asserts THE DATA THE CARD WILL SHOW - the card's own
+    // sortBy, its own order, its own row count.
     const s = Object.values(manifest()['sap.ovp'].cards)[0].settings;
     const [term, qualifier] = s.annotationPath.split('#');
     const short = term.replace('com.sap.vocabularies.UI.v1.', 'UI.');
@@ -119,22 +130,52 @@ describe('E2a — the one-card OVP', () => {
         `<Annotation Term="${short}" Qualifier="${qualifier}">([\\s\\S]*?)</Annotation>`))[1];
     const paths = [...coll.matchAll(/<PropertyValue Property="Value" Path="([^"]+)"/g)].map(m => m[1]);
 
-    // Exactly what the card asks the service for.
+    // THE CARD'S OWN QUERY, in the card's own order.
+    const VISIBLE = 5;   // an OVP list card shows five before "show more"
     const url = `/odata/v4/planning/${s.entitySet}?$select=${paths.join(',')}`
-              + (s.sortBy ? `&$orderby=${s.sortBy} ${s.sortOrder === 'descending' ? 'desc' : 'asc'}` : '');
+              + (s.sortBy ? `&$orderby=${s.sortBy} ${s.sortOrder === 'descending' ? 'desc' : 'asc'}` : '')
+              + `&$top=${VISIBLE}`;
     const { data } = await test.GET(url);
-    assert.ok(Array.isArray(data.value), 'the card query did not return a collection');
-    assert.ok(data.value.length > 0,
-      'THE CARD WOULD RENDER EMPTY. The binding resolves and returns no rows.');
+    assert.strictEqual(data.value.length, VISIBLE,
+      `the card can only show ${data.value.length} rows - it will look half-built`);
 
-    // And not merely rows - rows with VALUES. A card of nulls is an empty card
-    // that passes a row count.
-    for (const p of paths) {
-      const populated = data.value.filter(r => r[p] !== null && r[p] !== undefined).length;
-      assert.ok(populated > 0, `every row is null in "${p}" - the card would show a blank column`);
-    }
+    // EVERY VISIBLE ROW must carry a value in every column. Not "some row
+    // somewhere" - these five are what a person sees.
+    for (const [n, r] of data.value.entries())
+      for (const p of paths)
+        assert.ok(r[p] !== null && r[p] !== undefined,
+          `visible row ${n + 1} has no ${p} - the card shows a blank cell there`);
+
     const r = data.value[0];
-    out(`${data.value.length} rows; first: ` + paths.map(p => `${p}=${r[p]}`).join('  '));
+    out(`top ${VISIBLE} by ${s.sortBy} ${s.sortOrder}, no blanks; first: `
+      + paths.map(p => `${p}=${r[p]}`).join('  '));
+  });
+
+  it('EXIT-5b  THE SORT IS A DECISION, and this is where it is written', async () => {
+    // manifest.json cannot hold a comment, and the schema's
+    // additionalProperties:false means an invented _comment key fails
+    // ovp-manifest EXIT-5. So the reasoning lives HERE, where it fails loudly
+    // if someone restores the obvious default rather than being deleted
+    // alongside the change.
+    const s = Object.values(manifest()['sap.ovp'].cards)[0].settings;
+    assert.strictEqual(s.sortBy, 'recon_variance_kg',
+      'THE SORT IS recon_variance_kg DESCENDING, AND "newest first" IS WRONG HERE.\n'
+    + '  delivery_date desc surfaces the five most RECENT deliveries, which are all\n'
+    + '  NOT_RECONCILED with a null gauge and a null variance. Every verdict worth\n'
+    + '  seeing is on 10 April. A controller wants what is WRONG, not what is recent.\n'
+    + '  Not recon_status desc either: it puts VARIANCE first by ALPHABETICAL ACCIDENT\n'
+    + '  and breaks silently the day a status is added.\n'
+    + '  KNOWN COST: a large NEGATIVE variance sorts last, as do nulls, so the card\n'
+    + '  shows what is measured and wrong rather than what is unmeasured. The card\n'
+    + '  header\'s "N of 26" is what stops the rest being hidden by omission.');
+    assert.strictEqual(s.sortOrder, 'descending');
+    // And the cost is real, not theoretical - prove a null exists to sort last.
+    const { data } = await test.GET(
+      `/odata/v4/planning/${s.entitySet}?$filter=recon_variance_kg eq null&$select=delivery_number`);
+    assert.ok(data.value.length > 0,
+      'instrument check: no null variance exists, so the stated cost is not the real one');
+    out(`sortBy recon_variance_kg descending; ${data.value.length} rows have a null variance `
+      + `and sort last, which is the stated cost`);
   });
 
   it('EXIT-6  the global filter entity is real, and relates the card to a flight', async () => {
