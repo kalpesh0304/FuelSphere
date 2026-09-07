@@ -17,6 +17,12 @@
  */
 
 using { fuelsphere as db } from '../db/schema';
+// DESIGNATED_SUPPLIERS lives in its own file, and schema.cds cannot see it -
+// that file imports schema.cds, so the dependency runs one way only. Without
+// this second `using`, `cds compile srv` reports "Artifact has not been found"
+// while `cds serve` succeeds, because serve loads all of db/ and srv/ and
+// compile does not. A model that boots and will not compile.
+using { fuelsphere as ds } from '../db/designated-suppliers';
 
 @path: '/odata/v4/planning'
 service PlanningService {
@@ -384,6 +390,24 @@ service PlanningService {
     @readonly
     @cds.autoexpose
     entity FLIGHT_FUEL_TICKETS as projection on db.FLIGHT_FUEL_TICKETS;
+
+    /**
+     * DesignatedSuppliers — who fuels this flight, at this station, on this date.
+     *
+     * Exposed so FLIGHT_SCHEDULE.designation emits a navigation. Without the
+     * target here CAP drops the association silently ("target is outside of
+     * service") and the flight page's supplier block has nothing to bind to -
+     * D47's first kind.
+     */
+    @readonly
+    entity DesignatedSuppliers as projection on db.DESIGNATED_SUPPLIERS {
+        *,
+        station             : redirected to Airports,
+        supplier            : redirected to Suppliers,
+        supplier_contract   : redirected to Contracts,
+        into_plane_agent    : redirected to Suppliers,
+        into_plane_contract : redirected to Contracts
+    };
 
     @readonly
     entity Manufacturers as projection on db.MANUFACTURE;
