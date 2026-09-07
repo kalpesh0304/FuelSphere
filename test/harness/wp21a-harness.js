@@ -440,16 +440,40 @@ it('EXIT-13 — the registry is complete and every declared check is implemented
     const groups = {};
     for (const r of reg) (groups[r.check_group] ||= []).push(r.check_code);
     for (const [g,c] of Object.entries(groups)) out(`  ${g.padEnd(11)} ${c.length}  ${c.join(' ')}`);
-    assert.strictEqual(reg.length, 22, '22 checks in scope for 21A');
-    const unimplemented = reg.filter(r => r.is_implemented === false);
-    out(`  ${reg.length} registered, ${unimplemented.length} not implemented`);
-    assert.strictEqual(unimplemented.length, 0, 'every 21A check has an implementation — the S/4 ones are 21B');
+    // THIS ASSERTED 22 AND "EVERY DECLARED CHECK IS IMPLEMENTED", WHICH WAS
+    // TRUE WHEN WRITTEN AND IS NOW FALSE BY DESIGN. INV453 was added with
+    // is_implemented = false deliberately: the specification names 23 rules,
+    // the engine runs 22, and before that row NOTHING ANYWHERE RECORDED THE
+    // DIFFERENCE - not even the column the registry carries for exactly this.
+    //
+    // D39's shape again, caught the same session rather than in weeks.
+    // Narrowed to what it should always have said: every check the engine is
+    // EXPECTED to run is implemented, and every one it is not carries a
+    // reason. A row marked unimplemented with no reason is the state this
+    // criterion now guards - an invisible gap wearing a visible marker.
+    // NOT `=== false`: SQLite returns the CDS Boolean as 0. That comparison
+    // was inert in raise() for months.
+    const unimplemented = reg.filter(r => K.notImplemented(r));
+    const implemented   = reg.filter(r => !K.notImplemented(r));
+    assert.strictEqual(implemented.length, 22, '22 checks in scope for 21A');
+    out(`  ${reg.length} registered = ${implemented.length} implemented + ${unimplemented.length} not`);
+    for (const u of unimplemented) {
+        assert.ok((u.not_implemented_reason || '').trim().length > 30,
+            `${u.check_code} is marked not implemented and gives no reason — indistinguishable from `
+          + `a row somebody flagged and forgot`);
+        out(`  NOT IMPLEMENTED  ${u.check_code}  ${u.not_implemented_reason.slice(0, 72)}`);
+    }
 
-    // every registered code is one the engine can actually raise
+    // every IMPLEMENTED code is one the engine can actually raise. An
+    // unimplemented one is expected to be absent from K.C - that is what
+    // unimplemented means.
     const known = new Set(Object.values(K.C));
-    const orphans = reg.filter(r => !known.has(r.check_code)).map(r => r.check_code);
+    const orphans = implemented.filter(r => !known.has(r.check_code)).map(r => r.check_code);
     assert.deepStrictEqual(orphans, [], 'a registered code the engine never emits is a silent no-op');
-    out(`  all 22 codes are emitted by the engine — none is a declared no-op`);
+    const wrongly = unimplemented.filter(r => known.has(r.check_code)).map(r => r.check_code);
+    assert.deepStrictEqual(wrongly, [],
+        `${wrongly} is marked not implemented and the engine DOES emit it — the flag is lying`);
+    out(`  all ${implemented.length} implemented codes are emitted by the engine — none is a declared no-op`);
 });
 
 });

@@ -1363,3 +1363,128 @@ annotate InvoiceService.Invoices with {
     rules_not_applicable @title: 'Not Checked'
                          @Common.QuickInfo: 'Rules that DID NOT RUN on this document. This is not a pass - nothing looked at them. Open "Rules - what ran and what did not" for the reason on each; several are standing gaps in the data rather than facts about this invoice.';
 }
+
+// ===========================================================================
+// UNBILLED TICKETS — the exposure list and the coverage report, one entity
+//
+// KILOGRAMS LEAD. Money follows mass, not count: sixteen unbilled tickets
+// could be sixteen small top-ups or one widebody uplift. The mass is the
+// MONEY, the count is the WORK, and a controller asking "how bad is this"
+// means the first while "how much is there to do" means the second. Both
+// are on the row; the mass is first.
+// ===========================================================================
+annotate InvoiceService.UnbilledTickets with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Ticket',
+            TypeNamePlural : 'Ticket Billing Status',
+            Title          : { Value: ticket_number },
+            Description    : { Value: billing_state }
+        },
+
+        // station_code is a filter DELIBERATELY, even though it cannot cover
+        // every row: the four UNBILLABLE tickets have no order and therefore
+        // no station, and they read UNKNOWN rather than being excluded. An
+        // unmatched uplift with no station is still a finding - somebody put
+        // fuel in an aircraft somewhere and nobody knows where - and hiding
+        // it from a station-filtered view hides the worst row in the set.
+        SelectionFields: [ billing_state, station_code, est_basis, flight_number ],
+
+        LineItem: [
+            { Value: billing_state, Label: 'State',
+              Criticality: stateCriticality, ![@UI.Importance]: #High },
+            { Value: ticket_number,   Label: 'Ticket',        ![@UI.Importance]: #High },
+            // THE MASS FIRST. It is the exposure regardless of how many
+            // pieces of paper it arrived on.
+            { Value: quantity_kg,     Label: 'Mass (kg)',     ![@UI.Importance]: #High },
+            { Value: est_value,       Label: 'Est. value',    ![@UI.Importance]: #High },
+            { Value: est_basis,       Label: 'Estimated from', ![@UI.Importance]: #High },
+            { Value: age_days,        Label: 'Age (days)',    ![@UI.Importance]: #High },
+            { Value: station_code,    Label: 'Station',       ![@UI.Importance]: #Medium },
+            { Value: delivery_timestamp, Label: 'Delivered',  ![@UI.Importance]: #Medium },
+            { Value: flight_number,   Label: 'Flight',        ![@UI.Importance]: #Medium },
+            { Value: aircraft_reg,    Label: 'Tail',          ![@UI.Importance]: #Low }
+        ],
+
+        PresentationVariant: {
+            // UNBILLABLE, THEN UNBILLED, THEN BILLED — on state_rank, not on
+            // the state string. 'BILLED' < 'UNBILLABLE' < 'UNBILLED'
+            // alphabetically puts the settled rows first and the worst in
+            // the middle: right for no reason and wrong the day a state is
+            // added.
+            //
+            // AND WITHIN A STATE, OLDEST FIRST — on delivery_timestamp
+            // ascending, NOT on age_days. age_days is virtual and filled
+            // after READ, so the database never sees it and cannot order by
+            // it. The timestamp gives the identical order and sorts where
+            // sorting belongs.
+            SortOrder: [
+                { Property: state_rank,         Descending: false },
+                { Property: delivery_timestamp, Descending: false }
+            ],
+            Visualizations: [ '@UI.LineItem' ]
+        },
+
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'Exposure',
+              Target: '@UI.FieldGroup#Exposure', Label: 'Exposure' },
+            { $Type: 'UI.ReferenceFacet', ID: 'TicketContext',
+              Target: '@UI.FieldGroup#TicketContext', Label: 'The uplift' }
+        ],
+
+        FieldGroup#Exposure: {
+            Data: [
+                { Value: billing_state, Label: 'State', Criticality: stateCriticality },
+                { Value: quantity_kg,   Label: 'Mass (kg)' },
+                { Value: est_value,     Label: 'Estimated value' },
+                { Value: est_unit_price, Label: 'Estimated unit price' },
+                { Value: est_currency,  Label: 'Currency' },
+                // HOW THE ESTIMATE WAS REACHED, BESIDE IT. An estimate with
+                // no basis is a number in a money column that no document
+                // supports.
+                { Value: est_basis,     Label: 'Estimated from' },
+                { Value: age_days,      Label: 'Age (days)' },
+                { Value: delivery_timestamp, Label: 'Delivered' }
+            ]
+        },
+
+        FieldGroup#TicketContext: {
+            Data: [
+                { Value: internal_number,     Label: 'Internal number' },
+                { Value: supplier_ticket_ref, Label: 'Supplier reference' },
+                { Value: station_code,        Label: 'Station' },
+                { Value: flight_number,       Label: 'Flight' },
+                { Value: aircraft_reg,        Label: 'Tail' },
+                { Value: quantity_metered,    Label: 'Metered' },
+                { Value: uom_code,            Label: 'UoM' },
+                { Value: match_status,        Label: 'Order match' }
+            ]
+        }
+    }
+);
+
+annotate InvoiceService.UnbilledTickets with {
+    ticket_number    @title: 'Ticket Number';
+    internal_number  @title: 'Internal Number';
+    supplier_ticket_ref @title: 'Supplier Reference';
+    billing_state    @title: 'Billing State'
+                     @Common.QuickInfo: 'BILLED - an invoice line references this ticket. UNBILLED - no invoice line yet, but the ticket has an order, so a supplier can still bill it. UNBILLABLE - no invoice line AND NO ORDER: fuel reached an aircraft with nothing in FuelSphere authorising it and no purchase order any invoice could ever match. The third is not a worse version of the second, it is a different problem for a different person.';
+    state_rank       @title: 'State Rank';
+    station_code     @title: 'Station'
+                     @Common.QuickInfo: 'Resolved through the order. UNKNOWN where the ticket has no order - shown rather than excluded, because an uplift nobody can place is still a finding.';
+    age_days         @title: 'Age (days)'
+                     @Common.QuickInfo: 'Days since the fuel went on the aircraft. THIS IS AN AGE, NOT A DEADLINE. 02-BEHAVIOUR specifies claim windows - a written claim within 15 days, quality defects within 30, after which the right is waived - and a claim window sorts by TIME REMAINING while this sorts oldest-first. NOTHING IN THE MODEL HOLDS A CLAIM WINDOW, so that second column is absent rather than omitted, and this list does not tell you what expires today.';
+    quantity_kg      @title: 'Mass (kg)';
+    quantity_metered @title: 'Metered Quantity';
+    uom_code         @title: 'Unit of Measure';
+    est_value        @title: 'Estimated Value'
+                     @Common.QuickInfo: 'The ORDER''S price times the mass, never an invoice''s - nothing has been invoiced, so there is no actual. NULL where nothing resolves, never zero.';
+    est_unit_price   @title: 'Estimated Unit Price';
+    est_currency     @title: 'Currency';
+    est_basis        @title: 'Estimated From'
+                     @Common.QuickInfo: 'ORDER_PRICE - the order carried a unit price. NO_ORDER - the ticket reaches no order, so no supplier and no contract and no price. NO_PRICE - an order with no unit price. NO_QUANTITY - no mass to multiply.';
+    delivery_timestamp @title: 'Delivered';
+    flight_number    @title: 'Flight Number';
+    aircraft_reg     @title: 'Tail';
+    match_status     @title: 'Order Match';
+}

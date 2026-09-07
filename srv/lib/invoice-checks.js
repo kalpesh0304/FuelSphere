@@ -87,6 +87,23 @@ const C = {
  * registry — but it also means a missing row is silent, so the caller is told
  * how many rows it found and the harness asserts on that.
  */
+/**
+ * IS THIS RULE REGISTERED AND NOT IMPLEMENTED?
+ *
+ * NOT `=== false`. SQLite stores a CDS Boolean as 0/1 and a raw
+ * db.run(SELECT...) does not coerce it, so `is_implemented` arrives as the
+ * NUMBER 0. raise() has carried `if (reg.is_implemented === false)` since
+ * WP-21A and IT HAS NEVER FIRED - on any rule, ever. The registry's own
+ * mechanism for recording "declared and not built" was not merely unused,
+ * it was inert, and nothing would have told anyone.
+ *
+ * Found while adding INV453, whose whole purpose is to make that gap
+ * visible. Same family as the recorded "a search that matches one form is
+ * silently partial": a comparison written for one representation of a value
+ * that has two.
+ */
+const notImplemented = (r) => r.is_implemented === false || r.is_implemented === 0;
+
 async function loadRegistry(asOfDate, tx) {
     const db = tx || cds.db;
     const rows = await db.run(SELECT.from('fuelsphere.INVOICE_CHECK_REGISTRY'));
@@ -201,7 +218,7 @@ function ladder(variancePct, rule, fallbackSeverity) {
 function raise(registry, code, opts = {}) {
     const reg = registry.get(code);
     if (!reg) return { skipped: 'NOT_REGISTERED', check_code: code };
-    if (reg.is_implemented === false) return { skipped: 'NOT_IMPLEMENTED', check_code: code };
+    if (notImplemented(reg)) return { skipped: 'NOT_IMPLEMENTED', check_code: code };
 
     const severity = opts.severity || reg.default_severity;
     return {
@@ -858,6 +875,25 @@ async function runChecks(invoice, items, opts, tx) {
     }
 
     // ---- DUPLICATES, as their own pass ------------------------------------
+    // ---- RULES THAT ARE REGISTERED AND NOT IMPLEMENTED --------------------
+    //
+    // A rule nothing calls produces no verdict at all, and silence is the
+    // state this whole entity exists to end. INV453 is registered with
+    // is_implemented = false precisely so the gap between the 23 the
+    // specification names and the 22 the code runs is VISIBLE - emitting
+    // nothing for it would put the gap back where it was.
+    //
+    // Header-level, because an unimplemented rule did not fail to apply to a
+    // LINE; it did not run at all. And the reason comes from the registry
+    // rather than from here, so the record and the screen cannot disagree.
+    for (const [code, reg] of registry) {
+        if (!notImplemented(reg)) continue;
+        note(code, {}, 'NOT_APPLICABLE',
+             reg.not_implemented_reason
+                 ? `Registered and NOT IMPLEMENTED. ${reg.not_implemented_reason}`
+                 : 'Registered and not implemented; nothing evaluated it.');
+    }
+
     // THROUGH push(), NOT STRAIGHT ONTO exceptions. The old line bypassed
     // the collector, which was harmless while push() only appended - it is
     // not harmless now, because push() is what records the FAILED verdict.
@@ -962,6 +998,6 @@ async function checkComponents(invoice, items, resolutions, registry, tx, note) 
 
 module.exports = {
     C, SEV, GATING, isGating, r2, r4, num,
-    loadRegistry, resolveTolerance, ladder, raise,
+    loadRegistry, notImplemented, resolveTolerance, ladder, raise,
     resolveLine, detectDuplicates, deriveTotals, checkComponents, runChecks
 };
