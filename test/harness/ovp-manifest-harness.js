@@ -30,7 +30,21 @@ const PROJECT = require('node:path').resolve(__dirname, '..', '..');
 const assert  = require('node:assert');
 const fs      = require('node:fs');
 const path    = require('node:path');
-const { describe, it } = require('node:test');
+// THE RUNNER COUNTS MOCHA, SO THIS HARNESS MUST BE MOCHA.
+//
+// Written with node:test, it ran under `npx mocha <file>` and mocha saw NO
+// TESTS. Six criteria executed inside node:test's own runner, printed TAP,
+// and were invisible to run-harnesses.sh, which scrapes mocha's "N passing".
+// It reported `ovp-manifest-harness 0 0 0` for weeks.
+//
+// AND IT COULD NOT TURN THE SUITE RED. Measured with a planted failure:
+// node:test sets process.exitCode = 1, mocha then calls process.exit(0)
+// because ITS OWN failure count is zero, and the shell sees 0. A harness
+// that cannot fail is the vacuous pass one level up - not an assertion that
+// cannot fail, a whole harness that cannot.
+//
+// Every other harness here uses mocha's globals. This one is the outlier and
+// is now the same shape as the rest.
 const out = s => process.stdout.write('      ' + s + '\n');
 
 const SCHEMA = JSON.parse(fs.readFileSync(`${__dirname}/../schemas/OverviewPageConfig.json`, 'utf8'));
