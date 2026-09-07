@@ -334,6 +334,81 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
           + `— exact within each depth`);
     });
 
+    it('EXIT-9  RUNG 5 IS UNEXERCISED BY DATA, and says so', async () => {
+        // NOT A PASSING TEST DRESSED AS COVERAGE. Written in the shape
+        // d-designated-suppliers EXIT-8 uses for carrier scoping, and for
+        // the same reason: a criterion that is silent about what it does not
+        // reach reads as though it reached everything.
+        //
+        // EXIT-4 asserts the cascade below a FAILED INV450. Rungs 2, 3 and 4
+        // each fail on exactly one seeded line. RUNG 5 - INV466, no goods
+        // receipt - FAILS ON NONE, so the last arm of the cascade is
+        // asserted only by construction: the code says it can fail and no
+        // data has ever made it.
+        //
+        // HOW IT FAILS, AND IT IS MEANT TO: the day a line is seeded with an
+        // order and no goods receipt, this criterion breaks and demands to
+        // be replaced by one that tests the arm rather than reporting it
+        // missing. A gap that closes silently is a gap nobody notices
+        // closing.
+        const d = await db();
+        const CASCADE = ['INV450','INV462','INV463','INV464','INV466'];
+        const hits = {};
+        for (const c of CASCADE) {
+            const n = await d.run(SELECT.from('fuelsphere.IDR_RULE_STATUS')
+                .columns('count(*) as n').where({ check_code: c, status: 'FAILED' }));
+            hits[c] = n[0].n;
+        }
+        assert.strictEqual(hits.INV466, 0,
+            `INV466 now fails on ${hits.INV466} line(s) — rung 5 has become testable and this `
+          + `criterion should be REPLACED by one that asserts what happens below it, not one that `
+          + `reports the arm as unreached`);
+        for (const c of CASCADE.slice(0, 4)) assert.ok(hits[c] > 0,
+            `${c} fails on no line either — the gap is wider than this criterion claims`);
+        out(`cascade failures in the seed: `
+          + CASCADE.map(c => `${c}=${hits[c]}`).join('  ')
+          + `  — rung 5 UNEXERCISED, asserted only by construction`);
+    });
+
+    it('EXIT-10  COMPONENT COVERAGE IS UNEXERCISED BY DATA — D54, and says so', async () => {
+        // THE FLOOR OF 3 ON A FULLY RESOLVED LINE IS NOT THE CASCADE.
+        //
+        // component_breakdown is null on every DERIVED_PRICES row, so INV471
+        // and INV472 have never run on any line, ever. They are grey on 14 of
+        // 14 resolved lines for a reason that has nothing to do with the
+        // document being read.
+        //
+        // A clean invoice therefore reads "3 not checked" and someone will
+        // call that close enough. The counter is honest; the inference from
+        // it would not be. This criterion is where that sentence lives so it
+        // is not only in a defect row.
+        //
+        // NOT FIXED HERE, deliberately: authoring a component breakdown is a
+        // pricing decision, and inventing one to improve a counter would be
+        // the first figure in this system typed to make a screen look
+        // better. The day a real one is authored this criterion fails and
+        // asks for a test of the comparison instead.
+        const d = await db();
+        const dp = await d.run(SELECT.from('fuelsphere.DERIVED_PRICES')
+            .columns('ID','is_current','component_breakdown'));
+        const withBreakdown = dp.filter(r => r.component_breakdown);
+        assert.strictEqual(withBreakdown.length, 0,
+            `${withBreakdown.length} of ${dp.length} DERIVED_PRICES rows now carry a component_breakdown — `
+          + `INV471/INV472 have become testable and this criterion should be REPLACED by one that `
+          + `asserts the charge-versus-contract comparison`);
+
+        // And the consequence, stated rather than left to be inferred: every
+        // fully resolved line carries these two as NOT_APPLICABLE.
+        const na = await d.run(SELECT.from('fuelsphere.IDR_RULE_STATUS')
+            .columns('check_code','status').where({ check_code: { in: ['INV471','INV472'] } }));
+        const ran = na.filter(r => r.status !== 'NOT_APPLICABLE');
+        assert.strictEqual(ran.length, 0,
+            `${ran.length} component-coverage verdict(s) are not NOT_APPLICABLE, which contradicts `
+          + `there being no breakdown to compare against`);
+        out(`${dp.length} derived prices, 0 with a component_breakdown; all ${na.length} INV471/INV472 `
+          + `verdicts are NOT_APPLICABLE — "3 not checked" on a clean invoice is this, twice, plus INV470`);
+    });
+
     it('EXIT-7  the exceptions raised are UNCHANGED by the verdict recorder', async () => {
         // The recorder restructured every check site. This is the criterion
         // that says the restructure was additive: same exceptions, same
