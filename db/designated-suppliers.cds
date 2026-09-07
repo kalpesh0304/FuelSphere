@@ -186,3 +186,63 @@ extend db.FLIGHT_SCHEDULE with {
                       on  station_default.station_code   = origin_airport
                       and station_default.flight_number is null;
 }
+
+
+/**
+ * FLIGHT_DESIGNATION - the designations that APPLY to a flight, both axes.
+ *
+ * WHY THE CARD CANNOT BIND DESIGNATED_SUPPLIERS DIRECTLY. A card filtered by
+ * flight_number sees only flight-scoped rows, and MEASURED AGAINST THE SEED
+ * only TWO OF TWENTY-TWO flights have one - AC410 and AC102. The other twenty
+ * resolve to a station default, whose flight_number is null and which the
+ * filter therefore excludes. The card would render empty on twenty flights
+ * with nothing to say why: the eighth cause of an empty section.
+ *
+ * WHAT THIS ENUMERATES, AND WHAT IT DELIBERATELY DOES NOT DECIDE.
+ *
+ * It selects the designations whose SCOPE and DATE WINDOW admit this flight,
+ * and carries `axis` so a reader can see which is the flight-level row and
+ * which is the station default. That matches the decision already taken in
+ * package D: where a flight-level designation exists, the station block still
+ * shows, labelled rather than hidden.
+ *
+ * IT DOES NOT PICK A WINNER. Specificity-before-priority is the tie-break and
+ * it lives in ONE place - srv/lib/designation-resolver.js, over
+ * parameter-store's resolveEffective. Reimplementing that ordering in SQL
+ * would be D44 exactly: a second independent implementation of one rule,
+ * which nobody would notice disagreeing until it did.
+ *
+ * The date window IS reproduced here, and that is a filter rather than a
+ * tie-break: a row outside its validity does not APPLY, so showing it would
+ * be wrong on a card as well as in the resolver.
+ */
+entity FLIGHT_DESIGNATION as select from db.FLIGHT_SCHEDULE as f
+    join DESIGNATED_SUPPLIERS as d
+      on  d.station_code = f.origin_airport
+      and ( d.flight_number = f.flight_number or d.flight_number is null )
+      and ( d.valid_from is null or d.valid_from <= f.flight_date )
+      and ( d.valid_to   is null or d.valid_to   >= f.flight_date )
+{
+    key f.ID              as flight_ID,
+    key d.ID              as designation_ID,
+
+        // The global filter's names.
+        f.flight_number,
+        f.flight_date,
+        f.origin_airport,
+        f.destination_airport,
+        f.airline_code,
+
+        // WHICH AXIS ANSWERED. The whole reason both rows are shown.
+        case when d.flight_number is null then 'STATION' else 'FLIGHT' end
+                          as axis : String(8),
+
+        d.station_code,
+        d.carrier_code,
+        d.designation_type,
+        d.priority,
+        d.valid_from,
+        d.valid_to,
+        d.supplier,
+        d.into_plane_agent
+};
