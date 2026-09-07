@@ -487,7 +487,37 @@ service PlanningService {
      * second is the same silence as an Aircraft card that omits MLW.
      */
     @readonly
-    entity SupplierRoleContacts as projection on sc.SUPPLIER_ROLE_CONTACTS;
+    entity SupplierRoleContacts as projection on sc.SUPPLIER_ROLE_CONTACTS {
+        *,
+        // A ROLE WITH NO CONTACT IS ORANGE, NOT RED AND NOT GREY.
+        //
+        // Not red: BP UK having no disputes contact is a gap in our records,
+        // not a fault of this flight. Not neutral either - grey would read
+        // as "nothing to say here", and the whole reason the row exists is
+        // that there IS something to say.
+        case when primary_name is null then 2 else 3 end
+            as contactCriticality : Integer
+    };
+
+    /**
+     * FlightContacts — who to ring for THIS flight, by party and role.
+     *
+     * The facet cannot be `designation/supplier/role_contacts`: designation
+     * is an Association to MANY, so that path needs a key at the first hop
+     * and Fiori has none. Measured - GET FlightSchedule(<id>)/designation/
+     * supplier returns 404. Every hop exists and nothing renders.
+     */
+    @readonly
+    entity FlightContacts as projection on sc.FLIGHT_CONTACTS {
+        *,
+        case when primary_name is null then 2 else 3 end
+            as contactCriticality : Integer,
+        // AGENT FIRST. Where the supplier does not perform its own uplift,
+        // the agent is who a planner actually rings, and "time is of the
+        // essence" was the reason given.
+        case party when 'AGENT' then 1 else 2 end
+            as partyRank : Integer
+    };
 
     @readonly
     entity SupplierContacts as projection on sc.SUPPLIER_CONTACTS {

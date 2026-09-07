@@ -47,6 +47,7 @@ namespace fuelsphere;
 
 using { cuid } from '@sap/cds/common';
 using { fuelsphere as db } from './schema';
+using { fuelsphere as dsg } from './designated-suppliers';
 
 /**
  * The four roles, as DATA rather than as an enum.
@@ -155,4 +156,102 @@ extend db.MASTER_SUPPLIERS with {
                     on contacts.supplier = $self;
     role_contacts : Association to many SUPPLIER_ROLE_CONTACTS
                     on role_contacts.supplier_ID = ID;
+}
+
+
+/**
+ * FLIGHT_CONTACTS — who to ring for THIS flight, by party and role.
+ *
+ * WHY A VIEW AND NOT A FACET PATH. The obvious annotation is
+ * `designation/supplier/role_contacts/@UI.LineItem`, and it CANNOT BIND:
+ * FLIGHT_SCHEDULE.designation is an Association to MANY, so the path needs a
+ * key at the first hop and Fiori has none to give. Measured -
+ * GET FlightSchedule(<id>)/designation/supplier returns 404. Every hop
+ * exists, the path resolves on paper, and nothing renders: the D50 class
+ * arriving through cardinality rather than through a wrong name.
+ *
+ * TWO PARTIES ON ONE FLIGHT, AND THE ROLES DIVIDE BETWEEN THEM. Where the
+ * supplier does not perform its own uplift, the UPLIFT contact sits with the
+ * AGENT while invoicing and disputes stay with the SUPPLIER. `party` is what
+ * stops a planner ringing the wrong company at 05:00, and it is a column
+ * rather than two views because one scannable block beats two half-empty
+ * ones.
+ *
+ * Built on FLIGHT_DESIGNATION, so it enumerates the companies that APPLY -
+ * both a flight-level designation and a station default where both exist.
+ *
+ * AND IT IS KEYED ON THE COMPANY, NOT ON THE DESIGNATION. Keyed on
+ * designation_ID it returned SIXTEEN ROWS FOR AC410: two applicable
+ * designations naming the SAME supplier, so every number appeared twice and
+ * the strip that exists to be scanned listed each contact once per rung.
+ * Measured through the navigation, not reasoned about - the same duplication
+ * a left join causes in UNBILLED_TICKETS, arriving somewhere else.
+ *
+ * The group by is what collapses it, and it still shows TWO companies where
+ * two designations name different ones, which is the case that matters.
+ */
+entity FLIGHT_CONTACTS as select from dsg.FLIGHT_DESIGNATION as fd
+    join SUPPLIER_ROLE_CONTACTS as rc
+      on rc.supplier_ID = fd.supplier.ID
+{
+    key fd.flight_ID,
+    key rc.supplier_ID,
+    key rc.role_code,
+
+        fd.flight_number,
+        fd.flight_date,
+        fd.origin_airport,
+        fd.destination_airport,
+        fd.airline_code,
+
+        'SUPPLIER'          as party : String(8),
+        rc.supplier_name,
+        rc.role_name,
+        rc.sort_order,
+        rc.primary_name,
+        rc.primary_position,
+        rc.primary_phone,
+        rc.primary_mobile,
+        rc.primary_email,
+        rc.primary_hours,
+        rc.contact_count,
+        rc.other_count
+} group by fd.flight_ID, rc.supplier_ID, rc.role_code, fd.flight_number, fd.flight_date,
+           fd.origin_airport, fd.destination_airport, fd.airline_code, rc.supplier_name,
+           rc.role_name, rc.sort_order, rc.primary_name, rc.primary_position, rc.primary_phone,
+           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count, rc.other_count
+union all
+select from dsg.FLIGHT_DESIGNATION as fd
+    join SUPPLIER_ROLE_CONTACTS as rc
+      on rc.supplier_ID = fd.into_plane_agent.ID
+{
+    key fd.flight_ID,
+    key rc.supplier_ID,
+    key rc.role_code,
+
+        fd.flight_number,
+        fd.flight_date,
+        fd.origin_airport,
+        fd.destination_airport,
+        fd.airline_code,
+
+        'AGENT'             as party : String(8),
+        rc.supplier_name,
+        rc.role_name,
+        rc.sort_order,
+        rc.primary_name,
+        rc.primary_position,
+        rc.primary_phone,
+        rc.primary_mobile,
+        rc.primary_email,
+        rc.primary_hours,
+        rc.contact_count,
+        rc.other_count
+} group by fd.flight_ID, rc.supplier_ID, rc.role_code, fd.flight_number, fd.flight_date,
+           fd.origin_airport, fd.destination_airport, fd.airline_code, rc.supplier_name,
+           rc.role_name, rc.sort_order, rc.primary_name, rc.primary_position, rc.primary_phone,
+           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count, rc.other_count;
+
+extend db.FLIGHT_SCHEDULE with {
+    contacts : Association to many FLIGHT_CONTACTS on contacts.flight_ID = ID;
 }
