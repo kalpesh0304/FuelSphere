@@ -599,6 +599,21 @@ service InvoiceService {
         canPost             : Boolean;
         checksRegistered    : Integer;      // How many rows the registry held
         checksSkipped       : Integer;      // Registered but not implemented
+
+        // THE FIVE COUNTERS, AND THE POINT IS THAT THEY SUM.
+        //
+        //     rulesEvaluated = passed + failed + bypassed + notApplicable
+        //
+        // checksRegistered is NOT one of them and is not their total: a
+        // line rule is evaluated once per line, so twenty-two registered
+        // rules give seventy-three verdicts on a four-line document. The
+        // registry says what COULD run; these say what DID.
+        rulesEvaluated      : Integer;
+        rulesPassed         : Integer;
+        rulesFailed         : Integer;
+        rulesBypassed       : Integer;
+        rulesNotApplicable  : Integer;      // NOT a pass. Nothing looked at it
+
         exceptionsRaised    : Integer;
         hardErrors          : Integer;
         softErrors          : Integer;

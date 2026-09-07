@@ -92,6 +92,76 @@ module.exports = class InvoiceService extends cds.ApplicationService {
             }
             if (rows.length) await INSERT.into('fuelsphere.INVOICE_EXCEPTIONS').entries(rows);
 
+            // ============================================================
+            // THE RULE STATUSES — one row per applicable rule, INCLUDING
+            // the ones that produced nothing.
+            //
+            // Replaced wholesale on every run, unlike the exceptions above,
+            // and for the opposite reason. An exception survives because a
+            // BYPASS is a judgement somebody made about it. A verdict is
+            // the OUTCOME OF THIS RUN and has nothing to preserve: keeping
+            // a stale one would say a rule was evaluated at a time it was
+            // not, which is the claim this table exists to make honest.
+            //
+            // The bypass is reflected onto the verdict rather than kept in
+            // it: a clerk scanning twenty-two rows should not have to join
+            // to learn that one of the reds was released.
+            // ============================================================
+            await DELETE.from('fuelsphere.IDR_RULE_STATUS').where({ invoice_ID: invoice.ID });
+
+            const regRows = await SELECT.from('fuelsphere.INVOICE_CHECK_REGISTRY')
+                .columns('ID', 'check_code');
+            const regByCode = new Map(regRows.map(r => [r.check_code, r.ID]));
+
+            // A FAILED verdict points AT its exception rather than restating
+            // it. Bypassed exceptions were never re-raised above, so their
+            // key is looked up among the survivors.
+            const excByKey = new Map();
+            for (const r of rows) excByKey.set(`${r.check_code}|${r.invoice_item_ID || ''}`, r);
+            const bypassByKey = new Map();
+            for (const b of bypassed) bypassByKey.set(`${b.check_code}|${b.invoice_item_ID || ''}`, b);
+
+            const statusRows = (result.verdicts || []).map(v => {
+                const k = `${v.check_code}|${v.invoice_item_ID || ''}`;
+                const byp = bypassByKey.get(k);
+                const exc = excByKey.get(k) || byp || null;
+                return {
+                    ID: cds.utils.uuid(),
+                    invoice_ID: invoice.ID,
+                    rule_ID: regByCode.get(v.check_code) || null,
+                    check_code: v.check_code,
+                    check_group: v.check_group,
+                    invoice_item_ID: v.invoice_item_ID,
+                    line_number: v.line_number,
+                    // A rule whose exception is bypassed is BYPASSED, not
+                    // FAILED. It is still true and someone accepted it -
+                    // the same distinction ExceptionStatus makes in words.
+                    status: byp ? 'BYPASSED' : v.status,
+                    severity: (exc && exc.severity) || v.severity || null,
+                    severity_source: (exc && exc.severity_source) || v.severity_source || null,
+                    na_reason: v.na_reason,
+                    exception_ID: exc ? exc.ID : null,
+                    message: byp ? byp.message : v.message,
+                    evaluated_at: now,
+                    evaluated_by: user,
+                    bypassed_by: byp ? byp.modified_by || byp.created_by : null,
+                    bypassed_at: byp ? byp.modified_at : null,
+                    bypass_reason: byp ? byp.cleared_reason : null
+                };
+            });
+            if (statusRows.length) {
+                await INSERT.into('fuelsphere.IDR_RULE_STATUS').entries(statusRows);
+            }
+
+            const count = (st) => statusRows.filter(r => r.status === st).length;
+            const counters = {
+                rules_evaluated:      statusRows.length,
+                rules_passed:         count('PASSED'),
+                rules_failed:         count('FAILED'),
+                rules_bypassed:       count('BYPASSED'),
+                rules_not_applicable: count('NOT_APPLICABLE')
+            };
+
             // The gate counts what is OPEN. A bypassed exception is still
             // true and still recorded — it simply no longer gates, which is
             // the whole point of a bypass.
@@ -110,10 +180,19 @@ module.exports = class InvoiceService extends cds.ApplicationService {
                 gate_evaluated_at: now,
                 open_hard_count: hard,
                 open_soft_count: soft,
-                warning_count: warn
+                warning_count: warn,
+
+                // THE FIVE, AND THEY COUNT A DIFFERENT THING FROM THE THREE
+                // ABOVE. Those count OPEN EXCEPTIONS; these count RULES
+                // EVALUATED. rules_passed and rules_not_applicable have no
+                // counterpart in the three, because a rule that passed and a
+                // rule that never ran both leave no exception behind - which
+                // is the whole reason IDR_RULE_STATUS exists.
+                ...counters
             }).where({ ID: invoice.ID });
 
-            return { rows, hard, soft, warn, gate, bypassedKept: bypassed.length };
+            return { rows, hard, soft, warn, gate, bypassedKept: bypassed.length,
+                     statusRows, counters };
         };
 
         /** Write back what the resolution produced, so it is re-explainable. */
@@ -183,6 +262,11 @@ module.exports = class InvoiceService extends cds.ApplicationService {
                 canPost: p.gate === 'CLEAR',
                 checksRegistered: result.registrySize,
                 checksSkipped: result.skipped.length,
+                rulesEvaluated:     p.counters.rules_evaluated,
+                rulesPassed:        p.counters.rules_passed,
+                rulesFailed:        p.counters.rules_failed,
+                rulesBypassed:      p.counters.rules_bypassed,
+                rulesNotApplicable: p.counters.rules_not_applicable,
                 exceptionsRaised: p.rows.length,
                 hardErrors: p.hard,
                 softErrors: p.soft,
