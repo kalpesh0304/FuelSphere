@@ -1,0 +1,5 @@
+role_code;role_name;description;sort_order;is_active
+UPLIFT;Uplift;Operational contact for the physical fuelling. Sits with the INTO-PLANE AGENT where the supplier does not perform its own uplift;10;true
+OPERATIONS;Operations;24-hour operations desk. The number rung at 05:00;20;true
+INVOICING;Invoicing;Billing queries and invoice corrections. Stays with the SUPPLIER even when an agent performs the uplift;30;true
+DISPUTES;Disputes;Short delivery, quality and quantity claims. Rung last and matters most;40;true

@@ -459,6 +459,22 @@ annotate PlanningService.FlightSchedule with @(
                 Label  : 'This station''s default',
                 Target : 'station_default/@UI.LineItem#StationBlock'
             },
+            // ================================================================
+            // WHO TO RING, AND FOR WHAT. Two blocks, because the answer
+            // differs by party: where the supplier does not perform its own
+            // uplift, the UPLIFT contact sits with the AGENT while invoicing
+            // and disputes stay with the SUPPLIER. One combined block would
+            // put a planner on the phone to the wrong company at 05:00.
+            //
+            // Reached through the designation, which is what resolves WHICH
+            // supplier and WHICH agent for this flight on this date.
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightContacts',
+                Label  : 'Who to ring',
+                Target : 'contacts/@UI.LineItem#ContactStrip'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'AircraftBlock',
@@ -1076,4 +1092,138 @@ annotate PlanningService.FlightAircraft with {
     aircraft_model      @title: 'Aircraft Model';
     flight_number       @title: 'Flight Number';
     flight_date         @title: 'Flight Date';
+}
+
+
+// ===========================================================================
+// C — THE CONTACT STRIP
+//
+// PRIMARY PER ROLE, WITH THE COUNT OF OTHERS. The strip exists so somebody
+// can ring at 05:00: four roles, four numbers, one screen. Showing every
+// contact stops it being scannable, and a planner reading eight rows to find
+// the uplift number has lost the thing the strip was for.
+//
+// AND "+N more" IS THE WHOLE AFFORDANCE. A strip showing one contact with no
+// sign of a second is the same silence as an Aircraft card that omits MLW -
+// correct, and it teaches nothing. other_count says others EXIST without
+// spending a row on them.
+// ===========================================================================
+annotate PlanningService.FlightContacts with @(
+    UI: {
+        // AGENT BEFORE SUPPLIER, THEN sort_order WITHIN EACH.
+        //
+        // On partyRank, not on the party string: 'AGENT' < 'SUPPLIER'
+        // alphabetically and would work today by accident. And within a
+        // party on sort_order, not role_name - DISPUTES comes first
+        // alphabetically and is the one you ring last.
+        PresentationVariant: {
+            SortOrder: [
+                { Property: partyRank,  Descending: false },
+                { Property: sort_order, Descending: false }
+            ],
+            Visualizations: [ '@UI.LineItem#ContactStrip' ]
+        },
+        LineItem #ContactStrip: [
+            // THE PARTY FIRST. Where the supplier does not perform its own
+            // uplift, invoicing and disputes stay with the supplier while
+            // the uplift number is the agent's - and a planner who cannot
+            // see which is which rings the wrong company at 05:00.
+            { Value: party,           Label: 'Party',    ![@UI.Importance]: #High },
+            { Value: supplier_name,   Label: 'Company',  ![@UI.Importance]: #High },
+            { Value: role_name,        Label: 'Role',    ![@UI.Importance]: #High },
+            // "none recorded" arrives as a null primary_name on a row that
+            // EXISTS. The row is the finding; the null is how it reads.
+            { Value: primary_name,     Label: 'Contact', Criticality: contactCriticality,
+              ![@UI.Importance]: #High },
+            // THE THIRD STATE, SPELT OUT. A blank Contact now means two
+            // opposite things and this is the column that separates them:
+            // NOT_APPLICABLE is a fact about the split, NONE_RECORDED is a
+            // gap in our records. role_note carries the one-clause reason.
+            { Value: role_status,      Label: 'Status',  ![@UI.Importance]: #High },
+            { Value: role_note,        Label: 'Why',     ![@UI.Importance]: #High },
+            { Value: primary_phone,    Label: 'Phone',   ![@UI.Importance]: #High },
+            { Value: primary_mobile,   Label: 'Mobile',  ![@UI.Importance]: #Medium },
+            { Value: primary_hours,    Label: 'Hours',   ![@UI.Importance]: #High },
+            { Value: primary_email,    Label: 'Email',   ![@UI.Importance]: #Medium },
+            { Value: other_count,      Label: '+ more',  ![@UI.Importance]: #High },
+            { Value: primary_position, Label: 'Position', ![@UI.Importance]: #Low }
+        ]
+    }
+);
+
+annotate PlanningService.FlightContacts with {
+    party            @title: 'Party';
+    role_status      @title: 'Status'
+                     @Common.QuickInfo: 'PRESENT - a contact answers first for this role. NONE_RECORDED - the company has one and nobody collected it: A GAP. NOT_APPLICABLE - the company does not hold this role at all: A FACT. An agent that does not invoice has no invoicing contact BY DESIGN, and the same blank would otherwise read as a gap.';
+    role_note        @title: 'Why';
+    partyRank        @title: 'Party Order';
+    axis             @title: 'Applies By';
+    supplier_name    @title: 'Company';
+    role_name        @title: 'Role';
+    sort_order       @title: 'Order';
+    primary_name     @title: 'Contact'
+                     @Common.QuickInfo: 'The contact who answers first for this role. Blank means NONE RECORDED for this company — the row is here so the gap is visible, because a missing row is invisible.';
+    primary_position @title: 'Position';
+    primary_phone    @title: 'Phone';
+    primary_mobile   @title: 'Mobile';
+    primary_email    @title: 'Email';
+    primary_hours    @title: 'Hours';
+    contact_count    @title: 'Contacts';
+    other_count      @title: '+ More'
+                     @Common.QuickInfo: 'Contacts BEYOND the one shown. 0 means this is the only one — or that there are none at all, which the blank Contact tells you instead. The strip shows the primary so it stays scannable at 05:00; the others are on the supplier.';
+}
+
+annotate PlanningService.SupplierRoleContacts with {
+    role_code        @title: 'Role Code';
+    role_name        @title: 'Role';
+    sort_order       @title: 'Order';
+    supplier_name    @title: 'Supplier';
+    supplier_code    @title: 'Supplier Code';
+    primary_name     @title: 'Contact'
+                     @Common.QuickInfo: 'The contact who answers first for this role. Blank means NONE RECORDED for this supplier — the row is here so the gap is visible, because a missing row is invisible.';
+    primary_position @title: 'Position';
+    primary_phone    @title: 'Phone';
+    primary_mobile   @title: 'Mobile';
+    primary_email    @title: 'Email';
+    primary_hours    @title: 'Hours';
+    primary_timezone @title: 'Timezone';
+    contact_count    @title: 'Contacts';
+    other_count      @title: '+ More'
+                     @Common.QuickInfo: 'Contacts BEYOND the one shown. 0 means this is the only one — or that there are none at all, which the blank Contact tells you instead. The strip shows the primary so it stays scannable at 05:00; the others are on the supplier.';
+}
+
+annotate PlanningService.SupplierContacts with {
+    contact_name @title: 'Name';
+    position     @title: 'Position';
+    role_code    @title: 'Role';
+    phone        @title: 'Phone';
+    mobile       @title: 'Mobile';
+    email        @title: 'Email';
+    hours        @title: 'Hours';
+    timezone     @title: 'Timezone';
+    is_primary   @title: 'Answers First';
+    valid_from   @title: 'Valid From';
+    valid_to     @title: 'Valid To';
+}
+annotate PlanningService.ContactRoles with {
+    role_code   @title: 'Role Code';
+    role_name   @title: 'Role';
+    description @title: 'Description';
+    sort_order  @title: 'Order';
+}
+
+// ===========================================================================
+// AND THE E2b AIRCRAFT CARD SAYS WHAT THE FLIGHT SCHEDULE ALREADY SAYS
+//
+// The A block above states that MLW, MZFW and engine_burn_rate_kgph ARE NOT
+// IN THE MODEL. The overview card about the SAME TAIL said nothing - seven
+// columns and no indication that three expected fields do not exist. The
+// same subject on two screens, one honest and one silent, and the reasoning
+// sat in a code comment where no reader meets it.
+//
+// Folded in here rather than waiting for work package B, which is when this
+// card GAINS three columns rather than a note.
+// ===========================================================================
+annotate PlanningService.FlightAircraft with {
+    mtow_kg @Common.QuickInfo: 'Maximum take-off weight, from the aircraft TYPE rather than this registration — the same figure for every tail of the type. MLW, MZFW and engine burn rate are NOT IN THE MODEL AT ALL, on the tail or the type, and arrive with work package B. They are missing rather than blank: a field that is not there is a question.';
 }

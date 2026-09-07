@@ -23,6 +23,7 @@ using { fuelsphere as db } from '../db/schema';
 // while `cds serve` succeeds, because serve loads all of db/ and srv/ and
 // compile does not. A model that boots and will not compile.
 using { fuelsphere as ds } from '../db/designated-suppliers';
+using { fuelsphere as sc } from '../db/supplier-contacts';
 
 @path: '/odata/v4/planning'
 service PlanningService {
@@ -473,6 +474,68 @@ service PlanningService {
         supplier         : redirected to Suppliers,
         into_plane_agent : redirected to Suppliers
     };
+
+    /**
+     * SupplierRoleContacts — FOUR ROWS PER SUPPLIER, ALWAYS.
+     *
+     * The strip that lets somebody ring at 05:00. A role with no contact is
+     * a ROW reading "none recorded", not an absence: a missing row is
+     * invisible, and the SME asked for these twice.
+     *
+     * The primary only, with other_count beside it, because the strip exists
+     * to be scanned - and a strip showing one contact with no sign of a
+     * second is the same silence as an Aircraft card that omits MLW.
+     */
+    @readonly
+    entity SupplierRoleContacts as projection on sc.SUPPLIER_ROLE_CONTACTS {
+        *,
+        // A ROLE WITH NO CONTACT IS ORANGE, NOT RED AND NOT GREY.
+        //
+        // Not red: BP UK having no disputes contact is a gap in our records,
+        // not a fault of this flight. Not neutral either - grey would read
+        // as "nothing to say here", and the whole reason the row exists is
+        // that there IS something to say.
+        case when primary_name is null then 2 else 3 end
+            as contactCriticality : Integer
+    };
+
+    /**
+     * FlightContacts — who to ring for THIS flight, by party and role.
+     *
+     * The facet cannot be `designation/supplier/role_contacts`: designation
+     * is an Association to MANY, so that path needs a key at the first hop
+     * and Fiori has none. Measured - GET FlightSchedule(<id>)/designation/
+     * supplier returns 404. Every hop exists and nothing renders.
+     */
+    @readonly
+    entity FlightContacts as projection on sc.FLIGHT_CONTACTS {
+        *,
+        // PRESENT green, NONE_RECORDED orange, NOT_APPLICABLE NEUTRAL.
+        //
+        // Not-applicable is grey for the reason it is grey everywhere else
+        // today: it is a FACT rather than a gap, and orange would say
+        // "chase this" about a company that correctly does not hold the
+        // role. Green would be worse - it would say we have a contact.
+        case role_status
+            when 'PRESENT'        then 3
+            when 'NONE_RECORDED'  then 2
+            else                       0
+        end as contactCriticality : Integer,
+        // AGENT FIRST. Where the supplier does not perform its own uplift,
+        // the agent is who a planner actually rings, and "time is of the
+        // essence" was the reason given.
+        case party when 'AGENT' then 1 else 2 end
+            as partyRank : Integer
+    };
+
+    @readonly
+    entity SupplierContacts as projection on sc.SUPPLIER_CONTACTS {
+        *,
+        supplier : redirected to Suppliers
+    };
+
+    @readonly
+    entity ContactRoles as projection on sc.CONTACT_ROLES;
 
     @readonly
     entity FlightAircraft as projection on db.FLIGHT_AIRCRAFT {
