@@ -101,7 +101,7 @@
     "cards": {
       "card00_fuelStatus": {
         "model": "mainModel",
-        "template": "sap.ovp.cards.list",
+        "template": "sap.ovp.cards.v4.list",
         "settings": {
           "title": "Fuel status",
           "subTitle": "the reconciliation verdict, per delivery",

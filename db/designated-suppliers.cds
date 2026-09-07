@@ -160,7 +160,29 @@ entity DESIGNATED_SUPPLIERS : cuid, db.AuditTrail {
 // beside one that did not.
 // ============================================================================
 extend db.FLIGHT_SCHEDULE with {
+
+    // "Designated for AC410" — an arrangement made for THIS flight.
     designation : Association to many DESIGNATED_SUPPLIERS
                   on  designation.flight_number = flight_number
                   and designation.station_code  = origin_airport;
+
+    // "YYZ default" — what this station does for anything without one.
+    //
+    // A SECOND ASSOCIATION RATHER THAN A CASCADE, AND IT MAKES A BETTER
+    // SCREEN THAN THE SPEC ASKED FOR. Someone will later see two blocks where
+    // the design said one and assume it was a workaround for the join. It is
+    // not.
+    //
+    // A station default means THIS FLIGHT HAS NO SPECIFIC ARRANGEMENT, and a
+    // planner needs to know that. A cascade would have shown one supplier and
+    // said nothing about which axis answered - the information would have
+    // been resolved away.
+    //
+    // flight_number = null is what makes it the station's row and not another
+    // flight's. Without it a designation for a DIFFERENT flight that names
+    // this station would answer here, which is the over-matching join one
+    // rung below where designation-resolver.js guards against it.
+    station_default : Association to many DESIGNATED_SUPPLIERS
+                      on  station_default.station_code   = origin_airport
+                      and station_default.flight_number is null;
 }

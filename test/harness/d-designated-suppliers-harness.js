@@ -65,8 +65,8 @@ describe('D — who fuels this flight', () => {
   });
 
   it('EXIT-4  RUNG 2 does NOT let another flight answer for this station', async () => {
-    // The over-matching join, one rung down. AC101 is designated AT LHR; a
-    // different flight at LHR must NOT pick up AC101's row.
+    // The over-matching join, one rung down. AC102 is designated AT LHR; a
+    // different flight at LHR must NOT pick up AC102's row.
     const r = await resolveDesignation({ flightNumber: 'AC888-NO-SUCH', stationCode: 'LHR',
         asOfDate: '2026-04-10', carrierCode: 'AC' });
     assert.strictEqual(r.resolved, true);
@@ -78,7 +78,7 @@ describe('D — who fuels this flight', () => {
         .where({ ID: r.row.supplier_ID }));
     assert.strictEqual(sup.supplier_code, 'BPUK001',
       `LHR's station default is BP; got ${sup.supplier_code}`);
-    out(`an undesignated flight at LHR -> ${sup.supplier_code}, not AC101's supplier`);
+    out(`an undesignated flight at LHR -> ${sup.supplier_code}, not AC102's supplier`);
   });
 
   it('EXIT-5  RUNG 3 — nothing resolves, and NOTHING IS AN ANSWER', async () => {
@@ -131,16 +131,16 @@ describe('D — who fuels this flight', () => {
     // AC101 at LHR is priority 900; the LHR station row is 100. Lower wins on
     // priority, so if the axis were expressed as a number the station would
     // take it. The flight must win anyway.
-    const r = await resolveDesignation({ flightNumber: 'AC101', stationCode: 'LHR',
+    const r = await resolveDesignation({ flightNumber: 'AC102', stationCode: 'LHR',
         asOfDate: '2026-04-10', carrierCode: 'AC' });
     assert.strictEqual(r.axis, AXIS.FLIGHT);
-    assert.strictEqual(r.row.flight_number, 'AC101');
+    assert.strictEqual(r.row.flight_number, 'AC102');
     const station = await (await db()).run(SELECT.one.from('fuelsphere.DESIGNATED_SUPPLIERS')
         .where({ station_code: 'LHR', flight_number: null }));
     assert.ok(Number(r.row.priority) > Number(station.priority),
       `instrument check: the flight row must have a WORSE priority than the station row, `
     + `or this proves nothing about the axis. flight=${r.row.priority} station=${station.priority}`);
-    out(`AC101 priority ${r.row.priority} beats LHR station priority ${station.priority} on AXIS`);
+    out(`AC102 priority ${r.row.priority} beats LHR station priority ${station.priority} on AXIS`);
   });
 
   it('EXIT-8  carrier scoping is UNEXERCISED BY DATA, and says so', async () => {
