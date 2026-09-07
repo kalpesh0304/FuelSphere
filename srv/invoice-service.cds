@@ -16,6 +16,15 @@
 
 using { fuelsphere as db } from '../db/schema';
 
+// THE NEW FILE MUST BE NAMED HERE OR THE GATE CANNOT SEE IT.
+//
+// `cds serve` loads all of db/ and srv/; `cds compile srv` loads only what
+// srv/ imports. Without this line the server would serve IDR_RULE_STATUS
+// correctly over HTTP while `cds compile srv` reported "Artifact has not
+// been found" - the recorded trap, and the dangerous way round, because the
+// running server is right and the gate is wrong.
+using { fuelsphere as idr } from '../db/idr-rule-status';
+
 @path: '/odata/v4/invoice'
 service InvoiceService {
 
@@ -324,6 +333,44 @@ service InvoiceService {
         exception    : redirected to InvoiceExceptions,
         invoice      : redirected to Invoices,
         invoice_item : redirected to InvoiceItems
+    };
+
+    /**
+     * IdrRuleStatus - ONE ROW PER DOCUMENT PER APPLICABLE RULE
+     *
+     * The verdict of a run, for EVERY rule, including the ones that produced
+     * nothing. InvoiceExceptions carries the evidence of a failure; this
+     * carries what happened to each rule, and its reason for existing is the
+     * member the exception table cannot hold: NOT_APPLICABLE.
+     *
+     * Read-only over OData. These rows are the output of runChecks and
+     * writing one by hand would assert that a rule was evaluated when it was
+     * not - which is the exact claim this entity exists to make trustworthy.
+     */
+    @readonly
+    entity IdrRuleStatus as projection on idr.IDR_RULE_STATUS {
+        *,
+        invoice      : redirected to Invoices,
+        invoice_item : redirected to InvoiceItems,
+        rule         : redirected to InvoiceCheckRegistry,
+        exception    : redirected to InvoiceExceptions,
+
+        // THE FOUR VERDICTS IN COLOUR, AND NOT_APPLICABLE IS NOT GREEN.
+        //
+        // 0 is NEUTRAL - grey. A rule that did not apply is neither good nor
+        // bad news and colouring it green is the join-by-absence error
+        // rendered in CSS: it would say "checked and fine" about a rule that
+        // never ran. That is the whole finding, so the palette has to carry
+        // it too.
+        //
+        // BYPASSED is orange, never green, following lifecycleCriticality on
+        // InvoiceExceptions: still true, and someone accepted it anyway.
+        case status
+            when 'PASSED'   then 3
+            when 'FAILED'   then 1
+            when 'BYPASSED' then 2
+            else 0
+        end as statusCriticality : Integer
     };
 
     /**
