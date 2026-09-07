@@ -288,6 +288,43 @@ module.exports = class InvoiceService extends cds.ApplicationService {
             };
         };
 
+        // ================================================================
+        // UNBILLED TICKETS — the age, and why it is computed here
+        // ================================================================
+        //
+        // days_between() COMPILED CLEAN IN THE VIEW AND DID NOT SERVE: it is
+        // a HANA function SQLite does not implement, so every read of the
+        // entity returned 500. julianday() serves on SQLite and would fail on
+        // HANA - worse, because it passes here and breaks in production.
+        //
+        // So the number is filled after READ. THE COST, STATED: a virtual
+        // element cannot be $filtered or sorted on, because both run in the
+        // database before this handler sees a row. The screen sorts on
+        // delivery_timestamp instead, which is the SAME ORDER - oldest first
+        // - and needs no function. Anyone adding an age filter has to move
+        // this into the view, and that means finding a portable expression
+        // rather than moving the handler.
+        // AND THE SOURCE COLUMN HAS TO BE FETCHED, OR THE HANDLER COMPUTES
+        // NOTHING. Measured: $select=age_days without delivery_timestamp
+        // returned rows with no age at all - the after-READ handler had
+        // nothing to subtract from and silently skipped every row. A virtual
+        // element depends on a real one, and a client that does not ask for
+        // the real one gets a blank column with no error.
+        this.before('READ', 'UnbilledTickets', (req) => {
+            const cols = req.query.SELECT && req.query.SELECT.columns;
+            if (!cols) return;                                  // SELECT * already has it
+            const has = (n) => cols.some(c => c.ref && c.ref[c.ref.length - 1] === n);
+            if (has('age_days') && !has('delivery_timestamp')) cols.push({ ref: ['delivery_timestamp'] });
+        });
+
+        this.after('READ', 'UnbilledTickets', (rows) => {
+            const now = Date.now();
+            for (const r of (Array.isArray(rows) ? rows : [rows])) {
+                if (!r || !r.delivery_timestamp) continue;
+                r.age_days = Math.floor((now - new Date(r.delivery_timestamp).getTime()) / 86400000);
+            }
+        });
+
         this.on('validateForPosting', Invoices, runValidation);
 
         // executeThreeWayMatch is the DECLARED name and renaming a declared

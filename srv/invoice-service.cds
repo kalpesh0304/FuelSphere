@@ -24,6 +24,7 @@ using { fuelsphere as db } from '../db/schema';
 // been found" - the recorded trap, and the dangerous way round, because the
 // running server is right and the gate is wrong.
 using { fuelsphere as idr } from '../db/idr-rule-status';
+using { fuelsphere as ub } from '../db/unbilled-tickets';
 
 @path: '/odata/v4/invoice'
 service InvoiceService {
@@ -336,6 +337,24 @@ service InvoiceService {
     };
 
     /**
+     * UnbilledTickets — delivered fuel with no invoice line.
+     *
+     * The exposure report, and the coverage report, on one entity: BILLED
+     * rows are what has been invoiced, and the two unbilled states are what
+     * has not. A screen filters; the entity carries all three so a coverage
+     * figure and an exposure list read from the same rows.
+     *
+     * Read-only: every column is derived from the ticket, its order and its
+     * invoice lines. There is nothing here a person should type.
+     */
+    @readonly
+    entity UnbilledTickets as projection on ub.UNBILLED_TICKETS {
+        *,
+        order    : redirected to FuelOrders,
+        delivery : redirected to FuelDeliveries
+    };
+
+    /**
      * IdrRuleStatus - ONE ROW PER DOCUMENT PER APPLICABLE RULE
      *
      * The verdict of a run, for EVERY rule, including the ones that produced
@@ -497,6 +516,13 @@ service InvoiceService {
      * as aobt/aibt on BurnService: different reader, different facts.
      */
     @readonly
+    // THE CANONICAL PROJECTION OF FUEL_TICKETS ON THIS SERVICE.
+    //
+    // UnbilledTickets also projects it, so CAP cannot pick a redirection
+    // target for FuelOrders:tickets or InvoiceItems:ticket and refuses to
+    // guess. Pinned HERE, which keeps every existing navigation where it
+    // already points - UnbilledTickets is a report, not the ticket.
+    @cds.redirection.target
     entity FuelTickets as projection on db.FUEL_TICKETS {
         key ID,
         ticket_number,
