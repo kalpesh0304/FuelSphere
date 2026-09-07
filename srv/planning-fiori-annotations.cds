@@ -325,7 +325,17 @@ annotate PlanningService.FlightSchedule with @(
             destination_airport,
             aircraft_type,
             airline_code,
-            status
+            status,
+            // A. THE SME ASKED FOR THE SUPPLIER AS A FILTER AND A COLUMN,
+            // twice in one session. Both, not either.
+            //
+            // It filters on the STATION DEFAULT rather than the flight-level
+            // designation because that is the one 13 of 22 flights have -
+            // filtering on the flight axis would return one row and read as
+            // broken. A flight with its own arrangement still matches its
+            // station's filter, which is the behaviour a planner expects
+            // from "show me World Fuel's flights".
+            station_default.supplier.supplier_name
         ],
 
         // --- List Report Table ---
@@ -340,6 +350,19 @@ annotate PlanningService.FlightSchedule with @(
             { Value: scheduled_departure, Label: 'Departure' },
             { Value: scheduled_arrival, Label: 'Arrival' },
             { Value: status, Label: 'Status' },
+
+            // A. The supplier as a COLUMN, and the two the survey confirmed
+            // exist. `terminal` is NOT here: the brief listed gate, stand and
+            // terminal as present and only two of the three are - a field
+            // that is not there is a question, not a blank column.
+            {
+                Value: station_default.supplier.supplier_name,
+                Label: 'Supplier (station)',
+                ![@UI.Importance]: #High
+            },
+            { Value: gate_number,  Label: 'Gate',  ![@UI.Importance]: #Medium },
+            { Value: stand_number, Label: 'Stand', ![@UI.Importance]: #Medium },
+
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'PlanningService.importFlightScheduleExcel',
@@ -406,6 +429,43 @@ annotate PlanningService.FlightSchedule with @(
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DelayDetails', Label: 'Delay Details' }
                 ]
             },
+            // ================================================================
+            // A — THE THREE BLOCKS. Two of them, and the third short by three
+            // fields that are not in the model.
+            //
+            // ALL RESOLVED THROUGH ASSOCIATIONS, NEVER COPIED. A supplier
+            // changes a number and every flight shows the new one.
+            //
+            // AND BOTH SUPPLIER BLOCKS ALWAYS SHOW, even where a flight has
+            // its own designation. If the station block were hidden when the
+            // flight one exists, 21 flights would have two blocks and one
+            // would have a single block, and THE PAGE WOULD CHANGE SHAPE
+            // BETWEEN ROWS - which is worse than an empty section, because a
+            // viewer cannot tell a missing block from an absent one.
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'DesignatedForThisFlight',
+                // Named for what it is, not for its rung. "Primary" and
+                // "fallback" are resolver words; a planner does not think in
+                // rungs, and an empty block here MEANS SOMETHING - this
+                // flight has no arrangement of its own.
+                Label  : 'Designated for this flight',
+                Target : 'designation/@UI.LineItem#FlightBlock'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'StationDefault',
+                Label  : 'This station''s default',
+                Target : 'station_default/@UI.LineItem#StationBlock'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'AircraftBlock',
+                Label  : 'Aircraft',
+                Target : 'tail/@UI.FieldGroup#AircraftForFlight'
+            },
+
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'FlightDeliveries',
@@ -728,4 +788,107 @@ annotate PlanningService.importFlightScheduleExcel with (
                 @Core.ContentDisposition.Type: 'inline',
     fileName    @title: 'File Name'
                 @UI.Hidden: true
+);
+
+// ============================================================================
+// A — THE SUPPLIER AND AGENT BLOCKS
+//
+// Two qualified LineItems on one entity, because the two blocks answer
+// different questions and a planner reads them differently.
+//
+// #FlightBlock   "is there an arrangement for THIS flight?"
+// #StationBlock  "and what does this station do otherwise?"
+//
+// Both carry the validity window. NEITHER ASSOCIATION FILTERS BY DATE - a
+// date in the `on` condition narrows a row set without picking one, so a
+// screen could show an expired designation beside a live one with nothing
+// saying which. Showing valid_from and valid_to lets the reader see the
+// window instead of trusting it.
+// ============================================================================
+annotate PlanningService.DesignatedSuppliers with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Designation',
+            TypeNamePlural : 'Designations',
+            Title          : { Value: supplier.supplier_name },
+            Description    : { Value: designation_type }
+        },
+
+        LineItem #FlightBlock: [
+            { Value: supplier.supplier_name,    Label: 'Supplier',        ![@UI.Importance]: #High },
+            { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
+            // TRUE means the supplier fuels its own product and the two agent
+            // columns are EMPTY BY DESIGN - a different state from "not known
+            // yet", and this column is what tells them apart.
+            { Value: supplier_performs_uplift,  Label: 'Supplier fuels',  ![@UI.Importance]: #High },
+            { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent', ![@UI.Importance]: #High },
+            { Value: into_plane_contract.contract_number, Label: 'Handling contract', ![@UI.Importance]: #Medium },
+            { Value: valid_from,                Label: 'Valid from',      ![@UI.Importance]: #Medium },
+            { Value: valid_to,                  Label: 'Valid to',        ![@UI.Importance]: #Medium }
+        ],
+
+        // The station block adds the station and drops nothing: a planner
+        // looking at a default wants to see WHICH station it belongs to,
+        // because the flight's origin is elsewhere on the page.
+        LineItem #StationBlock: [
+            { Value: station_code,              Label: 'Station',         ![@UI.Importance]: #High },
+            { Value: supplier.supplier_name,    Label: 'Supplier',        ![@UI.Importance]: #High },
+            { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
+            { Value: supplier_performs_uplift,  Label: 'Supplier fuels',  ![@UI.Importance]: #High },
+            { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent', ![@UI.Importance]: #High },
+            { Value: into_plane_contract.contract_number, Label: 'Handling contract', ![@UI.Importance]: #Medium },
+            { Value: valid_from,                Label: 'Valid from',      ![@UI.Importance]: #Medium },
+            { Value: valid_to,                  Label: 'Valid to',        ![@UI.Importance]: #Medium }
+        ]
+    }
+);
+
+annotate PlanningService.DesignatedSuppliers with {
+    ID                       @UI.Hidden;
+    flight_number            @title: 'Flight';
+    station                  @title: 'Station';
+    station_code             @title: 'Station';
+    carrier_code             @title: 'Carrier';
+    supplier                 @title: 'Supplier';
+    supplier_contract        @title: 'Fuel Contract';
+    supplier_performs_uplift @title: 'Supplier Performs Uplift';
+    into_plane_agent         @title: 'Into-Plane Agent';
+    into_plane_contract      @title: 'Handling Contract';
+    designation_type         @title: 'Designation';
+    valid_from               @title: 'Valid From';
+    valid_to                 @title: 'Valid To';
+    priority                 @title: 'Priority';
+    is_active                @title: 'Active';
+    notes                    @title: 'Notes' @UI.MultiLineText;
+};
+
+// ============================================================================
+// A — THE AIRCRAFT BLOCK, AND IT SHIPS SHORT BY THREE FIELDS
+//
+// MLW, MZFW and engine_burn_rate_kgph ARE NOT IN THE MODEL. Not on the
+// registration, not on the type. So they are MISSING here rather than
+// declared and blank: a field that is not there is a question, and a blank
+// one is the eighth cause of an empty section.
+//
+// MTOW is reached THROUGH the type. It lives on AIRCRAFT_MASTER and is
+// populated 17/17; the registration overrides fuel capacity where tanks
+// differ and does not carry a weight of its own.
+// ============================================================================
+annotate PlanningService.AircraftRegistrations with @(
+    UI: {
+        FieldGroup #AircraftForFlight: {
+            Label: 'Aircraft',
+            Data: [
+                { Value: registration,             Label: 'Registration' },
+                { Value: aircraft_type_code,       Label: 'Type' },
+                { Value: aircraft_type.mtow_kg,    Label: 'MTOW (kg)' },
+                { Value: dry_operating_weight_kg,  Label: 'DOW (kg)' },
+                { Value: fuel_capacity_kg,         Label: 'Fuel capacity (kg)' },
+                { Value: apu_burn_rate_kg_hr,      Label: 'APU burn (kg/h)' },
+                { Value: apu_rate_source,          Label: 'APU rate source' },
+                { Value: performance_factor_pct,   Label: 'Performance factor (%)' },
+                { Value: record_status,            Label: 'Register status' }
+            ]
+        }
+    }
 );
