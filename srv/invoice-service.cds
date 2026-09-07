@@ -370,7 +370,37 @@ service InvoiceService {
             when 'FAILED'   then 1
             when 'BYPASSED' then 2
             else 0
-        end as statusCriticality : Integer
+        end as statusCriticality : Integer,
+
+        // A SORT RANK, BECAUSE CRITICALITY IS NOT ONE.
+        //
+        // Sorting on statusCriticality ascending was the obvious move and it
+        // is WRONG, which executing the binding is what showed: the palette
+        // runs 0 neutral, 1 red, 2 orange, 3 green, so ascending puts the
+        // SIXTEEN GREY ROWS ABOVE THE ONE RED ONE and buries the finding
+        // under the thing the finding is about. Criticality orders by colour
+        // and colour is not urgency - 0 sits below 1 only because "neutral"
+        // was assigned the spare number.
+        //
+        // The reading order is a decision, and it is this:
+        //
+        //   1 FAILED          what is wrong
+        //   2 NOT_APPLICABLE  what nobody looked at - second because it is
+        //                     the whole point of the table, and a clerk who
+        //                     reads only the reds has the same blind spot
+        //                     the exception list already gave them
+        //   3 BYPASSED        what was released, and by whom
+        //   4 PASSED          what is fine, and it goes last
+        //
+        // Calculated rather than virtual so it can be sorted on at all:
+        // $orderby runs in the database, before an after-READ handler would
+        // ever see the row.
+        case status
+            when 'FAILED'         then 1
+            when 'NOT_APPLICABLE' then 2
+            when 'BYPASSED'       then 3
+            else 4
+        end as verdictRank : Integer
     };
 
     /**
