@@ -351,7 +351,20 @@ service InvoiceService {
     entity UnbilledTickets as projection on ub.UNBILLED_TICKETS {
         *,
         order    : redirected to FuelOrders,
-        delivery : redirected to FuelDeliveries
+        delivery : redirected to FuelDeliveries,
+
+        // UNBILLABLE IS RED, UNBILLED IS ORANGE, BILLED IS GREEN.
+        //
+        // Not a palette choice. UNBILLABLE is fuel nobody can bill and
+        // nobody has explained; UNBILLED is money a supplier has not asked
+        // for yet, which is a wait rather than a fault. Giving them one
+        // colour would put the four rows that need a person among the twelve
+        // that need a calendar.
+        case billing_state
+            when 'UNBILLABLE' then 1
+            when 'UNBILLED'   then 2
+            else                   3
+        end as stateCriticality : Integer
     };
 
     /**
