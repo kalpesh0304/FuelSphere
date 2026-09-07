@@ -510,8 +510,17 @@ service PlanningService {
     @readonly
     entity FlightContacts as projection on sc.FLIGHT_CONTACTS {
         *,
-        case when primary_name is null then 2 else 3 end
-            as contactCriticality : Integer,
+        // PRESENT green, NONE_RECORDED orange, NOT_APPLICABLE NEUTRAL.
+        //
+        // Not-applicable is grey for the reason it is grey everywhere else
+        // today: it is a FACT rather than a gap, and orange would say
+        // "chase this" about a company that correctly does not hold the
+        // role. Green would be worse - it would say we have a contact.
+        case role_status
+            when 'PRESENT'        then 3
+            when 'NONE_RECORDED'  then 2
+            else                       0
+        end as contactCriticality : Integer,
         // AGENT FIRST. Where the supplier does not perform its own uplift,
         // the agent is who a planner actually rings, and "time is of the
         // essence" was the reason given.

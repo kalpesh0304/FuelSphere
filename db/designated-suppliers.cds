@@ -255,5 +255,12 @@ entity FLIGHT_DESIGNATION as select from db.FLIGHT_SCHEDULE as f
         d.valid_from,
         d.valid_to,
         d.supplier,
-        d.into_plane_agent
+        d.into_plane_agent,
+
+        // CARRIED SO THE CONTACT STRIP CAN DERIVE, NOT STORE. Where the
+        // supplier does not perform its own uplift, invoicing and disputes
+        // stay with the SUPPLIER - so the agent's invoicing row is NOT
+        // APPLICABLE rather than missing, and this flag is what says so.
+        // A stored marker would be a second place holding one fact.
+        d.supplier_performs_uplift
 };

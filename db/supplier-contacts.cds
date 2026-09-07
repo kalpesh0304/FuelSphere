@@ -215,11 +215,33 @@ entity FLIGHT_CONTACTS as select from dsg.FLIGHT_DESIGNATION as fd
         rc.primary_email,
         rc.primary_hours,
         rc.contact_count,
-        rc.other_count
+        rc.other_count,
+
+        // THREE STATES, NOT TWO. A blank contact means two opposite things
+        // and a viewer cannot tell them apart:
+        //
+        //   NONE_RECORDED   the company has one and nobody collected it. A GAP.
+        //   NOT_APPLICABLE  the company does not hold this role AT ALL. A FACT.
+        //
+        // DERIVED FROM supplier_performs_uplift, NOT STORED. Where the
+        // supplier does not perform its own uplift there is an agent, and
+        // invoicing and disputes stay with the SUPPLIER - so the agent's
+        // invoicing row is not a gap, it is the split working. The flag
+        // already says this, and a stored marker would be a second source
+        // that can disagree with it.
+        case
+            when rc.primary_name is not null then 'PRESENT'
+            else 'NONE_RECORDED'
+        end as role_status : String(14),
+
+        // No note on the supplier side: every role applies to the supplier,
+        // so a blank there is always a gap and never a fact.
+        null as role_note : String(60)
 } group by fd.flight_ID, rc.supplier_ID, rc.role_code, fd.flight_number, fd.flight_date,
            fd.origin_airport, fd.destination_airport, fd.airline_code, rc.supplier_name,
            rc.role_name, rc.sort_order, rc.primary_name, rc.primary_position, rc.primary_phone,
-           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count, rc.other_count
+           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count,
+           rc.other_count, fd.supplier_performs_uplift
 union all
 select from dsg.FLIGHT_DESIGNATION as fd
     join SUPPLIER_ROLE_CONTACTS as rc
@@ -246,11 +268,37 @@ select from dsg.FLIGHT_DESIGNATION as fd
         rc.primary_email,
         rc.primary_hours,
         rc.contact_count,
-        rc.other_count
+        rc.other_count,
+
+        // THREE STATES, NOT TWO. A blank contact means two opposite things
+        // and a viewer cannot tell them apart:
+        //
+        //   NONE_RECORDED   the company has one and nobody collected it. A GAP.
+        //   NOT_APPLICABLE  the company does not hold this role AT ALL. A FACT.
+        //
+        // DERIVED FROM supplier_performs_uplift, NOT STORED. Where the
+        // supplier does not perform its own uplift there is an agent, and
+        // invoicing and disputes stay with the SUPPLIER - so the agent's
+        // invoicing row is not a gap, it is the split working. The flag
+        // already says this, and a stored marker would be a second source
+        // that can disagree with it.
+        case
+            when rc.primary_name is not null then 'PRESENT'
+            when rc.role_code in ('INVOICING','DISPUTES')
+                 and fd.supplier_performs_uplift = false then 'NOT_APPLICABLE'
+            else 'NONE_RECORDED'
+        end as role_status : String(14),
+
+        case
+            when rc.primary_name is null and rc.role_code in ('INVOICING','DISPUTES')
+                 and fd.supplier_performs_uplift = false then 'the supplier invoices'
+            else null
+        end as role_note : String(60)
 } group by fd.flight_ID, rc.supplier_ID, rc.role_code, fd.flight_number, fd.flight_date,
            fd.origin_airport, fd.destination_airport, fd.airline_code, rc.supplier_name,
            rc.role_name, rc.sort_order, rc.primary_name, rc.primary_position, rc.primary_phone,
-           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count, rc.other_count;
+           rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count,
+           rc.other_count, fd.supplier_performs_uplift;
 
 extend db.FLIGHT_SCHEDULE with {
     contacts : Association to many FLIGHT_CONTACTS on contacts.flight_ID = ID;

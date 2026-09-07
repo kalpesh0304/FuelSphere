@@ -1135,6 +1135,12 @@ annotate PlanningService.FlightContacts with @(
             // EXISTS. The row is the finding; the null is how it reads.
             { Value: primary_name,     Label: 'Contact', Criticality: contactCriticality,
               ![@UI.Importance]: #High },
+            // THE THIRD STATE, SPELT OUT. A blank Contact now means two
+            // opposite things and this is the column that separates them:
+            // NOT_APPLICABLE is a fact about the split, NONE_RECORDED is a
+            // gap in our records. role_note carries the one-clause reason.
+            { Value: role_status,      Label: 'Status',  ![@UI.Importance]: #High },
+            { Value: role_note,        Label: 'Why',     ![@UI.Importance]: #High },
             { Value: primary_phone,    Label: 'Phone',   ![@UI.Importance]: #High },
             { Value: primary_mobile,   Label: 'Mobile',  ![@UI.Importance]: #Medium },
             { Value: primary_hours,    Label: 'Hours',   ![@UI.Importance]: #High },
@@ -1147,6 +1153,9 @@ annotate PlanningService.FlightContacts with @(
 
 annotate PlanningService.FlightContacts with {
     party            @title: 'Party';
+    role_status      @title: 'Status'
+                     @Common.QuickInfo: 'PRESENT - a contact answers first for this role. NONE_RECORDED - the company has one and nobody collected it: A GAP. NOT_APPLICABLE - the company does not hold this role at all: A FACT. An agent that does not invoice has no invoicing contact BY DESIGN, and the same blank would otherwise read as a gap.';
+    role_note        @title: 'Why';
     partyRank        @title: 'Party Order';
     axis             @title: 'Applies By';
     supplier_name    @title: 'Company';

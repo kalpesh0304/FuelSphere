@@ -40,17 +40,24 @@ const ANNPATH = /AnnotationPath="([^"]+)"/;
 const all = (re, s) => [...s.matchAll(new RegExp(re.source, 'g'))].map(m => m[1]);
 
 function parse(x) {
-    const props = {}, navs = {}, navtype = {};
+    const props = {}, navs = {}, navtype = {}, navmany = {};
     const add = (n, body) => {
         props[n] = new Set(all(/<Property Name="(\w+)"/, body));
         navs[n]  = new Set(all(/<NavigationProperty Name="(\w+)"/, body));
         navtype[n] = {};
-        for (const m of body.matchAll(/<NavigationProperty Name="(\w+)" Type="([^"]+)"/g))
+        // CARDINALITY IS KEPT NOW, NOT DISCARDED. It was always in the EDMX -
+        // a to-many emits Type="Collection(...)" - and this function stripped
+        // it to get the target. EXIT-5 needs it, and it needed nothing new
+        // from the compiler.
+        navmany[n] = new Set();
+        for (const m of body.matchAll(/<NavigationProperty Name="(\w+)" Type="([^"]+)"/g)) {
+            if (m[2].startsWith('Collection(')) navmany[n].add(m[1]);
             navtype[n][m[1]] = m[2].replace('Collection(', '').replace(')', '').split('.').pop();
+        }
     };
     for (const m of x.matchAll(/<EntityType Name="(\w+)"[^>]*>([\s\S]*?)<\/EntityType>/g)) add(m[1], m[2]);
     for (const m of x.matchAll(/<ComplexType Name="(\w+)"[^>]*>([\s\S]*?)<\/ComplexType>/g)) add(m[1], m[2]);
-    return { props, navs, navtype };
+    return { props, navs, navtype, navmany };
 }
 
 /** Walk every emitted binding on one service. */
@@ -182,5 +189,87 @@ describe('D50 — no annotation on any service points at nothing', () => {
     assert.ok(rf.navtype['DeliveryRecords']?.['signature_pilot_document'],
       'SourceDocuments is unexposed on RefuelerService - the signature fields are blank again');
     out('4 properties and 2 navigations, all present');
+  });
+
+  it('EXIT-5  A NINTH CAUSE — a path whose middle hop is a TO-MANY', async () => {
+    // THE FIRST CAUSE WHERE THE ANNOTATION IS CORRECT AND THE SHAPE IS WRONG.
+    //
+    // The other eight are about what a path NAMES. This one is about what a
+    // path can TRAVERSE: `designation/supplier/supplier_name` names three
+    // real things and cannot bind, because FLIGHT_SCHEDULE.designation is an
+    // Association to MANY and Fiori has no key for the first hop.
+    //
+    //     GET FlightSchedule(<id>)/designation/supplier   ->  404
+    //
+    // EXIT-3 would have passed it: every hop resolves to a real term on a
+    // real entity. The sweep checked what a path names and never what it
+    // could walk.
+    //
+    // IT COSTS NOTHING TO CHECK. Cardinality was always in the EDMX - a
+    // to-many emits Type="Collection(...)" - and parse() was stripping it to
+    // get the target type. The instrument had the evidence and discarded it.
+    //
+    // A TO-MANY AS THE LAST HOP IS CORRECT and must not be flagged: a facet
+    // target like `contacts/@UI.LineItem` is exactly that, and it is how
+    // every table on an object page is bound. Only a to-many with further
+    // hops after it is unbindable.
+    let checked = 0; const bad = [];
+    for (const [svc, x] of Object.entries(edmx)) {
+      const { navtype, navmany } = parse(x);
+      for (const m of x.matchAll(/<Annotations Target="[^."]+\.(\w+)[^"]*">([\s\S]*?)<\/Annotations>/g)) {
+        const ent = m[1];
+        for (const path of all(PATH, m[2])) {
+          const parts = path.split('/');
+          if (parts.length < 3) { checked++; continue; }   // no middle hop to be wrong
+          let cur = ent;
+          for (let i = 0; i < parts.length - 1; i++) {
+            if (navmany[cur]?.has(parts[i]) && i < parts.length - 2)
+              bad.push(`${svc}.${ent} -> ${path}  (to-many at "${parts[i]}")`);
+            cur = navtype[cur]?.[parts[i]];
+            if (!cur) break;
+          }
+          checked++;
+        }
+      }
+    }
+    // PROVE THE READER BEFORE TRUSTING THE COUNT, in both directions - the
+    // rule EXIT-1 sets for this file, applied to the new check.
+    const pl = parse(edmx['PlanningService']);
+    assert.ok(pl.navmany['FlightSchedule']?.has('designation'),
+      'instrument check: FlightSchedule.designation is not seen as a to-many, so this criterion is blind');
+    assert.ok(!pl.navmany['FlightSchedule']?.has('tail'),
+      'instrument check: FlightSchedule.tail is reported as a to-many and is not - the reader over-reports');
+
+    // ONE KNOWN, RECORDED RATHER THAN ASSERTED AWAY, AND IT IS NOT MINE TO
+    // FIX. Package A put the designated supplier in FlightSchedule's
+    // SelectionFields and LineItem because the SME asked for it twice - as a
+    // filter AND as a list column. station_default is an Association to
+    // MANY, so it has never shown a name:
+    //
+    //     $select=station_default/supplier/supplier_name
+    //       -> 200, "station_default_supplier_supplier_name": null, always
+    //     $select=tail/registration
+    //       -> 200, "tail_registration": "RP-C8801"
+    //
+    // The repair is a DECISION, not a patch. A to-one over station_code is
+    // D44 exactly - a to-one over a condition matching many - and copying
+    // the name onto the flight is what D's "resolved, never copied" rule
+    // forbids and d-designated-suppliers EXIT-9 asserts against. So it is
+    // ratcheted: this one entry is accepted, and any NEW occurrence fails.
+    const KNOWN = new Set([
+      'PlanningService.FlightSchedule -> station_default/supplier/supplier_name  (to-many at "station_default")',
+    ]);
+    const fresh = bad.filter(b => !KNOWN.has(b));
+    assert.deepStrictEqual(fresh, [],
+      `${fresh.length} NEW path(s) traverse a to-many mid-way and CANNOT BIND. Every hop is real and `
+    + `the annotation reads correctly - Fiori has no key for the collection hop, and the field comes `
+    + `back present and null:\n  ` + fresh.slice(0, 6).join('\n  '));
+    // The ratchet must not rust: a KNOWN entry that has been repaired has to
+    // come off, or the list becomes a record of decisions nobody took.
+    const stale = [...KNOWN].filter(k => !bad.includes(k));
+    assert.deepStrictEqual(stale, [],
+      `a known unbindable path now binds - take it out of KNOWN: ${stale.join(', ')}`);
+    out(`${checked} paths across ${Object.keys(edmx).length} services, ${bad.length} traversing a `
+      + `to-many mid-way (${KNOWN.size} known, 0 new)`);
   });
 });
