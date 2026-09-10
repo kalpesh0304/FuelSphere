@@ -1227,3 +1227,85 @@ annotate PlanningService.ContactRoles with {
 annotate PlanningService.FlightAircraft with {
     mtow_kg @Common.QuickInfo: 'Maximum take-off weight, from the aircraft TYPE rather than this registration — the same figure for every tail of the type. MLW, MZFW and engine burn rate are NOT IN THE MODEL AT ALL, on the tail or the type, and arrive with work package B. They are missing rather than blank: a field that is not there is a question.';
 }
+
+// ===========================================================================
+// UNITS — AND THE RULE THAT DECIDES WHICH TREATMENT EACH FIELD GETS
+//
+// A UNIT COLUMN BELONGS TO ONE FIELD. @Measures.Unit points at the column
+// holding the unit OF THAT VALUE, never at the nearest unit column on the
+// row. Getting that wrong is worse than no units at all, because a unit
+// annotation correct on half the data looks identical to one correct on all
+// of it — and the whole reason for adding units is that a bare 2,884 and a
+// bare 2,305.76 cannot be told apart.
+//
+//   quantity_metered   -> @Measures.Unit: uom_code    uom_code IS its unit
+//   quantity_kg        -> LABEL "(kg)"                the NAME is the unit
+//   ordered_quantity   -> @Measures.Unit: uom_code    and it is LTR on AC410
+//   block_fuel_kg      -> LABEL                       no column exists
+//
+// MEASURED, NOT ASSUMED, on every pairing below:
+//   FLIGHT_FUEL_TICKETS     uom_code = LTR on 14 of 30, KG on 16
+//   FLIGHT_FUEL_DELIVERIES  uom_code = LTR on 10 of 26, KG on 16
+//   FuelOrders              uom_code = LTR on  3 of 25 — ALL THREE AC410's
+//
+// So pointing uom_code at a _kg field would render a mass as litres on
+// roughly half the rows, and a "(kg)" label on ordered_quantity would be
+// wrong on exactly the order the demo opens. Both directions are live here.
+// ===========================================================================
+
+annotate PlanningService.FLIGHT_FUEL_TICKETS with {
+    // uom_code is the unit of the METERED figure ONLY.
+    quantity_metered @Measures.Unit: uom_code  @title: 'Metered Quantity';
+    // NOT @Measures.Unit. Kilograms is in the name, and taking the metered
+    // unit here renders 2,305.76 kg as "2,305.76 LTR" on every litre ticket.
+    quantity_kg      @title: 'Mass (kg)';
+    density_value    @title: 'Density (kg/L)';
+    uom_code         @title: 'Metered In';
+}
+
+annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
+    delivered_quantity @Measures.Unit: uom_code  @title: 'Delivered Quantity';
+    uom_code           @title: 'Delivered In';
+    fob_delta_kg       @title: 'Gauge Delta (kg)';
+    recon_variance_kg  @title: 'Reconciliation Variance (kg)';
+}
+
+annotate PlanningService.FuelOrders with {
+    // THE COLUMN, NOT A LABEL. 3 of 25 orders are in LTR and all three are
+    // AC410's — FO-YYZ-20260410-001 is 2881.25 LTR on the demo flight.
+    ordered_quantity @Measures.Unit: uom_code           @title: 'Ordered Quantity';
+    uom_code         @title: 'Ordered In';
+    unit_price       @Measures.ISOCurrency: currency_code @title: 'Unit Price';
+    total_amount     @Measures.ISOCurrency: currency_code @title: 'Total Amount';
+}
+
+annotate PlanningService.FlightDispatches with {
+    // NO UNIT COLUMN EXISTS ON THIS ENTITY and none should be added: a
+    // constant 'KG' column on every row is a second place holding one fact.
+    // The name carries it and the label says it.
+    dispatch_qty_kg    @title: 'Dispatch Quantity (kg)';
+    block_fuel_kg      @title: 'Block Fuel (kg)';
+    required_uplift_kg @title: 'Required Uplift (kg)';
+    rob_departure_kg   @title: 'ROB at Departure (kg)';
+}
+
+annotate PlanningService.FuelBurns with {
+    planned_burn_kg @title: 'Planned Burn (kg)';
+    actual_burn_kg  @title: 'Actual Burn (kg)';
+    variance_kg     @title: 'Variance (kg)';
+    engine_burn_kg  @title: 'Engine Burn (kg)';
+    apu_burn_kg     @title: 'APU Burn (kg)';
+}
+
+annotate PlanningService.FuelDeliveries with {
+    fob_before_kg @title: 'FOB Before (kg)';
+    fob_after_kg  @title: 'FOB After (kg)';
+}
+
+annotate PlanningService.FlightAircraft with {
+    mtow_kg             @title: 'MTOW (kg)';
+    dow_kg              @title: 'Dry Operating Weight (kg)';
+    fuel_capacity_kg    @title: 'Fuel Capacity (kg)';
+    apu_burn_rate_kg_hr @title: 'APU Burn Rate (kg/h)';
+    cruise_burn_kgph    @title: 'Cruise Burn (kg/h)';
+}
