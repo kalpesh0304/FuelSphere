@@ -1751,7 +1751,20 @@ entity FLIGHT_AIRCRAFT as select from FLIGHT_SCHEDULE {
         // same figure for every tail of a type. A fact about the model, not
         // a shortcut - the day B lands a per-tail MTOW this line changes and
         // nothing else does.
-        tail.aircraft_type.mtow_kg       as mtow_kg,
+        // THE WORK PACKAGE B FIELDS ARE NOT REACHED FROM HERE, AND THAT IS
+        // THE ONE-WAY DEPENDENCY RATHER THAN A PREFERENCE.
+        //
+        // mtow_kg, mlw_kg, mzfw_kg and engine_burn_rate_kgph are added to
+        // AIRCRAFT_REGISTRATIONS by db/aircraft-performance-fields.cds,
+        // which IMPORTS this file. schema.cds cannot see an entity - or an
+        // extension - in a file that imports it, so reaching them here gave
+        //
+        //     cds compile db  : 0 errors
+        //     cds compile srv : 5 errors
+        //
+        // exactly the recorded trap, and in its more dangerous direction:
+        // `cds deploy` succeeded and the server served, so only the gate
+        // said anything. The resolution lives on PlanningService.
         tail.aircraft_type.cruise_burn_kgph as cruise_burn_kgph,
         tail.aircraft_type.aircraft_model   as aircraft_model
 };

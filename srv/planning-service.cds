@@ -24,6 +24,7 @@ using { fuelsphere as db } from '../db/schema';
 // compile does not. A model that boots and will not compile.
 using { fuelsphere as ds } from '../db/designated-suppliers';
 using { fuelsphere as sc } from '../db/supplier-contacts';
+using { fuelsphere as perf } from '../db/aircraft-performance-fields';
 
 @path: '/odata/v4/planning'
 service PlanningService {
@@ -552,7 +553,38 @@ service PlanningService {
     @readonly
     entity FlightAircraft as projection on db.FLIGHT_AIRCRAFT {
         *,
-        tail : redirected to AircraftRegistrations
+        tail : redirected to AircraftRegistrations,
+
+        // THE TAIL'S FIGURE WINS, AND THE TYPE'S IS THE FALLBACK.
+        //
+        // Work package B added mtow_kg to AIRCRAFT_REGISTRATIONS as an
+        // OVERRIDE, so two places can now hold this fact. ONE coalesce is
+        // what stops that being a defect: it decides which governs, in one
+        // expression, so no reader has to know there are two. Null on the
+        // registration means the type's figure applies — and a null cannot
+        // disagree with anything, which is the whole reason the override is
+        // nullable rather than copied down.
+        //
+        // Resolved HERE rather than in the FLIGHT_AIRCRAFT view because
+        // schema.cds cannot see the file that adds these fields — that file
+        // imports it. The dependency runs one way.
+        // NAMED mtow_kg, NOT mtow_resolved_kg. Renaming it broke three harnesses
+        // at once — d50 reported a dangling annotation path, e2b got
+        // 400 "Property mtow_kg does not exist", and the Aircraft card would
+        // have failed its WHOLE READ rather than one column. The resolved
+        // value IS the MTOW; the two sources are visible beside it for anyone
+        // who needs to know which won.
+        coalesce(tail.mtow_kg, tail.aircraft_type.mtow_kg) as mtow_kg : Decimal(15,2),
+        tail.mtow_kg                as mtow_tail_kg  : Decimal(15,2),
+        tail.aircraft_type.mtow_kg  as mtow_type_kg  : Decimal(15,2),
+
+        // NULL ON ALL 31 ROWS TODAY. Carried so the resolution exists the
+        // day data arrives, and deliberately NOT put on the Aircraft card:
+        // three permanently blank columns on an operational page is the
+        // eighth cause of an empty section.
+        tail.mlw_kg                 as mlw_kg        : Decimal(15,2),
+        tail.mzfw_kg                as mzfw_kg       : Decimal(15,2),
+        tail.engine_burn_rate_kgph  as engine_burn_rate_kgph : Decimal(10,2)
     };
 
     /**
