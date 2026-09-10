@@ -14,11 +14,30 @@
  *  - Plants        : Daily
  *  - Suppliers     : On-demand via A_BusinessPartner (general BP data)
  *  - SuppliersVendor : On-demand via A_Supplier (vendor-specific enrichment)
+ *  - Contracts     : On-demand (manual S4 Sync button)
  *
  * Recommended sync order for Suppliers:
  *  1. Suppliers       → inserts all BP records
  *  2. SuppliersVendor → enriches with vendor-specific fields (LIFNR, payment terms)
+ *
+ * ⚠️ Suppliers → Contracts ordering is REQUIRED, every time, not just once:
+ *  Suppliers uses full-replace (DELETE ALL → reinsert), and MASTER_SUPPLIERS
+ *  uses a generated UUID key. Every Suppliers sync therefore gives every
+ *  supplier row a NEW UUID. MASTER_CONTRACTS.supplier is a managed
+ *  association holding that UUID (supplier_ID), so any Suppliers sync run
+ *  AFTER a Contracts sync silently orphans every contract's supplier link.
+ *  Re-run Contracts sync immediately after any Suppliers sync to re-resolve
+ *  the links — there is no code-level guard against this today.
  */
+
+// Parses an OData V2 "/Date(1690848000000)/" literal (or an already-ISO
+// value) down to a plain YYYY-MM-DD string for a CDS Date field.
+function parseODataDate(value) {
+    if (!value) return null;
+    const m = /\/Date\((\d+)\)\//.exec(value);
+    if (m) return new Date(Number(m[1])).toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+}
 
 module.exports = {
 
@@ -100,6 +119,71 @@ module.exports = {
             s4_vendor_no  : s4.BusinessPartner         || '',   // BP number as vendor reference
             is_active     : true
         })
+    },
+
+    // ==========================================================================
+    // CONTRACTS — API_PURCHASECONTRACT_PROCESS_SRV
+    // S4 EntitySet : A_PurchaseContract
+    // HANA Entity  : fuelsphere.MASTER_CONTRACTS
+    //
+    // apiPath / field names verified against live $metadata on 2026-09-03
+    // (dgits4h20hyd gateway) — entity set and every field below confirmed
+    // to exist. No header-level description field exists anywhere in this
+    // service (checked full $metadata): the only text field is item-level
+    // PurchaseContractItemType.PurchaseContractItemText ("Short Text"),
+    // reached via to_PurchaseContractItem — not used here since a contract
+    // can have many items and no single one is "the" name. contract_name
+    // intentionally falls back to the contract number.
+    //
+    // Note: supplier is a MANAGED association (MASTER_CONTRACTS.supplier ->
+    //       MASTER_SUPPLIERS), unlike land1/currency_code elsewhere in this
+    //       file which are unmanaged (matched by business key). CAP needs
+    //       the actual supplier row's UUID (supplier_ID), so resolveRefs
+    //       pre-fetches a s4_vendor_no -> ID lookup once before mapping.
+    //       Sync Suppliers BEFORE Contracts or this lookup will come up
+    //       empty and the row will be skipped with a mapping error.
+    //
+    // contract_type / price_type are FuelSphere-native classifications
+    // (SPOT/TERM/FRAMEWORK, CPE/FIXED/NATIVE) with no S4 equivalent — real
+    // PurchaseContractType values seen (WK/MK/ZDOC) don't map cleanly, so
+    // these are defaulted here, same as Countries' compliance fields;
+    // manage them manually in the app after sync if the defaults don't fit.
+    // ==========================================================================
+    Contracts: {
+        apiPath  : `/sap/opu/odata/sap/API_PURCHASECONTRACT_PROCESS_SRV/A_PurchaseContract` +
+                   `?$filter=PurchasingDocumentDeletionCode eq ''`,
+        dbEntity : 'fuelsphere.MASTER_CONTRACTS',
+        keyField : 'contract_number',
+
+        resolveRefs: async () => {
+            const suppliers = await SELECT.from('fuelsphere.MASTER_SUPPLIERS').columns('ID', 's4_vendor_no');
+            const bySupplierNo = {};
+            suppliers.forEach(s => { if (s.s4_vendor_no) bySupplierNo[s.s4_vendor_no] = s.ID; });
+            return { bySupplierNo };
+        },
+
+        mapRow: (s4, refs) => {
+            const supplierId = refs.bySupplierNo[s4.Supplier];
+            if (!supplierId) {
+                throw new Error(`No MASTER_SUPPLIERS record for S4 vendor "${s4.Supplier}" — sync Suppliers first`);
+            }
+            return {
+                contract_number    : s4.PurchaseContract || '',
+                contract_name      : s4.PurchaseContract || '',  // no header description field exists in this API
+                supplier_ID        : supplierId,
+                valid_from         : parseODataDate(s4.ValidityStartDate),
+                valid_to           : parseODataDate(s4.ValidityEndDate),
+                contract_type      : 'TERM',   // FuelSphere-native — no S4 equivalent, verify default fits
+                price_type         : 'FIXED',  // FuelSphere-native — no S4 equivalent, verify default fits
+                currency_code      : s4.DocumentCurrency || '',
+                payment_terms      : s4.PaymentTerms || '',
+                incoterms          : s4.IncotermsClassification || '',
+                min_volume_kg      : null,
+                max_volume_kg      : null,
+                s4_contract_number : s4.PurchaseContract || '',
+                is_active          : true
+            };
+        }
     },
 
     // ==========================================================================

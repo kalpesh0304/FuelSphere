@@ -2705,7 +2705,7 @@ entity INVOICE_CHECK_REGISTRY : cuid, ActiveStatus, AuditTrail {
         // absent, because absence is invisible and a declared no-op looks
         // like it passed. This makes the gap countable.
         is_implemented      : Boolean default true;
-        not_implemented_reason : String(200);             // Why, and which package owns it
+        not_implemented_reason : String(500);             // Why, and which package owns it
 
         // Effective dating, as every configuration table here carries
         valid_from          : Date;

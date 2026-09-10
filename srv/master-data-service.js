@@ -46,7 +46,11 @@ module.exports = class MasterDataService extends cds.ApplicationService {
         this.on('S4_SyncSuppliers', async (req) => {
             return this._syncFromS4('Suppliers', req);
         });
-        
+
+        this.on('S4_SyncContracts', async (req) => {
+            return this._syncFromS4('Contracts', req);
+        });
+
         // ====================================================================
         // ACTION: syncFromS4HANA
         // Generic action — entityType param drives which entity to sync
@@ -157,11 +161,22 @@ module.exports = class MasterDataService extends cds.ApplicationService {
             }
 
             // ------------------------------------------------------------------
+            // STEP 2.5: Resolve references (e.g. FK lookups for managed
+            // associations). Most entities key-match on a business key
+            // (land1, werks, ...) so this is a no-op for them; entities with
+            // a managed association (e.g. Contracts.supplier) need the
+            // actual target UUID, resolved once here rather than per row.
+            // ------------------------------------------------------------------
+            const refs = typeof config.resolveRefs === 'function'
+                ? await config.resolveRefs()
+                : {};
+
+            // ------------------------------------------------------------------
             // STEP 3: Map S4 fields → HANA entity fields
             // ------------------------------------------------------------------
             const mappedRows = s4Data.map((s4Row, idx) => {
                 try {
-                    return config.mapRow(s4Row);
+                    return config.mapRow(s4Row, refs);
                 } catch (mapErr) {
                     errors.push(`Row ${idx} mapping error: ${mapErr.message}`);
                     return null;
