@@ -16,6 +16,7 @@ const cds=require(`${PROJECT}/node_modules/@sap/cds`);
 const assert=require('node:assert');
 const test=cds.test(PROJECT); const out=s=>process.stdout.write('      '+s+'\n');
 const P='/odata/v4/planning';
+const M='/odata/v4/master';
 
 describe('A — the flight schedule', () => {
 
@@ -103,7 +104,7 @@ describe('A — the flight schedule', () => {
     out(`${fuels.length} supplier-fuels (agent null by design), ${agent.length} with a named agent`);
   });
 
-  it('EXIT-6  the aircraft block, and THREE FIELDS ARE MISSING NOT BLANK', async () => {
+  it('EXIT-6  the aircraft block, and THREE FIELDS DELIBERATELY NOT BOUND HERE', async () => {
     const { data } = await test.GET(`${P}/FlightSchedule?$filter=flight_number eq 'AC410'`
       + `&$expand=tail($select=registration,aircraft_type_code,dry_operating_weight_kg,`
       + `fuel_capacity_kg,apu_burn_rate_kg_hr,performance_factor_pct,record_status;`
@@ -115,18 +116,52 @@ describe('A — the flight schedule', () => {
       assert.ok(t[f] !== null && t[f] !== undefined, `the aircraft block would show a blank ${f}`);
     assert.ok(t.aircraft_type?.mtow_kg, 'MTOW is reached through the TYPE and is null');
 
-    // MLW, MZFW and engine burn are NOT in the model. The block must not bind
-    // them - a field that is not there is a question; a blank one is the
-    // eighth cause of an empty section.
-    const et = edmx.match(/<EntityType Name="AircraftRegistrations"[\s\S]*?<\/EntityType>/)[0];
-    for (const absent of ['mlw_kg','mzfw_kg','engine_burn_rate_kgph']) {
-      assert.strictEqual(new RegExp(`Name="${absent}"`).test(et), false,
-        `${absent} now EXISTS - the aircraft block should gain it and this criterion should change`);
-      assert.strictEqual(edmx.includes(`Path="${absent}"`), false,
-        `the block binds ${absent}, which is not in the model - it would render blank`);
+    // THIS CRITERION SAID "MISSING RATHER THAN BLANK" AND IT FIRED WHEN THE
+    // FIELDS ARRIVED — which is the criterion working, not breaking. Package
+    // B added mlw_kg, mzfw_kg and engine_burn_rate_kgph to the tail master,
+    // so the first half no longer holds.
+    //
+    // THE SECOND HALF STILL DOES, AND IT IS THE HALF THAT MATTERED. They are
+    // NULL on every tail and must not be bound in THIS block — a field that is
+    // not there is a question; one that is there and permanently blank is the
+    // eighth cause of an empty section. They belong on the master-data page,
+    // where an empty field is a prompt to fill it, and tail-performance
+    // EXIT-4 asserts exactly that split.
+    //
+    // SCOPED TO #AircraftForFlight, NOT TO THE WHOLE EDMX. PlanningService
+    // also carries the tail's own object page, and the day someone annotates
+    // MLW there this criterion must not fire — it is about the FLIGHT's
+    // aircraft block and nothing else.
+    const fg = edmx.match(
+      /<Annotation Term="UI.FieldGroup" Qualifier="AircraftForFlight">[\s\S]*?<\/Annotation>/);
+    assert.ok(fg, 'the flight\'s aircraft block is gone from the EDMX');
+    const m2 = cds.linked(cds.compile.for.nodejs(await cds.load(`${PROJECT}/db`))).definitions;
+    const reg = m2['fuelsphere.AIRCRAFT_REGISTRATIONS'].elements;
+    for (const f of ['mlw_kg','mzfw_kg','engine_burn_rate_kgph']) {
+      assert.ok(reg[f], `${f} has gone from the tail master again`);
+      // FORM-AGNOSTIC ON PURPOSE. `Path="mlw_kg"` is only ONE of the forms a
+      // binding takes: MTOW in this very block emits as
+      // `Path="aircraft_type/mtow_kg"`, so an exact-match check would report
+      // "not bound" for a field that IS bound through one hop. Proved by
+      // measuring this block: nine fields, and the exact form finds eight.
+      const bound = [...fg[0].matchAll(/Path="([^"]*)"/g)]
+        .map(x => x[1]).filter(x => x.split('/').includes(f));
+      assert.deepStrictEqual(bound, [],
+        `the flight's aircraft block binds ${f}. It is NULL on every tail, so it would render as a `
+      + `permanently blank row on an operational page — the exact failure this criterion was written `
+      + `for, arriving from the other direction now that the field exists.`);
     }
+    const { data: nulls } = await test.GET(
+      `${M}/AircraftRegistrations?$select=registration,mlw_kg,mzfw_kg,engine_burn_rate_kgph&$top=60`);
+    assert.ok(nulls.value.length > 0, 'instrument check: no tails read back at all');
+    const populated = nulls.value.filter(
+      r => r.mlw_kg != null || r.mzfw_kg != null || r.engine_burn_rate_kgph != null);
+    assert.strictEqual(populated.length, 0,
+      `${populated.length} tail(s) now carry MLW/MZFW/engine burn — the aircraft block SHOULD gain them `
+    + `and this criterion should change to assert they render.`);
     out(`C-FDMO: MTOW ${t.aircraft_type.mtow_kg} (via type), DOW ${t.dry_operating_weight_kg}, `
-      + `cap ${t.fuel_capacity_kg}, APU ${t.apu_burn_rate_kg_hr}; MLW/MZFW/engine burn absent from the model`);
+      + `cap ${t.fuel_capacity_kg}, APU ${t.apu_burn_rate_kg_hr}; MLW/MZFW/engine burn now EXIST `
+      + `on the tail master, are null on all ${nulls.value.length} tails, and are not bound here`);
   });
 
   it('EXIT-7  nothing is COPIED onto the flight', async () => {

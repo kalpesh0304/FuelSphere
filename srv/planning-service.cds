@@ -568,7 +568,13 @@ service PlanningService {
         // Resolved HERE rather than in the FLIGHT_AIRCRAFT view because
         // schema.cds cannot see the file that adds these fields — that file
         // imports it. The dependency runs one way.
-        coalesce(tail.mtow_kg, tail.aircraft_type.mtow_kg) as mtow_resolved_kg : Decimal(15,2),
+        // NAMED mtow_kg, NOT mtow_resolved_kg. Renaming it broke three harnesses
+        // at once — d50 reported a dangling annotation path, e2b got
+        // 400 "Property mtow_kg does not exist", and the Aircraft card would
+        // have failed its WHOLE READ rather than one column. The resolved
+        // value IS the MTOW; the two sources are visible beside it for anyone
+        // who needs to know which won.
+        coalesce(tail.mtow_kg, tail.aircraft_type.mtow_kg) as mtow_kg : Decimal(15,2),
         tail.mtow_kg                as mtow_tail_kg  : Decimal(15,2),
         tail.aircraft_type.mtow_kg  as mtow_type_kg  : Decimal(15,2),
 
