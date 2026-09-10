@@ -27,11 +27,28 @@ describe('A — the flight schedule', () => {
     const blk = edmx.match(/<Annotations Target="PlanningService\.FlightSchedule">([\s\S]*?)<\/Annotations>/)[1];
     const sf = blk.match(/<Annotation Term="UI.SelectionFields">([\s\S]*?)<\/Annotation>/);
     assert.ok(sf, 'no SelectionFields at all');
-    assert.ok(/station_default\/supplier\/supplier_name/.test(sf[1]),
-      'the supplier is not a FILTER - the SME asked for both, twice');
     const li = blk.match(/<Annotation Term="UI.LineItem">([\s\S]*?)<\/Annotation>/);
-    assert.ok(/station_default\/supplier\/supplier_name/.test(li[1]),
-      'the supplier is not a COLUMN');
+
+    // THIS CRITERION ASSERTED station_default AND FIRED WHEN D56 WAS FIXED -
+    // the second self-invalidating criterion this week to do its job.
+    //
+    // It was right that the SME asked for BOTH and right that both were
+    // bound. It was wrong about what they were bound TO: station_default is
+    // the STATION axis by construction, so the filter MISSED AC102 under its
+    // real supplier and RETURNED it under LHR's default. Measured, both ways.
+    //
+    // Both halves of the ask still hold and now point at the resolved
+    // designation. The station default is asserted OFF both, because it
+    // agrees on 13 of 14 rows and differs on the one nobody is watching.
+    for (const [what, txt] of [['FILTER', sf[1]], ['COLUMN', li[1]]]) {
+      assert.ok(/designated\/supplier_name/.test(txt),
+        `the designated supplier is not a ${what} - the SME asked for both, twice`);
+      const stale = [...txt.matchAll(/Path="([^"]*)"/g)].map(m => m[1])
+        .filter(x => x.split('/').includes('station_default'));
+      assert.deepStrictEqual(stale, [],
+        `the ${what} binds station_default (${stale.join(', ')}), which cannot show a flight-level `
+      + `arrangement. See d56-designated-column EXIT-6 for the two flights it gets wrong.`);
+    }
     // gate and stand were confirmed present by survey; terminal was NOT.
     assert.ok(/Path="gate_number"/.test(li[1]) && /Path="stand_number"/.test(li[1]));
     assert.strictEqual(/Path="terminal"/.test(li[1]), false,
