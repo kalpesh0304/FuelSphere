@@ -175,10 +175,30 @@ describe('D — who fuels this flight', () => {
     const m = await cds.load(`${PROJECT}/db`);
     const l = cds.linked(cds.compile.for.nodejs(m)).definitions;
     for (const ent of ['fuelsphere.FLIGHT_SCHEDULE', 'fuelsphere.FLIGHT_DISPATCH']) {
-      const els = Object.keys(l[ent].elements);
-      const copied = els.filter(k => /designated|into_plane/.test(k));
+      // AN ASSOCIATION IS NOT A COPY - IT IS THE OPPOSITE OF ONE, and this
+      // criterion matched one by NAME and called it a denormalisation.
+      //
+      // D56 added FLIGHT_SCHEDULE.designated, a to-one onto a resolving view.
+      // Nothing is stored on the flight: a supplier changes and every flight
+      // shows the new one, which is precisely what this rule is FOR. The old
+      // test asked "is there an element whose name mentions the designation",
+      // and the rule is "is there a VALUE stored here that should have been
+      // resolved". Those differ exactly on the fix.
+      const els = l[ent].elements;
+      const copied = Object.keys(els).filter(k =>
+        /designated|into_plane/.test(k)
+        && !els[k].isAssociation && !els[k].isComposition);
       assert.deepStrictEqual(copied, [],
         `${ent} carries a copy of the designation: ${copied.join(', ')}`);
+      // AND THE ASSOCIATION MUST BE ONE - a to-MANY here would be D56 again,
+      // and a stored field renamed would slip past the filter above.
+      for (const k of Object.keys(els).filter(k => /designated/.test(k))) {
+        assert.ok(els[k].isAssociation,
+          `${ent}.${k} is not an association, so it is a stored value after all`);
+        assert.ok(!els[k].is2many,
+          `${ent}.${k} is a to-MANY. Fiori has no key for the first hop, which is D56 exactly - `
+        + `the column would come back present and null on every row.`);
+      }
     }
     // FUEL_ORDERS is the deliberate exception and must have the fields.
     const o = Object.keys(l['fuelsphere.FUEL_ORDERS'].elements);
