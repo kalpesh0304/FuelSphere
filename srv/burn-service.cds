@@ -37,6 +37,7 @@ service BurnService {
     entity FuelBurns as projection on db.FUEL_BURNS {
         *,
         flight              : redirected to FlightSchedule,
+        flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
         destination_airport : redirected to Airports

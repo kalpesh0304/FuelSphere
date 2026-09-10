@@ -1653,3 +1653,92 @@ annotate PlanningService.FlightDesignatedSupplier with {
     valid_from    @title: 'Valid From';
     valid_to      @title: 'Valid To';
 };
+
+// ============================================================================
+// CROSS-APP NAVIGATION — flight-overview's OVP cards to the standalone
+// Fiori Elements apps (fuelorders, fueltickets, flightdispatch).
+//
+// One UI.Identification per entity, referenced by each card's
+// identificationAnnotationPath in flight-overview/webapp/manifest.json. Both
+// row clicks and the card header use this same annotation: a row click
+// carries that row's own ID (resolves directly to the target app's Object
+// Page, since PlanningService and the target app's own service project the
+// same underlying table row with the same ID) and flight_number (so the
+// target's list is pre-filtered to this flight even before the object page
+// loads); a header click carries no row context, so it lands on the
+// target's list filtered by flight_number only where the current OVP page
+// itself is scoped to one flight.
+//
+// SemanticObject/Action values are lifted directly from each target app's
+// own sap.app.crossNavigation.inbounds entry, not invented here.
+// ============================================================================
+
+annotate PlanningService.FuelOrders with @(
+    UI.Identification #ToFuelOrdersApp: [
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            SemanticObject : 'fuelorders',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ]
+        }
+    ]
+);
+
+annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
+    UI.Identification #ToFuelTicketsApp: [
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            SemanticObject : 'fueltickets',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ]
+        }
+    ]
+);
+
+annotate PlanningService.FlightDispatches with @(
+    UI.Identification #ToFlightDispatchApp: [
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            SemanticObject : 'flightdispatch',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ]
+        }
+    ]
+);
+
+annotate PlanningService.FuelBurns with @(
+    UI.Identification #ToFuelBurnsApp: [
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            SemanticObject : 'fuelburns',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ]
+        }
+    ]
+);
+
+annotate PlanningService.FuelDeliveries with @(
+    UI.Identification #ToFuelDeliveriesApp: [
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            SemanticObject : 'fueldeliveries',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ]
+        }
+    ]
+);

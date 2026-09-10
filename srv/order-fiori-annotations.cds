@@ -38,13 +38,15 @@ annotate FuelOrderService.FuelOrders with @(
             status,
             priority,
             requested_date,
-            product_ID
+            product_ID,
+            flight_number
         ],
 
         // Line Item columns for List Report table
         LineItem: [
             { Value: order_number, Label: 'Order Number', ![@UI.Importance]: #High },
             { Value: requested_date, Label: 'Order Date', ![@UI.Importance]: #High },
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
             { Value: station_code, Label: 'Station', ![@UI.Importance]: #High },
             { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
             { Value: product.product_name, Label: 'Fuel Type', ![@UI.Importance]: #Medium },
@@ -348,6 +350,7 @@ annotate FuelOrderService.FuelOrders with {
     into_plane_contract          @title: 'Into-Plane Contract';
     ID              @UI.Hidden;
     order_number    @title: 'Order Number' @Common.FieldControl: #ReadOnly;
+    flight_number   @title: 'Flight';
     station_code    @title: 'Station' @mandatory;
     requested_date  @title: 'Delivery Date' @mandatory;
     requested_time  @title: 'Delivery Time';
@@ -611,6 +614,7 @@ annotate FuelOrderService.FuelDeliveries with @(
         // Line Item for embedded table in Order Object Page
         LineItem: [
             { Value: delivery_number, Label: 'Delivery Number', ![@UI.Importance]: #High },
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
             { Value: delivery_date, Label: 'Date', ![@UI.Importance]: #High },
             { Value: delivery_time, Label: 'Time', ![@UI.Importance]: #Medium },
             { Value: delivered_quantity, Label: 'Delivered (kg)', ![@UI.Importance]: #High },
@@ -653,7 +657,8 @@ annotate FuelOrderService.FuelDeliveries with @(
             aircraft_reg,
             status,
             recon_status,
-            fob_source
+            fob_source,
+            flight_number
         ],
 
         Facets: [
@@ -825,6 +830,7 @@ annotate FuelOrderService.FuelDeliveries with {
     refuel_complete              @title: 'Refuel Complete';
     ID                  @UI.Hidden;
     delivery_number     @title: 'Delivery Number' @Common.FieldControl: #ReadOnly;
+    flight_number       @title: 'Flight';
     delivery_date       @title: 'Delivery Date' @mandatory;
     delivery_time       @title: 'Delivery Time' @mandatory;
     delivered_quantity  @title: 'Delivered Qty (kg)' @mandatory;

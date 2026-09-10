@@ -30,12 +30,14 @@ annotate BurnService.FuelBurns with @(
             burn_date,
             data_source,
             status,
-            variance_status
+            variance_status,
+            flight_number
         ],
 
         // --- List Report Table ---
         LineItem: [
             { Value: tail_number, Label: 'Aircraft', ![@UI.Importance]: #High },
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
             { Value: burn_date, Label: 'Burn Date', ![@UI.Importance]: #High },
             { Value: origin_airport, Label: 'Origin', ![@UI.Importance]: #High },
             { Value: destination_airport, Label: 'Destination', ![@UI.Importance]: #High },
@@ -250,6 +252,7 @@ annotate BurnService.FuelBurns with @(
 annotate BurnService.FuelBurns with {
     ID                            @UI.Hidden;
     tail_number                   @title: 'Aircraft Tail';
+    flight_number                 @title: 'Flight';
     burn_date                     @title: 'Burn Date';
     burn_time                     @title: 'Burn Time';
     block_off_time                @title: 'Block-Off Time';
