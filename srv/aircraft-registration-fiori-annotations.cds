@@ -106,7 +106,29 @@ annotate MasterDataService.AircraftRegistrations with @(
                 // Burned on the ground and never metered. Nothing consumes
                 // this until WP-19; it is shown so the value can be
                 // maintained before then.
-                { Value: apu_burn_rate_kg_hr, Label: 'APU Burn Rate (kg/hr)' }
+                { Value: apu_burn_rate_kg_hr, Label: 'APU Burn Rate (kg/hr)' },
+
+                // ====================================================
+                // WORK PACKAGE B. NULL ON ALL 31 ROWS TODAY, AND SHOWN
+                // HERE ANYWAY — because this is the MASTER-DATA screen,
+                // where an empty field is a prompt to fill it rather
+                // than a section that failed to render.
+                //
+                // They are deliberately NOT on the flight overview's
+                // Aircraft card: three permanently blank columns on an
+                // operational page is the eighth cause of an empty
+                // section, and a viewer there cannot tell "this tail has
+                // no MLW recorded" from "the card is broken".
+                //
+                // MTOW is an OVERRIDE. Blank means the TYPE's figure
+                // governs, and AIRCRAFT_MASTER.mtow_kg is populated on
+                // all 17 types — so blank here is the normal case, not a
+                // gap. FLIGHT_AIRCRAFT resolves the pair with coalesce.
+                // ====================================================
+                { Value: mtow_kg,               Label: 'MTOW override (kg)' },
+                { Value: mlw_kg,                Label: 'MLW (kg)' },
+                { Value: mzfw_kg,               Label: 'MZFW (kg)' },
+                { Value: engine_burn_rate_kgph, Label: 'Engine Burn Rate (kg/h)' }
             ]
         },
 
@@ -167,6 +189,15 @@ annotate MasterDataService.AircraftRegistrations with {
     // rather than a default. See the schema comment at the field.
     apu_rate_source         @title: 'APU Rate Source';
     performance_factor_pct  @title: 'Performance Factor (%)';
+
+    mtow_kg               @title: 'MTOW Override (kg)'
+                          @Common.QuickInfo: 'Maximum take-off weight FOR THIS AIRFRAME. Leave blank unless this tail differs from its type — AIRCRAFT_MASTER carries the type figure and it is populated on all 17 types, so blank is the normal case. A weight variant or a modification is what makes an override right.';
+    mlw_kg                @title: 'MLW (kg)'
+                          @Common.QuickInfo: 'Maximum landing weight. It constrains the ARRIVAL, not the departure: a flight can be legal at MTOW and illegal to land without burning down to MLW, so it cannot be derived from MTOW by any ratio.';
+    mzfw_kg               @title: 'MZFW (kg)'
+                          @Common.QuickInfo: 'Maximum zero fuel weight — the structural limit on payload plus empty weight, before any fuel. FLIGHT_DISPATCH.payload_plan_kg is capped by this figure.';
+    engine_burn_rate_kgph @title: 'Engine Burn Rate (kg/h)'
+                          @Common.QuickInfo: 'Per tail and per hour, NOT the type''s cruise_burn_kgph. It drifts with airframe age and airlines re-baseline it, which is the same reason Performance Factor is per tail rather than per type. No source for this figure exists in FuelSphere yet.';
     on_own_aoc              @title: 'On Own AOC';
     cost_object_type        @title: 'Cost Object Type';
     cost_object_id          @title: 'Cost Object';

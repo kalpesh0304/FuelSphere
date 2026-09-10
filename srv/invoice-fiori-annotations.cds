@@ -1488,3 +1488,48 @@ annotate InvoiceService.UnbilledTickets with {
     aircraft_reg     @title: 'Tail';
     match_status     @title: 'Order Match';
 }
+
+// ===========================================================================
+// UNITS ON THE INVOICING SCREENS — same rule, and one entity it cannot serve
+// ===========================================================================
+annotate InvoiceService.UnbilledTickets with {
+    // est_value is a CURRENCY amount and est_currency is on the row.
+    est_value        @Measures.ISOCurrency: est_currency;
+    est_unit_price   @Measures.ISOCurrency: est_currency;
+    // uom_code is the METERED unit. quantity_kg is kilograms by name, and
+    // pointing uom_code at it renders the exposure figure as litres on every
+    // ticket metered in LTR — the number this whole screen leads with.
+    quantity_metered @Measures.Unit: uom_code;
+    quantity_kg      @title: 'Mass (kg)';
+}
+
+annotate InvoiceService.Invoices with {
+    stated_net_amount   @Measures.ISOCurrency: currency_code;
+    stated_gross_amount @Measures.ISOCurrency: currency_code;
+}
+
+annotate InvoiceService.FuelTickets with {
+    quantity_metered @Measures.Unit: uom_code;
+    quantity_kg      @title: 'Mass (kg)';
+    density_value    @title: 'Density (kg/L)';
+}
+
+// INVOICE_ITEMS AND INVOICE_MATCHES CANNOT BE SERVED BY THIS RULE, and
+// guessing is what the rule forbids.
+//
+// INVOICE_ITEMS carries uom_code — so `quantity` takes it — but net_amount,
+// tax_amount and unit_price are CURRENCY amounts and the entity has NO
+// currency column: the currency is the INVOICE's. @Measures.ISOCurrency must
+// point at a property of the same entity, so there is nothing to point at.
+//
+// INVOICE_MATCHES has neither. po_quantity, gr_quantity and inv_quantity
+// carry no unit column and their names do not say — and an invoice quantity
+// here may be litres or kilograms depending on the document. A label would
+// be a guess, and a guess is exactly what renders 2,884 and 2,305.76
+// indistinguishable.
+//
+// Recorded rather than annotated. Both need a decision about where the unit
+// comes from, not a label.
+annotate InvoiceService.InvoiceItems with {
+    quantity @Measures.Unit: uom_code;
+}

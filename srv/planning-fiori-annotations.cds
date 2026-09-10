@@ -1227,3 +1227,307 @@ annotate PlanningService.ContactRoles with {
 annotate PlanningService.FlightAircraft with {
     mtow_kg @Common.QuickInfo: 'Maximum take-off weight, from the aircraft TYPE rather than this registration — the same figure for every tail of the type. MLW, MZFW and engine burn rate are NOT IN THE MODEL AT ALL, on the tail or the type, and arrive with work package B. They are missing rather than blank: a field that is not there is a question.';
 }
+
+// ===========================================================================
+// THE FOUR DRILL-DOWNS — ORDER, TICKET, DISPATCH, DELIVERY
+//
+// NO SCHEMA CHANGE AND NO PROJECTION WIDENING. The survey found the cause is
+// not a thin projection:
+//
+//   FuelOrders             17 props, UI.Facets present but ONE facet
+//   FlightDispatches       15 props, HeaderInfo and ZERO facets
+//   FLIGHT_FUEL_TICKETS    19 props, HeaderInfo and ZERO facets
+//   FLIGHT_FUEL_DELIVERIES 19 props, HeaderInfo and ZERO facets
+//
+// A HEADER WITH NO FACETS IS EXACTLY THE SYMPTOM REPORTED: the ticket page
+// showed "WFS-YYZ-20260410-31 · World Fuel Services Canada" and nothing else,
+// because HeaderInfo rendered and there was NOWHERE TO PUT THE BODY. Not a
+// thin facet - no facet. FuelOrders was the inverse: one facet of flight
+// fields and no HeaderInfo, which is why it showed flight number, date and
+// airline code and nothing about the order.
+//
+// EVERY FIELD BELOW WAS MEASURED PRESENT IN THE EMITTED EDMX FIRST. A
+// FieldGroup naming a field the projection lacks FAILS THE WHOLE READ rather
+// than the column, and four new blocks against restricted projections is four
+// chances at it. The order was: read the projection, then write the block -
+// never the reverse, because the failure is silent one way and loud the other.
+//
+// WHAT THESE PAGES DO NOT CARRY, and it is a decision not an oversight:
+// meter start and end, temperature, the verification block, the S/4
+// references and the signature group live on FuelOrderService, which owns
+// these entities and exposes 50-odd fields each. A reader arriving FROM A
+// FLIGHT gets what the flight makes them ask about. Widening these
+// projections to match the owner is a separate decision, sized in the survey.
+// ===========================================================================
+
+// ---- ORDER ---------------------------------------------------------------
+annotate PlanningService.FuelOrders with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'Fuel Order',
+            TypeNamePlural : 'Fuel Orders',
+            Title          : { Value: order_number },
+            Description    : { Value: status }
+        },
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'OrderWhat',
+              Target: '@UI.FieldGroup#OrderWhat',   Label: 'The order' },
+            { $Type: 'UI.ReferenceFacet', ID: 'OrderQty',
+              Target: '@UI.FieldGroup#OrderQty',    Label: 'Quantity and value' },
+            { $Type: 'UI.ReferenceFacet', ID: 'OrderFlight',
+              Target: '@UI.FieldGroup#OrderFlight', Label: 'The flight it is for' }
+        ],
+        FieldGroup#OrderWhat: {
+            Data: [
+                { Value: order_number,   Label: 'Order number' },
+                { Value: status,         Label: 'Status' },
+                { Value: station_code,   Label: 'Station' },
+                { Value: requested_date, Label: 'Requested for' },
+                { Value: priority,       Label: 'Priority' },
+                { Value: notes,          Label: 'Notes' }
+            ]
+        },
+        // The unit lives in the LABEL here rather than in @Measures.Unit,
+        // because PlanningService.FuelOrders does not carry uom_code - it is
+        // on the owning service and was not brought through when this
+        // projection was widened for the overview card's filter. Recorded
+        // rather than worked around: a label is honest, and inventing a
+        // constant unit column would be a second place holding one fact.
+        FieldGroup#OrderQty: {
+            Data: [
+                { Value: ordered_quantity, Label: 'Ordered quantity' },
+                { Value: unit_price,       Label: 'Unit price' },
+                { Value: total_amount,     Label: 'Total amount' },
+                { Value: currency_code,    Label: 'Currency' }
+            ]
+        },
+        FieldGroup#OrderFlight: {
+            Data: [
+                { Value: flight_number,       Label: 'Flight' },
+                { Value: flight_date,         Label: 'Flight date' },
+                { Value: origin_airport,      Label: 'From' },
+                { Value: destination_airport, Label: 'To' },
+                { Value: airline_code,        Label: 'Carrier' }
+            ]
+        }
+    }
+);
+
+// ---- TICKET --------------------------------------------------------------
+// THE QUANTITIES ARE THE POINT. The reported symptom was a header and "no
+// quantities at all", and the metered figure with its unit beside the derived
+// mass is the conversion this whole module demonstrates.
+annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
+    UI: {
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'TicketWhat',
+              Target: '@UI.FieldGroup#TicketWhat',   Label: 'The ticket' },
+            { $Type: 'UI.ReferenceFacet', ID: 'TicketQty',
+              Target: '@UI.FieldGroup#TicketQty',    Label: 'What was uplifted' },
+            { $Type: 'UI.ReferenceFacet', ID: 'TicketWhere',
+              Target: '@UI.FieldGroup#TicketWhere',  Label: 'Aircraft and flight' }
+        ],
+        FieldGroup#TicketWhat: {
+            Data: [
+                { Value: ticket_number,      Label: 'Ticket number' },
+                { Value: supplier_name,      Label: 'Supplier' },
+                { Value: delivery_timestamp, Label: 'Delivered at' },
+                { Value: match_status,       Label: 'Order match' },
+                { Value: order.order_number, Label: 'Order' }
+            ]
+        },
+        // METERED, ITS UNIT, THEN THE MASS. In that order deliberately: the
+        // supplier metered a volume, the density converted it, and the mass
+        // is what everything downstream compares against. uom_code is the
+        // unit of quantity_metered ONLY - quantity_kg is kilograms by
+        // definition, and pointing uom_code at it would render a mass as
+        // litres on the 14 of 30 tickets metered in LTR.
+        FieldGroup#TicketQty: {
+            Data: [
+                { Value: quantity_metered, Label: 'Metered quantity' },
+                { Value: uom_code,         Label: 'Metered in' },
+                { Value: density_value,    Label: 'Density' },
+                { Value: quantity_kg,      Label: 'Mass (kg)' }
+            ]
+        },
+        FieldGroup#TicketWhere: {
+            Data: [
+                { Value: aircraft_reg,      Label: 'Tail' },
+                { Value: tail_registration, Label: 'Registration' },
+                { Value: flight_number,     Label: 'Flight' },
+                { Value: flight_date,       Label: 'Flight date' },
+                { Value: origin_airport,    Label: 'Station' }
+            ]
+        }
+    }
+);
+
+// ---- DISPATCH ------------------------------------------------------------
+annotate PlanningService.FlightDispatches with @(
+    UI: {
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'DispatchPlan',
+              Target: '@UI.FieldGroup#DispatchPlan', Label: 'The plan' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DispatchQty',
+              Target: '@UI.FieldGroup#DispatchQty',  Label: 'The stack' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DispatchWhere',
+              Target: '@UI.FieldGroup#DispatchWhere', Label: 'Aircraft and flight' }
+        ],
+        FieldGroup#DispatchPlan: {
+            Data: [
+                { Value: plan_version,       Label: 'Plan version' },
+                { Value: plan_status,        Label: 'Plan status' },
+                { Value: plan_group_id,      Label: 'Plan family' },
+                { Value: dispatch_source,    Label: 'Source' },
+                { Value: dispatch_timestamp, Label: 'Dispatched at' }
+            ]
+        },
+        // FOUR TERMS, NOT SIX. FLIGHT_DISPATCH holds a single dispatch_qty_kg
+        // with no trip/taxi/contingency/alternate/reserve/extra breakdown -
+        // the six-term stack is DESIGNED and not built. Showing four real
+        // figures is honest; five blank columns beside them would be the
+        // eighth cause of an empty section.
+        FieldGroup#DispatchQty: {
+            Data: [
+                { Value: dispatch_qty_kg,    Label: 'Dispatch quantity (kg)' },
+                { Value: block_fuel_kg,      Label: 'Block fuel (kg)' },
+                { Value: required_uplift_kg, Label: 'Required uplift (kg)' },
+                { Value: rob_departure_kg,   Label: 'ROB at departure (kg)' }
+            ]
+        },
+        FieldGroup#DispatchWhere: {
+            Data: [
+                { Value: tail_number,       Label: 'Tail' },
+                { Value: alternate_airport, Label: 'Alternate' },
+                { Value: flight_number,     Label: 'Flight' },
+                { Value: flight_date,       Label: 'Flight date' }
+            ]
+        }
+    }
+);
+
+// ---- DELIVERY ------------------------------------------------------------
+annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
+    UI: {
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'DeliveryWhat',
+              Target: '@UI.FieldGroup#DeliveryWhat',  Label: 'The delivery' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DeliveryRecon',
+              Target: '@UI.FieldGroup#DeliveryRecon', Label: 'Gauge and reconciliation' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DeliveryWhere',
+              Target: '@UI.FieldGroup#DeliveryWhere', Label: 'Aircraft and flight' }
+        ],
+        FieldGroup#DeliveryWhat: {
+            Data: [
+                { Value: delivery_number,    Label: 'Delivery number' },
+                { Value: delivery_date,      Label: 'Delivery date' },
+                { Value: delivered_quantity, Label: 'Delivered quantity' },
+                { Value: uom_code,           Label: 'Delivered in' },
+                { Value: supplier_count,     Label: 'Suppliers' },
+                { Value: order.order_number, Label: 'Order' }
+            ]
+        },
+        // THE VERDICT, AND WHERE IT CAME FROM. fob_source says whether the
+        // gauge figure was read or derived, and recon_status is meaningless
+        // without it - WP-34 built that distinction and this is the first
+        // page a planner can see it on.
+        FieldGroup#DeliveryRecon: {
+            Data: [
+                { Value: fob_delta_kg,      Label: 'Gauge delta (kg)' },
+                { Value: fob_source,        Label: 'Gauge source' },
+                { Value: recon_variance_kg, Label: 'Reconciliation variance (kg)' },
+                { Value: recon_status,      Label: 'Reconciliation status' }
+            ]
+        },
+        FieldGroup#DeliveryWhere: {
+            Data: [
+                { Value: aircraft_reg,      Label: 'Tail' },
+                { Value: tail_registration, Label: 'Registration' },
+                { Value: flight_number,     Label: 'Flight' },
+                { Value: flight_date,       Label: 'Flight date' },
+                { Value: origin_airport,    Label: 'Station' }
+            ]
+        }
+    }
+);
+
+// UNITS — AND THE RULE THAT DECIDES WHICH TREATMENT EACH FIELD GETS
+//
+// A UNIT COLUMN BELONGS TO ONE FIELD. @Measures.Unit points at the column
+// holding the unit OF THAT VALUE, never at the nearest unit column on the
+// row. Getting that wrong is worse than no units at all, because a unit
+// annotation correct on half the data looks identical to one correct on all
+// of it — and the whole reason for adding units is that a bare 2,884 and a
+// bare 2,305.76 cannot be told apart.
+//
+//   quantity_metered   -> @Measures.Unit: uom_code    uom_code IS its unit
+//   quantity_kg        -> LABEL "(kg)"                the NAME is the unit
+//   ordered_quantity   -> @Measures.Unit: uom_code    and it is LTR on AC410
+//   block_fuel_kg      -> LABEL                       no column exists
+//
+// MEASURED, NOT ASSUMED, on every pairing below:
+//   FLIGHT_FUEL_TICKETS     uom_code = LTR on 14 of 30, KG on 16
+//   FLIGHT_FUEL_DELIVERIES  uom_code = LTR on 10 of 26, KG on 16
+//   FuelOrders              uom_code = LTR on  3 of 25 — ALL THREE AC410's
+//
+// So pointing uom_code at a _kg field would render a mass as litres on
+// roughly half the rows, and a "(kg)" label on ordered_quantity would be
+// wrong on exactly the order the demo opens. Both directions are live here.
+// ===========================================================================
+
+annotate PlanningService.FLIGHT_FUEL_TICKETS with {
+    // uom_code is the unit of the METERED figure ONLY.
+    quantity_metered @Measures.Unit: uom_code  @title: 'Metered Quantity';
+    // NOT @Measures.Unit. Kilograms is in the name, and taking the metered
+    // unit here renders 2,305.76 kg as "2,305.76 LTR" on every litre ticket.
+    quantity_kg      @title: 'Mass (kg)';
+    density_value    @title: 'Density (kg/L)';
+    uom_code         @title: 'Metered In';
+}
+
+annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
+    delivered_quantity @Measures.Unit: uom_code  @title: 'Delivered Quantity';
+    uom_code           @title: 'Delivered In';
+    fob_delta_kg       @title: 'Gauge Delta (kg)';
+    recon_variance_kg  @title: 'Reconciliation Variance (kg)';
+}
+
+annotate PlanningService.FuelOrders with {
+    // THE COLUMN, NOT A LABEL. 3 of 25 orders are in LTR and all three are
+    // AC410's — FO-YYZ-20260410-001 is 2881.25 LTR on the demo flight.
+    ordered_quantity @Measures.Unit: uom_code           @title: 'Ordered Quantity';
+    uom_code         @title: 'Ordered In';
+    unit_price       @Measures.ISOCurrency: currency_code @title: 'Unit Price';
+    total_amount     @Measures.ISOCurrency: currency_code @title: 'Total Amount';
+}
+
+annotate PlanningService.FlightDispatches with {
+    // NO UNIT COLUMN EXISTS ON THIS ENTITY and none should be added: a
+    // constant 'KG' column on every row is a second place holding one fact.
+    // The name carries it and the label says it.
+    dispatch_qty_kg    @title: 'Dispatch Quantity (kg)';
+    block_fuel_kg      @title: 'Block Fuel (kg)';
+    required_uplift_kg @title: 'Required Uplift (kg)';
+    rob_departure_kg   @title: 'ROB at Departure (kg)';
+}
+
+annotate PlanningService.FuelBurns with {
+    planned_burn_kg @title: 'Planned Burn (kg)';
+    actual_burn_kg  @title: 'Actual Burn (kg)';
+    variance_kg     @title: 'Variance (kg)';
+    engine_burn_kg  @title: 'Engine Burn (kg)';
+    apu_burn_kg     @title: 'APU Burn (kg)';
+}
+
+annotate PlanningService.FuelDeliveries with {
+    fob_before_kg @title: 'FOB Before (kg)';
+    fob_after_kg  @title: 'FOB After (kg)';
+}
+
+annotate PlanningService.FlightAircraft with {
+    mtow_kg             @title: 'MTOW (kg)';
+    dow_kg              @title: 'Dry Operating Weight (kg)';
+    fuel_capacity_kg    @title: 'Fuel Capacity (kg)';
+    apu_burn_rate_kg_hr @title: 'APU Burn Rate (kg/h)';
+    cruise_burn_kgph    @title: 'Cruise Burn (kg/h)';
+}
