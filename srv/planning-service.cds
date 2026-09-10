@@ -304,6 +304,18 @@ service PlanningService {
         flight.destination_airport as destination_airport,
         flight.airline_code        as airline_code,
 
+        // THE UNIT OF ordered_quantity, AND IT IS NOT ALWAYS KILOGRAMS.
+        //
+        // Carried because a label cannot do this job: 3 of 25 orders are in
+        // LTR and 22 in KG, and ALL THREE LITRE ORDERS ARE AC410'S -
+        // FO-YYZ-20260410-001 is 2881.25 LTR on the demo flight itself. A
+        // "(kg)" label on this column would be wrong on exactly the row the
+        // walkthrough opens.
+        //
+        // This is a projection widening, not a schema change: db/ is
+        // untouched and the column already exists on FUEL_ORDERS.
+        uom_code,
+
         status,
         station_code,
         ordered_quantity,
