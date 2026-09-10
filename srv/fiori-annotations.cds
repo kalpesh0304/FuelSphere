@@ -1525,6 +1525,17 @@ annotate service.S4_SyncPlants with @(
     }
 );
 
+// ============================================================================
+// ACTION — S4_SyncContracts
+// ============================================================================
+annotate service.S4_SyncContracts with @(
+    Common.IsActionCritical: true,
+    Common.SideEffects: {
+        $Type          : 'Common.SideEffectsType',
+        TargetEntities : ['Contracts']
+    }
+);
+
 annotate service.UnitsOfMeasure with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },

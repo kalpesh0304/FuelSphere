@@ -159,4 +159,5 @@ service MasterDataService {
     action S4_SyncCountries() returns SyncResult;
     action S4_SyncPlants() returns SyncResult;
     action S4_SyncSuppliers() returns SyncResult;
+    action S4_SyncContracts() returns SyncResult;
 }

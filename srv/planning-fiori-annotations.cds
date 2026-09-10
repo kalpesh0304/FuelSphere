@@ -329,13 +329,25 @@ annotate PlanningService.FlightSchedule with @(
             // A. THE SME ASKED FOR THE SUPPLIER AS A FILTER AND A COLUMN,
             // twice in one session. Both, not either.
             //
-            // It filters on the STATION DEFAULT rather than the flight-level
-            // designation because that is the one 13 of 22 flights have -
-            // filtering on the flight axis would return one row and read as
-            // broken. A flight with its own arrangement still matches its
-            // station's filter, which is the behaviour a planner expects
-            // from "show me World Fuel's flights".
-            station_default.supplier.supplier_name
+            // D56: THIS FILTERED ON station_default AND THAT WAS WRONG IN
+            // BOTH DIRECTIONS, not merely approximate. Measured:
+            //
+            //   station_default eq 'Air Total'  -> AC302          MISSES AC102
+            //   station_default eq 'BP Aviation'-> AC102          WRONG, AC102
+            //                                                     is Air Total's
+            //
+            // AC102 has its own arrangement with Air Total; LHR's default is
+            // BP. The old filter hid it from the right supplier and returned
+            // it under the wrong one - two errors from one row, and no way to
+            // see either from the screen.
+            //
+            // The previous note argued the station axis was right because
+            // "13 of 22 flights have one" and the flight axis would return
+            // a single row. That reasoning was sound about the DATA and wrong
+            // about the QUESTION: `designated` resolves BOTH axes, so it
+            // answers on 14 of 22 - more than the station default did, on the
+            // correct axis.
+            designated.supplier_name
         ],
 
         // --- List Report Table ---
@@ -355,10 +367,30 @@ annotate PlanningService.FlightSchedule with @(
             // exist. `terminal` is NOT here: the brief listed gate, stand and
             // terminal as present and only two of the three are - a field
             // that is not there is a question, not a blank column.
+            //
+            // D56: THE STATION DEFAULT CAME OFF THIS ROW. It was headed
+            // "Supplier (station)" and was honest about what it showed, but
+            // it is not what was asked for and it agrees with the answer on
+            // 13 of 14 rows - so two columns here would differ exactly once,
+            // on the row nobody would be looking at.
+            //
+            // It is not deleted. It still renders in the #StationBlock facet
+            // on the object page, labelled, beside the flight block - which
+            // is package D's decision that BOTH axes always show, and this
+            // does not disturb it.
             {
-                Value: station_default.supplier.supplier_name,
-                Label: 'Supplier (station)',
+                Value: designated.supplier_name,
+                Label: 'Designated Supplier',
                 ![@UI.Importance]: #High
+            },
+            // WHICH AXIS ANSWERED, beside the name rather than resolved away.
+            // "Air Total" means something different when it is an arrangement
+            // for THIS FLIGHT than when it is what LHR does by default, and a
+            // planner deciding whether to change it needs to know which.
+            {
+                Value: designated.axis,
+                Label: 'Designated By',
+                ![@UI.Importance]: #Medium
             },
             { Value: gate_number,  Label: 'Gate',  ![@UI.Importance]: #Medium },
             { Value: stand_number, Label: 'Stand', ![@UI.Importance]: #Medium },
@@ -1596,3 +1628,28 @@ annotate PlanningService.FlightAircraft with {
     apu_burn_rate_kg_hr @title: 'APU Burn Rate (kg/h)';
     cruise_burn_kgph    @title: 'Cruise Burn (kg/h)';
 }
+
+// ============================================================================
+// D56 — THE RESOLVED DESIGNATION'S OWN LABELS.
+//
+// SelectionFields carries NO inline label. A LineItem entry can say
+// `{ Value: x, Label: 'Y' }` and that renders; a filter field has only the
+// PROPERTY'S label, so a property with none shows its technical name - which
+// is why the flight list's supplier filter once rendered as "supplier_name".
+//
+// So `designated.supplier_name` needs its title HERE, on the projection, not
+// on the LineItem entry.
+// ============================================================================
+annotate PlanningService.FlightDesignatedSupplier with {
+    supplier_name @title: 'Designated Supplier'
+                  @Common.QuickInfo: 'Who fuels this flight, resolved from DESIGNATED_SUPPLIERS: the arrangement for this flight where one exists, otherwise the station default. Blank means no designation applies - the order is created with an empty supplier and a person fills it in.';
+    supplier_code @title: 'Supplier Code';
+    axis          @title: 'Designated By'
+                  @Common.QuickInfo: 'FLIGHT - an arrangement made for this flight. STATION - what this station does by default, because this flight has no arrangement of its own.';
+    agent_name    @title: 'Into-Plane Agent';
+    supplier_performs_uplift @title: 'Supplier Fuels Own Product';
+    designation_type @title: 'Designation Type';
+    priority      @title: 'Priority';
+    valid_from    @title: 'Valid From';
+    valid_to      @title: 'Valid To';
+};

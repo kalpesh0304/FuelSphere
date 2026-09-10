@@ -25,6 +25,7 @@ using { fuelsphere as db } from '../db/schema';
 using { fuelsphere as ds } from '../db/designated-suppliers';
 using { fuelsphere as sc } from '../db/supplier-contacts';
 using { fuelsphere as perf } from '../db/aircraft-performance-fields';
+using { fuelsphere as dsr } from '../db/flight-designated-supplier';
 
 @path: '/odata/v4/planning'
 service PlanningService {
@@ -531,6 +532,22 @@ service PlanningService {
         *,
         supplier         : redirected to Suppliers,
         into_plane_agent : redirected to Suppliers
+    };
+
+    /**
+     * FlightDesignatedSupplier — ONE ROW PER FLIGHT, or none (D56).
+     *
+     * DECLARED EXPLICITLY rather than left auto-exposed as the target of
+     * FlightSchedule.designated. D47's third fact: an auto-exposed entity is
+     * navigable but NOT ADDRESSABLE — the auth layer returns 405 to anything
+     * naming the entity set directly, and a page renders empty with no error
+     * a viewer can see. The filter bar addresses this set, so it must be
+     * declared.
+     */
+    @readonly
+    entity FlightDesignatedSupplier as projection on dsr.FLIGHT_DESIGNATED_SUPPLIER {
+        *,
+        supplier : redirected to Suppliers
     };
 
     /**

@@ -240,25 +240,29 @@ describe('D50 — no annotation on any service points at nothing', () => {
     assert.ok(!pl.navmany['FlightSchedule']?.has('tail'),
       'instrument check: FlightSchedule.tail is reported as a to-many and is not - the reader over-reports');
 
-    // ONE KNOWN, RECORDED RATHER THAN ASSERTED AWAY, AND IT IS NOT MINE TO
-    // FIX. Package A put the designated supplier in FlightSchedule's
+    // THE ONE KNOWN ENTRY IS GONE, AND THE RATCHET IS WHAT SAID SO.
+    //
+    // Package A put the designated supplier in FlightSchedule's
     // SelectionFields and LineItem because the SME asked for it twice - as a
-    // filter AND as a list column. station_default is an Association to
-    // MANY, so it has never shown a name:
+    // filter AND as a list column - and bound both to `station_default`,
+    // which is an Association to MANY. This entry recorded that it could
+    // never bind, and said the repair was a DECISION rather than a patch.
     //
-    //     $select=station_default/supplier/supplier_name
-    //       -> 200, "station_default_supplier_supplier_name": null, always
-    //     $select=tail/registration
-    //       -> 200, "tail_registration": "RP-C8801"
+    // THE DECISION WAS TAKEN AND THE ENTRY CAME OFF BY FAILING. The stale
+    // check below fired the moment the column was rebound - which is the
+    // ratchet working, and the reason the check exists: an accepted list
+    // nobody re-derives becomes a record of decisions nobody took.
     //
-    // The repair is a DECISION, not a patch. A to-one over station_code is
-    // D44 exactly - a to-one over a condition matching many - and copying
-    // the name onto the flight is what D's "resolved, never copied" rule
-    // forbids and d-designated-suppliers EXIT-9 asserts against. So it is
-    // ratcheted: this one entry is accepted, and any NEW occurrence fails.
-    const KNOWN = new Set([
-      'PlanningService.FlightSchedule -> station_default/supplier/supplier_name  (to-many at "station_default")',
-    ]);
+    // What replaced it is FLIGHT_DESIGNATED_SUPPLIER, a view yielding at most
+    // one row per flight, reached by a to-ONE. Not the D44 shape the old note
+    // warned about: that was a to-one over a condition matching MANY, and
+    // this target has one row BY CONSTRUCTION - where two designations
+    // compete at the same axis the view emits nothing rather than choose.
+    //
+    // THE CLASS IS STILL GUARDED. The sweep walks every value path on all
+    // fifteen services; any NEW path through a to-many fails here with
+    // nothing accepted.
+    const KNOWN = new Set([]);
     const fresh = bad.filter(b => !KNOWN.has(b));
     assert.deepStrictEqual(fresh, [],
       `${fresh.length} NEW path(s) traverse a to-many mid-way and CANNOT BIND. Every hop is real and `
