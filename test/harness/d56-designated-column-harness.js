@@ -176,6 +176,16 @@ describe('D56 — the designated supplier column', () => {
     // priority agree, and it would pass with the ordering either way round.
     // AC102's flight row is priority 900 against a station row at 100. Flight
     // still wins. THAT is the pair that proves it.
+    //
+    // AND THE OBVIOUS SEED TO REACH FOR IS THE ONE THAT AGREES. Writing "the
+    // flight-level designation is the important one" leads straight to giving
+    // it the better priority as well - it reads as emphasis, and it is the
+    // natural thing to type. That seed makes this criterion vacuous while
+    // looking more deliberate than the one that works.
+    //
+    // So the disagreement is ASSERTED BEFORE the outcome is. If somebody
+    // re-seeds AC102 to priority 10 "for consistency", this fails on the
+    // anchor and says why, instead of passing and proving nothing.
     const { SELECT } = cds.ql;
     const rows = await cds.db.run(SELECT.from('fuelsphere.DESIGNATED_SUPPLIERS')
       .where({ station_code: 'LHR' }));
