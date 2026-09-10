@@ -946,19 +946,27 @@ annotate PlanningService.Suppliers with {
 // ===========================================================================
 
 // ---- CARD 2 · DISPATCH PLAN ----------------------------------------------
-// The stack that sums, and the required uplift. FLIGHT_DISPATCH holds a
-// single dispatch_qty_kg with no term breakdown (trip/taxi/contingency/
-// alternate/reserve/extra), so the card shows what exists rather than the
-// six-term stack the design describes. Stating that here rather than
-// rendering five blank columns.
+// THIS COMMENT ALSO CLAIMED THE STACK DOES NOT EXIST. Same stale source, same
+// self-explaining shape: it said the card "shows what exists rather than the
+// six-term stack", and what existed was the whole stack, populated on every
+// row, missing only from the projection.
+//
+// THE CARD STAYS NARROW ANYWAY, AND THAT IS NOW A CHOICE. An overview card is
+// scanned, not read - eleven figures across a card is a table nobody reads at
+// a glance. Trip and contingency go on it because they are what a planner
+// checks first and what the corrected defect lived in; the full stack is one
+// click away on the object page. required_uplift_kg comes OFF for the reason
+// in FieldGroup#DispatchQty below.
 annotate PlanningService.FlightDispatches with @(
     UI.LineItem #DispatchCard: [
-        { Value: plan_version,       Label: 'Version' },
-        { Value: plan_status,        Label: 'Status' },
-        { Value: dispatch_qty_kg,    Label: 'Dispatch (kg)' },
-        { Value: block_fuel_kg,      Label: 'Block (kg)' },
-        { Value: required_uplift_kg, Label: 'Required uplift (kg)' },
-        { Value: rob_departure_kg,   Label: 'ROB at departure (kg)' }
+        { Value: plan_version,        Label: 'Version' },
+        { Value: plan_status,         Label: 'Status' },
+        { Value: trip_fuel_kg,        Label: 'Trip (kg)' },
+        { Value: contingency_fuel_kg, Label: 'Contingency (kg)' },
+        { Value: contingency_pct_of_trip, Label: '% of trip' },
+        { Value: block_fuel_kg,       Label: 'Block (kg)' },
+        { Value: dispatch_qty_kg,     Label: 'Dispatch (kg)' },
+        { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' }
     ]
 );
 
@@ -1382,17 +1390,54 @@ annotate PlanningService.FlightDispatches with @(
                 { Value: dispatch_timestamp, Label: 'Dispatched at' }
             ]
         },
-        // FOUR TERMS, NOT SIX. FLIGHT_DISPATCH holds a single dispatch_qty_kg
-        // with no trip/taxi/contingency/alternate/reserve/extra breakdown -
-        // the six-term stack is DESIGNED and not built. Showing four real
-        // figures is honest; five blank columns beside them would be the
-        // eighth cause of an empty section.
+        // THIS COMMENT SAID "FOUR TERMS, NOT SIX ... the six-term stack is
+        // DESIGNED and not built". IT WAS WRONG, AND IT WAS THE CAUSE.
+        //
+        // The SEVEN components have been on FLIGHT_DISPATCH since WP-18 and
+        // are POPULATED ON ALL ELEVEN ROWS. The claim was read out of a stale
+        // CLAUDE.md section rather than measured - and the comment then sat
+        // here explaining the gap it had itself created, which is why nobody
+        // re-checked it. A note saying "this is absent by design" is the most
+        // expensive kind of wrong: it converts a defect into a decision and
+        // stops anybody looking.
+        //
+        // SEVEN, NOT SIX. Additional and extra are held separately and must
+        // not be merged - additional is a PLANNED requirement (EDTO,
+        // anticipated delay), extra is the COMMANDER'S DISCRETION, and the
+        // only interesting question about them is which is which. DSP454.
+        //
+        // THE RULE IS ON THE PAGE, ABOVE THE TOTAL. block = the sum of the
+        // seven, derived and never keyed (DSP450). A viewer who cannot see
+        // the rule cannot tell a total that is right from one that was typed.
+        //
+        // AND CONTINGENCY CARRIES ITS OWN RATIO, because the rule is stated
+        // as a PERCENTAGE OF TRIP and nobody divides two columns in their
+        // head. Seven rows carried 6.54% of trip until this branch - which
+        // was 5% of BLOCK showing through - and the number now reads 5.00 on
+        // all eleven.
+        //
+        // required_uplift_kg IS DELIBERATELY ABSENT. It is null on seven of
+        // eleven rows, and on the four that carry it the figure DISAGREES
+        // with block - rob_departure (which is 0 there, because
+        // rob_departure is post-uplift on those rows and pre-uplift on the
+        // other seven - D57). A blank result beside two populated inputs
+        // invites the viewer to do the subtraction and wonder why the system
+        // did not. It goes back when something computes it.
+        // dispatch-stack-harness EXIT-5 asserts its absence and fails the day
+        // it lands.
         FieldGroup#DispatchQty: {
             Data: [
-                { Value: dispatch_qty_kg,    Label: 'Dispatch quantity (kg)' },
-                { Value: block_fuel_kg,      Label: 'Block fuel (kg)' },
-                { Value: required_uplift_kg, Label: 'Required uplift (kg)' },
-                { Value: rob_departure_kg,   Label: 'ROB at departure (kg)' }
+                { Value: trip_fuel_kg,        Label: 'Trip (kg)' },
+                { Value: contingency_fuel_kg, Label: 'Contingency (kg)' },
+                { Value: contingency_pct_of_trip, Label: 'Contingency (% of trip, rule: 5.00)' },
+                { Value: alternate_fuel_kg,   Label: 'Alternate (kg)' },
+                { Value: final_reserve_kg,    Label: 'Final reserve (kg)' },
+                { Value: additional_fuel_kg,  Label: 'Additional — planned (kg)' },
+                { Value: taxi_fuel_kg,        Label: 'Taxi (kg)' },
+                { Value: extra_fuel_kg,       Label: 'Extra — commander (kg)' },
+                { Value: block_fuel_kg,       Label: 'Block = sum of the seven (kg)' },
+                { Value: dispatch_qty_kg,     Label: 'Dispatch quantity, confirmed (kg)' },
+                { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' }
             ]
         },
         FieldGroup#DispatchWhere: {
@@ -1506,9 +1551,29 @@ annotate PlanningService.FlightDispatches with {
     // constant 'KG' column on every row is a second place holding one fact.
     // The name carries it and the label says it.
     dispatch_qty_kg    @title: 'Dispatch Quantity (kg)';
-    block_fuel_kg      @title: 'Block Fuel (kg)';
+    block_fuel_kg      @title: 'Block Fuel (kg)'
+                       @Common.QuickInfo: 'The sum of the seven components. Derived, never keyed - DSP450. The dispatcher-confirmed dispatch quantity should equal it.';
     required_uplift_kg @title: 'Required Uplift (kg)';
-    rob_departure_kg   @title: 'ROB at Departure (kg)';
+    rob_departure_kg   @title: 'ROB at Departure (kg)'
+                       @Common.QuickInfo: 'Documented as remaining on board at chocks-off, which is AFTER uplift. Four of eleven rows follow that and equal block fuel; the other seven carry a pre-uplift figure instead. Do not subtract it from block - D57.';
+
+    // ---- THE SEVEN, EACH SAYING WHAT DISTINGUISHES IT -------------------
+    trip_fuel_kg        @title: 'Trip (kg)'
+                        @Common.QuickInfo: 'Takeoff to touchdown. Block fuel is gate to gate and is the larger figure.';
+    contingency_fuel_kg @title: 'Contingency (kg)'
+                        @Common.QuickInfo: 'The rule is 5% of TRIP. Seven of eleven rows carried 5% of BLOCK, which reads as 6.54% of trip, and were corrected on this branch.';
+    contingency_pct_of_trip @title: 'Contingency (% of trip)'
+                        @Common.QuickInfo: 'Computed on the row so the rule can be checked without dividing two columns. 5.00 is correct; 6.54 is the 5%-of-block defect showing through.';
+    alternate_fuel_kg   @title: 'Alternate (kg)'
+                        @Common.QuickInfo: 'Fuel to reach the alternate airport. Depends on the distance to it, so a fixed proportion of block across different routes is not a real figure.';
+    final_reserve_kg    @title: 'Final Reserve (kg)'
+                        @Common.QuickInfo: 'Thirty minutes at holding speed. Nothing in this model holds a holding burn rate, so the seeded figures cannot be checked against the rule - see D57.';
+    additional_fuel_kg  @title: 'Additional — planned (kg)'
+                        @Common.QuickInfo: 'A PLANNED requirement: EDTO, anticipated delay. Held separately from extra and never merged with it - DSP454.';
+    taxi_fuel_kg        @title: 'Taxi (kg)'
+                        @Common.QuickInfo: 'Ground running before takeoff. Roughly fixed per aircraft type and airport, so it does not scale with sector length.';
+    extra_fuel_kg       @title: 'Extra — commander (kg)'
+                        @Common.QuickInfo: 'The commander''s discretion, not a planned requirement. Held separately from additional so that what the operation required stays distinct from what the commander chose - DSP454.';
 }
 
 annotate PlanningService.FuelBurns with {
