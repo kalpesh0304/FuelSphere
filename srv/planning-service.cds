@@ -269,10 +269,55 @@ service PlanningService {
         plan_version,
         plan_status,
         tail_number,
+
+        // ------------------------------------------------------------------
+        // THE REGULATED STACK — WIDENED HERE BECAUSE IT WAS NEVER EXPOSED.
+        //
+        // The seven components have been on FLIGHT_DISPATCH since WP-18 and
+        // are POPULATED ON ALL ELEVEN ROWS. They were absent from this
+        // projection, so the dispatch card and object page could only show
+        // dispatch_qty_kg and block_fuel_kg - and the annotation beside them
+        // said the six-term stack was "DESIGNED and not built", which was
+        // read out of a stale CLAUDE.md section rather than measured. The
+        // comment then explained the gap it had caused.
+        //
+        // Widened FIRST and each field proved to read back before any
+        // annotation names it: an annotation against a field the projection
+        // lacks fails the WHOLE READ of the entity, not the column.
+        // ------------------------------------------------------------------
+        trip_fuel_kg,
+        contingency_fuel_kg,
+        alternate_fuel_kg,
+        final_reserve_kg,
+        additional_fuel_kg,
+        taxi_fuel_kg,
+        extra_fuel_kg,
+
         dispatch_qty_kg,
         block_fuel_kg,
         required_uplift_kg,
         rob_departure_kg,
+
+        // CONTINGENCY AS A PERCENTAGE OF TRIP, ON THE ROW.
+        //
+        // The rule is 5% of trip, and the defect it replaces was 5% of BLOCK
+        // showing through as 6.54% of trip on seven rows. A reader cannot
+        // divide two columns in their head across a table, so the ratio the
+        // rule is stated in is computed here.
+        //
+        // A CALCULATED ELEMENT, NOT A VIRTUAL ONE, so it can be sorted and
+        // filtered: $filter runs in the database before an after-READ handler
+        // ever sees the row (D52).
+        //
+        // GUARDED WITH `> 0` AND NOT `<> 0`: a null trip makes the comparison
+        // null, the CASE falls through, and the result is null - which is the
+        // right answer for "what fraction of an unknown trip is this", and is
+        // never 0. The recorded rule: a derived value with a missing input is
+        // null, never zero.
+        case when trip_fuel_kg > 0
+             then contingency_fuel_kg * 100 / trip_fuel_kg
+        end as contingency_pct_of_trip : Decimal(5,2),
+
         alternate_airport,
         dispatch_source,
         dispatch_timestamp,
