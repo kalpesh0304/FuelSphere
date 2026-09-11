@@ -79,7 +79,27 @@ describe('The four drill-downs from a flight', () => {
             for (const t of facetTargets(e)) {
                 const qual = t.split('#')[1];
                 const paths = groupPaths(e, qual);
-                assert.ok(paths.length >= 3, `${e}#${qual} binds only ${paths.length} field(s)`);
+                // THE FLOOR WAS 3 AND IT WAS A PROXY, NOT A RULE. Nothing
+                // about the whole-read trap this criterion is named for
+                // depends on a group's size - that is the `await test.GET`
+                // below, which fails if any path is unknown. The 3 was the
+                // smallest group that existed when this was written, and a
+                // threshold read off the data at hand becomes a law nobody
+                // re-derives.
+                //
+                // LOWERED TO 2 BY #DeliveryRecon, WHICH IS GENUINELY TWO
+                // FIELDS: a reconciliation verdict is the variance and the
+                // status, and that is all of it. fob_delta_kg and fob_source
+                // used to pad it and have moved into the gauge chain that
+                // produces them - a field in two groups on one object page
+                // renders twice, which delivery-gauge EXIT-2 now forbids.
+                // Padding this group back to three to satisfy a number would
+                // be fitting the page to the instrument.
+                //
+                // 2 rather than 1: a one-field group is a facet with a single
+                // row, which is the thin-page symptom this harness exists to
+                // catch, and no group here is that.
+                assert.ok(paths.length >= 2, `${e}#${qual} binds only ${paths.length} field(s)`);
                 await test.GET(query(e, paths, null));   // throws if any path is unknown
                 groups++; fields += paths.length;
             }
