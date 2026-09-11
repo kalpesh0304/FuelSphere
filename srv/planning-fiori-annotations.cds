@@ -61,7 +61,20 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
             { Value: recon_variance_kg,  Label: 'Variance (kg)',   ![@UI.Importance]: #High },
             { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #High },
             { Value: fob_source,         Label: 'Gauge Source',    ![@UI.Importance]: #Medium },
-            { Value: supplier_count,     Label: 'Suppliers',       ![@UI.Importance]: #Medium }
+            { Value: supplier_count,     Label: 'Suppliers',       ![@UI.Importance]: #Medium },
+            // Cross-app link for FlightSchedule's embedded "Deliveries"
+            // section (Target: 'deliveries/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Deliveries',
+                SemanticObject : 'fueldeliveries',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         // ------------------------------------------------------------------
@@ -125,7 +138,20 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
             // uplift_sequence does not exist on FUEL_TICKETS. The timestamp is
             // what makes two tickets on one order read as one uplift split
             // across two bowsers rather than two unrelated events.
-            { Value: delivery_timestamp, Label: 'Delivered At',    ![@UI.Importance]: #Medium }
+            { Value: delivery_timestamp, Label: 'Delivered At',    ![@UI.Importance]: #Medium },
+            // Cross-app link for FlightSchedule's embedded "Fuel Tickets"
+            // section (Target: 'tickets/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Tickets',
+                SemanticObject : 'fueltickets',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ]
     }
 );
@@ -179,7 +205,20 @@ annotate PlanningService.FlightDispatches with @(
             { Value: alternate_airport,  Label: 'Alternate',      ![@UI.Importance]: #Medium },
             { Value: tail_number,        Label: 'Tail',           ![@UI.Importance]: #Medium },
             { Value: dispatch_source,    Label: 'Source',         ![@UI.Importance]: #Low },
-            { Value: dispatch_timestamp, Label: 'Issued',         ![@UI.Importance]: #Low }
+            { Value: dispatch_timestamp, Label: 'Issued',         ![@UI.Importance]: #Low },
+            // Cross-app link for FlightSchedule's embedded "Dispatch Plans"
+            // section (Target: 'dispatches/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Flight Dispatch',
+                SemanticObject : 'flightdispatch',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ]
     }
 );
@@ -234,7 +273,20 @@ annotate PlanningService.FuelOrders with @(
             // through `fuel_order` - one arbitrary order where a flight has
             // several. Here they belong to the order that owns them.
             { Value: priority,         Label: 'Priority',      ![@UI.Importance]: #Medium },
-            { Value: notes,            Label: 'Notes',         ![@UI.Importance]: #Low }
+            { Value: notes,            Label: 'Notes',         ![@UI.Importance]: #Low },
+            // Cross-app link for FlightSchedule's embedded "Fuel Orders"
+            // section (Target: 'orders/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Orders',
+                SemanticObject : 'fuelorders',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ]
     }
 );

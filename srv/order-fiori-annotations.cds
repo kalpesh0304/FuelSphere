@@ -658,11 +658,23 @@ annotate FuelOrderService.FuelDeliveries with @(
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: s4_gr_number, Label: 'GR Number', ![@UI.Importance]: #Low },
             { Value: pilot_name, Label: 'Pilot', ![@UI.Importance]: #Low },
-            { Value: ground_crew_name, Label: 'Ground Crew', ![@UI.Importance]: #Low }
-            // Cross-app nav for FuelOrders' embedded "Deliveries (ePOD)"
-            // section (Target: 'deliveries/@UI.LineItem') is handled by
-            // fuelorders/webapp/manifest.json's navigation.deliveries.display
-            // override (row click), not a DataField here.
+            { Value: ground_crew_name, Label: 'Ground Crew', ![@UI.Importance]: #Low },
+            // Cross-app link. Shared with FuelOrders' embedded
+            // "Deliveries (ePOD)" section (Target: 'deliveries/@UI.LineItem').
+            // The manifest.json "display" override approach broke both the
+            // Edit button and, for some entities, row navigation entirely -
+            // reverted. This DataField is the proven mechanism.
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Deliveries',
+                SemanticObject : 'fueldeliveries',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         // WP-UI-01: a list with no filter bar makes an operator scroll.
@@ -929,11 +941,23 @@ annotate FuelOrderService.FuelTickets with @(
                 ![@UI.Importance]: #High
             },
             { Value: verified_by, Label: 'Verified By', ![@UI.Importance]: #Low },
-            { Value: verified_at, Label: 'Verified At', ![@UI.Importance]: #Low }
-            // Cross-app nav for FuelOrders' embedded "Fuel Tickets" section
-            // (Target: 'tickets/@UI.LineItem') is handled by
-            // fuelorders/webapp/manifest.json's navigation.tickets.display
-            // override (row click), not a DataField here.
+            { Value: verified_at, Label: 'Verified At', ![@UI.Importance]: #Low },
+            // Cross-app link. Shared with FuelOrders' embedded "Fuel
+            // Tickets" section (Target: 'tickets/@UI.LineItem').
+            // The manifest.json "display" override approach broke both the
+            // Edit button and, for some entities, row navigation entirely -
+            // reverted. This DataField is the proven mechanism.
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Tickets',
+                SemanticObject : 'fueltickets',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         SelectionFields: [
