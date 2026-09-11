@@ -998,7 +998,22 @@ annotate PlanningService.FlightDispatches with @(
         { Value: contingency_pct_of_trip, Label: '% of trip' },
         { Value: block_fuel_kg,       Label: 'Block (kg)' },
         { Value: dispatch_qty_kg,     Label: 'Dispatch (kg)' },
-        { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' }
+        { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' },
+        // Row-level cross-app navigation: standard UI.LineItem pattern, not
+        // an OVP-specific mechanism. Renders as a link within the row,
+        // resolved via the shared ID (same underlying table row on
+        // FuelOrderService) and flight_number (pre-filters the target list).
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            Label          : 'Open in Flight Dispatch',
+            SemanticObject : 'flightdispatch',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ],
+            ![@UI.Importance]: #Low
+        }
     ]
 );
 
@@ -1053,7 +1068,18 @@ annotate PlanningService.FuelOrders with @(
         { Value: station_code,     Label: 'Station' },
         { Value: ordered_quantity, Label: 'Ordered' },
         { Value: unit_price,       Label: 'Unit price' },
-        { Value: total_amount,     Label: 'Total' }
+        { Value: total_amount,     Label: 'Total' },
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            Label          : 'Open in Fuel Orders',
+            SemanticObject : 'fuelorders',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ],
+            ![@UI.Importance]: #Low
+        }
     ]
 );
 
@@ -1066,7 +1092,18 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
         { Value: uom_code,           Label: 'UoM' },
         { Value: quantity_kg,        Label: 'Mass (kg)' },
         { Value: match_status,       Label: 'Match' },
-        { Value: delivery_timestamp, Label: 'Delivered' }
+        { Value: delivery_timestamp, Label: 'Delivered' },
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            Label          : 'Open in Fuel Tickets',
+            SemanticObject : 'fueltickets',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ],
+            ![@UI.Importance]: #Low
+        }
     ]
 );
 
@@ -1083,7 +1120,18 @@ annotate PlanningService.FuelDeliveries with @(
         { Value: refuel_start_utc, Label: 'Refuel start' },
         { Value: refuel_end_utc,   Label: 'Refuel end' },
         { Value: supplier_count,   Label: 'Suppliers' },
-        { Value: delivery_method,  Label: 'Method' }
+        { Value: delivery_method,  Label: 'Method' },
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            Label          : 'Open in Fuel Deliveries',
+            SemanticObject : 'fueldeliveries',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ],
+            ![@UI.Importance]: #Low
+        }
     ]
 );
 
@@ -1104,7 +1152,18 @@ annotate PlanningService.FuelBurns with @(
         { Value: variance_kg,     Label: 'Variance (kg)' },
         { Value: variance_status, Label: 'Verdict' },
         { Value: engine_burn_kg,  Label: 'Engine (kg)' },
-        { Value: apu_burn_kg,     Label: 'APU (kg)' }
+        { Value: apu_burn_kg,     Label: 'APU (kg)' },
+        {
+            $Type          : 'UI.DataFieldForIntentBasedNavigation',
+            Label          : 'Open in Fuel Burns',
+            SemanticObject : 'fuelburns',
+            Action         : 'manage',
+            Mapping        : [
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+            ],
+            ![@UI.Importance]: #Low
+        }
     ]
 );
 

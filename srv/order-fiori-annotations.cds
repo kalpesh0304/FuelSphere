@@ -60,7 +60,22 @@ annotate FuelOrderService.FuelOrders with @(
             { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Medium },
             { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
             { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Medium },
-            { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low }
+            { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low },
+            // Cross-app link. Shared with FlightSchedule's embedded "Fuel
+            // Orders" section (Target: 'orders/@UI.LineItem' is this same
+            // unqualified LineItem) — viewed from inside this app itself the
+            // link is a harmless no-op back to the same record.
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Orders',
+                SemanticObject : 'fuelorders',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         // Presentation Variant for default sorting
@@ -648,7 +663,20 @@ annotate FuelOrderService.FuelDeliveries with @(
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: s4_gr_number, Label: 'GR Number', ![@UI.Importance]: #Low },
             { Value: pilot_name, Label: 'Pilot', ![@UI.Importance]: #Low },
-            { Value: ground_crew_name, Label: 'Ground Crew', ![@UI.Importance]: #Low }
+            { Value: ground_crew_name, Label: 'Ground Crew', ![@UI.Importance]: #Low },
+            // Cross-app link. Shared with FuelOrders' embedded
+            // "Deliveries (ePOD)" section (Target: 'deliveries/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Deliveries',
+                SemanticObject : 'fueldeliveries',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         // WP-UI-01: a list with no filter bar makes an operator scroll.
@@ -915,7 +943,20 @@ annotate FuelOrderService.FuelTickets with @(
                 ![@UI.Importance]: #High
             },
             { Value: verified_by, Label: 'Verified By', ![@UI.Importance]: #Low },
-            { Value: verified_at, Label: 'Verified At', ![@UI.Importance]: #Low }
+            { Value: verified_at, Label: 'Verified At', ![@UI.Importance]: #Low },
+            // Cross-app link. Shared with FuelOrders' embedded "Fuel
+            // Tickets" section (Target: 'tickets/@UI.LineItem').
+            {
+                $Type          : 'UI.DataFieldForIntentBasedNavigation',
+                Label          : 'Open in Fuel Tickets',
+                SemanticObject : 'fueltickets',
+                Action         : 'manage',
+                Mapping        : [
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
+                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
+                ],
+                ![@UI.Importance]: #Low
+            }
         ],
 
         SelectionFields: [
