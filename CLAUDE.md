@@ -322,7 +322,19 @@ PLN401 version not found · PLN402 version status invalid · PLN403 missing flig
 
 ## 10. Key business processes
 
-### Fuel order lifecycle — DIVERGENT
+### RE-MEASURED IN FULL, 11 September 2026 — THIS SECTION WAS WRONG IN ALL FOUR SUBSECTIONS
+
+**Not patched. Re-measured.** Three separate pieces of work this month were mis-scoped from this
+section, and the last one made the pattern plain: if a section is wrong four times, correcting the
+lines that were caught leaves the ones that were not.
+
+**And one cause runs through it.** `'Created'` was written in **assignment** form —
+`req.data.status = …` — which is exactly the form the WP-09 grep missed (the one-form-search trap,
+recorded in section 12). The fix landed; the row never moved. **So a missed grep produced a stale
+document, and the stale document then produced further scoping errors.** The cost is never the
+grep; it is everything downstream that trusts the note.
+
+### Fuel order lifecycle — BUILT
 
 ```
 Draft → Submitted → Confirmed → InProgress → Delivered → Completed
@@ -332,15 +344,29 @@ Draft → Submitted → Confirmed → InProgress → Delivered → Completed
                           S/4 PO and GR created
 ```
 
-**This is the correct target.** The code diverges:
+**The code follows this.** Measured 11 September:
 
-- Writes `'Created'` on creation, which is not in `OrderStatus`. Should write `'Draft'`
-- Never writes `'Completed'`. The path is unimplemented
-- `captureSignatures` sets `Delivered` **with no status guard**, so an order can jump there from any state
+| Previously recorded | Measured |
+|---|---|
+| *"writes `'Created'` on creation, not in `OrderStatus`"* | **`'Created'` occurs 0 times in `srv/`.** `order-service.js:205` writes `'Draft'`, and the field carries `default 'Draft'` |
+| *"never writes `'Completed'`. The path is unimplemented"* | **Written at `:300`**, under a WP-09 comment naming it the terminal state |
+| *"`captureSignatures` sets `Delivered` with no status guard"* (D13) | **Guarded**, and the comment names D13 |
 
-Seed data uses `Draft` and `Completed`, correctly following this specification. **The code is wrong, not the data.**
+**Every transition is guarded and none is free:** `submit` ← Draft · `confirm` ← Submitted ·
+`startDelivery` ← Confirmed · `captureSignatures` ← InProgress · `complete` ← Delivered ·
+`cancel` ← {Draft, Submitted, Confirmed}, **and a reason is mandatory unless Draft** — which is the
+precedent `quantity_variance_reason` follows.
 
-### Invoice verification flow — DESIGNED
+**What is genuinely open:** the guards are read-then-write with no optimistic locking (**D5**), and
+`OrderStatus` carries no `@assert.range`, so **the handler writing the right value is the only thing
+keeping it correct** (**D25**).
+
+**MDM402 fires at `draftActivate`, not at the POST** — `before CREATE` on a draft-enabled entity is
+reached when the draft is activated. Measured against a control: a CONFIRMED tail activates, a
+PROVISIONAL one is refused naming MDM402. That is correct — the gate belongs where the order becomes
+a commitment, not where someone starts typing.
+
+### Invoice verification flow — BUILT (the enum, at least)
 
 ```
 Draft → Submitted → Three-Way Match → Verified → Approved → Posted
@@ -348,29 +374,48 @@ Draft → Submitted → Three-Way Match → Verified → Approved → Posted
                    Exception Queue → Finance Manager Review
 ```
 
-`InvoiceStatus` is missing the `Submitted` member this flow requires. Seed data contains `SUBMITTED`, correctly following the specification. **Add the enum member.**
+**`InvoiceStatus` HAS `Submitted`.** Added by WP-09, with a comment saying so. The previous
+instruction here — *"Add the enum member"* — was carried out and never struck.
 
-### ROB calculation — DIVERGENT, with a complication
+The three-way match itself remains as D55 describes it: `executeThreeWayMatch` is
+pre-posting validation, and SAP performs the match at MIRO.
 
-`db/schema.cds:1985` states the formula:
+### ROB calculation — BUILT
 
 ```
 closingROBKg = openingROBKg + upliftKg - burnKg + adjustmentKg
 ```
 
-`ROB_LEDGER` carries all four components as separate fields, plus associations to `FUEL_BURNS`, `FUEL_DELIVERIES` and `FLIGHT_SCHEDULE` (`db/schema.cds:2001-2004`). **The model is correct.**
+**The code computes exactly this.** `burn-service.js`, inside `recalculateROB`:
+`runningOpening + uplift - burn + adjustment`.
 
-`burn-service.js:1145` computes `max(0, previous - burn)` — dropping uplift and adjustment, and clamping negatives.
+| Previously recorded | Measured |
+|---|---|
+| *"`burn-service.js:1145` computes `max(0, previous - burn)`"* | **`Math.max(0` occurs nowhere in the ROB path** — the only one left in `srv/` is version-gap arithmetic in `dispatch-plan.js`. And **`:1145` is an Excel-import return**, not the formula |
+| *"`@assert.range: [0, null]` on `closing_rob_kg` … the clamp may exist to satisfy it"* | **The assertion is gone.** The field is a bare `Decimal(12,2) @mandatory` |
+| **D15** *"ROB ledger cannot be rebuilt; `recalculateROB` unimplemented"* | **`recalculateROB` has a handler** and the rebuild loop is inside it |
 
-**Complication:** `db/schema.cds:2014` carries `@assert.range: [0, null]` on `closing_rob_kg`. The clamp may exist to satisfy that assertion. Removing the clamp without addressing the assertion will move the failure from silently-wrong-data to a rejected insert.
+An `INITIAL` entry seeds the chain and keeps its recorded closing balance rather than deriving it
+from zero components — which is right, and is not what a clamp does.
 
-### Fuel demand calculation — DESIGNED
+**So D3 and D15 are both closed**, and are struck in section 11.
+
+### Fuel demand calculation — BUILT
 
 ```
-Total Fuel = Trip + Taxi + Contingency + Alternate + Reserve + Extra
+Block = Trip + Contingency + Alternate + Final reserve + Additional + Taxi + Extra
 ```
 
-Not implemented. `FLIGHT_DISPATCH` holds a single `dispatch_qty_kg` with no breakdown. Comments in `planning-service.cds` state five terms at line 12 and six at line 134.
+**SEVEN terms, not six, and all seven are on `FLIGHT_DISPATCH` and populated on all eleven rows.**
+The previous claim — *"`FLIGHT_DISPATCH` holds a single `dispatch_qty_kg` with no breakdown"* — was
+already disproved by the dispatch work and is the instance that prompted this re-measurement: an
+annotation comment repeating it had converted the gap into a decision and stopped anybody looking.
+
+`block_fuel_kg` is the derived sum (DSP450) and `dispatch_qty_kg` is the dispatcher-confirmed figure
+that should equal it. Additional and extra are held apart deliberately (DSP454).
+
+**What is open is the DATA, not the model** — see **D57**: seven of eleven rows carry one percentage
+template, and only contingency had a rule to catch it by.
 
 ---
 
@@ -382,13 +427,13 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 |---|---|
 | ~~D1~~ | ~~Master sync transaction wrapper commented out~~ — **NOT A DEFECT.** Measured under WP-01 on 16 Aug 2026. CAP wraps every inbound request in a managed transaction; bare `DELETE`/`INSERT` dispatch onto it and `req.error(500)` rolls back. Delete and insert are already atomic on the request path. **Restoring the wrapper breaks the sync** — see trap below. Residual risk only if `_syncFromS4` is called outside a request context |
 | ~~D2~~ | **CLOSED by WP-02.** `'any'` now occurs **0 times**; 108 `to:` grants. The row described a fixed defect as live until 24 August |
-| D3 | ROB formula drops uplift, clamps negatives |
+| ~~D3~~ | **CLOSED, confirmed 11 September by the section 10 re-measurement.** The live formula in `recalculateROB` is `runningOpening + uplift - burn + adjustment` — all four terms. **`Math.max(0` occurs nowhere in the ROB path**, and the `@assert.range: [0, null]` that may have explained the clamp is gone too. **The row also carried a stale line number**: `burn-service.js:1145` is an Excel-import return, not the formula |
 | ~~D4~~ | **CLOSED** under WP-04. Shared allocator with an atomic counter, nine sites across five services |
 | D5 | No optimistic locking; status guards read-then-write |
 | D11 | No aircraft register |
 | D13 | `captureSignatures` has no order status guard |
 | D14 | No row-level security — zero `where:` clauses |
-| D15 | ROB ledger cannot be rebuilt; `recalculateROB` unimplemented |
+| ~~D15~~ | **CLOSED, same measurement.** `recalculateROB` has a handler in `burn-service.js` and the rebuild loop is inside it — it re-chains the ledger from the components, seeding from an `INITIAL` entry's recorded balance rather than deriving it from zeros |
 | ~~D16~~ | **CLOSED.** WP-05 removed it; confirmed by the WP-13 pre-survey that no `100000` guard remains in any handler |
 | **D19** | **NARROWED by the WP-21A closure survey. Two problems, not one.** **(a) Naming — decided.** `package.json` names `S2A` for `odata_api`, and `master-data-service.js:105` connects to it; `mta.yaml` provisions `S4HC_TECHNICAL` and `S4HC_USER`, neither referenced anywhere. **Point the code at `S4HC_TECHNICAL`** — background lookups with no user in the loop. Not the reverse: `S2A` is opaque, and renaming a destination to it would erase the technical-versus-principal-propagation distinction the two were created to express. One string. **(b) Environment — open.** **Neither provisioned destination declares a `URL`.** Both are `Type: HTTP`, `ProxyType: Internet`, with an authentication method and a description and nothing to point at. No S/4 tenant exists behind either, and no code change resolves it. **Caveat on (a):** a technical user for everything is right while FuelSphere holds its own authorisation model. If row-level security ever resolves against what a user may see **in S/4** rather than against FuelSphere's own attributes, `S4HC_USER` earns its place — and that is a decision, not a destination swap. Note before WP-14 |
 | **D54** | **`component_breakdown` is null on ALL SIX `DERIVED_PRICES` rows, so INV471 and INV472 have never run on any line, ever.** Measured while explaining the floor: a **fully resolved** line still carries **exactly 3 NOT_APPLICABLE**, and two of the three are component coverage — grey on **14 of 14** resolved lines for a reason that has nothing to do with the document. **A clean invoice reads "3 not checked" and someone will call that close enough**; it actually means charge-versus-contract comparison has never been exercised in this dataset. **Not a code defect** — `checkComponents` correctly declines to compare when there is nothing to compare with. **Not fixed: authoring a component breakdown is a pricing decision**, and inventing one to make a counter look better is the thing these counters exist to prevent. **Related, and also unexercised: no line in the seed fails at rung 5** (`INV466`, no goods receipt), so that arm of the cascade is asserted only by construction |
@@ -469,6 +514,9 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **CONSTRUCTING D47's 405 IS HARDER THAN THE DEFECT MAKES IT LOOK, AND THREE FAILED PLANTS SAY WHY** | Re-homing the addressability guard needed a plant that makes a declared entity return 405. **Three constructions failed, each for a different reason, and each is a fact about this model.** (1) Commenting out `FLIGHT_FUEL_TICKETS`'s declaration **broke the boot** — the annotation file targets it, so the model fails to load rather than serving a 405. (2) Narrowing its projection to three fields did the same. (3) Adding a fresh view reachable by an **unmanaged `Association to many`** produced **no entity set at all** — that is D47's FIRST half (a to-many dangles where the service does not expose both ends), not its third (auto-exposed and unaddressable). **So almost every declared entity here is load-bearing**, and the regression the criterion guards is one the model actively resists — which is worth knowing and is not the same as the criterion being vacuous. **The plant that works is the RATCHET's stale half: DECLARE a known-405 entity and the accepted list fails** — *"CONTRACT_LOCATIONS is now addressable and still on the accepted list"*. A repair firing the guard is the strongest plant available here |
 | **A CRITERION BUILT ON THE SAME FALSE PREMISE AS THE CODE IT GUARDS CANNOT TEST THAT PREMISE — IT PROMOTES IT TO A RULE, AND THE RULE THEN BLOCKS THE REPAIR** | An annotation comment said `@Measures.ISOCurrency` *"must point at a property of the same entity, so there is nothing to point at"*, and the invoice amounts went unannotated for that reason. **`units-harness` EXIT-3 asserted the identical sentence** — *"every @Measures target EXISTS on the SAME entity"* — because it was written from the same belief in the same sitting. **So the guard did not catch the error; it enforced it**, and annotating the amounts through `invoice.currency_code` FAILED the harness: correct by its own wording, wrong in fact. **Measured: it takes a PATH.** `@Measures.ISOCurrency: invoice.currency_code` emits `Path="invoice/currency_code"` and resolves to USD on every row. **This is worse than an untested guard** — an untested guard is silent, and this one actively vetoed the fix while showing green. **The distinguishing question is not "does the criterion pass" but "where did its rule come from"**: a criterion derived from the same author, the same hour and the same assumption as the code is a restatement, not a test. **The replacement is strictly stronger and comes from D56:** the target must RESOLVE — every intermediate hop a navigation that exists and is **to-ONE**, the final segment a property of the entity the path reaches. A to-many hop is D56 inside a measure annotation, and the walker names it: *"items is a TO-MANY (D56: null forever)"* |
 | **A PLANT THAT PASSES BECAUSE THE DATA CANNOT EXPRESS THE DIFFERENCE — the sixth shape's twin, and the plant is aimed correctly** | In the mis-aimed case the plant never creates the condition. **Here the plant is exactly right, the code change is real, and the criterion is blind because NO SEEDED ROW SEPARATES THE TWO IMPLEMENTATIONS.** `designation_state` derives from the two associations the blocks render from; re-sourcing it from `FLIGHT_DESIGNATED_SUPPLIER` left **all six criteria green**, because that view only diverges when it **declines** on a same-axis tie and **no flight has one** (D56, the unexercised arm). So the comment beside the `CASE` claimed a design decision mattered **and nothing proved it** — which is a documented decision resting on a vacuous guard, the worst of both. **The fix is to CONSTRUCT the distinguishing condition, not to re-aim the plant:** insert the tie, and the view declines to null while the blocks still render rows, so a view-sourced state says `NONE` where the page must say `STATION_DEFAULT`. **"No designation exists" and "I cannot tell you which" are different facts, and only one is true there.** The re-planted change now fails with that sentence. **The general question: when two implementations would agree on every row you have, a criterion comparing them proves only that the data is thin** |
+| **A COMPARISON NEEDS ITS CONTROL TO SUCCEED — if both arms fail, they agree about nothing** | Comparing two gates on a PROVISIONAL tail, both refused, and the obvious reading was *"the gates agree"*. **The control refused too.** A CONFIRMED tail was rejected by the same error — `"Value is required"` × 2, missing `order_number`, `station_code` and `requested_date`. **Neither arm ever reached the gate**, so the comparison would have reported an agreement it never tested. Supplying the mandatory fields: CONFIRMED activates, PROVISIONAL is refused naming MDM402 — and only then does the test discriminate. **The mechanical form: a comparison is meaningless until its control SUCCEEDS**, because a shared failure is indistinguishable from a match. Same family as the plant that fires the wrong criterion — a green comparison proving nothing because the subject was never exercised |
+| **ONE FUNCTION, TWO SAFETY PROFILES — AND A GATE THAT CAN BE DISARMED BY NARROWING A SELECT** | `registrationForFlight(flightOrId)` accepts either a flight ROW or an ID. **The ID path re-reads the registration and is self-sufficient; the ROW path reads `flightOrId.aircraft_reg` and trusts the caller's projection.** `order-service.js:374` selects all columns, so MDM402 fires today — but **adding `.columns(...)` there without `aircraft_reg` turns the gate into a silent no-op**: the code compiles, the gate is called, and it returns without checking. **Invisible to every instrument here** — no dangling path, no missing call, no error. A gate with a condition nobody states is a gate that gets found after it matters. Worth deciding whether the row path should re-read rather than trust |
+| **THE KEYS OF A PROGRAMMATIC `INSERT` ARE NOT TYPE-CHECKED** | `cds compile srv` returned **0 errors** on an `INSERT.into(FuelOrders).entries({...})` naming **three fields that do not exist** — `order_type` among them. A projection or an annotation naming a missing field fails loudly; an object literal does not. **So "it compiles" says nothing about whether the row you are writing has the columns you named**, and the silent outcome is a column that is simply never written. Verify every key against the LINKED model (`cds.linked(cds.compile.for.nodejs(...)).definitions[X].elements`) rather than by grepping the entity block — two of the three "absent" fields here were present via `extend` in another file, which a `sed`-range read of `schema.cds` cannot see |
 | **A search that matches one form is silently partial** | Four occurrences, four dresses, **and the fourth is a PATH rather than a string**. WP-04 grepped `ConcurrencyMode` where OData v4 emits `Core.OptimisticConcurrency`. WP-08 grepped `^\[error` where the compiler emits `[ERROR]`. WP-09 grepped `status: '…'` and missed `req.data.status = '…'` — the **primary writer**, in assignment form rather than object-literal form. **And a criterion asserting a field is NOT bound searched `Path="mlw_kg"`, which is one of the forms a binding takes** — measured on the block it guards: nine fields, and the exact form finds **eight**, because MTOW emits as `Path="aircraft_type/mtow_kg"`. **The false-pass direction is the dangerous one here**: the criterion would have reported "not bound" for a field that IS bound, and a two-hop binding is exactly how a field arrives on a page nobody meant to put it on. Fixed by splitting every `Path` on `/` and looking at the segments. **A verification that can produce a false pass is worse than none.** Key on exit codes; where a search is unavoidable, make it form-agnostic and prove the instrument against a known-present string |
 | **A CDS annotation binds to the next declaration** | Inserting an entity between an annotation and its target silently reassigns it. WP-07 broke `Aircraft`'s draft enablement this way, and **`cds compile` returned 0** — only a service boot caught it. A clean compile is necessary, not sufficient |
 | **Harnesses must run one per process** | A batch run of all 24 reports **88 failures**. They are `cds.test()` instances colliding in one process, **not regressions** — each harness passes clean when run alone. **Anyone running the suite as a batch will conclude the build is broken.** One process per harness is the only run that means anything |
