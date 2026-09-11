@@ -1514,22 +1514,55 @@ annotate InvoiceService.FuelTickets with {
     density_value    @title: 'Density (kg/L)';
 }
 
-// INVOICE_ITEMS AND INVOICE_MATCHES CANNOT BE SERVED BY THIS RULE, and
-// guessing is what the rule forbids.
+// THIS NOTE SAID THE CURRENCY AMOUNTS "CANNOT BE SERVED BY THIS RULE" AND
+// THAT WAS FALSE. I wrote it, in the units work, and it closed the question
+// with a claim nobody re-tested:
 //
-// INVOICE_ITEMS carries uom_code — so `quantity` takes it — but net_amount,
-// tax_amount and unit_price are CURRENCY amounts and the entity has NO
-// currency column: the currency is the INVOICE's. @Measures.ISOCurrency must
-// point at a property of the same entity, so there is nothing to point at.
+//     "@Measures.ISOCurrency must point at a property of the same entity,
+//      so there is nothing to point at."
 //
-// INVOICE_MATCHES has neither. po_quantity, gr_quantity and inv_quantity
-// carry no unit column and their names do not say — and an invoice quantity
-// here may be litres or kilograms depending on the document. A label would
-// be a guess, and a guess is exactly what renders 2,884 and 2,305.76
-// indistinguishable.
+// MEASURED: it takes a PATH. `@Measures.ISOCurrency: invoice.currency_code`
+// emits `Path="invoice/currency_code"` in the EDMX and resolves to USD on
+// every row. Nothing had to change but the annotation.
 //
-// Recorded rather than annotated. Both need a decision about where the unit
-// comes from, not a label.
+// Kept and corrected rather than deleted - a deleted wrong note loses the
+// fact that somebody believed it, and this is the SEVENTH instance in this
+// project of prose that reads as a record. The expensive shape is the one
+// that explains an absence as impossible: it converts a gap into a decision
+// and stops anybody looking, and it sits exactly where a checker would go.
+//
+// WHY THE PATH IS SAFE HERE, AND WHAT WOULD MAKE IT UNSAFE. `invoice` is a
+// to-ONE and InvoiceService exposes both ends. D56 is the counter-example
+// that supplies the rule: a path through a to-MANY names three real things
+// and returns null forever, because Fiori has no key for the collection hop.
+// One hop, to-one, target exposed - anything else is D56 again.
+//
+// WHAT IS STILL NOT ANNOTATED, AND IT IS NOT THE SAME QUESTION:
+// INVOICE_MATCHES.po_quantity, gr_quantity and inv_quantity carry no unit
+// column and their names do not say - an invoice quantity there may be litres
+// or kilograms depending on the document. THE CURRENCY OF AN AMOUNT IS NOT
+// AMBIGUOUS; THE UNIT OF A QUANTITY IS. That distinction is the whole reason
+// the amounts move and the quantities stay, and units-harness EXIT-6 now
+// asserts it at that granularity rather than banning both.
 annotate InvoiceService.InvoiceItems with {
-    quantity @Measures.Unit: uom_code;
+    quantity   @Measures.Unit: uom_code;
+    unit_price @Measures.ISOCurrency: invoice.currency_code;
+    net_amount @Measures.ISOCurrency: invoice.currency_code;
+    tax_amount @Measures.ISOCurrency: invoice.currency_code;
+}
+
+// THE AMOUNTS MOVE, THE QUANTITIES DO NOT. Four money fields and two
+// variances, all in the invoice's currency, one to-one hop away.
+annotate InvoiceService.InvoiceMatches with {
+    po_price        @Measures.ISOCurrency: invoice.currency_code;
+    po_amount       @Measures.ISOCurrency: invoice.currency_code;
+    inv_price       @Measures.ISOCurrency: invoice.currency_code;
+    inv_amount      @Measures.ISOCurrency: invoice.currency_code;
+    price_variance  @Measures.ISOCurrency: invoice.currency_code;
+    amount_variance @Measures.ISOCurrency: invoice.currency_code;
+}
+
+annotate InvoiceService.InvoiceApprovals with {
+    invoice_amount  @Measures.ISOCurrency: invoice.currency_code;
+    variance_amount @Measures.ISOCurrency: invoice.currency_code;
 }
