@@ -687,17 +687,22 @@ annotate PlanningService.FlightSchedule with @(
             ]
         },
 
-        // UI-B-03. WP-07B's convention: the association RESOLVES, the string
-        // beside it is what was RECEIVED. Both, because a station the master
-        // has never seen still has to be recordable.
-        FieldGroup #ActualStations: {
-            Data: [
-                { Value: actual_origin.iata_code,      Label: 'Actual Origin (resolved)' },
-                { Value: actual_origin_airport,        Label: 'Actual Origin (as received)' },
-                { Value: actual_destination.iata_code, Label: 'Actual Destination (resolved)' },
-                { Value: actual_destination_airport,   Label: 'Actual Destination (as received)' }
-            ]
-        },
+        // #ActualStations WAS HERE AND IS FOLDED INTO #ActualRouting BELOW.
+        //
+        // TWO FIELD GROUPS EXISTED FOR ONE THING, AND THE ONE THAT RENDERED
+        // WAS THE WRONG ONE. #ActualStations bound the READABLE form -
+        // actual_origin.iata_code - and NO FACET REFERENCED IT. #ActualRouting
+        // is the one on the object page, and it bound actual_origin_ID, the
+        // generated foreign key: a UUID, labelled "Actual Origin (resolved)".
+        //
+        // Both resolve, so no dangling-path sweep would have said anything -
+        // and the data is null on all 22 flights, so nothing rendered either
+        // way and nobody could see which had been picked. The day a diversion
+        // arrives the live group would have shown a GUID where an airport
+        // belongs.
+        //
+        // Its content moved rather than its name: the readable pairing is what
+        // survives.
 
         // The two ground-gap boundaries. An empty timestamp is NOT a zero gap -
         // it means there is no split point, which is a different answer.
@@ -711,13 +716,30 @@ annotate PlanningService.FlightSchedule with @(
         },
 
         // Where the flight actually operated, as received and as resolved.
-        // Empty does NOT mean 'went as planned' - see the schema comment.
+        //
+        // EMPTY DOES NOT MEAN 'WENT AS PLANNED', and the status below is the
+        // whole point of this group. The schema is explicit that null here is
+        // UNDECIDED - "it may mean 'no deviation' or 'the feed did not say'" -
+        // so four blank rows invite exactly the reading the schema forbids.
+        // routing_status says NOT_RECORDED instead, which is what is true.
+        //
+        // THE UUIDs ARE GONE. This group bound actual_origin_ID and
+        // actual_destination_ID, labelled "(resolved)", which would render a
+        // GUID the day a diversion arrives. The resolved value a reader wants
+        // is the airport CODE, and the association carries it.
+        //
+        // BOTH FORMS STAY, because WP-07B's convention is that they are
+        // DIFFERENT FACTS: a diversion airport may not be in the register at
+        // all, so as-received can be a perfectly good code while resolved is
+        // null. A screen showing only the resolved form would report that
+        // diversion as no diversion.
         FieldGroup #ActualRouting: {
             Data: [
-                { Value: actual_origin_airport,      Label: 'Actual Origin' },
-                { Value: actual_origin_ID,           Label: 'Actual Origin (resolved)' },
-                { Value: actual_destination_airport, Label: 'Actual Destination' },
-                { Value: actual_destination_ID,      Label: 'Actual Destination (resolved)' }
+                { Value: routing_status,               Label: 'Actual Routing' },
+                { Value: actual_origin_airport,        Label: 'Actual Origin (as received)' },
+                { Value: actual_origin.iata_code,      Label: 'Actual Origin (resolved)' },
+                { Value: actual_destination_airport,   Label: 'Actual Destination (as received)' },
+                { Value: actual_destination.iata_code, Label: 'Actual Destination (resolved)' }
             ]
         },
 
@@ -767,6 +789,8 @@ annotate PlanningService.FlightSchedule with {
     flight_start_utc              @title: 'Flight Start (UTC)';
     start_source                  @title: 'Start Source';
     // WP-33. The String(3) IATA codes carry the plain titles...
+    routing_status                @title: 'Actual Routing'
+                                  @Common.QuickInfo: 'NOT_RECORDED - no actual routing was received. It does NOT mean the flight went as planned; the schema is explicit that null here may mean either. PARTIALLY_RECORDED - one station recorded and the other not, so no comparison is possible. AS_PLANNED - both recorded and both match. DEVIATION - both recorded and at least one differs.';
     actual_origin_airport         @title: 'Actual Origin';
     actual_destination_airport    @title: 'Actual Destination';
     // ...and the titles go on the ASSOCIATIONS so CAP propagates them to the
