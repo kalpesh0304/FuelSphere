@@ -476,20 +476,34 @@ annotate PlanningService.FlightSchedule with @(
             // viewer cannot tell a missing block from an absent one.
             // ================================================================
             {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'DesignatedForThisFlight',
                 // Named for what it is, not for its rung. "Primary" and
                 // "fallback" are resolver words; a planner does not think in
                 // rungs, and an empty block here MEANS SOMETHING - this
                 // flight has no arrangement of its own.
                 Label  : 'Designated for this flight',
-                Target : 'designation/@UI.LineItem#FlightBlock'
+                // A COLLECTION FACET SO THE SENTENCE SITS INSIDE THE SECTION
+                // RATHER THAN BESIDE IT. The block is a LineItem over a
+                // to-many, so no field can be added to the table - the
+                // statement needs its own field group under the same heading.
+                $Type  : 'UI.CollectionFacet',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', ID: 'FlightDesignationNote',
+                      Target: '@UI.FieldGroup#FlightDesignationNote' },
+                    { $Type: 'UI.ReferenceFacet', ID: 'FlightDesignationRows',
+                      Target: 'designation/@UI.LineItem#FlightBlock' }
+                ]
             },
             {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'StationDefault',
                 Label  : 'This station''s default',
-                Target : 'station_default/@UI.LineItem#StationBlock'
+                $Type  : 'UI.CollectionFacet',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', ID: 'StationDesignationNote',
+                      Target: '@UI.FieldGroup#StationDesignationNote' },
+                    { $Type: 'UI.ReferenceFacet', ID: 'StationDefaultRows',
+                      Target: 'station_default/@UI.LineItem#StationBlock' }
+                ]
             },
             // ================================================================
             // WHO TO RING, AND FOR WHAT. Two blocks, because the answer
@@ -733,6 +747,17 @@ annotate PlanningService.FlightSchedule with @(
         // all, so as-received can be a perfectly good code while resolved is
         // null. A screen showing only the resolved form would report that
         // diversion as no diversion.
+        // THE TWO SENTENCES. Derived, never stored - the view already knows
+        // the condition, and a column somebody maintains would be a second
+        // place holding one fact.
+        FieldGroup #FlightDesignationNote: {
+            Data: [ { Value: flight_designation_note, Label: '' } ]
+        },
+
+        FieldGroup #StationDesignationNote: {
+            Data: [ { Value: station_designation_note, Label: '' } ]
+        },
+
         FieldGroup #ActualRouting: {
             Data: [
                 { Value: routing_status,               Label: 'Actual Routing' },
