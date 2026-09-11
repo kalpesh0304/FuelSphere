@@ -20,6 +20,48 @@ module.exports = class PlanningService extends cds.ApplicationService {
         const { FlightSchedule } = this.entities;
 
         // ====================================================================
+        // RAISE A FUEL ORDER FROM THE FLIGHT - OFFERED HERE, PERFORMED THERE.
+        //
+        // This is the projection a flight reader opens: `flightSchedule` is
+        // the only deployed app with a FlightSchedule object page and it binds
+        // /odata/v4/planning/. The same action on FuelOrderService.
+        // FlightSchedule is annotated, bound and correctly placed on the
+        // dispatch section of a projection that has no page in any deployed
+        // app - complete, correct and invisible.
+        //
+        // IT DELEGATES AND WRITES NOTHING. FuelOrderService owns order
+        // creation and there is exactly ONE INSERT, in createOrderFromFlight.
+        // D44 is two independent implementations of one rule disagreeing one
+        // day with nothing to notice; a second INSERT here would be that
+        // shape, so there is not one.
+        //
+        // THE FLIGHT ID COMES FROM THE BINDING CONTEXT, never the payload -
+        // which is the whole reason the action is bound. On the order list a
+        // person types the flight, the date and the station, all of which this
+        // page already knows and any of which they can get wrong.
+        //
+        // ERROR PROPAGATION IS THE PART THAT NEEDED MEASURING, not the call.
+        // A refusal raised inside FuelOrderService - MDM402 on a provisional
+        // registration is the live one - has to reach the caller AS A REFUSAL.
+        // If it arrives as a 500 the gate is intact and the screen lies about
+        // why, which is worse than the gate being absent: a 500 reads as "the
+        // system is broken", and somebody retries. Measured on S6's tail in
+        // planning-raise-order-harness EXIT-3.
+        // ====================================================================
+        this.on('createFuelOrder', FlightSchedule, async (req) => {
+            const flightId = req.params && req.params.length
+                ? (typeof req.params[0] === 'object' ? req.params[0].ID : req.params[0])
+                : null;
+            if (!flightId) return req.error(400, 'No flight in context.');
+
+            const orders = await cds.connect.to('FuelOrderService');
+            return orders.send({
+                event: 'createOrderFromFlight',
+                data: Object.assign({}, req.data, { flightId })
+            });
+        });
+
+        // ====================================================================
         // AUTO-CREATE DRAFT FUEL ORDER ON FLIGHT SCHEDULE CREATION
         // ====================================================================
 

@@ -1204,10 +1204,52 @@ annotate FuelOrderService.FlightSchedule with @(
                 Label  : 'Fuel Orders'
             },
             {
-                $Type  : 'UI.ReferenceFacet',
+                // THE CREATE BUTTON GOES HERE, NOT ON THE ORDER LIST.
+                //
+                // A create form on the order list asks a person to type the
+                // flight, the date and the station - all three of which this
+                // page already knows, and any of which they can get wrong.
+                // Bound to the flight, none of them is typed.
+                //
+                // On the DISPATCH section rather than the Fuel Orders section
+                // because the plan is what the order answers: the quantity
+                // defaults from the plan's required uplift, and the variance
+                // reason is measured against it. The order is a consequence
+                // of the plan, so the button belongs beside the plan.
+                //
+                // A CollectionFacet so the action sits under the same heading
+                // as the table - a LineItem toolbar action must bind the
+                // table's own entity, and this one binds the FLIGHT.
                 ID     : 'FlightDispatchPlans',
-                Target : 'dispatches/@UI.LineItem',
-                Label  : 'Dispatch Plans'
+                Label  : 'Dispatch Plans',
+                $Type  : 'UI.CollectionFacet',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', ID: 'RaiseOrder',
+                      Target: '@UI.FieldGroup#RaiseOrder' },
+                    { $Type: 'UI.ReferenceFacet', ID: 'DispatchPlanRows',
+                      Target: 'dispatches/@UI.LineItem' }
+                ]
+            }
+        ]
+    }
+);
+
+annotate FuelOrderService.FuelOrders with {
+    order_type               @title: 'Order Type'
+                             @Common.QuickInfo: 'ORIGINAL, or AMENDMENT or INCREMENTAL to an earlier order, or TANKERING. Declared as an enum and NOT enforced by the model - D25, 79 enum-typed elements and zero with @assert.range - so the creation handler is what rejects a bad value.';
+    planned_quantity_kg      @title: 'Planned Quantity (kg)'
+                             @Common.QuickInfo: 'The plan''s required uplift at the moment this order was raised, COPIED rather than resolved: a plan can be superseded, and the order must keep the figure it was actually compared against. Blank where the plan carried none.';
+    quantity_variance_reason @title: 'Variance Reason'
+                             @Common.QuickInfo: 'Why the ordered quantity differs from the planned figure. Required when the two differ, refused when they match, and absent entirely where the plan carries no figure to differ from.';
+};
+
+annotate FuelOrderService.FlightSchedule with @(
+    UI.FieldGroup #RaiseOrder: {
+        Data: [
+            {
+                $Type  : 'UI.DataFieldForAction',
+                Action : 'FuelOrderService.createFuelOrder',
+                Label  : 'Raise Fuel Order'
             }
         ]
     }

@@ -87,8 +87,18 @@ describe('WP-05 — remove the hardcoded large-order guard (D16)', function () {
         const db = await cds.connect.to('db');
         const id = cds.utils.uuid();
         await db.run(INSERT.into('fuelsphere.FUEL_ORDERS').entries({
+            // D39. THIS SAID 'Created', AND THAT IS WHY THIS HARNESS WAS RED
+            // FOR WEEKS. WP-09 changed the writer from 'Created' to 'Draft';
+            // the fixture was never updated, so `submit` refused on the STATUS
+            // GUARD before the quantity validation was ever reached - and the
+            // criterion failed for a reason that had nothing to do with what it
+            // tests.
+            //
+            // 'Created' is not a member of OrderStatus and nothing in srv/
+            // writes it. A fixture seeding a state the writer cannot produce
+            // tests a system that does not exist.
             ID: id, order_number: 'FO-MNL-20260316-901', station_code: 'MNL',
-            status: 'Created', ordered_quantity: 0, unit_price: 0.85
+            status: 'Draft', ordered_quantity: 0, unit_price: 0.85
         }));
 
         let status, msg;
@@ -109,8 +119,9 @@ describe('WP-05 — remove the hardcoded large-order guard (D16)', function () {
         const db = await cds.connect.to('db');
         const id = cds.utils.uuid();
         await db.run(INSERT.into('fuelsphere.FUEL_ORDERS').entries({
+            // D39, the other half. Same stale value, same cause.
             ID: id, order_number: 'FO-MNL-20260316-902', station_code: 'MNL',
-            status: 'Created', ordered_quantity: 120000, unit_price: 0.85
+            status: 'Draft', ordered_quantity: 120000, unit_price: 0.85
         }));
 
         let status, msg;

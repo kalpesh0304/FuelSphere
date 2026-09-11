@@ -253,7 +253,52 @@ service FuelOrderService {
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
         destination : redirected to Airports
-    } excluding { fuel_order };
+    } excluding { fuel_order }
+    actions {
+        /**
+         * Raise a fuel order for THIS flight.
+         *
+         * BOUND, AND THAT IS THE WHOLE POINT. The unbound
+         * createOrderFromFlight takes a flightId, which on a screen means a
+         * person types or picks the flight - and the flight number, the date
+         * and the station are all things this page already knows and any of
+         * which they can get wrong.
+         *
+         * Bound, the flight is the binding context. Nothing about WHERE and
+         * WHEN is typed; what is typed is only what a person knows and the
+         * system does not.
+         *
+         * It goes on the DISPATCH PLAN section rather than the order list,
+         * because the plan is what the order answers: the quantity defaults
+         * from the plan's required uplift and the variance reason is measured
+         * against it.
+         */
+        action createFuelOrder(
+            // TYPED — only a person knows these
+            orderedQuantity        : Decimal(12,2) @mandatory,
+            uomCode                : String(3),
+            orderType              : String(20),
+
+            // DEFAULTED FROM THE DESIGNATION, OVERRIDABLE
+            supplierId             : UUID,
+            contractId             : UUID,
+            intoPlaneAgentId       : UUID,
+            intoPlaneContractId    : UUID,
+
+            // CONDITIONAL
+            parentOrderId          : UUID,
+            tankeringSectors       : Integer,
+
+            // Required only where the plan carries a figure AND the quantity
+            // differs from it. Three states, and the third has no field —
+            // see db/order-plan-variance.cds.
+            quantityVarianceReason : String(500),
+
+            unitPrice              : Decimal(15,4),
+            currencyCode           : String(3),
+            notes                  : String(1000)
+        ) returns FuelOrders;
+    };
 
     // ========================================================================
     // FLIGHT DISPATCH (Dispatch Data from External Systems)
@@ -410,7 +455,51 @@ service FuelOrderService {
         unitPrice       : Decimal(15,4),
         currencyCode    : String(3),
         priority        : String(10),
-        notes           : String(1000)
+        notes           : String(1000),
+
+        // ====================================================================
+        // MANUAL ORDER CREATION — START FROM THE FLIGHT, NOT FROM THE ORDER
+        // LIST.
+        //
+        // The flight already knows its number, date, station and plan. A
+        // create form on the order list asks a person to type all four, and
+        // any of them can be got wrong. Everything below is either typed
+        // because only a person knows it, defaulted from the designation, or
+        // derived from the flight.
+        //
+        // TYPED (3): orderedQuantity, uomCode, orderType
+        // DEFAULTED, OVERRIDABLE (4): supplier, supplier contract,
+        //   into-plane agent, into-plane contract — all from the designation
+        // DERIVED, NEVER ENTERED: flight, dispatch plan, station, order date,
+        //   conversion density, ordered_quantity_kg
+        // ====================================================================
+
+        uomCode         : String(3),      // typed; defaults from the contract
+        orderType       : String(20),     // ORIGINAL | AMENDMENT | INCREMENTAL | TANKERING
+
+        // From the designation, overridable. supplierId/contractId above are
+        // the fuel side; these two are the into-plane side, and D's rule is
+        // that they stay EMPTY where the supplier fuels its own product.
+        intoPlaneAgentId    : UUID,
+        intoPlaneContractId : UUID,
+
+        // The plan this order is raised against. Derived from the flight's
+        // ACTIVE plan when omitted - it comes back null on every order today,
+        // so a creation path that sets it is what makes the link real rather
+        // than modelled.
+        dispatchPlanId  : UUID,
+        conversionDensity : Decimal(10,4),
+
+        // CONDITIONAL. parent_order is mandatory on AMENDMENT and INCREMENTAL
+        // and must be ABSENT on ORIGINAL; tankering_sectors only where the
+        // order is tankering.
+        parentOrderId   : UUID,
+        tankeringSectors : Integer,
+
+        // Required only where the plan carries a figure AND the quantity
+        // differs from it. See db/order-plan-variance.cds for the three
+        // states and why the third has no field at all.
+        quantityVarianceReason : String(500)
     ) returns FuelOrders;
 
     /**

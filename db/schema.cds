@@ -1652,6 +1652,41 @@ entity FLIGHT_FUEL_DELIVERIES as select from FUEL_DELIVERIES {
         delivery_date,
         delivered_quantity,
         uom_code,
+
+        // ------------------------------------------------------------------
+        // THE GAUGE READINGS AND THE REFUELLING WINDOW — WIDENED HERE BECAUSE
+        // THIS IS THE DELIVERY PAGE A FLIGHT REACHES.
+        //
+        // The view carried the VERDICT (fob_delta_kg, fob_source,
+        // recon_variance_kg, recon_status) and none of the readings the
+        // verdict is computed from. The comment above its annotations said
+        // "the delivery's own object page already shows everything; this
+        // answers one question and stops" - and that object page is
+        // FuelOrderService.FuelDeliveries, in a DIFFERENT APP. From the
+        // flight there is no route to it. So the narrowing was justified by
+        // a page the reader cannot reach from where they are standing, and
+        // the seven fields below were absent for that reason rather than by
+        // a decision about this page.
+        //
+        // WIDENING THE VIEW DOES NOT WIDEN THE CARD, which is what the
+        // original narrowing was protecting. The Fuel Status card binds
+        // LineItem#FuelStatusCard and names five fields explicitly; a column
+        // arriving on the view cannot appear there. "A card must say less
+        // than a table" is enforced by the QUALIFIER, not by the view's
+        // column list - so the constraint survives this change intact.
+        //
+        // fob_rounding_kg is deliberately NOT here. It was not asked for, and
+        // a view widened past its request is how the next reader loses the
+        // thread of why any of these are present.
+        // ------------------------------------------------------------------
+        fob_at_arrival_kg,
+        fob_before_kg,
+        fob_after_kg,
+        ground_burn_kg,
+        refuel_start_utc,
+        refuel_end_utc,
+        refuel_complete,
+
         fob_delta_kg,
         fob_source,
         recon_variance_kg,

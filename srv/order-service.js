@@ -23,6 +23,7 @@ const {
     DEFAULT_VOLUME_UOM,
     resolveDefaultVolumeUom,
     planMassToOrderVolume,
+    resolvePlanningDensity,
     isMassUom,
     deriveGaugeFigures
 } = require('./lib/fuel-uom');
@@ -366,9 +367,34 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // CREATE ORDER FROM FLIGHT (Service-level action)
         // ====================================================================
 
+        // ====================================================================
+        // THE BOUND FORM — the flight supplies its own context.
+        //
+        // One implementation, reached two ways: this delegates to the unbound
+        // action rather than repeating its body. Two implementations of one
+        // rule is D44, and a create path is exactly where a second copy would
+        // drift - the unbound one gates on MDM402, allocates the number,
+        // derives the plan and enforces the three variance states, and none
+        // of that is worth writing twice.
+        //
+        // The flight ID comes from the binding context, never from the
+        // payload: that is the difference the bound form exists to make.
+        // ====================================================================
+        this.on('createFuelOrder', FlightSchedule, async (req) => {
+            const flightId = _id(req.params);
+            if (!flightId) return req.error(400, 'No flight in context.');
+            return this.send({
+                event: 'createOrderFromFlight',
+                data: Object.assign({}, req.data, { flightId })
+            });
+        });
+
         this.on('createOrderFromFlight', async (req) => {
             const { flightId, supplierId, contractId, productId, orderedQuantity, orderedQuantityKg,
-                    unitPrice, currencyCode, priority, notes } = req.data;
+                    unitPrice, currencyCode, priority, notes,
+                    uomCode, orderType, intoPlaneAgentId, intoPlaneContractId,
+                    dispatchPlanId, conversionDensity,
+                    parentOrderId, tankeringSectors, quantityVarianceReason } = req.data;
 
             // Look up the flight
             const flight = await SELECT.one.from(FlightSchedule).where({ ID: flightId });
@@ -404,6 +430,126 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // factor leaves the quantity alone rather than inventing one.
             const converted = await planMassToOrderVolume(orderedQuantityKg);
 
+            // ================================================================
+            // ORDER TYPE, AND THE TWO CONDITIONALS.
+            //
+            // NOTHING ENFORCES OrderStatus OR ANY OTHER ENUM HERE. D25: 79
+            // enum-typed elements and zero are enforced - a CDS enum is
+            // documentation unless @assert.range is present, and it is not.
+            // So the handler writing the right value is the ONLY thing keeping
+            // status correct, and the same is true of order_type below. This
+            // is not the package to enforce 79 enums in; it is the package to
+            // say out loud that nothing is enforcing this one.
+            // ================================================================
+            const TYPES = ['ORIGINAL', 'AMENDMENT', 'INCREMENTAL', 'TANKERING'];
+            const type = orderType || 'ORIGINAL';
+            if (!TYPES.includes(type)) {
+                return req.error(400,
+                    `Order type "${type}" is not one of ${TYPES.join(', ')}.`);
+            }
+
+            // parent_order is what an AMENDMENT or an INCREMENTAL amends. An
+            // ORIGINAL has nothing to point at, and accepting one there would
+            // record a lineage that does not exist.
+            const NEEDS_PARENT = ['AMENDMENT', 'INCREMENTAL'];
+            if (NEEDS_PARENT.includes(type) && !parentOrderId) {
+                return req.error(400,
+                    `An ${type} order must name the order it amends (parentOrderId).`);
+            }
+            if (!NEEDS_PARENT.includes(type) && parentOrderId) {
+                return req.error(400,
+                    `An ${type} order cannot name a parent order.`);
+            }
+            if (tankeringSectors != null && type !== 'TANKERING') {
+                return req.error(400,
+                    `tankeringSectors applies only to a TANKERING order; this one is ${type}.`);
+            }
+
+            // ================================================================
+            // THE PLAN, AND THE FIGURE THIS ORDER IS COMPARED AGAINST.
+            //
+            // Derived from the flight's ACTIVE plan where the caller does not
+            // name one - dispatch_plan_ID comes back null on every order
+            // today, so a creation path that sets it is what makes the link
+            // real rather than modelled.
+            //
+            // The plan figure is COPIED, not resolved. A plan can be
+            // superseded (DSP453 replaces the active row) and the order must
+            // keep the figure it was actually compared against.
+            // ================================================================
+            let planId = dispatchPlanId || null;
+            if (!planId) {
+                const activePlan = await SELECT.one.from('fuelsphere.FLIGHT_DISPATCH')
+                    .columns('ID', 'required_uplift_kg')
+                    .where({ flight_schedule_ID: flightId, plan_status: 'ACTIVE' });
+                if (activePlan) planId = activePlan.ID;
+            }
+            const plan = planId
+                ? await SELECT.one.from('fuelsphere.FLIGHT_DISPATCH')
+                    .columns('ID', 'required_uplift_kg').where({ ID: planId })
+                : null;
+            const plannedKg = plan && plan.required_uplift_kg != null
+                ? Number(plan.required_uplift_kg) : null;
+
+            // THREE STATES, AND THE THIRD IS WHY THIS IS NOT A SIMPLE
+            // "reason required when overridden".
+            //
+            //   plan figure present, quantity DIFFERS -> reason MANDATORY
+            //   plan figure present, quantity MATCHES -> no reason wanted
+            //   plan figure ABSENT                    -> no comparison exists
+            //
+            // D57 leaves required_uplift_kg null on seven of eleven plans, so
+            // the third state is the common one today. Demanding a reason
+            // there would invent a comparison.
+            //
+            // THE MANDATORY-UNLESS SHAPE IS A CONVENTION IN THIS FILE, NOT A
+            // CHOICE MADE HERE: `cancel` already refuses without a reason
+            // unless the order is Draft. A state that loses information
+            // requires the information that explains it.
+            // THE COMPARISON MASS IS COMPUTED AND NOT RECORDED, AND THAT
+            // DISTINCTION IS THE WHOLE OF IT.
+            //
+            // Measured on the bound action: it carries no orderedQuantityKg,
+            // because a person types a VOLUME. With no mass to compare,
+            // `differs` was false on every order and NO REASON WAS EVER
+            // REQUIRED — the guard was inert on the only path a screen takes.
+            //
+            // But deriving the mass and WRITING it violates WP-11 EXIT-1d and
+            // the standing rule behind it: a derived value with a missing
+            // input is null, never computed from a default. Recording
+            // conversion_density on an order where nobody supplied a mass
+            // claims a conversion that did not happen.
+            //
+            // So the mass is computed HERE, for the check, and goes nowhere.
+            // A comparison is not a stored fact. The order keeps its typed
+            // volume and no conversion it cannot justify; the error message
+            // quotes the figure it compared, so the check is still auditable.
+            let orderedKg = converted ? Number(converted.ordered_quantity_kg)
+                                      : (orderedQuantityKg != null ? Number(orderedQuantityKg) : null);
+            if (orderedKg == null && orderedQuantity != null) {
+                const d = conversionDensity != null
+                    ? { density: Number(conversionDensity) }
+                    : await resolvePlanningDensity(uomCode || undefined);
+                if (d && d.density > 0) {
+                    orderedKg = Number((Number(orderedQuantity) * d.density).toFixed(2));
+                }
+            }
+
+            const differs = plannedKg != null && orderedKg != null
+                         && Math.abs(orderedKg - plannedKg) >= 0.005;
+            if (differs && !quantityVarianceReason) {
+                return req.error(400,
+                    `The ordered quantity (${orderedKg} kg) differs from the plan (${plannedKg} kg). `
+                  + `A reason is required - an order that silently differs from its plan is a variance `
+                  + `nobody sees.`);
+            }
+            if (!differs && quantityVarianceReason) {
+                return req.error(400, plannedKg == null
+                    ? `This flight's plan carries no required uplift, so there is nothing to differ `
+                    + `from and no reason to record.`
+                    : `The ordered quantity matches the plan, so there is no variance to explain.`);
+            }
+
             const orderId = cds.utils.uuid();
             await INSERT.into(FuelOrders).entries({
                 ID: orderId,
@@ -414,7 +560,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 supplier_ID: supplierId,
                 contract_ID: contractId,
                 product_ID: productId,
-                uom_code: (await resolveDefaultVolumeUom()).uom,
+                uom_code: uomCode || (await resolveDefaultVolumeUom()).uom,
                 ordered_quantity: orderedQuantity,
                 ...(converted ? {
                     ordered_quantity: converted.quantity,
@@ -429,6 +575,24 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 requested_date: flight.flight_date,
                 priority: priority || 'Normal',
                 status: 'Draft',
+
+                order_type: type,
+                parent_order_ID: parentOrderId || null,
+                tankering_sectors: tankeringSectors != null ? tankeringSectors : null,
+                is_tankering: type === 'TANKERING',
+
+                // From the designation, overridable. Empty is a REAL STATE
+                // where the supplier fuels its own product - D's rule - so a
+                // null here is not a gap to fill.
+                into_plane_agent_ID: intoPlaneAgentId || null,
+                into_plane_contract_ID: intoPlaneContractId || null,
+
+                dispatch_plan_ID: planId,
+                planned_quantity_kg: plannedKg,
+                quantity_variance_reason: quantityVarianceReason || null,
+                ...(conversionDensity != null && !converted
+                    ? { conversion_density: conversionDensity } : {}),
+
                 notes: notes || `Fuel order for flight ${flight.flight_number} ${flight.origin_airport}-${flight.destination_airport}`
             });
 
