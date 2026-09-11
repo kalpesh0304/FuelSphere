@@ -277,7 +277,57 @@ service PlanningService {
              and actual_destination_airport = destination_airport
                 then 'AS_PLANNED'
             else 'DEVIATION'
-        end as routing_status : String(20)
+        end as routing_status : String(20),
+
+        // ====================================================================
+        // WHICH DESIGNATION BLOCK ANSWERS, AND A SENTENCE FOR EACH.
+        //
+        // Ajesh reported "Designated for this flight" blank on AC412. It is
+        // CORRECT - two of twenty-two flights carry a flight-level
+        // designation and AC412 is not one - but the blank said nothing, and
+        // a viewer cannot tell "no specific arrangement exists" from "nobody
+        // filled it in".
+        //
+        // DERIVED FROM THE SAME TWO ASSOCIATIONS THE BLOCKS RENDER FROM, so
+        // the sentence cannot drift from the table beneath it. NOT from
+        // FLIGHT_DESIGNATED_SUPPLIER: that view DECLINES on an ambiguous
+        // designation, and "declined" would render here as "no designation
+        // exists", which is a different fact.
+        // ====================================================================
+        case
+            when exists designation      then 'FLIGHT'
+            when exists station_default  then 'STATION_DEFAULT'
+            else 'NONE'
+        end as designation_state : String(16),
+
+        // Both notes are STATEMENTS whether or not the table below has rows.
+        // The same distinction has been the fix four times now - NOT_APPLICABLE
+        // versus none-recorded on the contacts strip, NOT_RECORDED versus
+        // AS_PLANNED on actual routing, and both blocks here - and every time
+        // by DERIVING the common case rather than rendering an absence.
+        case
+            when exists designation
+                then 'Designated specifically for this flight'
+            when exists station_default
+                then 'No flight-level designation — this flight uses the station default below'
+            else 'No designation — the supplier does not default on this flight''s orders'
+        end as flight_designation_note : String(120),
+
+        // THE STATION BLOCK NEEDS ITS OWN SENTENCE, and asking that question
+        // was the point: on the 8 rows with no designation at all it is blank
+        // too. Explaining one block and leaving the other bare turns two
+        // unexplained gaps into one, which is not better.
+        //
+        // The NONE text is rung 3 of designation-resolver.js verbatim: "an
+        // undesignated station RESOLVES TO NOTHING, a person fills the
+        // supplier in, and the absence is visible rather than papered over."
+        case
+            when exists station_default
+                then 'Applies to any flight from ' || origin_airport
+                     || ' without a designation of its own'
+            else 'No default supplier is designated at ' || origin_airport
+                 || ' — orders on this flight are created with an empty supplier for a person to fill in'
+        end as station_designation_note : String(160)
     } excluding { fuel_order };
 
     /**
