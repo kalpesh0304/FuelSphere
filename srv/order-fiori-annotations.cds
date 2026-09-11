@@ -60,22 +60,17 @@ annotate FuelOrderService.FuelOrders with @(
             { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Medium },
             { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
             { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Medium },
-            { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low },
-            // Cross-app link. Shared with FlightSchedule's embedded "Fuel
-            // Orders" section (Target: 'orders/@UI.LineItem' is this same
-            // unqualified LineItem) — viewed from inside this app itself the
-            // link is a harmless no-op back to the same record.
-            {
-                $Type          : 'UI.DataFieldForIntentBasedNavigation',
-                Label          : 'Open in Fuel Orders',
-                SemanticObject : 'fuelorders',
-                Action         : 'manage',
-                Mapping        : [
-                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: ID,            SemanticObjectProperty: 'ID' },
-                    { $Type: 'Common.SemanticObjectMappingType', LocalProperty: flight_number,  SemanticObjectProperty: 'flight_number' }
-                ],
-                ![@UI.Importance]: #Low
-            }
+            { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low }
+            // No cross-app nav DataField here: this LineItem is FuelOrders'
+            // OWN default (used by this app's own List Report). FlightSchedule's
+            // embedded "Fuel Orders" section targets 'orders/@UI.LineItem',
+            // which resolves to PlanningService.FuelOrders — a DIFFERENT,
+            // unqualified LineItem (planning-fiori-annotations.cds) — not this
+            // one. Verified against the compiled EDMX, not assumed: the earlier
+            // comment here claiming they were "the same unqualified LineItem"
+            // was wrong. That row click is wired via
+            // flightSchedule/webapp/manifest.json's navigation.orders.display
+            // override instead.
         ],
 
         // Presentation Variant for default sorting
