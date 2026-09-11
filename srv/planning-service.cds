@@ -328,7 +328,60 @@ service PlanningService {
             else 'No default supplier is designated at ' || origin_airport
                  || ' — orders on this flight are created with an empty supplier for a person to fill in'
         end as station_designation_note : String(160)
-    } excluding { fuel_order };
+    } excluding { fuel_order }
+    actions {
+        /**
+         * Raise a fuel order for THIS flight.
+         *
+         * HERE BECAUSE THIS IS THE PROJECTION A FLIGHT READER OPENS. The same
+         * action is declared and annotated on FuelOrderService.FlightSchedule,
+         * where it is complete, correct and on no screen: `flightSchedule` is
+         * the only deployed app with a FlightSchedule object page and it binds
+         * /odata/v4/planning/. Five services project FLIGHT_SCHEDULE and one
+         * is opened. That annotation is KEPT - it costs nothing and is right
+         * the day that projection gets a page - but it is not what a planner
+         * can reach today.
+         *
+         * @readonly ON PlanningService.FuelOrders IS NOT THE BOUNDARY IT LOOKS
+         * LIKE, and the distinction is the reason this is allowed to exist.
+         * That annotation says "do not write ORDERS through this projection",
+         * which stays true: this action writes nothing through it. It calls
+         * the service that owns the write. The READ surface and the ACTION
+         * surface are different questions, and conflating them is what kept
+         * burns off the flight page - ownership and reachability are not the
+         * same thing.
+         *
+         * PLANNING OFFERS, FUELORDER PERFORMS. There is still exactly ONE
+         * INSERT, in createOrderFromFlight, which is D44's whole point: two
+         * implementations of one rule disagree one day with nothing to notice.
+         * The handler here delegates and does not write. The moment a second
+         * INSERT appears the argument for this changes.
+         */
+        action createFuelOrder(
+            // TYPED - only a person knows these
+            orderedQuantity        : Decimal(12,2) @mandatory,
+            uomCode                : String(3),
+            orderType              : String(20),
+
+            // DEFAULTED FROM THE DESIGNATION, OVERRIDABLE
+            supplierId             : UUID,
+            contractId             : UUID,
+            intoPlaneAgentId       : UUID,
+            intoPlaneContractId    : UUID,
+
+            // CONDITIONAL
+            parentOrderId          : UUID,
+            tankeringSectors       : Integer,
+
+            // Required only where the plan carries a figure AND the quantity
+            // differs from it. Three states, and the third has no field.
+            quantityVarianceReason : String(500),
+
+            unitPrice              : Decimal(15,4),
+            currencyCode           : String(3),
+            notes                  : String(1000)
+        ) returns FuelOrders;
+    };
 
     /**
      * FlightDispatches - the plan a flight was released against.

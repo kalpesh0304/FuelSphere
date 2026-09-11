@@ -130,6 +130,27 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
     }
 );
 
+// ============================================================================
+// THE RAISE-ORDER BUTTON, ON THE PROJECTION A FLIGHT READER ACTUALLY OPENS.
+//
+// The identical group exists on FuelOrderService.FlightSchedule and is on no
+// screen: that projection has no page in any of the four deployed apps. It is
+// KEPT rather than moved - it costs nothing and is correct the day that
+// projection gets a page - but `flightSchedule` binds /odata/v4/planning/, so
+// this is the one a planner can press.
+// ============================================================================
+annotate PlanningService.FlightSchedule with @(
+    UI.FieldGroup #RaiseOrder: {
+        Data: [
+            {
+                $Type  : 'UI.DataFieldForAction',
+                Action : 'PlanningService.createFuelOrder',
+                Label  : 'Raise Fuel Order'
+            }
+        ]
+    }
+);
+
 annotate PlanningService.FLIGHT_FUEL_TICKETS with {
     ticket_number      @title: 'Ticket';
     quantity_metered   @title: 'Metered';
@@ -540,11 +561,25 @@ annotate PlanningService.FlightSchedule with @(
                 Target : 'tickets/@UI.LineItem',
                 Label  : 'Fuel Tickets'
             },
+            // THE BUTTON GOES ON THE DISPATCH SECTION, AND THIS FACET BECAME
+            // A COLLECTION TO CARRY IT. A ReferenceFacet targets one thing; a
+            // CollectionFacet holds the action above the rows it acts from.
+            //
+            // On the order list a person types the flight, the date and the
+            // station - all of which this page already knows and any of which
+            // they can get wrong. The plan is also what the order ANSWERS: the
+            // quantity defaults from the plan's required uplift and the
+            // variance reason is measured against it.
             {
-                $Type  : 'UI.ReferenceFacet',
+                $Type  : 'UI.CollectionFacet',
                 ID     : 'DispatchPlans',
-                Target : 'dispatches/@UI.LineItem',
-                Label  : 'Dispatch Plans'
+                Label  : 'Dispatch Plans',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', ID: 'RaiseOrder',
+                      Target: '@UI.FieldGroup#RaiseOrder' },
+                    { $Type: 'UI.ReferenceFacet', ID: 'DispatchPlanRows',
+                      Target: 'dispatches/@UI.LineItem' }
+                ]
             },
             {
                 $Type  : 'UI.CollectionFacet',
