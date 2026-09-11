@@ -148,45 +148,101 @@ describe('What a deployed app actually opens', function () {
     });
 
     // -------------------------------------------------------------- EXIT-3 --
-    // THE CRITERION THIS FILE WAS WRITTEN FOR.
+    // THE CRITERION THIS FILE WAS WRITTEN FOR, AND IT ASSERTS THE REQUIREMENT
+    // RATHER THAN ITS MIRROR.
     //
     // `manual-order-creation` EXIT-7 asserted the button is in the Dispatch
     // Plans section and passed, because it compiled the EDMX for
-    // `service:'FuelOrderService'` — the projection it was built against. IT
+    // `service:'FuelOrderService'` - the projection it was built against. IT
     // NEVER ASKED WHICH SERVICE THE READER OPENS, so it would pass with the
-    // button on any service at all. Same family as a 200 from $fiori-preview:
-    // an instrument answering a narrower question than the one being asked.
+    // button on any service at all.
     //
-    // HOW THIS ONE FAILS: put an action button on a FlightSchedule projection
-    // no app opens. It fails on the state that prompted it.
-    it('EXIT-3  every action button on a FlightSchedule projection is on the opened one', () => {
-        const openedSvc = DEPLOYED.find(d => d.pages.includes('FlightSchedule')).service;
-        const stranded = [];
-        for (const svc of Object.keys(edmx)) {
-            const acts = actionsOn(svc, 'FlightSchedule');
-            out(`  ${svc}.FlightSchedule buttons: ${acts.join(', ') || '(none)'}${svc === openedSvc ? '   <- OPENED' : ''}`);
-            if (svc !== openedSvc) for (const a of acts) stranded.push(`${a} is annotated on ${svc}.FlightSchedule, which no deployed app opens`);
-        }
-        for (const s of stranded) out(`  STRANDED: ${s}`);
-        assert.deepStrictEqual(stranded, [],
-            'an action button sits on a FlightSchedule projection with no page - it is complete, correct and invisible');
+    // THE FIRST VERSION OF THIS CRITERION MADE THE OPPOSITE MISTAKE and is
+    // worth keeping the record of: it asserted no OTHER projection may carry
+    // an action button, which is stronger than the decision. Keeping the
+    // FuelOrderService annotation is deliberate - it costs nothing and is
+    // correct the day that projection gets a page - so a criterion forbidding
+    // it would have vetoed a decision somebody took. Same shape as the
+    // `@Measures` guard that enforced the error it was written to catch.
+    // The stranded copy is REPORTED by EXIT-5, not forbidden here.
+    //
+    // HOW THIS FAILS: take the button off the opened projection. It failed on
+    // the commit before the repair, naming FuelOrderService.
+    it('EXIT-3  the raise-order action is annotated on the OPENED projection', () => {
+        const opened = DEPLOYED.find(d => d.pages.includes('FlightSchedule')).service;
+        const acts = actionsOn(opened, 'FlightSchedule');
+        out(`  ${opened}.FlightSchedule buttons: ${acts.join(', ') || '(none)'}`);
+        const raise = acts.filter(a => /createFuelOrder$/.test(a));
+        out(`  raise-order buttons a flight reader can press: ${raise.join(', ') || 'NONE'}`);
+        assert.deepStrictEqual(raise, [`${opened}.createFuelOrder`],
+            'the flight reader cannot raise an order: the action is not annotated on the projection '
+          + 'their app binds. It may be complete and correct on another one, and that is not a screen.');
     });
 
     // -------------------------------------------------------------- EXIT-4 --
-    // The same question for field groups, which is how the button GETS onto a
-    // section: #RaiseOrder is referenced by a facet on the pageless projection.
-    // Separate from EXIT-3 because a group can be stranded with no action in
-    // it, and an action can be placed without a group.
-    it('EXIT-4  every facet-referenced FieldGroup on a FlightSchedule projection is on the opened one', () => {
+    // The group is how the button reaches a SECTION. Separate from EXIT-3
+    // because an action can be annotated without a group carrying it onto a
+    // facet, and the placement is the half that was specified: the dispatch
+    // section, because the plan is what the order answers.
+    it('EXIT-4  the button is on the DISPATCH section of the opened projection', () => {
+        const opened = DEPLOYED.find(d => d.pages.includes('FlightSchedule')).service;
+        const blk = block(opened, 'FlightSchedule');
+        assert.ok(blk, `no annotation block for ${opened}.FlightSchedule`);
+        assert.ok(groupsOn(opened, 'FlightSchedule').includes('RaiseOrder'),
+            'no #RaiseOrder group on the opened projection');
+        const m = /<PropertyValue Property="ID" String="DispatchPlans"\/>[\s\S]{0,900}/.exec(blk);
+        assert.ok(m, 'the Dispatch Plans facet is gone from the opened projection');
+        out(`  Dispatch Plans facet found on ${opened}.FlightSchedule`);
+        assert.ok(/@UI\.FieldGroup#RaiseOrder/.test(m[0]),
+            'the create action is not in the Dispatch Plans section. On the order list a person types '
+          + 'the flight, the date and the station - all of which the flight page already knows.');
+        out('  #RaiseOrder is inside it');
+    });
+
+    // -------------------------------------------------------------- EXIT-5 --
+    // THE STRANDED COPIES, RATCHETED RATHER THAN FORBIDDEN.
+    //
+    // An annotation on a projection no app opens is not automatically wrong -
+    // FuelOrderService's is kept on purpose. It IS the defect class when
+    // nobody decided it, and the two are indistinguishable by reading. So
+    // every one is listed with its reason, and BOTH DIRECTIONS are asserted:
+    // no NEW stranded annotation, and no KNOWN entry that has stopped being
+    // stranded. The second half is what stops the list rotting into
+    // permission - the day `FuelOrderService.FlightSchedule` gains a page in
+    // the DEPLOYED table, these entries must come out, and this fails until
+    // they do. A repair is what makes it fail.
+    it('EXIT-5  every stranded FlightSchedule annotation is a recorded decision', () => {
+        const KNOWN = {
+            'FuelOrderService.FlightSchedule':
+                'Kept deliberately. The identical action and #RaiseOrder group were built here first '
+              + 'and are correct; this projection simply has no page in any of the four deployed apps. '
+              + 'Removing them would cost the work for nothing and they are right the day it gets one.'
+        };
         const openedSvc = DEPLOYED.find(d => d.pages.includes('FlightSchedule')).service;
+        const openedEntities = new Set(DEPLOYED.map(d => `${d.service}.FlightSchedule`)
+            .filter(t => t.startsWith(openedSvc)));
+
         const stranded = [];
         for (const svc of Object.keys(edmx)) {
-            const grps = groupsOn(svc, 'FlightSchedule');
-            out(`  ${svc}.FlightSchedule groups: ${grps.length}${svc === openedSvc ? '   <- OPENED' : '  ' + (grps.join(', ') || '')}`);
-            if (svc !== openedSvc) for (const g of grps) stranded.push(`#${g} on ${svc}.FlightSchedule, which no deployed app opens`);
+            const t = `${svc}.FlightSchedule`;
+            if (openedEntities.has(t)) continue;
+            const n = actionsOn(svc, 'FlightSchedule').length + groupsOn(svc, 'FlightSchedule').length;
+            if (n > 0) stranded.push(t);
         }
-        for (const s of stranded) out(`  STRANDED: ${s}`);
-        assert.deepStrictEqual(stranded, [],
-            'a field group sits on a FlightSchedule projection with no page');
+        out(`  stranded FlightSchedule projections: ${stranded.join(', ') || '(none)'}`);
+        for (const t of stranded) out(`    ${t}: ${KNOWN[t] ? 'RECORDED' : '*** NOT RECORDED ***'}`);
+
+        const unrecorded = stranded.filter(t => !KNOWN[t]);
+        assert.deepStrictEqual(unrecorded, [],
+            'an annotated FlightSchedule projection that no deployed app opens is not on the recorded '
+          + 'list - it is complete, correct and invisible, and nobody decided that');
+
+        // THE STALE HALF. A KNOWN entry whose projection now has a page is a
+        // decision that has expired, and leaving it in makes the list a record
+        // of choices nobody took.
+        const expired = Object.keys(KNOWN).filter(t => !stranded.includes(t));
+        out(`  recorded entries that are no longer stranded: ${expired.join(', ') || '(none)'}`);
+        assert.deepStrictEqual(expired, [],
+            'a recorded stranded projection now has a page or lost its annotations - take it off the list');
     });
 });
