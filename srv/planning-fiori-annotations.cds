@@ -1632,8 +1632,12 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
         Facets: [
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryWhat',
               Target: '@UI.FieldGroup#DeliveryWhat',  Label: 'The delivery' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DeliveryGauge',
+              Target: '@UI.FieldGroup#AircraftGauge', Label: 'Aircraft gauge (FQIS)' },
+            { $Type: 'UI.ReferenceFacet', ID: 'DeliveryRefuelWindow',
+              Target: '@UI.FieldGroup#RefuelWindow',  Label: 'Refuelling window' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryRecon',
-              Target: '@UI.FieldGroup#DeliveryRecon', Label: 'Gauge and reconciliation' },
+              Target: '@UI.FieldGroup#DeliveryRecon', Label: 'Reconciliation' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryWhere',
               Target: '@UI.FieldGroup#DeliveryWhere', Label: 'Aircraft and flight' }
         ],
@@ -1647,14 +1651,64 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
                 { Value: order.order_number, Label: 'Order' }
             ]
         },
-        // THE VERDICT, AND WHERE IT CAME FROM. fob_source says whether the
-        // gauge figure was read or derived, and recon_status is meaningless
-        // without it - WP-34 built that distinction and this is the first
-        // page a planner can see it on.
+        // ------------------------------------------------------------------
+        // THE GAUGE CHAIN, IN THE ORDER THE TWO SUBTRACTIONS READ.
+        //
+        //   arrival  -  ground burn  =  before        what the turn consumed
+        //   after    -  before       =  delta         what the bowser put in
+        //
+        // Read top to bottom, each rule spans the two rows above its result.
+        // THERE IS NO HORIZONTAL RULE IN A FieldGroup, so the grouping is
+        // carried by ORDER and by the QuickInfo on the two derived figures
+        // rather than by a separator - which is better than a drawn line,
+        // because a viewer can see WHICH subtraction produced the number
+        // rather than only that a boundary exists.
+        //
+        // AND ONE OF THE TWO RULES IS NOT A CHECK, WHICH THE QuickInfo SAYS.
+        // On the gauge path ground_burn_kg IS arrival minus before
+        // (fuel-uom.js deriveGaugeFigures), so arrival minus ground burn
+        // returning before is the same subtraction rearranged and cannot
+        // fail. Measured on all four rows carrying the three: exact, every
+        // time. It is worth showing for LEGIBILITY - a reader sees where the
+        // figure came from - but presenting it as something a viewer
+        // verifies would be presenting a tautology as a control.
+        // ------------------------------------------------------------------
+        FieldGroup#AircraftGauge: {
+            Data: [
+                { Value: fob_at_arrival_kg, Label: 'FOB at arrival (kg)' },
+                { Value: ground_burn_kg,    Label: 'Ground burn (kg)' },
+                { Value: fob_before_kg,     Label: 'FOB before uplift (kg)' },
+                { Value: fob_after_kg,      Label: 'FOB after uplift (kg)' },
+                { Value: fob_delta_kg,      Label: 'Uplift by gauge (kg)' },
+                { Value: fob_source,        Label: 'Gauge source' }
+            ]
+        },
+
+        // WHEN, beside WHAT. WP-33 added the window; fob_before_kg and
+        // fob_after_kg say what the gauge read and nothing said when.
+        // The pair brackets the readings in time, and the rate falls out of
+        // it: on the demo delivery 2,884 L across 25 minutes is 115 L/min, a
+        // normal single-bowser figure and the kind of thing an SME checks.
+        FieldGroup#RefuelWindow: {
+            Data: [
+                { Value: refuel_start_utc, Label: 'Refuelling started' },
+                { Value: refuel_end_utc,   Label: 'Refuelling ended' },
+                { Value: refuel_complete,  Label: 'Refuelling complete' }
+            ]
+        },
+
+        // THE VERDICT. fob_source and fob_delta_kg USED TO SIT HERE and have
+        // moved up into the chain that produces them - not duplicated, moved.
+        // Two facets on one object page showing the same value twice is the
+        // duplicated-annotation pathology with both copies rendering, which
+        // is worse than the orphaned-group case because nothing looks wrong.
+        //
+        // The original rationale was that "recon_status is meaningless
+        // without fob_source". It still holds and is now satisfied by
+        // ADJACENCY - the gauge facet sits directly above this one - rather
+        // than by repeating the field.
         FieldGroup#DeliveryRecon: {
             Data: [
-                { Value: fob_delta_kg,      Label: 'Gauge delta (kg)' },
-                { Value: fob_source,        Label: 'Gauge source' },
                 { Value: recon_variance_kg, Label: 'Reconciliation variance (kg)' },
                 { Value: recon_status,      Label: 'Reconciliation status' }
             ]
@@ -1708,8 +1762,41 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with {
 annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
     delivered_quantity @Measures.Unit: uom_code  @title: 'Delivered Quantity';
     uom_code           @title: 'Delivered In';
-    fob_delta_kg       @title: 'Gauge Delta (kg)';
     recon_variance_kg  @title: 'Reconciliation Variance (kg)';
+
+    // ---- THE GAUGE SET: EVERY FIGURE IS A MASS, SO EVERY ONE IS A LABEL --
+    //
+    // NOT @Measures.Unit: uom_code. The rule above applies here in its
+    // sharpest form - uom_code on THIS entity is the unit of the METERED
+    // volume, measured LTR on 10 of 26 rows, and an FQIS reports mass
+    // unconditionally. Pointing these at it would render a kilogram figure
+    // as litres on ten deliveries and correctly on sixteen, which is the
+    // failure mode the rule was written for: right on most of the data and
+    // therefore indistinguishable from right.
+    //
+    // No unit column exists for these and none should be added - a constant
+    // 'KG' on every row is a second place holding one fact.
+    fob_at_arrival_kg  @title: 'FOB at Arrival (kg)'
+                       @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. Blank on most deliveries: a single reading is recorded as FOB before uplift instead, because copying one into the other manufactures a zero ground burn where the truth is unknown.';
+
+    fob_before_kg      @title: 'FOB Before Uplift (kg)'
+                       @Common.QuickInfo: 'What the gauge read immediately before refuelling. This is the reconciliation input, not the arrival figure.';
+
+    fob_after_kg       @title: 'FOB After Uplift (kg)'
+                       @Common.QuickInfo: 'What the gauge read immediately after refuelling.';
+
+    ground_burn_kg     @title: 'Ground Burn (kg)'
+                       @Common.QuickInfo: 'Fuel consumed on the ground between the two arrival readings - APU, mainly. STORED, not recomputed when this page is read, and WHICH CALCULATION PRODUCED IT DEPENDS ON THE GAUGE SOURCE: on a measured reading it is arrival minus before, an OUTPUT of the two figures above, so subtracting it from arrival returns FOB before uplift by construction. On ACARS_DERIVED it is the APU total from recorded usage cycles and is an INPUT to the uplift instead - there the subtraction means nothing and FOB before uplift may be blank.';
+
+    fob_delta_kg       @title: 'Uplift by Gauge (kg)'
+                       @Common.QuickInfo: 'What the aircraft actually took, by gauge: FOB after uplift minus FOB before uplift. Compared against the sum of the supplier tickets to produce the reconciliation variance below.';
+
+    fob_source         @title: 'Gauge Source'
+                       @Common.QuickInfo: 'How the readings above were obtained. ACARS downlinked and OCR_CONFIRMED are measured; CREW_REPORTED is typically rounded to 100 kg; PANEL_PRESET is what was REQUESTED, not what arrived; ACARS_DERIVED is computed from the OUT and IN readings adjusted for APU, so the figures are derived rather than read. NONE IS NOT A MISSING VALUE - it means no gauge reading exists for this delivery, which is why the reconciliation reads NOT_RECONCILED with a BLANK variance rather than zero. Unknown is not agreement.';
+
+    refuel_start_utc   @title: 'Refuelling Started';
+    refuel_end_utc     @title: 'Refuelling Ended';
+    refuel_complete    @title: 'Refuelling Complete';
 }
 
 annotate PlanningService.FuelOrders with {
