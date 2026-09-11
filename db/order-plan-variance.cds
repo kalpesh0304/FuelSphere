@@ -41,7 +41,32 @@ namespace fuelsphere;
 
 using { fuelsphere as db } from './schema';
 
+/**
+ * WHAT KIND OF ORDER THIS IS.
+ *
+ * `is_tankering` already existed and is kept: it is the flag the tankering
+ * fields hang off, and removing it would break every writer. order_type is
+ * wider - an order is ORIGINAL, or it AMENDS one, or it is INCREMENTAL to
+ * one, or it is TANKERING - and only the fourth has anything to do with the
+ * existing flag. The handler keeps the two consistent.
+ *
+ * DECLARED AS AN ENUM AND NOT ENFORCED, WHICH IS SAID HERE RATHER THAN
+ * ASSUMED. D25: 79 enum-typed elements in this schema and ZERO are enforced -
+ * CAP validates only where @assert.range is present. This one is no different,
+ * so the handler's TYPES check is the only thing rejecting a bad value, and a
+ * direct INSERT bypasses it. Adding @assert.range here would enforce one field
+ * of seventy-nine and imply the rest are covered.
+ */
+type FuelOrderType : String(20) enum {
+    Original    = 'ORIGINAL';
+    Amendment   = 'AMENDMENT';
+    Incremental = 'INCREMENTAL';
+    Tankering   = 'TANKERING';
+}
+
 extend db.FUEL_ORDERS with {
+
+    order_type               : FuelOrderType default 'ORIGINAL';
 
     // The plan figure this order was raised against, COPIED AT CREATION.
     //
