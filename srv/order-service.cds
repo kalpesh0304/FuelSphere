@@ -42,6 +42,7 @@ service FuelOrderService {
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
         flight      : redirected to FlightSchedule,
+        flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
         airport     : redirected to Airports,
         supplier    : redirected to Suppliers,
         contract    : redirected to Contracts,
@@ -135,6 +136,7 @@ service FuelOrderService {
     entity FuelDeliveries as projection on db.FUEL_DELIVERIES {
         *,
         order : redirected to FuelOrders,
+        order.flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
         virtual null as statusCriticality   : Integer,
         virtual null as varianceCriticality : Integer
     } actions {

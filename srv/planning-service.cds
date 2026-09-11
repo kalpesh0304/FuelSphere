@@ -239,7 +239,45 @@ service PlanningService {
         *,
         aircraft    : redirected to Aircraft,
         origin      : redirected to Airports,
-        destination : redirected to Airports
+        destination : redirected to Airports,
+
+        // ====================================================================
+        // WHAT THE ACTUAL ROUTING SAYS — AND FOUR ANSWERS, NOT TWO.
+        //
+        // The schema is explicit that null here is UNDECIDED: "SEMANTICS OF
+        // NULL ARE OPEN - it may mean 'no deviation' or 'the feed did not
+        // say'. Those are different facts and nothing should assume one."
+        //
+        // So this must NOT render "operated as scheduled" from an absence.
+        // NOT_RECORDED is the honest answer, and it is the answer on all 22
+        // flights today: no actual_* routing column exists in the seed at all.
+        //
+        // AND A PARTIAL RECORDING GETS ITS OWN ANSWER. Coalescing a missing
+        // destination to the planned one and calling the flight AS_PLANNED is
+        // the forbidden assumption wearing arithmetic - it asserts "no
+        // deviation" from "did not say". One recorded and one not is a state
+        // the screen has to be able to express.
+        //
+        // COMPARED AS-RECEIVED AGAINST PLANNED, both IATA String(3), which is
+        // like for like. The resolved association is the READABLE form and is
+        // what the field group binds; it is not the comparison operand,
+        // because a diversion airport may not be in the register at all and
+        // would then resolve to null while the code is perfectly good.
+        //
+        // A CALCULATED ELEMENT, not virtual, so it can be filtered and sorted:
+        // $filter runs in the database before an after-READ handler sees the
+        // row (D52). Every null test is written `is null` - `case when x =
+        // null` never matches in SQL and would send every row to the else.
+        case
+            when actual_origin_airport is null and actual_destination_airport is null
+                then 'NOT_RECORDED'
+            when actual_origin_airport is null or actual_destination_airport is null
+                then 'PARTIALLY_RECORDED'
+            when actual_origin_airport = origin_airport
+             and actual_destination_airport = destination_airport
+                then 'AS_PLANNED'
+            else 'DEVIATION'
+        end as routing_status : String(20)
     } excluding { fuel_order };
 
     /**
