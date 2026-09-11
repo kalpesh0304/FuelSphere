@@ -28,13 +28,21 @@ const measures = async () => {
     const found=[];
     for (const s of SVCS) {
         let x; try { x=(await test.GET(`/odata/v4/${s}/$metadata`)).data; } catch { continue; }
-        const props={};
-        for (const m of x.matchAll(/<EntityType Name="(\w+)"[^>]*>([\s\S]*?)<\/EntityType>/g))
+        const props={}, navs={};
+        for (const m of x.matchAll(/<EntityType Name="(\w+)"[^>]*>([\s\S]*?)<\/EntityType>/g)) {
             props[m[1]]=new Set([...m[2].matchAll(/<Property Name="(\w+)"/g)].map(q=>q[1]));
+            // CARDINALITY IS IN THE TYPE AND IS EASY TO THROW AWAY. D56 was
+            // missed for weeks because a parser stripped Collection(...) to
+            // get the target type. Keep both.
+            navs[m[1]]=new Map([...m[2].matchAll(/<NavigationProperty Name="(\w+)" Type="([^"]+)"/g)]
+                .map(q=>[q[1], { target: q[2].replace(/^Collection\((.*)\)$/,'$1').split('.').pop(),
+                                 many: /^Collection\(/.test(q[2]) }]));
+        }
         for (const m of x.matchAll(/<Annotations Target="\w+Service\.(\w+)\/(\w+)">([\s\S]*?)<\/Annotations>/g)) {
             const [,ent,field,body]=m;
             const u=/Term="Measures\.(Unit|ISOCurrency)" Path="([^"]+)"/.exec(body);
-            if (u) found.push({ svc:s, ent, field, term:u[1], target:u[2], props:props[ent] });
+            if (u) found.push({ svc:s, ent, field, term:u[1], target:u[2],
+                                props:props[ent], allProps:props, allNavs:navs });
         }
     }
     return found;
@@ -83,17 +91,59 @@ describe('Units on quantities and amounts', () => {
         out(`${cur.length} amounts carry @Measures.ISOCurrency; 0 carry @Measures.Unit`);
     });
 
-    it('EXIT-3  every @Measures target EXISTS on the SAME entity', async () => {
-        // @Measures.ISOCurrency must point at a property of the same entity.
-        // A dangling target is D50's class arriving in a measure annotation,
-        // and it renders as a value with no unit — indistinguishable from
-        // never having annotated it.
+    it('EXIT-3  every @Measures target RESOLVES — same entity, or a to-ONE path', async () => {
+        // THIS CRITERION SAID "must point at a property of the SAME ENTITY",
+        // AND THAT WAS FALSE — the same false belief as the annotation comment
+        // beside InvoiceItems, written from it.
+        //
+        // SO IT COULD NOT CATCH THE MISTAKE; IT ENFORCED IT. A criterion built
+        // on the same premise as the code it guards does not test that premise,
+        // it promotes it to a rule - and the rule then blocks the repair. That
+        // is what happened here: annotating the invoice amounts through
+        // invoice/currency_code failed this criterion, correctly by its own
+        // wording and wrongly in fact.
+        //
+        // MEASURED: `@Measures.ISOCurrency: invoice.currency_code` emits
+        // Path="invoice/currency_code" and resolves to USD on every row.
+        //
+        // THE REAL RULE IS STRICTLY STRONGER, and D56 is where it comes from:
+        // the target must RESOLVE. Every intermediate hop must be a navigation
+        // that EXISTS and is TO-ONE, and the final segment must be a property
+        // of the entity the path reaches. A to-MANY hop names three real
+        // things and returns null forever, because Fiori has no key for the
+        // collection - which is D56 exactly, in a measure annotation.
         const all = await measures();
-        const dangling = all.filter(m => m.props && !m.props.has(m.target));
-        assert.deepStrictEqual(dangling.map(d=>`${d.svc}.${d.ent}.${d.field} -> ${d.target}`), [],
-            `a measure annotation points at a column the entity does not have. It renders as a bare `
-          + `number with no error — indistinguishable from no annotation at all.`);
-        out(`${all.length} targets, all present on their own entity`);
+        const bad = [];
+        for (const m of all) {
+            const segs = m.target.split('/');
+            let ent = m.ent, ok = true, why = '';
+            for (const seg of segs.slice(0, -1)) {
+                const nav = m.allNavs[ent] && m.allNavs[ent].get(seg);
+                if (!nav)      { ok=false; why=`no navigation "${seg}" on ${ent}`; break; }
+                if (nav.many)  { ok=false; why=`"${seg}" is a TO-MANY (D56: null forever)`; break; }
+                ent = nav.target;
+            }
+            if (ok) {
+                const leaf = segs[segs.length-1];
+                if (!m.allProps[ent] || !m.allProps[ent].has(leaf)) {
+                    ok=false; why=`${ent} has no property "${leaf}"`;
+                }
+            }
+            if (!ok) bad.push(`${m.svc}.${m.ent}.${m.field} -> ${m.target}  (${why})`);
+        }
+        assert.deepStrictEqual(bad, [],
+            `a measure annotation points somewhere that does not resolve. It renders as a bare number `
+          + `with no error - indistinguishable from no annotation at all:\n  ` + bad.join('\n  '));
+
+        // PROVE THE WALKER IN BOTH DIRECTIONS, on this run's own data.
+        const paths = all.filter(m => m.target.includes('/'));
+        assert.ok(paths.length > 0,
+            'instrument check: no PATH target was seen at all, so the hop-walking half of this '
+          + 'criterion read nothing and would pass however broken it was');
+        assert.ok(all.some(m => !m.target.includes('/')),
+            'instrument check: no same-entity target was seen either');
+        out(`${all.length} targets all resolve — ${all.length-paths.length} on their own entity, `
+          + `${paths.length} through a to-one path`);
     });
 
     it('EXIT-4  the annotated pairings render correctly on LIVE rows', async () => {
@@ -142,22 +192,65 @@ describe('Units on quantities and amounts', () => {
           + `-> ${T.quantity_kg} kg  (three figures, three units, none guessable from the number)`);
     });
 
-    it('EXIT-6  the entities the rule CANNOT serve are RECORDED, not guessed at', async () => {
-        // INVOICE_MATCHES carries no unit column and its names do not say.
-        // A label there would be a guess, and a guess is what makes 2,884
-        // and 2,305.76 indistinguishable in the first place.
+    it('EXIT-6  THE UNIT OF A QUANTITY IS AMBIGUOUS; THE CURRENCY OF AN AMOUNT IS NOT', async () => {
+        // THIS CRITERION BANNED **ANY** MEASURE ANNOTATION ON InvoiceMatches,
+        // FOR A REASON THAT ONLY HOLDS FOR QUANTITIES — and it would have
+        // blocked a correct fix. Same class as d-designated-suppliers EXIT-9
+        // matching an association by name: a rule asserted at the wrong
+        // granularity, which reads as strictness and behaves as a veto.
+        //
+        // po_quantity, gr_quantity and inv_quantity genuinely cannot be
+        // served: no unit column, and an invoice quantity there may be litres
+        // or kilograms depending on the document. A label would be a guess.
+        //
+        // The AMOUNTS beside them were never ambiguous. They are in the
+        // invoice's currency, one to-ONE hop away, and the note claiming
+        // ISOCurrency "must point at a property of the same entity" was
+        // FALSE — it emits Path="invoice/currency_code" and resolves.
         const all = await measures();
-        const guessed = all.filter(m => m.ent === 'InvoiceMatches');
-        assert.deepStrictEqual(guessed.map(g=>g.field), [],
-            `InvoiceMatches now carries a measure annotation. It has NO unit column and its names do `
-          + `not say — an invoice quantity there may be litres or kilograms depending on the document. `
-          + `If a decision was taken about where the unit comes from, this criterion should record it.`);
+
+        // (a) NO Measures.Unit anywhere on InvoiceMatches. This is the half
+        //     that is a real decision, and it stands.
+        const unitAnn = all.filter(m => m.ent === 'InvoiceMatches' && m.term === 'Unit');
+        assert.deepStrictEqual(unitAnn.map(g => g.field), [],
+            `InvoiceMatches carries a Measures.Unit. Its quantities have NO unit column and their `
+          + `names do not say — litres or kilograms depending on the document. If a decision was `
+          + `taken about where the unit comes from, record it here rather than pointing at the `
+          + `nearest column.`);
+
+        // (b) AND THE AMOUNTS MUST BE ANNOTATED, not merely permitted. A
+        //     criterion that only forbids leaves the correct state and the
+        //     lazy state indistinguishable.
+        const ccy = all.filter(m => m.ent === 'InvoiceMatches' && m.term === 'ISOCurrency');
+        for (const f of ['po_amount','inv_amount','amount_variance','po_price','inv_price','price_variance'])
+            assert.ok(ccy.some(c => c.field === f),
+                `InvoiceMatches.${f} carries no currency. It is money, in the invoice's currency, and `
+              + `an amount with no currency beside it is the same failure as a quantity with no unit.`);
+
+        // (c) EVERY ONE OF THEM GOES THROUGH THE HEADER, and the hop is to-ONE.
+        //     A path through a to-many is D56: three real names, null forever.
+        for (const c of ccy)
+            assert.strictEqual(c.target, 'invoice/currency_code',
+                `InvoiceMatches.${c.field} takes its currency from "${c.target}". It must come from `
+              + `the invoice header - anything else is a second place holding one fact.`);
+
+        // (d) AND IT MUST RESOLVE AGAINST DATA. An emitted path is not a value:
+        //     that is the whole $fiori-preview lesson.
+        const { data } = await test.GET('/odata/v4/invoice/InvoiceMatches?$top=5'
+            + '&$select=po_amount&$expand=invoice($select=currency_code)');
+        assert.ok(data.value.length, 'no invoice matches to check the path against');
+        const unresolved = data.value.filter(r => !r.invoice || !r.invoice.currency_code);
+        assert.strictEqual(unresolved.length, 0,
+            `${unresolved.length} match(es) cannot reach a currency through the header, so the `
+          + `annotation binds nothing and every amount renders bare.`);
+
         const src = fs.readFileSync(`${PROJECT}/srv/invoice-fiori-annotations.cds`,'utf8');
-        assert.ok(/INVOICE_MATCHES has neither/.test(src),
-            'the reason InvoiceMatches is unannotated is not written at the site — an absence with no '
-          + 'note reads as an oversight rather than a decision');
-        assert.ok(/currency is the INVOICE's/.test(src),
-            'the reason InvoiceItems amounts are unannotated is not written at the site');
-        out('InvoiceMatches and InvoiceItems amounts unannotated, with the reason at the site');
+        assert.ok(/THE CURRENCY OF AN AMOUNT IS NOT\n\/\/ AMBIGUOUS; THE UNIT OF A QUANTITY IS\./.test(src)
+               || /CURRENCY OF AN AMOUNT IS NOT/.test(src),
+            'the reason the quantities stay unannotated while the amounts moved is not written at the '
+          + 'site — an absence with no note reads as an oversight rather than a decision');
+        out(`InvoiceMatches: ${unitAnn.length} Measures.Unit (correct: quantities are ambiguous), `
+          + `${ccy.length} ISOCurrency all via invoice/currency_code, resolving on `
+          + `${data.value.length}/${data.value.length} rows`);
     });
 });
