@@ -867,6 +867,51 @@ service PlanningService {
     };
 
     /**
+     * ApuUsage - the APU cycles the burn's apu_burn_kg is summed from.
+     *
+     * DECLARED EXPLICITLY, AND THE DECLARATION IS WHAT MAKES THE SET
+     * ADDRESSABLE. CAP auto-exposes an association target and then marks it
+     * @cds.autoexposed, and the auth layer refuses every direct read of such a
+     * set with 405 "not explicitly exposed as part of the service" - D47's
+     * third kind, which renders as an empty section with no error a viewer can
+     * see. An explicit `entity ... as projection on ...` lifts it out of that
+     * class. The @cds.autoexpose annotation does NOT: that was measured and the
+     * credit was misattributed for weeks.
+     *
+     * ON THIS SERVICE BECAUSE THIS IS WHERE THE READER IS. BurnService
+     * annotates these cycles already, completely and correctly, and no
+     * deployed app opens BurnService - the flight reader is on PlanningService
+     * (section 13). Work that lands elsewhere is complete, correct and
+     * invisible, and every sweep passes on it.
+     */
+    @readonly
+    entity ApuUsage as projection on db.APU_USAGE {
+        *,
+        tail             : redirected to AircraftRegistrations,
+        flight           : redirected to FlightSchedule,
+        allocated_flight : redirected to FlightSchedule,
+
+        // THE OVP PROPAGATES A FILTER BY MATCHING PROPERTY NAMES, so a set
+        // carrying flight_ID and not flight_number ignores the filter bar and
+        // shows the whole fleet on a page about one flight. FuelBurns above
+        // projects the same two for the same reason.
+        //
+        // SOURCED FROM `flight`, NOT `allocated_flight`, AND THE CHOICE IS
+        // UNEXERCISED BY DATA. `flight` is the flight the cycle was RECORDED
+        // against; `allocated_flight` is the COST decision taken afterwards.
+        // They are equal on every cycle in this dataset that has either (D59),
+        // so nothing here distinguishes them and no test could. Recorded as a
+        // choice rather than left to look like a fact: the recording is the
+        // more primitive of the two, and an allocation that ever moves should
+        // not silently move which flight page a cycle appears on.
+        //
+        // Null on C-FDMP's 787.50 kg OVERNIGHT cycle, which belongs to no
+        // flight at all - correctly, and that is the point of listing it.
+        flight.flight_number as flight_number,
+        flight.flight_date   as flight_date
+    };
+
+    /**
      * DesignatedSuppliers — who fuels this flight, at this station, on this date.
      *
      * Exposed so FLIGHT_SCHEDULE.designation emits a navigation. Without the
