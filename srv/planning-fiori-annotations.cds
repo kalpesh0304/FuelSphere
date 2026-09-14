@@ -1873,7 +1873,7 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
     // No unit column exists for these and none should be added - a constant
     // 'KG' on every row is a second place holding one fact.
     fob_at_arrival_kg  @title: 'FOB at Arrival (kg)'
-                       @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. Blank on most deliveries: a single reading is recorded as FOB before uplift instead, because copying one into the other manufactures a zero ground burn where the truth is unknown.';
+                       @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. Blank on most deliveries: a single reading is recorded as FOB before uplift instead, because copying one into the other manufactures a zero ground burn where the truth is unknown. The arriving leg ITSELF is not modelled in this dataset - no tail here has a predecessor flight - so this figure is the balance at the START OF THE DEMONSTRATION PERIOD, seeded rather than carried from a prior leg''s closure.';
 
     fob_before_kg      @title: 'FOB Before Uplift (kg)'
                        @Common.QuickInfo: 'What the gauge read immediately before refuelling. This is the reconciliation input, not the arrival figure.';

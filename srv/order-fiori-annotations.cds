@@ -1663,7 +1663,11 @@ annotate FuelOrderService.FuelDeliveries with {
     uom_code            @title: 'Unit of Measure';
     delivery_method     @title: 'Delivery Method';
 
-    fob_at_arrival_kg   @title: 'Fuel on Board at Arrival (kg)';
+    // Same statement as the ledger's INITIAL row, for the same reason: an
+    // arrival figure with no arriving leg behind it reads as a carried
+    // balance and is a seeded one. Say it rather than let it imply a chain.
+    fob_at_arrival_kg   @title: 'Fuel on Board at Arrival (kg)'
+                        @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. The arriving leg ITSELF is not modelled in this dataset - no tail here has a predecessor flight - so this figure is the balance at the START OF THE DEMONSTRATION PERIOD, seeded rather than carried from a prior leg''s closure.';
     fob_before_kg       @title: 'Fuel on Board Before Refuelling (kg)';
     fob_after_kg        @title: 'Fuel on Board After Refuelling (kg)';
 

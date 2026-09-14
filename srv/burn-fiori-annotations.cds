@@ -521,8 +521,21 @@ annotate BurnService.ROBLedger with {
     record_time            @title: 'Record Time';
     sequence               @title: 'Sequence' @Common.FieldControl: #ReadOnly;
     airport_code           @title: 'Airport';
-    entry_type             @title: 'Entry Type';
-    opening_rob_kg         @title: 'Opening ROB (kg)';
+    // THE CHAIN STARTS HERE, AND THE SCREEN SAYS SO.
+    // 12 of 12 tails in this dataset are open at both ends: no tail's first
+    // leg has a predecessor row, so the balance an INITIAL entry carries was
+    // never computed from a prior flight - it was seeded. That is a legitimate
+    // demonstration boundary, not a gap, but it is invisible on screen unless
+    // stated: an opening balance reads exactly like a carried one. Same repair
+    // as NOT_RECORDED, 'no flight-level designation' and 'not applicable - the
+    // supplier invoices': name what the figure IS rather than let it imply a
+    // continuity that does not exist. Seeding two inbound legs was considered
+    // and rejected - it would make the demo's tails behave differently from
+    // the other ten for no reason a viewer could see.
+    entry_type             @title: 'Entry Type'
+                           @Common.QuickInfo: 'INITIAL seeds the chain: its closing balance is recorded fuel state, not a value derived from uplift and burn. Every other type is computed. A rebuild keeps an INITIAL balance as recorded and chains onward from it.';
+    opening_rob_kg         @title: 'Opening ROB (kg)'
+                           @Common.QuickInfo: 'The previous entry''s closing balance - EXCEPT on the first entry of a tail, where it is the balance at the START OF THE DEMONSTRATION PERIOD, seeded rather than carried, because no prior leg is modelled in this dataset. No tail here has a predecessor flight, so every chain begins with a figure rather than with an arrival.';
     uplift_kg              @title: 'Uplift (kg)';
     burn_kg                @title: 'Burn (kg)';
     adjustment_kg          @title: 'Adjustment (kg)';
