@@ -317,7 +317,11 @@ service FuelOrderService {
          */
         action createFuelOrder(
             // TYPED — only a person knows these
-            orderedQuantity        : Decimal(12,2) @mandatory,
+            // @mandatory REMOVED - see planning-service.cds. The enforcement is
+            // in createOrderFromFlight (EPD451), which both bound declarations
+            // and the unbound action all reach. Kept identical to Planning's on
+            // purpose: one signature, diverging copies invite a later "fix".
+            orderedQuantity        : Decimal(12,2),
             uomCode                : String(3),
             orderType              : String(20),
 
