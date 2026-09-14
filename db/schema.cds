@@ -3380,6 +3380,26 @@ entity FUEL_BURNS : cuid, AuditTrail {
         apu_burn_kg         : Decimal(12,2);              // Derived. Sum of the cycles apportioned here
         engine_burn_kg      : Decimal(12,2);              // Derived: actual_burn_kg - apu_burn_kg
 
+        // THE CYCLES apu_burn_kg IS SUMMED FROM, KEYED ON THE TAIL RATHER
+        // THAN ON THE FLIGHT, AND THE KEY IS THE WHOLE DECISION.
+        //
+        // A flight key would hide the largest cycle in the dataset:
+        // C-FDMP's 787.50 kg OVERNIGHT carries no flight_ID and no
+        // allocated_flight_ID (D59), so a flight-keyed navigation shows it
+        // NOWHERE, and a viewer summing the cycles against the tail's ledger
+        // movement finds 787.50 kg missing with nothing on the page to say
+        // why. On the tail key it appears with an empty flight column, which
+        // is the absence doing its own work: a row present with a visible gap
+        // beats a row that is not there.
+        //
+        // And a TIME key was measured and rejected. Classifying cycles against
+        // [block_off_time, block_on_time] by timestamp alone pulls C-FDMO's
+        // 12 MAY cycles into AC410's 10 April window - a month later, same
+        // tail, no upper bound anybody has defined. The cycle's owner is the
+        // tail; its flight is an allocation recorded on the row.
+        apu_cycles          : Association to many APU_USAGE
+                                on apu_cycles.tail = $self.tail;
+
         // Variance Calculation
         variance_kg         : Decimal(12,2);              // Variance = actual - planned
         variance_pct        : Decimal(5,2);               // Variance percentage
