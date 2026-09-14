@@ -359,17 +359,21 @@ service PlanningService {
          */
         action createFuelOrder(
             // TYPED - only a person knows these
-            // @mandatory REMOVED, AND THE ENFORCEMENT MOVED RATHER THAN DROPPED.
-            // It emitted a STATIC Common.FieldControl=Mandatory on the parameter
-            // and NO Nullable="false" - and the two actions carrying one are
-            // exactly the two whose header buttons do not render, while submit (0
-            // params) and crewReview (4 params, none mandatory) both do. That is a
-            // hypothesis under test, not a finding: parameter COUNT is still
-            // confounded with it across all eight annotated actions, and no action
-            // in the repository populates either off-diagonal cell.
-            // The refusal now lives in createOrderFromFlight as EPD451, which is
-            // STRONGER than the annotation was: it also covers the unbound
-            // createOrderFromFlight entry point, which never had @mandatory at all.
+            // @mandatory REMOVED, AND IT STAYS OFF FOR A DIFFERENT REASON THAN
+            // IT CAME OFF. It was removed to test whether the static
+            // Common.FieldControl it emits was why the header button did not
+            // render. IT WAS NOT - a zero-parameter no-op probe beside it did
+            // not render either, and the cause is the entity: a NON-DRAFT
+            // object page header carries no custom actions.
+            //
+            // So its removal explained nothing, and it could go back. It does
+            // not, because EPD451 in createOrderFromFlight now covers STRICTLY
+            // MORE: @mandatory reached the two bound declarations, EPD451
+            // reaches those AND the unbound door, which never had one and
+            // where totalAmount would have written a zero-amount order.
+            // Restoring it would be a second enforcement of a subset - two
+            // places holding one rule, which is D44's shape and the thing this
+            // repository has declined three times.
             orderedQuantity        : Decimal(12,2),
             uomCode                : String(3),
             orderType              : String(20),
@@ -392,28 +396,6 @@ service PlanningService {
             currencyCode           : String(3),
             notes                  : String(1000)
         ) returns FuelOrders;
-
-        /**
-         * PROBE - TEMPORARY, DELETE WHEN THE 2x2 IS READ.
-         *
-         * Zero parameters, no behaviour, annotated in UI.Identification beside
-         * Raise Fuel Order. It exists to answer ONE question that no existing
-         * page in this repository can: does a NON-DRAFT object page header
-         * render a custom action at all?
-         *
-         * Every other bound Identification action here sits on a DRAFT-enabled
-         * entity (FuelOrders, SalesOrders); createFuelOrder is the only one on
-         * a non-draft entity, so "non-draft headers render nothing" and
-         * "createFuelOrder specifically is broken" predict the same screen.
-         * Read together with the @mandatory removal above:
-         *
-         *   neither button        -> non-draft headers carry no custom actions
-         *   this one only         -> headers work; many-parameters is the cause
-         *   both                  -> @mandatory was the cause
-         *
-         * Four outcomes, three conclusions, one look.
-         */
-        action probeHeaderButton() returns String;
     };
 
     /**

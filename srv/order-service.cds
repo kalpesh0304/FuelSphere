@@ -317,10 +317,14 @@ service FuelOrderService {
          */
         action createFuelOrder(
             // TYPED — only a person knows these
-            // @mandatory REMOVED - see planning-service.cds. The enforcement is
-            // in createOrderFromFlight (EPD451), which both bound declarations
-            // and the unbound action all reach. Kept identical to Planning's on
-            // purpose: one signature, diverging copies invite a later "fix".
+            // @mandatory REMOVED - see planning-service.cds for the measurement.
+            // Its removal explained nothing (the cause was the entity, not the
+            // annotation) and it stays off because EPD451 in
+            // createOrderFromFlight covers strictly more: both bound
+            // declarations AND the unbound door, which never had one. Putting
+            // it back would be a second enforcement of a subset. Kept
+            // identical to Planning's on purpose: one signature, diverging
+            // copies invite a later "fix".
             orderedQuantity        : Decimal(12,2),
             uomCode                : String(3),
             orderType              : String(20),

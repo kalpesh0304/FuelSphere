@@ -183,43 +183,34 @@ annotate PlanningService.FlightSchedule with @(
     // right - the plan is what the order answers.
     // ------------------------------------------------------------------
     // ========================================================================
-    // THE 2x2. THE SECOND ENTRY IS A PROBE AND COMES OUT WHEN IT IS READ.
+    // MEASURED, NOT INFERRED: A NON-DRAFT OBJECT PAGE HEADER CARRIES NO
+    // CUSTOM ACTIONS. THIS ENTRY RENDERS NOTHING AND IS KEPT ANYWAY.
     //
-    // Raise Fuel Order is emitted, placed and on no screen. Four green
-    // criteria say it is correct and a planner cannot find it, which is the
-    // limit named in section 12: no instrument here can assert that a shape
-    // RENDERS, because ui5.sap.com is unreachable from the build container.
+    // The 2x2 that settled it: Raise Fuel Order (13 parameters, @mandatory
+    // removed) beside a zero-parameter no-op probe, same entity, same facet,
+    // same page. Ajesh saw NEITHER - only Delete. That rules out parameter
+    // count and @mandatory together and leaves the entity: FLIGHT_SCHEDULE is
+    // not draft-enabled, and every other bound Identification action in this
+    // repository (FuelOrders x3, SalesOrders x4) sits on one that is.
     //
-    // Ajesh's own control killed three candidate causes at once - on the
-    // draft-enabled FuelOrders, submit and crewReview render while
-    // createFuelTicket does not, holding term, boundness and draft state
-    // constant. What survives is parameter count and @mandatory, and those two
-    // are confounded across all eight annotated actions in this repository:
-    // every one is (<=5 params, zero mandatory) or (13 params, >=1 mandatory),
-    // both off-diagonal cells empty.
+    // AND IT DISPROVED THE EXPLANATION THAT PRECEDED IT. The previous note
+    // here said a UI.FieldGroup is a Form, a Form with no fields draws
+    // nothing, and UI.Identification was therefore the fix. The Identification
+    // entry did not render either, so that was never the cause - it was a
+    // plausible mechanism fitted to a single observation. Recorded because a
+    // deleted wrong explanation loses the fact that somebody believed it.
     //
-    //   Raise Fuel Order  13 params, @mandatory now REMOVED
-    //   Probe              0 params, never had one
-    //
-    //   neither renders -> a non-draft object page header carries no custom
-    //                      action at all, and the draft question returns
-    //   probe only      -> headers work; something about many parameters
-    //   both            -> @mandatory was the cause
-    //
-    // One look, three conclusions. Delete the probe entry, the handler in
-    // planning-service.js and the declaration together.
+    // KEPT rather than removed: it costs nothing, it is what both conventions
+    // in this repository use for an object-page action, and it becomes correct
+    // the day this entity is draft-enabled. Ratcheted as known-dead by
+    // `deployed-reach` EXIT-4, which fails if it ever starts mattering.
+    // THE BUTTON A PLANNER PRESSES IS ON UI.LineItem - see below.
     // ========================================================================
     UI.Identification: [
         {
             $Type            : 'UI.DataFieldForAction',
             Action           : 'PlanningService.createFuelOrder',
             Label            : 'Raise Fuel Order',
-            ![@UI.Importance]: #High
-        },
-        {
-            $Type            : 'UI.DataFieldForAction',
-            Action           : 'PlanningService.probeHeaderButton',
-            Label            : 'Probe (no parameters)',
             ![@UI.Importance]: #High
         }
     ],
@@ -511,6 +502,33 @@ annotate PlanningService.FlightSchedule with @(
                 Action : 'PlanningService.importFlightScheduleExcel',
                 Label  : 'Upload Flight Schedule',
                 Inline : false
+            },
+
+            // ================================================================
+            // THE LIST REPORT TOOLBAR IS THE SURFACE THAT RENDERS ON THIS
+            // ENTITY, AND THIS IS AJESH'S OWN PROPOSAL: pick a flight from the
+            // list, press a button.
+            //
+            // Measured rather than guessed. The object page header carries no
+            // custom action on a non-draft entity - two annotations, one with
+            // 13 parameters and one with none, both invisible. The toolbar
+            // above works today: `importFlightScheduleExcel` is one line up,
+            // on THIS entity and THIS service, and it renders.
+            //
+            // ONE DIFFERENCE REMAINS AND IT IS THE LAST UNTESTED CELL. The
+            // Excel import is UNBOUND; this is BOUND, and no bound action sits
+            // in a UI.LineItem anywhere in this repository. So the surface is
+            // proven and this combination is not. If it does not render, the
+            // fallback is an UNBOUND action taking flightId as a parameter -
+            // exactly the shape the import already proves - and at that point
+            // every cell in the table has been filled.
+            // ================================================================
+            {
+                $Type            : 'UI.DataFieldForAction',
+                Action           : 'PlanningService.createFuelOrder',
+                Label            : 'Raise Fuel Order',
+                Inline           : false,
+                ![@UI.Importance]: #High
             }
         ],
 
