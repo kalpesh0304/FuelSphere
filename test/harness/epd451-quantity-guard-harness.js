@@ -31,6 +31,10 @@
  *           variance rule, whose business it is
  *   EXIT-5  the refusal is raised from srv/ JavaScript, so it does not depend
  *           on an annotation that this week's open question may yet change
+ *   EXIT-7  the MASS form alone is accepted - orderedQuantityKg with no
+ *           orderedQuantity is how a plan-sourced order arrives (WP-11 / A2),
+ *           and the first version of this guard refused it while BOTH PLANTS
+ *           PASSED. A plant tests the rule its author believes
  *   EXIT-6  the probe, IF IT IS STILL HERE, is zero-parameter and annotated.
  *           Written conditional ON PURPOSE: the probe is temporary and a
  *           criterion that goes red when it is deleted would make deleting it
@@ -101,6 +105,24 @@ describe('EPD451 - an order must name a quantity', () => {
         out('ratcheted here rather than "no @mandatory anywhere": the probe may yet');
         out('say the annotation was innocent, and a criterion forbidding it would');
         out('veto that repair while showing green');
+    });
+
+    it('EXIT-7: the MASS form alone is accepted - two units name a quantity', async () => {
+        // THE FIRST VERSION OF THE GUARD REFUSED THIS, and both of my plants
+        // passed anyway: a plant tests the rule its author believes. wp11
+        // EXIT-1 tested the rule that is true. Locked here so the guard's own
+        // contract states it, rather than depending on a harness about
+        // conversion to notice a change in a harness about refusal.
+        // 9600 kg against AC410's 2305 kg plan trips the VARIANCE rule, which is
+        // a different owner refusing for a different reason - the first draft of
+        // this criterion read that 400 as a failure of the guard. The reason is
+        // supplied so the only thing left that can refuse is EPD451.
+        const r = await post(`${O}/createOrderFromFlight`,
+            { flightId: AC410, orderedQuantityKg: 9600, quantityVarianceReason: 'harness: mass form' });
+        out(`mass only (orderedQuantityKg=9600, no orderedQuantity) -> ${r.status} ${r.data?.order_number ?? r.message}`);
+        assert.doesNotMatch(String(r.message ?? ''), /EPD451/, 'the mass form names a quantity');
+        assert.strictEqual(r.status, 200, 'a plan-sourced order names its quantity in kg (WP-11 / A2)');
+        assert.ok(r.data?.order_number);
     });
 
     it('EXIT-6: the probe, IF present, is zero-parameter and annotated', async () => {

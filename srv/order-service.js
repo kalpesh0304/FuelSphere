@@ -452,11 +452,28 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // zero order is a different rule with a different owner, and
             // silently folding it in here would be a second undeclared
             // criterion riding along.
+            //
+            // TWO UNITS NAME A QUANTITY, AND THE FIRST VERSION OF THIS GUARD
+            // KNEW ABOUT ONE. `wp11-harness` EXIT-1 caught it: WP-11 / A2 has
+            // a plan-sourced order arrive in KILOGRAMS - orderedQuantityKg,
+            // converted to volume by planMassToOrderVolume below - with no
+            // orderedQuantity at all, and the guard refused a legitimate call.
+            // The bound actions have no Kg parameter, so that form is reachable
+            // ONLY through this unbound door, which is precisely the door this
+            // guard newly covers. @mandatory never saw it, so nothing had ever
+            // had the chance to be wrong about it before.
+            //
+            // Worth saying where the correction came from: TWO PLANTS PASSED on
+            // the narrow version, because a plant tests the rule the author
+            // believes. The existing suite tested the rule that is actually
+            // true.
             // ================================================================
-            if (orderedQuantity === undefined || orderedQuantity === null) {
+            const missing = q => q === undefined || q === null;
+            if (missing(orderedQuantity) && missing(orderedQuantityKg)) {
                 return req.error(400,
-                    'EPD451: An ordered quantity is required. An order that names no ' +
-                    'quantity cannot be priced, delivered against, or reconciled.');
+                    'EPD451: An ordered quantity is required, in volume ' +
+                    '(orderedQuantity) or in mass (orderedQuantityKg). An order that ' +
+                    'names no quantity cannot be priced, delivered against, or reconciled.');
             }
 
             // Look up the flight
