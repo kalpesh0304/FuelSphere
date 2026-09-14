@@ -92,6 +92,38 @@ const actionsOn = (svc, ent) => {
     const b = block(svc, ent);
     return b === null ? [] : [...b.matchAll(/Property="Action"\s+String="([^"]+)"/g)].map(m => m[1]);
 };
+// The extent of ONE annotation, nested children included. A LineItem holds
+// <Annotation Term="UI.Importance"/> inside its records, so "up to the next
+// Term=" cuts the collection in half and reports a false absence. Balanced on
+// opens and closes, self-closing tags counted as neither.
+const scopeOf = (blk, termName) => {
+    if (blk === null) return '';
+    const at = blk.search(new RegExp(term(termName)));
+    if (at < 0) return '';
+    // BACK UP TO THE TAG. The search lands on Term="..." INSIDE <Annotation ...>,
+    // so counting from there never sees the opening tag: the first </Annotation>
+    // drives depth to -1 and the scan runs to the end of the block, swallowing
+    // every sibling. The known-absent control caught exactly that - it was right
+    // about the reader, and loosening it would have hidden the over-run.
+    const start = blk.lastIndexOf('<Annotation', at);
+    if (start < 0) return '';
+    let depth = 0, i = start;
+    while (i < blk.length) {
+        const open = blk.indexOf('<Annotation', i);
+        const close = blk.indexOf('</Annotation>', i);
+        if (close < 0) return blk.slice(start);
+        if (open >= 0 && open < close) {
+            const tagEnd = blk.indexOf('>', open);
+            if (blk[tagEnd - 1] !== '/') depth++;
+            i = tagEnd + 1;
+        } else {
+            depth--;
+            if (depth === 0) return blk.slice(start, close + 13);
+            i = close + 13;
+        }
+    }
+    return blk.slice(start);
+};
 const groupsOn = (svc, ent) => {
     const b = block(svc, ent);
     return b === null ? [] : [...b.matchAll(new RegExp(term('FieldGroup') + '\\s+Qualifier="([^"]+)"', 'g'))].map(m => m[1]);
@@ -201,23 +233,71 @@ describe('What a deployed app actually opens', function () {
     });
 
     // -------------------------------------------------------------- EXIT-4 --
-    // The group is how the button reaches a SECTION. Separate from EXIT-3
-    // because an action can be annotated without a group carrying it onto a
-    // facet, and the placement is the half that was specified: the dispatch
-    // section, because the plan is what the order answers.
-    it('EXIT-4  the button is on the DISPATCH section of the opened projection', () => {
+    // REWRITTEN AFTER A RENDERING DISPROVED IT, AND THE OLD VERSION WOULD HAVE
+    // VETOED THE REPAIR.
+    //
+    // It asserted `#RaiseOrder` sits inside the Dispatch Plans facet, because
+    // the plan is what the order answers. That reasoning is still good and the
+    // placement is DEAD: Ajesh saw only Delete on AC410's header with the
+    // action annotated BOTH in UI.Identification and in that field group, and
+    // with a zero-parameter no-op probe beside them. A non-draft object page
+    // header carries no custom actions. Moving the button to the surface that
+    // renders would have FAILED the old EXIT-4 - the @Measures shape a fourth
+    // time, a criterion enforcing a belief rather than testing a requirement.
+    //
+    // WHERE THE NEW RULE COMES FROM, since that is the question: not from the
+    // annotation and not from me. From a person looking at the deployed page -
+    // the only rendering instrument this project has - plus one fact this
+    // repository can state on its own, that `importFlightScheduleExcel` is in
+    // UI.LineItem on THIS entity and THIS service and is known to work.
+    //
+    // BOTH DIRECTIONS, so the dead copies cannot rot into permission: the
+    // action must be on the surface that RENDERS, and the object-page copies
+    // are ratcheted as known-dead. If FLIGHT_SCHEDULE is ever draft-enabled
+    // they start mattering and the second half fails, which is the prompt to
+    // re-derive rather than assume.
+    it('EXIT-4  the button is on the surface that RENDERS, and the dead copies are ratcheted', () => {
         const opened = DEPLOYED.find(d => d.pages.includes('FlightSchedule')).service;
         const blk = block(opened, 'FlightSchedule');
         assert.ok(blk, `no annotation block for ${opened}.FlightSchedule`);
-        assert.ok(groupsOn(opened, 'FlightSchedule').includes('RaiseOrder'),
-            'no #RaiseOrder group on the opened projection');
-        const m = /<PropertyValue Property="ID" String="DispatchPlans"\/>[\s\S]{0,900}/.exec(blk);
-        assert.ok(m, 'the Dispatch Plans facet is gone from the opened projection');
-        out(`  Dispatch Plans facet found on ${opened}.FlightSchedule`);
-        assert.ok(/@UI\.FieldGroup#RaiseOrder/.test(m[0]),
-            'the create action is not in the Dispatch Plans section. On the order list a person types '
-          + 'the flight, the date and the station - all of which the flight page already knows.');
-        out('  #RaiseOrder is inside it');
+
+        // prove the reader against a known-present and a known-absent string
+        // before believing either half below
+        assert.ok(blk.includes('Term="UI.LineItem"'), 'reader control: UI.LineItem present');
+        assert.ok(!blk.includes('Term="UI.NotATerm"'), 'reader control: known-absent term');
+
+        // PROVE THE SCANNER AGAINST LITERAL FACTS OF THIS BLOCK before using it:
+        // the LineItem scope must CONTAIN the Excel import (the button known to
+        // render on this very entity) and must NOT contain the RaiseOrder field
+        // group, which is a SIBLING annotation. A scanner that over-runs would
+        // swallow the sibling and report the toolbar entry present when it is not.
+        const lineItem = scopeOf(blk, 'LineItem');
+        assert.ok(lineItem.includes('importFlightScheduleExcel'),
+            'scanner control: the LineItem scope must contain the known-present toolbar action');
+        assert.ok(!lineItem.includes('RaiseOrder'),
+            'scanner control: the LineItem scope must NOT reach the sibling field group');
+        out(`  LineItem scope ${lineItem.length} chars, controls pass`);
+
+        const inToolbar = lineItem.includes(`String="${opened}.createFuelOrder"`);
+        out(`  createFuelOrder in the LIST REPORT toolbar (UI.LineItem): ${inToolbar}`);
+        assert.ok(inToolbar,
+            'the raise-order action is not in UI.LineItem. The object page header does not render '
+          + 'custom actions on this non-draft entity - measured on the deployed page, twice, with a '
+          + 'zero-parameter control. The list toolbar is the surface that works here.');
+
+        // the known-dead object-page copies, asserted as STILL dead
+        // read from the SERVED metadata this file already fetched, not a
+        // recompile - it is what the deployed app is given
+        const served = edmx[opened];
+        const et = served.slice(served.indexOf('<EntityType Name="FlightSchedule"'));
+        const draftEnabled = et.slice(0, et.indexOf('</Key>')).includes('IsActiveEntity');
+        out(`  ${opened}.FlightSchedule draft-enabled: ${draftEnabled}`);
+        assert.strictEqual(draftEnabled, false,
+            'FLIGHT_SCHEDULE is now draft-enabled, so the object page header may render custom '
+          + 'actions after all. UI.Identification and #RaiseOrder were kept on that bet. Re-derive '
+          + 'which surface the button belongs on rather than assuming this criterion still holds.');
+        out('  UI.Identification and #RaiseOrder kept, and still dead - they cost nothing and');
+        out('  become correct the day the entity is draft-enabled, which this criterion watches for');
     });
 
     // -------------------------------------------------------------- EXIT-5 --
