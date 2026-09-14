@@ -2068,3 +2068,136 @@ annotate PlanningService.FuelDeliveries with @(
         }
     ]
 );
+
+// ===========================================================================
+// APU CYCLES ON THE BURN - the arithmetic on the page, per cycle
+// ===========================================================================
+//
+// WHAT THIS REPLACES, AND WHY THE THING ASKED FOR WAS NOT BUILT.
+//
+// The request was three summed windows - GROUND-ARRIVAL, IN BLOCK,
+// GROUND-DEPARTURE - each with minutes, rate and kilograms, so that
+// 30 min x 105 kg/h / 60 = 52.50 recomputes on screen. The second half of
+// that is right and is what this section does. The three windows are not
+// built, and three measurements say why:
+//
+//   1. A WINDOW CANNOT BE KEYED ON TIME. Classifying cycles against
+//      [block_off_time, block_on_time] by timestamp alone pulls C-FDMO's
+//      12 MAY cycles into AC410's 10 April window - a month later, same
+//      tail, and no upper bound anybody has defined.
+//
+//   2. GROUND-ARRIVAL HAS NO START ON ANY TAIL. It begins at the previous
+//      leg's block-on, and 14 of 22 flights have no previous leg (D59).
+//      One of the three windows is empty by construction everywhere.
+//
+//   3. CLOSURE DIVIDES NOTHING, ANYWHERE. Every cycle in this dataset
+//      carries allocated_flight_ID equal to its own flight_ID, so no cycle
+//      is split between the leg that arrives and the leg that departs. A
+//      card headed with three windows asserts a division that has never
+//      occurred on any row.
+//
+// A summed figure that is unbounded on every tail and asserts a division
+// that never happened is worse than a list that is right. So: the cycles,
+// keyed on the tail, with the allocation stated as what it is.
+annotate PlanningService.ApuUsage with @(
+    UI: {
+        HeaderInfo: {
+            TypeName       : 'APU Cycle',
+            TypeNamePlural : 'APU Cycles',
+            Title          : { Value: usage_phase },
+            Description    : { Value: tail_number }
+        },
+        // READING ORDER IS THE ARITHMETIC: phase, then the window it ran in,
+        // then minutes x rate = kilograms, left to right. The rate sits beside
+        // the figure it produced rather than once in the aircraft block - it is
+        // per-tail, and the reader is looking at the burn.
+        LineItem: [
+            { Value: usage_phase,        Label: 'Phase',            ![@UI.Importance]: #High },
+            { Value: apu_start_utc,      Label: 'Start (UTC)',      ![@UI.Importance]: #High },
+            { Value: apu_stop_utc,       Label: 'Stop (UTC)',       ![@UI.Importance]: #High },
+            { Value: running_minutes,    Label: 'Minutes',          ![@UI.Importance]: #High },
+            { Value: burn_rate_kg_hr,    Label: 'Rate (kg/h)',      ![@UI.Importance]: #High },
+            { Value: apu_burn_kg,        Label: 'APU Burn (kg)',    ![@UI.Importance]: #High },
+            { Value: allocated_flight_ID, Label: 'Allocated Flight', ![@UI.Importance]: #High },
+            {
+                Value: apu_source,
+                Label: 'Source',
+                // APU413. An estimate must never read as equivalent to an
+                // ACARS figure: ACARS positive, an estimate critical - usable,
+                // and not the same thing.
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'apu_source' }, 'ACARS'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'apu_source' }, 'GROUND_TIME_EST'] }, 2, 0 ] } ] } },
+                ![@UI.Importance]: #Medium
+            },
+            {
+                Value: is_open,
+                Label: 'Open Cycle',
+                Criticality: { $edmJson: { $If: [ { $Eq: [{ $Path: 'is_open' }, true] }, 1, 3 ] } },
+                ![@UI.Importance]: #Medium
+            }
+        ]
+    }
+);
+
+annotate PlanningService.ApuUsage with {
+    ID                   @UI.Hidden;
+    tail_number          @title: 'Registration';
+    usage_phase          @title: 'Phase';
+    apu_start_utc        @title: 'APU Start (UTC)';
+    apu_stop_utc         @title: 'APU Stop (UTC)'
+                         @Common.QuickInfo: 'Blank while the cycle is open. A cycle with no stop has no minutes and no mass - a derived value with a missing input is null, never zero.';
+    running_minutes      @title: 'Minutes';
+    burn_rate_kg_hr      @title: 'Rate (kg/h)'
+                         @Common.QuickInfo: 'The tail''s APU burn rate, from AIRCRAFT_REGISTRATIONS. Shown beside the mass it produced so the arithmetic can be checked: minutes x rate / 60 = APU burn.';
+    apu_burn_kg          @title: 'APU Burn (kg)'
+                         @Common.QuickInfo: 'Minutes x rate / 60. NEVER METERED - this is the only fuel figure in the system that is derived rather than measured, which is why the minutes and the rate are on the row beside it.';
+    rate_source          @title: 'Rate Source';
+    apu_source           @title: 'Cycle Source';
+    is_open              @title: 'Open Cycle';
+    allocated_flight     @title: 'Allocated Flight';
+    allocated_flight_ID  @title: 'Allocated Flight'
+                         @Common.QuickInfo: 'THE CYCLE IS ALLOCATED WHOLE TO ONE FLIGHT, NEVER DIVIDED BETWEEN TWO. Flight closure is meant to split a turn between the leg that arrives and the leg that departs; no cycle in this dataset is split, so every row here is an assignment rather than a share. BLANK MEANS UNALLOCATED, not zero: C-FDMP''s 787.50 kg OVERNIGHT cycle carries no flight at all and is the largest in the dataset. It is listed because a viewer summing these rows against the tail''s ledger movement would otherwise find it missing with nothing on the page to say why. D59.';
+    allocation_basis     @title: 'Allocation Basis';
+    remarks              @title: 'Remarks';
+};
+
+// The burn's object page: the split, then the cycles it was summed from.
+// FuelBurns carried a LineItem and NO UI.Facets, so opening a burn from the
+// flight reached a page with no content - the cycles had nowhere to land.
+annotate PlanningService.FuelBurns with @(
+    UI: {
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#BurnSplit',
+              Label: 'Burn Split' },
+            { $Type: 'UI.ReferenceFacet', ID: 'ApuCycles',
+              Target: 'apu_cycles/@UI.LineItem',
+              Label: 'APU Cycles - allocated whole, never divided' }
+        ],
+        FieldGroup#BurnSplit: {
+            Label: 'Burn Split',
+            Data: [
+                { Value: actual_burn_kg, Label: 'Block Burn (kg)' },
+                { Value: apu_burn_kg,    Label: 'APU in Block (kg)' },
+                { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
+            ]
+        }
+    }
+);
+
+annotate PlanningService.FuelBurns with {
+    // THE BARE ZERO IS WRONG ON EVERY FLIGHT, NOT JUST ON AC412.
+    // Measured across the whole dataset: ZERO of eleven cycles overlap any
+    // burn's [block_off_time, block_on_time]. Every cycle is wholly before
+    // block-off or wholly after block-on, so this field is structurally 0.00
+    // everywhere rather than coincidentally so on one flight. Rendering 0.00
+    // with nothing beside it says the APU burned nothing; what is true is that
+    // no cycle falls in the window. Fifth instance of naming the common case
+    // rather than letting an absence render as a figure - after NOT_RECORDED,
+    // "no flight-level designation", "not applicable - the supplier invoices"
+    // and the seeded opening balance.
+    apu_burn_kg    @title: 'APU in Block (kg)'
+                   @Common.QuickInfo: 'APU fuel burned BETWEEN BLOCK-OFF AND BLOCK-ON only. 0.00 does not mean the APU was idle - it means no APU cycle falls inside the block window, which is true of every cycle in this dataset: each one runs wholly before block-off or wholly after block-on. The fuel is in the APU Cycles section below, on the ground either side. D42.';
+    engine_burn_kg @title: 'Engine Burn (kg)'
+                   @Common.QuickInfo: 'Block burn less APU in block. Equal to block burn wherever no cycle falls inside the block window, which is everywhere in this dataset.';
+};
