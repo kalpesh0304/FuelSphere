@@ -192,6 +192,102 @@ module.exports = class TicketService extends cds.ApplicationService {
         // TICKET ACTIONS
         // ====================================================================
 
+        // ====================================================================
+        // CAPTURE A TICKET AGAINST AN ORDER — THE ONE WRITER.
+        //
+        // FuelOrderService.FuelOrders offers a bound form of this so a clerk
+        // can raise a ticket from the order in front of them; that handler
+        // delegates here and writes nothing. D44 is two independent
+        // implementations of one rule disagreeing one day with nothing to
+        // notice.
+        //
+        // THE INSERT GOES THROUGH THIS SERVICE'S OWN ENTITY so the before-
+        // CREATE hooks above run: deriveMeasurement for quantity_metered and
+        // quantity_kg, resolveTicketTail for the registration, and the
+        // numbering hook for match_status and internal_number. Writing to the
+        // database directly would bypass all four and leave a ticket with a
+        // null mass and no number.
+        //
+        // NO GATE. Decision A1: the fuel is in the tanks before a ticket
+        // exists, so capture is never refused. The only refusal reachable
+        // from here is EPD411 on a meter span that runs backwards, which is
+        // an impossible reading rather than a business rule.
+        // ====================================================================
+        this.on('captureTicketForOrder', async (req) => {
+            const d = req.data;
+            if (!d.orderId) return req.error(400, 'No order given.');
+
+            // FUEL_ORDERS CARRIES NO REGISTRATION. It has `flight` and nothing
+            // else naming a tail - no aircraft_reg, no tail - which is D46 seen
+            // from this side: the order's registration is the FLIGHT's, and an
+            // order without a flight has none. Selecting `aircraft_reg` here
+            // failed loudly, which is the one mercy: a SELECT is checked
+            // against the model where an INSERT's keys are not.
+            const { FuelOrders } = this.entities;
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('ID', 'station_code', 'uom_code', 'flight_ID')
+                .where({ ID: d.orderId });
+            if (!order) return req.error(404, `Order ${d.orderId} not found.`);
+
+            const ID = cds.utils.uuid();
+            const row = {
+                ID,
+                order_ID: order.ID,
+                ticket_number: d.ticketNumber,
+                quantity: d.quantity,
+                delivery_timestamp: d.deliveryTimestamp,
+                meter_start: d.meterStart ?? null,
+                meter_end: d.meterEnd ?? null,
+                density_value: d.densityValue ?? null,
+                density_uom: d.densityUom ?? null,
+                density_temp_c: d.densityTempC ?? null,
+                vehicle_id: d.vehicleId ?? null,
+                meter_serial: d.meterSerial ?? null,
+                supplier_ticket_ref: d.supplierTicketRef ?? null
+            };
+            // BOTH CARRY AN ENTITY DEFAULT, so only send them when the caller
+            // named one. Sending undefined would not override the default, but
+            // sending null WOULD - and a null uom_code makes the mass
+            // derivation decline with "no uom_code on the ticket".
+            if (d.uomCode) row.uom_code = d.uomCode;
+            if (d.densityBasis) row.density_basis = d.densityBasis;
+
+            // THE REGISTRATION COMES FROM THE ORDER'S FLIGHT, and only where
+            // there is one. `resolveTicketTail` does NOT look a tail up - it
+            // reads `req.data.aircraft_reg` and returns early when it is
+            // undefined - so supplying this string is what makes the tail
+            // resolve. Eleven of twenty-five orders have no flight (D46), and
+            // those tickets land with a null tail, which A1 permits.
+            if (order.flight_ID) {
+                const flight = await cds.db.run(SELECT.one
+                    .from('fuelsphere.FLIGHT_SCHEDULE')
+                    .columns('aircraft_reg', 'flight_number')
+                    .where({ ID: order.flight_ID }));
+                if (flight) {
+                    if (flight.aircraft_reg) row.aircraft_reg = flight.aircraft_reg;
+                    if (flight.flight_number) row.flight_number = flight.flight_number;
+                }
+            }
+
+            // THROUGH THE SERVICE, NOT THROUGH THE DATABASE — and the
+            // difference is every derivation this action depends on.
+            //
+            // `INSERT.into(FuelTickets)` inside a handler dispatches to the
+            // DATABASE on the ambient transaction. It lands a row and fires
+            // NONE of this service's before-CREATE hooks: measured, the ticket
+            // arrived with a null quantity_metered, a null quantity_kg, a null
+            // internal_number, match_status left at UNMATCHED despite having an
+            // order, and a meter span running BACKWARDS accepted with 200
+            // where EPD411 should have refused it.
+            //
+            // `this.run(...)` dispatches through the service, so the four hooks
+            // run and the ambient request's user comes with it. A bare
+            // srv.run() from outside a request is 401 — the @restrict is
+            // evaluated, and there is no user to evaluate it against.
+            await this.run(INSERT.into(FuelTickets).entries(row));
+            return await SELECT.one.from(FuelTickets).where({ ID });
+        });
+
         // Attach ticket to a delivery
         this.on('attachToDelivery', FuelTickets, async (req) => {
             const ticket = await SELECT.one.from(FuelTickets).where({ ID: _id(req.params) });

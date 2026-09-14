@@ -380,6 +380,35 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // The flight ID comes from the binding context, never from the
         // payload: that is the difference the bound form exists to make.
         // ====================================================================
+        // ====================================================================
+        // CAPTURE A TICKET FROM THE ORDER — OFFERED HERE, PERFORMED THERE.
+        //
+        // `fuelorders` binds /odata/v4/orders/ and opens FuelOrders, so this
+        // is the page a clerk holding the supplier's paperwork is on. The
+        // order comes from the BINDING CONTEXT, never the payload - from the
+        // order there is nothing to choose, which is precisely why the action
+        // is not offered from a flight (a flight has several orders, and
+        // picking one is D44).
+        //
+        // IT DELEGATES AND WRITES NOTHING. TicketService owns capture and its
+        // before-CREATE hooks derive the measurement, the mass, the tail and
+        // the number. A second INSERT here would be D44 reintroduced.
+        //
+        // NO GATE — A1. `submit` above refuses on a status guard and order
+        // creation refuses on MDM402; this refuses on nothing, because the
+        // fuel is already in the tanks.
+        // ====================================================================
+        this.on('createFuelTicket', FuelOrders, async (req) => {
+            const orderId = _id(req.params);
+            if (!orderId) return req.error(400, 'No order in context.');
+
+            const tickets = await cds.connect.to('TicketService');
+            return tickets.send({
+                event: 'captureTicketForOrder',
+                data: Object.assign({}, req.data, { orderId })
+            });
+        });
+
         this.on('createFuelOrder', FlightSchedule, async (req) => {
             const flightId = _id(req.params);
             if (!flightId) return req.error(400, 'No flight in context.');
