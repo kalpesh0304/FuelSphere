@@ -182,11 +182,44 @@ annotate PlanningService.FlightSchedule with @(
     // appears in the dispatch section, which is where it is contextually
     // right - the plan is what the order answers.
     // ------------------------------------------------------------------
+    // ========================================================================
+    // THE 2x2. THE SECOND ENTRY IS A PROBE AND COMES OUT WHEN IT IS READ.
+    //
+    // Raise Fuel Order is emitted, placed and on no screen. Four green
+    // criteria say it is correct and a planner cannot find it, which is the
+    // limit named in section 12: no instrument here can assert that a shape
+    // RENDERS, because ui5.sap.com is unreachable from the build container.
+    //
+    // Ajesh's own control killed three candidate causes at once - on the
+    // draft-enabled FuelOrders, submit and crewReview render while
+    // createFuelTicket does not, holding term, boundness and draft state
+    // constant. What survives is parameter count and @mandatory, and those two
+    // are confounded across all eight annotated actions in this repository:
+    // every one is (<=5 params, zero mandatory) or (13 params, >=1 mandatory),
+    // both off-diagonal cells empty.
+    //
+    //   Raise Fuel Order  13 params, @mandatory now REMOVED
+    //   Probe              0 params, never had one
+    //
+    //   neither renders -> a non-draft object page header carries no custom
+    //                      action at all, and the draft question returns
+    //   probe only      -> headers work; something about many parameters
+    //   both            -> @mandatory was the cause
+    //
+    // One look, three conclusions. Delete the probe entry, the handler in
+    // planning-service.js and the declaration together.
+    // ========================================================================
     UI.Identification: [
         {
             $Type            : 'UI.DataFieldForAction',
             Action           : 'PlanningService.createFuelOrder',
             Label            : 'Raise Fuel Order',
+            ![@UI.Importance]: #High
+        },
+        {
+            $Type            : 'UI.DataFieldForAction',
+            Action           : 'PlanningService.probeHeaderButton',
+            Label            : 'Probe (no parameters)',
             ![@UI.Importance]: #High
         }
     ],
