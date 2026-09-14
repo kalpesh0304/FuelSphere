@@ -155,6 +155,42 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with {
 // this is the one a planner can press.
 // ============================================================================
 annotate PlanningService.FlightSchedule with @(
+    // ------------------------------------------------------------------
+    // THE HEADER BUTTON. BOTH CONVENTIONS IN THIS REPOSITORY PUT AN OBJECT
+    // PAGE ACTION HERE, AND THIS ENTITY HAD NO UNQUALIFIED Identification
+    // AT ALL.
+    //
+    //   RefuelerService  confirmOrder, scheduleDelivery, recordDelivery,
+    //                    createInvoice   - UI.Identification, under a
+    //                    comment reading "Object page action buttons"
+    //   FuelOrderService submit, crewReview - UI.Identification, under
+    //                    "Object page custom action buttons"
+    //   the Excel imports - UI.LineItem with Inline: false, which is the
+    //                    table toolbar rather than the object page
+    //
+    // `createFuelOrder` was the ONLY object-page action in this repository
+    // sitting in a UI.FieldGroup. Fiori Elements does support an action in
+    // a field group, so that is not wrong - but there is no local
+    // precedent for it rendering, the group holds only the action and no
+    // fields, and NOTHING HERE CAN RENDER A PAGE TO CHECK: $fiori-preview
+    // bootstraps from ui5.sap.com, which answers 403 to CONNECT in the
+    // build container, so its 200 is a route resolving and no pixels.
+    //
+    // So this is added rather than substituted. The header is where a
+    // planner looks; #RaiseOrder below stays because it costs nothing, it
+    // is correct, and IF the field-group form renders the button also
+    // appears in the dispatch section, which is where it is contextually
+    // right - the plan is what the order answers.
+    // ------------------------------------------------------------------
+    UI.Identification: [
+        {
+            $Type            : 'UI.DataFieldForAction',
+            Action           : 'PlanningService.createFuelOrder',
+            Label            : 'Raise Fuel Order',
+            ![@UI.Importance]: #High
+        }
+    ],
+
     UI.FieldGroup #RaiseOrder: {
         Data: [
             {
