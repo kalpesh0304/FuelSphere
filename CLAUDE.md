@@ -93,6 +93,7 @@ Entities exist and are seeded. OData actions are declared. **Calling one returns
 | Aircraft register | **Does not exist.** `AIRCRAFT_MASTER` has key `type_code` — a *type* master. Individual aircraft are free-text strings |
 | Error logs | `ERROR_LOGS` and `EXCEPTION_ITEMS` have **0 rows** and are never written |
 | Concurrency | No ETags. Number generation is non-atomic `max + 1` |
+| **Rendering — NOTHING HERE HAS EVER RENDERED A PIXEL** | **`ui5.sap.com` answers 403 to CONNECT from this container**, measured on both files `$fiori-preview` bootstraps: `resources/sap-ui-core.js` and `test-resources/sap/ushell/bootstrap/sandbox.js`. The preview page is **1,750 bytes of bootstrap HTML with zero annotation content** — it declares a ushell sandbox pointing at `…/FlightSchedule/app` and waits for the UI5 runtime to fetch it. **That `/app` route returns 404 to a direct GET**, because nothing generates the manifest until the component loads, and the component never loads. **So the preview has never rendered anything here and cannot.** Consequence, and it is the one that matters: **every "the screen shows X" produced in this workspace is an inference from `$metadata`**, never an observation. A person whose machine reaches the CDN is the only source of rendering evidence anyone has — *"I cannot see the button"* from such a person **outranks every green criterion here**, because no criterion here is about pixels |
 | Build output | No `gen/`, no `mta_archives/`. **`node_modules/` IS present — CAP 8.9.9 is installed** (corrected 21 August). The service can be booted and measured rather than reasoned about, which is how the `$fiori-preview` claims above were settled |
 
 ---
@@ -253,41 +254,61 @@ SAP_COM_0008 Business Partner · 0009 Product Master · 0028 Journal Entry · 00
 
 ## 8. Error codes
 
-Two sets — implemented and designed. **Both are valid.** New validations take a code from the appropriate prefix.
+### RE-MEASURED IN FULL, 14 September 2026 — THIS SECTION NAMED 8 PREFIXES AND THERE ARE 18
 
-### Implemented — BUILT
+**Not patched. Re-measured**, for the reason §10 was: the `EPD411` entry was wrong in **both halves**
+of one line — *"DESIGNED — no meter field exists"* — and a section wrong in both halves of one entry
+is a section nobody has re-derived. Correcting the line would have left the ten prefixes it never
+mentioned.
 
-| Prefix | Domain |
-|---|---|
-| `FB4xx` / `FB5xx` | Fuel burn and ROB |
-| `EPD4xx` | ePOD, delivery, quantity verification |
-| `IMP4xx` | Flight schedule import |
-| `ENR4xx` | Flight schedule enrichment |
-| `DSP4xx` / `DSP5xx` | Flight dispatch import |
+**Measured across `srv/**/*.{js,cds}`: 18 prefixes, 192 codes.** The reader was proved first, because
+**flight numbers have the shape of an error code** — `AC410` and `PR1041` match `[A-Z]{2,4}\d{3}` and
+were reported as codes until airline prefixes were excluded.
 
-### ePOD and delivery — `EPD4xx`
+| Prefix | Codes | In JS | State |
+|---|---|---|---|
+| `EPD` | 17 | 16 | **BUILT** — ePOD, delivery, gauge, reconciliation |
+| `INV` | 34 | 24 | **BUILT** — was listed here as DESIGNED. The IDR work built it |
+| `PRC` | 12 | 12 | **BUILT** — pricing. Never listed here |
+| `DSP` | 10 | 9 | **BUILT** — dispatch import |
+| `APU` | 9 | 8 | **BUILT** — never listed here |
+| `IMP` | 8 | 4 | **PARTIAL** — 401–404 built, 405–408 declared only |
+| `CFG` | 6 | 6 | **BUILT** — parameter store. Never listed here |
+| `FB` | 12 | 5 | **PARTIAL** — 401/402/403/409/500 built, seven declared only |
+| `ENR` | 4 | 3 | **PARTIAL** |
+| `MDM` | 3 | 3 | **BUILT** — the registration gate. Never listed here |
+| `STG` | 1 | 1 | **BUILT** — never listed here |
+| `INT` | 10 | 1 | **DESIGNED** |
+| `CA` · `CMP` · `FPE` · `PLN` · `RA` · `SEC` | 10·12·12·10·10·12 | **0 each** | **DESIGNED** — declared in a `.cds` and executed by nothing |
+
+**"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a
+shared constant, so a raise-site count undercounts. A code appearing in a `.js` file is something
+that can execute; a code appearing only in a `.cds` is a declaration.
+
+### ePOD and delivery — `EPD4xx` — 17 codes, 16 executable
 
 | Code | Description | State |
 |---|---|---|
 | EPD401 | Delivered quantity exceeds tolerance, above 5% variance | BUILT |
 | EPD402 | Missing required signature before status change | BUILT |
-| EPD403 | Temperature out of range, −40 to +50 °C | BUILT |
-| EPD404 | Density out of specification, 0.775 to 0.840 kg/L | BUILT — density then unused |
-| EPD410 | Duplicate ticket number for supplier | DESIGNED |
-| EPD411 | Meter reading does not match ticket quantity | DESIGNED — **no meter field exists** |
+| EPD403 | Temperature out of range | BUILT — limits resolve from `TOLERANCE_RULES` (WP-13), not literals |
+| EPD404 | Density out of specification | BUILT — density then unused in the correction |
+| EPD410 | Duplicate ticket number for supplier | **DESIGNED** — the only EPD code with no JS |
+| **EPD411** | **Meter reading versus ticket quantity** | **BUILT, AND IMPLEMENTED TWICE.** A **hard refusal** when `meter_end < meter_start`, and a **`req.warn`** when the metered span disagrees with the printed quantity — a warning by decision A1, because refusing the ticket puts the uplift outside the system. **This entry previously read "DESIGNED — no meter field exists". `meter_start`, `meter_end` and `meter_serial` all exist on `FUEL_TICKETS`** |
+| EPD450 · EPD453 | Number allocation · ticket mass derivation | BUILT |
+| EPD461 · EPD462 | FOB reconciliation variance and attribution | BUILT |
+| EPD463 | Delivery validation | BUILT |
+| EPD476–EPD480 | Gauge-uplift derivation, WP-34 | BUILT |
+| EPD481 | Signature document capture | BUILT |
 
-### Integration — `INT4xx` — DESIGNED
-INT401 S/4 PO creation failed · INT402 S/4 GR posting failed · INT403 supplier communication timeout · INT404 object store upload failed
+### Everything else
 
-### Invoice — `INV4xx` — DESIGNED
-INV401 PO not found · INV402 GR not found · INV403 price variance exceeds tolerance · INV404 quantity variance exceeds tolerance · INV405 duplicate invoice · INV406 FI posting failed · INV407 invalid tax code for jurisdiction · INV408 posting period closed · INV409 approval limit exceeded · INV410 currency conversion error
+Prefixes not detailed here are summarised in the table above. **Before adding a code to any of them,
+measure that prefix rather than trusting this page** — that is what this re-measurement exists to say.
 
-### Planning — `PLN4xx` — DESIGNED
-PLN401 version not found · PLN402 version status invalid · PLN403 missing flight schedule · PLN404 route-aircraft matrix not found · PLN405 price assumption missing · PLN410 SSIM parsing error · PLN411 invalid SSIM record · PLN420 SAC connection failed · PLN421 SAC writeback failed · PLN422 SAC model not configured
-
-**Convention:** `4xx` business rule violation, `5xx` technical failure. New domains take a new prefix, documented here.
-
----
+**Convention:** `4xx` business rule violation, `5xx` technical failure. New domains take a new prefix,
+documented here. **And an unlisted prefix is not a free choice** — ten of the eighteen were added
+without this section moving.
 
 ## 9. SOX controls — DESIGNED, none enforced
 
@@ -495,7 +516,7 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
 | **A service projection is a DATABASE VIEW, so adding a calculated element needs a redeploy — and until then EVERY read of that entity is 500** | Adding `verdictRank` to `InvoiceService.IdrRuleStatus` made a plain `GET ...?$top=1` naming nothing return **`no such column: $I.verdictRank`**. `cds compile srv` was clean, `d50-annotation-sweep` passed, `ui02` passed, and the entity had returned 200 an hour earlier. **The deployed view was from before the element existed** — CAP materialises `entity X as projection on Y { *, case … end as z }` as a SQL view at deploy time, so the running server queries a view whose column list is stale. **The error names the new element even on a query that does not mention it**, which is what sent an hour into bisecting the sort. **The tell was the plain read failing** — a broken sort cannot break `$top=1`. **The general form, which is the reusable half: when an error names a column the query does not reference, the query is not the problem.** Same family as the boot-versus-compile row above: an instrument (a clean compile, a passing harness) answering a narrower question than *will this serve* |
 | **A FUNCTION THAT SERVES ON SQLITE AND FAILS ON HANA IS INVISIBLE TO EVERY CHECK HERE — not untested, INVISIBLE** | `days_between(x, $now)` in a view **compiled clean and returned 500 at runtime**: *"no such function: days_between"*, a HANA function `@cap-js/sqlite` does not implement. That one is loud. **`julianday()` is the dangerous direction: it serves on SQLite and does not exist on HANA**, so it passes every compile, every harness and every plant here, and **the first symptom is a deployment.** **Nothing in this project runs against HANA** — dev is `sqlite`, the harnesses are `:memory:`, and the production profile is the only place the difference appears. So no criterion can catch this class and no plant can fire. **Cheap to sweep once, expensive to discover once:** what else in `db/` and `srv/` calls a function whose availability differs between the two? Not swept yet, and recorded so it is a known gap rather than a surprise |
 | **A model can boot and not compile — `cds serve` and `cds compile srv` disagree about validity** | `cds serve` loads **all of `db/` and `srv/`**; `cds compile srv` loads only what `srv/` imports. So an entity declared in a new `db/*.cds` file is invisible to `compile` unless a service `using`s that file **by name** — and the running server was right while the gate was wrong, which is the more dangerous way round. Measured: `srv/planning-service.cds` referenced `DESIGNATED_SUPPLIERS` and served it correctly over HTTP while `cds compile srv` reported *"Artifact has not been found"*. **Every exit-code check in this project runs one or the other**, so a check somewhere is either passing on a model that would not build or failing on one that runs. Same family as the `$fiori-preview` row below — an instrument answering a narrower question than the one being asked. **And the dependency runs one way:** `schema.cds` cannot see an entity in a file that imports it, so an association from the base entity must be written as `extend` from the new file |
-| **A 200 from `$fiori-preview` is not evidence that anything rendered** | It means the route resolved and a manifest was generated. **That is all it has ever meant.** The preview page loads UI5 from `https://ui5.sap.com/resources/sap-ui-core.js`, and in the build container that host answers **403 to CONNECT** — so the runtime has never loaded there and no page has ever rendered. The check is still doing real work: `preview.js` throws `400 No such entity` for an unexposed entity, so a 200 proves the entity is exposed and the manifest generates. **It proves nothing about pixels, annotations taking effect, or a facet having content.** Same family as the `default_severity` and `Path="` errors — an instrument answering a narrower question than the one being asked — except this one was *asked for by name*, repeatedly, and over-read for weeks. **The replacement is stronger than the thing it replaces:** walk every annotation path against the emitted EDMX (`d50-annotation-sweep-harness`) and **execute every binding against live data**. A person looking at a page cannot tell an empty section from one whose data is merely absent today; a binding that returns rows can |
+| **A 200 from `$fiori-preview` is not evidence that anything rendered** | It means the route resolved and a manifest was generated. **That is all it has ever meant.** The preview page loads UI5 from `https://ui5.sap.com/resources/sap-ui-core.js`, and in the build container that host answers **403 to CONNECT** — so the runtime has never loaded there and no page has ever rendered. The check is still doing real work: `preview.js` throws `400 No such entity` for an unexposed entity, so a 200 proves the entity is exposed and the manifest generates. **It proves nothing about pixels, annotations taking effect, or a facet having content.** Same family as the `default_severity` and `Path="` errors — an instrument answering a narrower question than the one being asked — except this one was *asked for by name*, repeatedly, and over-read for weeks. **The replacement is stronger than the thing it replaces:** walk every annotation path against the emitted EDMX (`d50-annotation-sweep-harness`) and **execute every binding against live data**. A person looking at a page cannot tell an empty section from one whose data is merely absent today; a binding that returns rows can. **AND THE CORRECTION NOW RUNS TO ITS CONCLUSION, WHICH IS A NAMED LIMIT RATHER THAN A BETTER INSTRUMENT.** Paths and bindings answer *does this RESOLVE* and *does it RETURN ROWS*. **Neither can answer *does this SHAPE RENDER*, and no criterion in this repository can** — because rendering needs the UI5 runtime and `ui5.sap.com` is 403 here (section 2). It bit immediately: `createFuelOrder` is annotated on the opened projection, inside the right facet, emitting correctly in the EDMX — **and a planner could not find the button**, because it sat in a `UI.FieldGroup` where every other object-page action in this repository uses `UI.Identification`. **`deployed-reach` EXIT-3 and EXIT-4 are both TRUE and the button was invisible.** **An assertion about WHERE an annotation sits cannot assert that it renders.** Same family as the cross-entity gap in that harness's header: a class with no instrument, **named rather than implied covered** |
 | **A DEFECT ROW CAN BE WRONG IN TWO WAYS, AND THE ONE WHERE THE OBSERVATION HOLDS IS MORE DURABLE AND MORE MISLEADING** | **D1**: a commented-out transaction wrapper, recorded as data loss — the wrapper *was* commented out, and it was commented out because it was redundant. **D35**: `mta.yaml` has no `html5-apps-repo` module, recorded as *"the actual constraint on the UI work"* — the modules *are* absent, and they are absent because the Fiori apps are separate projects. **D56 IS A THIRD KIND AND THE WORST, because the OBSERVATION was false as well and only the CONCLUSION happened to point the right way** — the row said "this is broken, fix it", which was true, for reasons that were not the reasons. D1 and D35 were a true observation with a false inference; this was a false observation whose inference was accidentally right, which is undetectable by re-checking either half. the column was recorded as returning *"null, ALWAYS"* and it returns a name on **14 of 22 flights**. Anyone re-checking saw names, concluded the row was stale, and stopped — while the actual defect (a CORRECT-LOOKING name from the wrong axis, on one flight in twenty-two) sat untouched for weeks. **A wrong symptom is worse than a wrong inference: it sends the re-checker looking for the wrong thing, and finding it absent reads as reassurance.** In each case **the thing observed was true — or was believed to have been observed — and the inference was not**, which is why both survived so long: anyone re-checking confirms the observation and stops. **Deleting such a row loses the observation; leaving it uncorrected loses weeks.** Strike it through and keep it, with what was seen and what was wrongly concluded from it stated separately |
 | **A baseline captured by an unproven instrument encodes the instrument's errors as facts** | `ui02` EXIT-2c's known-unlabelled list was first written with **22 entries, measured by a reader whose window ran past `</Annotations>` into the next block. Nine were labelled all along.** A wrong baseline is **worse than no baseline**: it freezes phantom defects into the file as ACCEPTED, and afterwards every one reads as a decision somebody took rather than an artefact of a broken reader — indistinguishable, and nobody re-derives an accepted list. **Prove the instrument, THEN capture the baseline, in that order.** The three errors in that one criterion were all found by planting, never by reading: scoped to every bound field it reported 64 (most labelled inline); a leaf-name search found the right name on the wrong entity; and the window overran its own scope. **A ratchet is only as good as the reader that set it** |
 | **An arm no data reaches is asserted only by construction, and a criterion silent about that reads as coverage** | Two in the IDR work, both now criteria that ASSERT THE GAP and **self-invalidate when it closes** — the shape `d-designated-suppliers` EXIT-8 already used for carrier scoping. **Rung 5 of the resolution cascade** (`INV466`, no goods receipt) fails on **no seeded line**, so EXIT-4's cascade assertion reaches rungs 1–4 and stops. **Component coverage** (`INV471`/`INV472`) has never run on **any line, ever** — D54. Each criterion fails the day its gap closes and demands replacement by one that tests the arm: proved by planting the closure, not by reading. **And a seed plant is not the right plant for a criterion that reads the computation** — flipping a seeded `INV466` verdict fired EXIT-3 and not EXIT-9, because the earlier criteria re-run the checks and overwrite the seed; blanking `s4_gr_number` in `FUEL_DELIVERIES` is what actually closes the gap, and that fires it |
