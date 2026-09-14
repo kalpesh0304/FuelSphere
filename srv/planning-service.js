@@ -62,6 +62,24 @@ module.exports = class PlanningService extends cds.ApplicationService {
         });
 
         // ====================================================================
+        // PROBE - TEMPORARY, DELETE WITH THE DECLARATION AND THE ANNOTATION.
+        //
+        // Returns a string so that pressing it is UNAMBIGUOUS. A no-op with no
+        // handler would return CAP's default and a viewer could not tell
+        // "rendered and worked" from "rendered and did nothing" - and the
+        // whole point of this probe is that its presence on screen is the
+        // measurement. A trap in section 12 is exactly this: a default no-op
+        // looks like it worked.
+        // ====================================================================
+        this.on('probeHeaderButton', FlightSchedule, async (req) => {
+            const id = req.params && req.params.length
+                ? (typeof req.params[0] === 'object' ? req.params[0].ID : req.params[0])
+                : null;
+            return `Probe: a zero-parameter bound action rendered and ran on this ` +
+                   `non-draft object page (flight ${id}).`;
+        });
+
+        // ====================================================================
         // AUTO-CREATE DRAFT FUEL ORDER ON FLIGHT SCHEDULE CREATION
         // ====================================================================
 

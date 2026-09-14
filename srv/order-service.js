@@ -425,6 +425,40 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     dispatchPlanId, conversionDensity,
                     parentOrderId, tankeringSectors, quantityVarianceReason } = req.data;
 
+            // ================================================================
+            // EPD451 - AN ORDER MUST NAME A QUANTITY.
+            //
+            // THIS GUARD REPLACES AN ANNOTATION, AND IT IS WIDER THAN THE ONE
+            // IT REPLACES. @mandatory on the bound actions' orderedQuantity
+            // returned 400 "Value is required" - measured before removing it,
+            // because an annotation that enforces is a defensive guard and
+            // removing one without checking is how enforcement disappears.
+            //
+            // But it only ever covered the TWO BOUND FORMS. createOrderFromFlight
+            // is also callable unbound and never carried @mandatory, so an order
+            // with no quantity could always be created through this door:
+            // totalAmount below reads `orderedQuantity && unitPrice ? ... : 0`
+            // and would have written a zero-amount order without complaint.
+            // One writer, one guard - the D44 shape applied to a refusal.
+            //
+            // EPD451 continues the EPD4xx block by the precedent EPD450 set:
+            // order-number allocation took a code from this prefix rather than
+            // invent an ORD one, and inventing a prefix is a decision this
+            // change does not need to take. 451 is free - measured across
+            // srv/, db/ and test/, not assumed.
+            //
+            // ZERO IS NOT A QUANTITY AND NULL IS NOT ZERO. The rule refuses
+            // absence; it does not refuse a value it dislikes. A negative or
+            // zero order is a different rule with a different owner, and
+            // silently folding it in here would be a second undeclared
+            // criterion riding along.
+            // ================================================================
+            if (orderedQuantity === undefined || orderedQuantity === null) {
+                return req.error(400,
+                    'EPD451: An ordered quantity is required. An order that names no ' +
+                    'quantity cannot be priced, delivered against, or reconciled.');
+            }
+
             // Look up the flight
             const flight = await SELECT.one.from(FlightSchedule).where({ ID: flightId });
             if (!flight) return req.error(404, 'Flight not found');
