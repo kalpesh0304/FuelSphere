@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Schedule — FuelSphere (local)</title>
+    <!--
+      LOCAL DEVELOPMENT ONLY. This app is NOT deployed and must not be.
+      mta.yaml has no html5-apps-repo module and that is a DECISION (D35),
+      not a gap: the four Fiori apps on the launchpad are separate
+      repositories (section 17). Adding a deployment module here would
+      restore a capability the architecture declined.
+
+      WHY IT EXISTS: $fiori-preview DRAWS some action buttons and EXECUTES
+      NONE - measured over four rounds, section 12. A real Fiori Elements
+      app does execute them. This is the smallest one that opens the page a
+      planner reads, against the running service on localhost:4004.
+
+      UI5 comes from the CDN, which this build container cannot reach
+      (403 to CONNECT). Nothing here can verify that it renders; a person
+      with a browser is the only instrument for that.
+    -->
+    <script
+        id="sap-ui-bootstrap"
+        src="https://ui5.sap.com/resources/sap-ui-core.js"
+        data-sap-ui-theme="sap_horizon"
+        data-sap-ui-resourceroots='{"fuelsphere.flightschedule": "./"}'
+        data-sap-ui-compatVersion="edge"
+        data-sap-ui-oninit="module:sap/ui/core/ComponentSupport"
+        data-sap-ui-async="true"
+        data-sap-ui-frameOptions="trusted"
+    ></script>
+</head>
+<body class="sapUiBody">
+    <div data-sap-ui-component
+         data-name="fuelsphere.flightschedule"
+         data-id="container"
+         data-settings='{"id" : "flightschedule"}'></div>
+</body>
+</html>
