@@ -155,6 +155,54 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with {
 // this is the one a planner can press.
 // ============================================================================
 annotate PlanningService.FlightSchedule with @(
+    // ------------------------------------------------------------------
+    // THE HEADER BUTTON. BOTH CONVENTIONS IN THIS REPOSITORY PUT AN OBJECT
+    // PAGE ACTION HERE, AND THIS ENTITY HAD NO UNQUALIFIED Identification
+    // AT ALL.
+    //
+    //   RefuelerService  confirmOrder, scheduleDelivery, recordDelivery,
+    //                    createInvoice   - UI.Identification, under a
+    //                    comment reading "Object page action buttons"
+    //   FuelOrderService submit, crewReview - UI.Identification, under
+    //                    "Object page custom action buttons"
+    //   the Excel imports - UI.LineItem with Inline: false, which is the
+    //                    table toolbar rather than the object page
+    //
+    // `createFuelOrder` was the ONLY object-page action in this repository
+    // sitting in a UI.FieldGroup. Fiori Elements does support an action in
+    // a field group, so that is not wrong - but there is no local
+    // precedent for it rendering, the group holds only the action and no
+    // fields, and NOTHING HERE CAN RENDER A PAGE TO CHECK: $fiori-preview
+    // bootstraps from ui5.sap.com, which answers 403 to CONNECT in the
+    // build container, so its 200 is a route resolving and no pixels.
+    //
+    // So this is added rather than substituted. The header is where a
+    // planner looks; #RaiseOrder below stays because it costs nothing, it
+    // is correct, and IF the field-group form renders the button also
+    // appears in the dispatch section, which is where it is contextually
+    // right - the plan is what the order answers.
+    // ------------------------------------------------------------------
+    // ========================================================================
+    // NO UI.Identification ENTRY HERE, AND THE REASON IS A MEASUREMENT.
+    //
+    // One was added and has been removed again. The object page header renders
+    // no custom action on this non-draft entity - proved by annotating a
+    // ZERO-PARAMETER NO-OP PROBE beside Raise Fuel Order and seeing neither.
+    // Re-adding it duplicates a surface that does not draw.
+    //
+    // AND THE WIDER FINDING MAKES THE SURFACE IRRELEVANT: $fiori-preview DRAWS
+    // some action buttons and EXECUTES NONE. importFlightScheduleExcel is the
+    // one action button that DOES draw on this page, and pressing it does
+    // nothing. So four rounds of moving this annotation between terms measured
+    // which shapes DRAW on a surface where nothing RUNS.
+    //
+    // The button is annotated ONCE, in UI.LineItem below - Ajesh's own shape,
+    // pick a flight from the list and press. It is NOT known to draw there
+    // either (bound-in-LineItem measured absent). It is kept as the single
+    // annotated surface so the deferred work - a real generated Fiori app
+    // against localhost:4004, where actions DO execute - has one place to
+    // start rather than three. Ratcheted by `deployed-reach` EXIT-4.
+    // ========================================================================
     UI.FieldGroup #RaiseOrder: {
         Data: [
             {
@@ -442,6 +490,33 @@ annotate PlanningService.FlightSchedule with @(
                 Action : 'PlanningService.importFlightScheduleExcel',
                 Label  : 'Upload Flight Schedule',
                 Inline : false
+            },
+
+            // ================================================================
+            // THE LIST REPORT TOOLBAR IS THE SURFACE THAT RENDERS ON THIS
+            // ENTITY, AND THIS IS AJESH'S OWN PROPOSAL: pick a flight from the
+            // list, press a button.
+            //
+            // Measured rather than guessed. The object page header carries no
+            // custom action on a non-draft entity - two annotations, one with
+            // 13 parameters and one with none, both invisible. The toolbar
+            // above works today: `importFlightScheduleExcel` is one line up,
+            // on THIS entity and THIS service, and it renders.
+            //
+            // ONE DIFFERENCE REMAINS AND IT IS THE LAST UNTESTED CELL. The
+            // Excel import is UNBOUND; this is BOUND, and no bound action sits
+            // in a UI.LineItem anywhere in this repository. So the surface is
+            // proven and this combination is not. If it does not render, the
+            // fallback is an UNBOUND action taking flightId as a parameter -
+            // exactly the shape the import already proves - and at that point
+            // every cell in the table has been filled.
+            // ================================================================
+            {
+                $Type            : 'UI.DataFieldForAction',
+                Action           : 'PlanningService.createFuelOrder',
+                Label            : 'Raise Fuel Order',
+                Inline           : false,
+                ![@UI.Importance]: #High
             }
         ],
 
@@ -1798,7 +1873,7 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with {
     // No unit column exists for these and none should be added - a constant
     // 'KG' on every row is a second place holding one fact.
     fob_at_arrival_kg  @title: 'FOB at Arrival (kg)'
-                       @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. Blank on most deliveries: a single reading is recorded as FOB before uplift instead, because copying one into the other manufactures a zero ground burn where the truth is unknown.';
+                       @Common.QuickInfo: 'What the gauge read at chocks-on, at the end of the arriving leg. Blank on most deliveries: a single reading is recorded as FOB before uplift instead, because copying one into the other manufactures a zero ground burn where the truth is unknown. The arriving leg ITSELF is not modelled in this dataset - no tail here has a predecessor flight - so this figure is the balance at the START OF THE DEMONSTRATION PERIOD, seeded rather than carried from a prior leg''s closure.';
 
     fob_before_kg      @title: 'FOB Before Uplift (kg)'
                        @Common.QuickInfo: 'What the gauge read immediately before refuelling. This is the reconciliation input, not the arrival figure.';

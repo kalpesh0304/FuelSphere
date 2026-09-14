@@ -359,7 +359,22 @@ service PlanningService {
          */
         action createFuelOrder(
             // TYPED - only a person knows these
-            orderedQuantity        : Decimal(12,2) @mandatory,
+            // @mandatory REMOVED, AND IT STAYS OFF FOR A DIFFERENT REASON THAN
+            // IT CAME OFF. It was removed to test whether the static
+            // Common.FieldControl it emits was why the header button did not
+            // render. IT WAS NOT - a zero-parameter no-op probe beside it did
+            // not render either, and the cause is the entity: a NON-DRAFT
+            // object page header carries no custom actions.
+            //
+            // So its removal explained nothing, and it could go back. It does
+            // not, because EPD451 in createOrderFromFlight now covers STRICTLY
+            // MORE: @mandatory reached the two bound declarations, EPD451
+            // reaches those AND the unbound door, which never had one and
+            // where totalAmount would have written a zero-amount order.
+            // Restoring it would be a second enforcement of a subset - two
+            // places holding one rule, which is D44's shape and the thing this
+            // repository has declined three times.
+            orderedQuantity        : Decimal(12,2),
             uomCode                : String(3),
             orderType              : String(20),
 

@@ -380,6 +380,35 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // The flight ID comes from the binding context, never from the
         // payload: that is the difference the bound form exists to make.
         // ====================================================================
+        // ====================================================================
+        // CAPTURE A TICKET FROM THE ORDER — OFFERED HERE, PERFORMED THERE.
+        //
+        // `fuelorders` binds /odata/v4/orders/ and opens FuelOrders, so this
+        // is the page a clerk holding the supplier's paperwork is on. The
+        // order comes from the BINDING CONTEXT, never the payload - from the
+        // order there is nothing to choose, which is precisely why the action
+        // is not offered from a flight (a flight has several orders, and
+        // picking one is D44).
+        //
+        // IT DELEGATES AND WRITES NOTHING. TicketService owns capture and its
+        // before-CREATE hooks derive the measurement, the mass, the tail and
+        // the number. A second INSERT here would be D44 reintroduced.
+        //
+        // NO GATE — A1. `submit` above refuses on a status guard and order
+        // creation refuses on MDM402; this refuses on nothing, because the
+        // fuel is already in the tanks.
+        // ====================================================================
+        this.on('createFuelTicket', FuelOrders, async (req) => {
+            const orderId = _id(req.params);
+            if (!orderId) return req.error(400, 'No order in context.');
+
+            const tickets = await cds.connect.to('TicketService');
+            return tickets.send({
+                event: 'captureTicketForOrder',
+                data: Object.assign({}, req.data, { orderId })
+            });
+        });
+
         this.on('createFuelOrder', FlightSchedule, async (req) => {
             const flightId = _id(req.params);
             if (!flightId) return req.error(400, 'No flight in context.');
@@ -395,6 +424,57 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     uomCode, orderType, intoPlaneAgentId, intoPlaneContractId,
                     dispatchPlanId, conversionDensity,
                     parentOrderId, tankeringSectors, quantityVarianceReason } = req.data;
+
+            // ================================================================
+            // EPD451 - AN ORDER MUST NAME A QUANTITY.
+            //
+            // THIS GUARD REPLACES AN ANNOTATION, AND IT IS WIDER THAN THE ONE
+            // IT REPLACES. @mandatory on the bound actions' orderedQuantity
+            // returned 400 "Value is required" - measured before removing it,
+            // because an annotation that enforces is a defensive guard and
+            // removing one without checking is how enforcement disappears.
+            //
+            // But it only ever covered the TWO BOUND FORMS. createOrderFromFlight
+            // is also callable unbound and never carried @mandatory, so an order
+            // with no quantity could always be created through this door:
+            // totalAmount below reads `orderedQuantity && unitPrice ? ... : 0`
+            // and would have written a zero-amount order without complaint.
+            // One writer, one guard - the D44 shape applied to a refusal.
+            //
+            // EPD451 continues the EPD4xx block by the precedent EPD450 set:
+            // order-number allocation took a code from this prefix rather than
+            // invent an ORD one, and inventing a prefix is a decision this
+            // change does not need to take. 451 is free - measured across
+            // srv/, db/ and test/, not assumed.
+            //
+            // ZERO IS NOT A QUANTITY AND NULL IS NOT ZERO. The rule refuses
+            // absence; it does not refuse a value it dislikes. A negative or
+            // zero order is a different rule with a different owner, and
+            // silently folding it in here would be a second undeclared
+            // criterion riding along.
+            //
+            // TWO UNITS NAME A QUANTITY, AND THE FIRST VERSION OF THIS GUARD
+            // KNEW ABOUT ONE. `wp11-harness` EXIT-1 caught it: WP-11 / A2 has
+            // a plan-sourced order arrive in KILOGRAMS - orderedQuantityKg,
+            // converted to volume by planMassToOrderVolume below - with no
+            // orderedQuantity at all, and the guard refused a legitimate call.
+            // The bound actions have no Kg parameter, so that form is reachable
+            // ONLY through this unbound door, which is precisely the door this
+            // guard newly covers. @mandatory never saw it, so nothing had ever
+            // had the chance to be wrong about it before.
+            //
+            // Worth saying where the correction came from: TWO PLANTS PASSED on
+            // the narrow version, because a plant tests the rule the author
+            // believes. The existing suite tested the rule that is actually
+            // true.
+            // ================================================================
+            const missing = q => q === undefined || q === null;
+            if (missing(orderedQuantity) && missing(orderedQuantityKg)) {
+                return req.error(400,
+                    'EPD451: An ordered quantity is required, in volume ' +
+                    '(orderedQuantity) or in mass (orderedQuantityKg). An order that ' +
+                    'names no quantity cannot be priced, delivered against, or reconciled.');
+            }
 
             // Look up the flight
             const flight = await SELECT.one.from(FlightSchedule).where({ ID: flightId });

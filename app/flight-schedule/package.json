@@ -1,0 +1,7 @@
+{
+    "name": "fuelsphere-flight-schedule",
+    "version": "1.0.0",
+    "private": true,
+    "description": "LOCAL ONLY. Fiori Elements List Report + Object Page over PlanningService.FlightSchedule, served by CAP from app/. Not deployed - see D35 and section 17.",
+    "engines": { "node": "22.x" }
+}

@@ -1,0 +1,123 @@
+{
+    "_version": "1.59.0",
+    "sap.app": {
+        "id": "fuelsphere.flightschedule",
+        "type": "application",
+        "i18n": "i18n/i18n.properties",
+        "applicationVersion": { "version": "1.0.0" },
+        "title": "{{appTitle}}",
+        "description": "{{appDescription}}",
+        "dataSources": {
+            "mainService": {
+                "uri": "/odata/v4/planning/",
+                "type": "OData",
+                "settings": {
+                    "annotations": [],
+                    "odataVersion": "4.0"
+                }
+            }
+        }
+    },
+    "sap.ui": {
+        "technology": "UI5",
+        "icons": { "icon": "sap-icon://flight" },
+        "deviceTypes": { "desktop": true, "tablet": true, "phone": true }
+    },
+    "sap.ui5": {
+        "flexEnabled": true,
+        "dependencies": {
+            "minUI5Version": "1.120.0",
+            "libs": {
+                "sap.m": {},
+                "sap.ui.core": {},
+                "sap.fe.templates": {}
+            }
+        },
+        "contentDensities": { "compact": true, "cozy": true },
+        "models": {
+            "i18n": {
+                "type": "sap.ui.model.resource.ResourceModel",
+                "settings": { "bundleName": "fuelsphere.flightschedule.i18n.i18n" }
+            },
+            "": {
+                "dataSource": "mainService",
+                "preload": true,
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "earlyRequests": true
+                }
+            },
+            "@i18n": {
+                "type": "sap.ui.model.resource.ResourceModel",
+                "uri": "i18n/i18n.properties"
+            }
+        },
+        "resources": { "css": [] },
+        "routing": {
+            "config": {},
+            "routes": [
+                { "pattern": ":?query:", "name": "FlightScheduleList", "target": "FlightScheduleList" },
+                { "pattern": "FlightSchedule({key}):?query:", "name": "FlightScheduleObjectPage", "target": "FlightScheduleObjectPage" },
+                { "pattern": "FlightSchedule({key})/dispatches({key2}):?query:", "name": "DispatchObjectPage", "target": "DispatchObjectPage" },
+                { "pattern": "FlightSchedule({key})/orders({key2}):?query:", "name": "OrderObjectPage", "target": "OrderObjectPage" },
+                { "pattern": "FlightSchedule({key})/deliveries({key2}):?query:", "name": "DeliveryObjectPage", "target": "DeliveryObjectPage" },
+                { "pattern": "FlightSchedule({key})/tickets({key2}):?query:", "name": "TicketObjectPage", "target": "TicketObjectPage" }
+            ],
+            "targets": {
+                "FlightScheduleList": {
+                    "type": "Component",
+                    "id": "FlightScheduleList",
+                    "name": "sap.fe.templates.ListReport",
+                    "options": {
+                        "settings": {
+                            "contextPath": "/FlightSchedule",
+                            "variantManagement": "Page",
+                            "initialLoad": "Enabled",
+                            "navigation": { "FlightSchedule": { "detail": { "route": "FlightScheduleObjectPage" } } },
+                            "controlConfiguration": {
+                                "@com.sap.vocabularies.UI.v1.LineItem": {
+                                    "tableSettings": { "type": "ResponsiveTable", "selectionMode": "Multi" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "FlightScheduleObjectPage": {
+                    "type": "Component",
+                    "id": "FlightScheduleObjectPage",
+                    "name": "sap.fe.templates.ObjectPage",
+                    "options": {
+                        "settings": {
+                            "editableHeaderContent": false,
+                            "contextPath": "/FlightSchedule",
+                            "navigation": {
+                                "dispatches":  { "detail": { "route": "DispatchObjectPage" } },
+                                "orders":      { "detail": { "route": "OrderObjectPage" } },
+                                "deliveries":  { "detail": { "route": "DeliveryObjectPage" } },
+                                "tickets":     { "detail": { "route": "TicketObjectPage" } }
+                            }
+                        }
+                    }
+                },
+                "DispatchObjectPage": {
+                    "type": "Component", "id": "DispatchObjectPage", "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/FlightSchedule/dispatches" } }
+                },
+                "OrderObjectPage": {
+                    "type": "Component", "id": "OrderObjectPage", "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/FlightSchedule/orders" } }
+                },
+                "DeliveryObjectPage": {
+                    "type": "Component", "id": "DeliveryObjectPage", "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/FlightSchedule/deliveries" } }
+                },
+                "TicketObjectPage": {
+                    "type": "Component", "id": "TicketObjectPage", "name": "sap.fe.templates.ObjectPage",
+                    "options": { "settings": { "contextPath": "/FlightSchedule/tickets" } }
+                }
+            }
+        }
+    },
+    "sap.fiori": { "registrationIds": [], "archeType": "transactional" }
+}
