@@ -409,6 +409,19 @@ annotate PricingService.FormulaComponents with @(
 // DERIVED PRICES - Calculated Prices
 // =============================================================================
 
+annotate PricingService.DerivedPrices with {
+    // Renders as `2.4003 USD/GAL` rather than a bare 2.4003. Both targets are
+    // properties of THIS entity, so both resolve - @Measures takes a path and
+    // `units-harness` walks it either way.
+    derived_price    @Measures.ISOCurrency: currency_currency_code
+                     @Measures.Unit       : uom_uom_code
+                     @Common.QuickInfo    : 'Basic fuel price PER UNIT of the formula''s UoM. Tax and duty amounts are calculated by SAP (PRC403). NO LINE AMOUNT IS DERIVED: extending a per-gallon price to a delivery in kilograms needs a density basis the model does not carry - PRC406 declines to convert without one, and fuel-uom refuses gallons because conversion_to_kg on GAL is kilograms per gallon at an assumed density rather than a volume ratio. F19.';
+    base_index_value @Measures.ISOCurrency: currency_currency_code
+                     @Measures.Unit       : uom_uom_code
+                     @Common.QuickInfo    : 'The index as USED - averaged over the quotation period where the formula says so, not the single day''s assessment. component_breakdown lists every quote with its date and id (PRC407).';
+    component_breakdown @Common.QuickInfo : 'Computed by the derivation, never authored. Every component, the quotes used, the scope that resolved the formula and the engine that ran.';
+};
+
 annotate PricingService.DerivedPrices with @(
     Capabilities: {
         InsertRestrictions: { Insertable: false },
@@ -473,6 +486,34 @@ annotate PricingService.DerivedPrices with @(
             }
         ],
 
+        // ------------------------------------------------------------------
+        // THE PRICE IS PER UNIT AND THERE IS NO LINE AMOUNT, WHICH IS A
+        // FINDING RATHER THAN AN OMISSION - SO THE SECTION SAYS SO.
+        //
+        // A missing figure with a stated reason is a finding. A missing one
+        // without is the eighth cause of a section that reads wrong, and this
+        // repository has spent weeks on the difference.
+        //
+        // derived_price is the BASIC FUEL PRICE PER UNIT (PRC403: tax and duty
+        // amounts are SAP's). Extending it to a ticket needs a unit change the
+        // model declines to make, TWICE and on purpose:
+        //   - `pricing-service.js` logs PRC406 and applies NO conversion,
+        //     because the density basis belongs on a scheme entity that does
+        //     not exist and inventing a factor would put an unstated
+        //     assumption into a price;
+        //   - `srv/lib/fuel-uom.js` refuses gallons, because
+        //     UNIT_OF_MEASURE.conversion_to_kg on GAL is KILOGRAMS PER GALLON
+        //     AT AN ASSUMED DENSITY, not a volume ratio - the 3.7854 it seems
+        //     to yield is an unstated coupling between two rows. F19.
+        //
+        // So: the price is per GALLON, the mass chain is per KILOGRAM, and the
+        // conversion between them needs a density basis this model does not
+        // carry yet. Closing F19 with a real volume ratio as its own master
+        // data fact is the path.
+        //
+        // The currency and UoM are bound here as well, and were not before -
+        // the page rendered `2.4003` with nothing saying per what.
+        // ------------------------------------------------------------------
         FieldGroup#PriceDetails: {
             Data: [
                 { Value: price_date, Label: 'Price Date' },
@@ -480,7 +521,9 @@ annotate PricingService.DerivedPrices with @(
                 { Value: contract.contract_name, Label: 'Contract Name' },
                 { Value: formula.formula_name, Label: 'Formula' },
                 { Value: formula_version, Label: 'Formula Version' },
-                { Value: derived_price, Label: 'Derived Price' },
+                { Value: derived_price, Label: 'Basic Fuel Price (per unit)' },
+                { Value: currency_currency_code, Label: 'Currency' },
+                { Value: uom_uom_code, Label: 'Priced Per' },
                 { Value: pricing_engine, Label: 'Pricing Engine' },
                 { Value: valid_from, Label: 'Valid From' },
                 { Value: valid_to, Label: 'Valid To' },
