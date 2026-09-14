@@ -296,6 +296,7 @@ that can execute; a code appearing only in a `.cds` is a declaration.
 | EPD410 | Duplicate ticket number for supplier | **DESIGNED** — the only EPD code with no JS |
 | **EPD411** | **Meter reading versus ticket quantity** | **BUILT, AND IMPLEMENTED TWICE.** A **hard refusal** when `meter_end < meter_start`, and a **`req.warn`** when the metered span disagrees with the printed quantity — a warning by decision A1, because refusing the ticket puts the uplift outside the system. **This entry previously read "DESIGNED — no meter field exists". `meter_start`, `meter_end` and `meter_serial` all exist on `FUEL_TICKETS`** |
 | EPD450 · EPD453 | Number allocation · ticket mass derivation | BUILT |
+| **EPD451** | **Ordered quantity is required** | **BUILT.** Replaces `@mandatory` on the bound actions' `orderedQuantity` and is **wider than it was**: the annotation covered the two bound declarations only, while `createOrderFromFlight` is callable unbound and never carried one. Took an EPD code by the precedent **EPD450** set — order-number allocation is an order-creation concern that extended this prefix rather than invent an `ORD` one. **Refuses ABSENCE, not a value:** `orderedQuantity: 0` passes it and the variance rule refuses it, proved by a plant |
 | EPD461 · EPD462 | FOB reconciliation variance and attribution | BUILT |
 | EPD463 | Delivery validation | BUILT |
 | EPD476–EPD480 | Gauge-uplift derivation, WP-34 | BUILT |
@@ -623,6 +624,24 @@ Full list with evidence in `docs/design/00-DECISIONS.md`. Blocking set:
   failed silently on the ones they do. **Third inert guard this week and the first caught before
   shipping:** the other two were found by TAKING the path, this one by asking what the path would
   produce.
+
+- **WHEN A CLASS OF ARTEFACT IS UNIFORM, THE FIRST INSTANCE THAT DIFFERS IS A
+  MEASUREMENT, AND CREATING ONE DELIBERATELY IS CHEAPER THAN WAITING.** Three times
+  in one week a variable could not be isolated because **nothing in the repository
+  varied it.** `designation_state`: two implementations agreed on all 22 flights
+  because no flight ties at one axis. The raise-order button: term, boundness and
+  draft-enablement were **mutually** perfectly correlated across every annotated
+  action, so three candidate causes predicted one screen. One layer down: every one
+  of the eight action buttons is either **(≤5 parameters, zero `@mandatory`)** or
+  **(13 parameters, ≥1 `@mandatory`)** — both off-diagonal cells empty, so parameter
+  count and the annotation could not be told apart either. **Each time the instinct
+  was to search harder for a natural control, and each time there was none to find.**
+  The move that works is to **BUILD the missing cell**: a zero-parameter action on
+  the non-draft entity, an `@mandatory` removed while the parameter count is held at
+  13. It costs one declaration and it converts an unanswerable question into one
+  screenshot. **The tell that you need one is a sweep that reports a perfect
+  correlation** — a real cause and a coincidence look identical there, and no amount
+  of re-reading separates them.
 
 **THE FLIGHT READER IS ON `PlanningService`.**
 
