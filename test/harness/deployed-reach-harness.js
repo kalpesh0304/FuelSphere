@@ -296,8 +296,11 @@ describe('What a deployed app actually opens', function () {
             'FLIGHT_SCHEDULE is now draft-enabled, so the object page header may render custom '
           + 'actions after all. UI.Identification and #RaiseOrder were kept on that bet. Re-derive '
           + 'which surface the button belongs on rather than assuming this criterion still holds.');
-        out('  UI.Identification and #RaiseOrder kept, and still dead - they cost nothing and');
-        out('  become correct the day the entity is draft-enabled, which this criterion watches for');
+        out('  #RaiseOrder kept and known-dead; the UI.Identification entry was removed.');
+        out('  AND THE SURFACE IS NOT THE VARIABLE: $fiori-preview DRAWS some action');
+        out('  buttons and EXECUTES NONE - importFlightScheduleExcel draws here and does');
+        out('  nothing when pressed. This criterion asserts WHERE the annotation sits,');
+        out('  which is all it can assert. Execution needs a real generated Fiori app.');
     });
 
     // -------------------------------------------------------------- EXIT-5 --

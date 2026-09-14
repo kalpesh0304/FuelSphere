@@ -183,38 +183,26 @@ annotate PlanningService.FlightSchedule with @(
     // right - the plan is what the order answers.
     // ------------------------------------------------------------------
     // ========================================================================
-    // MEASURED, NOT INFERRED: A NON-DRAFT OBJECT PAGE HEADER CARRIES NO
-    // CUSTOM ACTIONS. THIS ENTRY RENDERS NOTHING AND IS KEPT ANYWAY.
+    // NO UI.Identification ENTRY HERE, AND THE REASON IS A MEASUREMENT.
     //
-    // The 2x2 that settled it: Raise Fuel Order (13 parameters, @mandatory
-    // removed) beside a zero-parameter no-op probe, same entity, same facet,
-    // same page. Ajesh saw NEITHER - only Delete. That rules out parameter
-    // count and @mandatory together and leaves the entity: FLIGHT_SCHEDULE is
-    // not draft-enabled, and every other bound Identification action in this
-    // repository (FuelOrders x3, SalesOrders x4) sits on one that is.
+    // One was added and has been removed again. The object page header renders
+    // no custom action on this non-draft entity - proved by annotating a
+    // ZERO-PARAMETER NO-OP PROBE beside Raise Fuel Order and seeing neither.
+    // Re-adding it duplicates a surface that does not draw.
     //
-    // AND IT DISPROVED THE EXPLANATION THAT PRECEDED IT. The previous note
-    // here said a UI.FieldGroup is a Form, a Form with no fields draws
-    // nothing, and UI.Identification was therefore the fix. The Identification
-    // entry did not render either, so that was never the cause - it was a
-    // plausible mechanism fitted to a single observation. Recorded because a
-    // deleted wrong explanation loses the fact that somebody believed it.
+    // AND THE WIDER FINDING MAKES THE SURFACE IRRELEVANT: $fiori-preview DRAWS
+    // some action buttons and EXECUTES NONE. importFlightScheduleExcel is the
+    // one action button that DOES draw on this page, and pressing it does
+    // nothing. So four rounds of moving this annotation between terms measured
+    // which shapes DRAW on a surface where nothing RUNS.
     //
-    // KEPT rather than removed: it costs nothing, it is what both conventions
-    // in this repository use for an object-page action, and it becomes correct
-    // the day this entity is draft-enabled. Ratcheted as known-dead by
-    // `deployed-reach` EXIT-4, which fails if it ever starts mattering.
-    // THE BUTTON A PLANNER PRESSES IS ON UI.LineItem - see below.
+    // The button is annotated ONCE, in UI.LineItem below - Ajesh's own shape,
+    // pick a flight from the list and press. It is NOT known to draw there
+    // either (bound-in-LineItem measured absent). It is kept as the single
+    // annotated surface so the deferred work - a real generated Fiori app
+    // against localhost:4004, where actions DO execute - has one place to
+    // start rather than three. Ratcheted by `deployed-reach` EXIT-4.
     // ========================================================================
-    UI.Identification: [
-        {
-            $Type            : 'UI.DataFieldForAction',
-            Action           : 'PlanningService.createFuelOrder',
-            Label            : 'Raise Fuel Order',
-            ![@UI.Importance]: #High
-        }
-    ],
-
     UI.FieldGroup #RaiseOrder: {
         Data: [
             {
