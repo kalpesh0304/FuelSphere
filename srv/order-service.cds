@@ -56,6 +56,48 @@ service FuelOrderService {
         virtual null as canSubmit           : Boolean @UI.Hidden
     } actions {
         /**
+         * Capture a supplier's fuel ticket against THIS order.
+         *
+         * BOUND, AND ON THE PAGE A CLERK ACTUALLY OPENS. `fuelorders` binds
+         * /odata/v4/orders/ and opens FuelOrders, so this is the projection a
+         * reader of an order is on - the convention in section 13, applied
+         * rather than rediscovered.
+         *
+         * FROM THE ORDER ONLY, AND THAT IS THE DESIGN RATHER THAN A
+         * LIMITATION. A ticket raised from a FLIGHT would have to choose among
+         * the flight's orders, and a to-one over a condition matching many is
+         * D44 exactly - the defect a whole package went into removing. From
+         * the order there is nothing to choose: the station, supplier, flight
+         * and tail all follow from it.
+         *
+         * IT DELEGATES AND WRITES NOTHING. TicketService owns ticket capture;
+         * this sends captureTicketForOrder with the order from the binding
+         * context, so the INSERT happens once, through the service whose
+         * before-CREATE hooks derive the measurement, the mass, the tail and
+         * the internal number.
+         *
+         * NO GATE - A1. Unlike `submit` above, which refuses on a status
+         * guard, and unlike order creation, which refuses on MDM402: the fuel
+         * is in the tanks by the time a ticket exists, and refusing it puts
+         * the uplift outside the system.
+         */
+        action createFuelTicket(
+            ticketNumber       : String(50) @mandatory,
+            quantity           : Decimal(12,2) @mandatory,
+            deliveryTimestamp  : DateTime @mandatory,
+            meterStart         : Decimal(12,2),
+            meterEnd           : Decimal(12,2),
+            densityValue       : Decimal(8,4),
+            densityUom         : String(10),
+            densityTempC       : Decimal(5,2),
+            uomCode            : String(3),
+            densityBasis       : String(10),
+            vehicleId          : String(50),
+            meterSerial        : String(50),
+            supplierTicketRef  : String(50)
+        ) returns FuelTickets;
+
+        /**
          * Submit order to supplier
          * Transitions: Draft → Submitted
          * Triggers supplier dispatch via SAP CPI
