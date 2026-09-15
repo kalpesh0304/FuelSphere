@@ -166,8 +166,6 @@ annotate TicketService.FuelTickets with {
     // delivery_number fields use elsewhere in this codebase.
     internal_number     @title: 'Fuel Ticket ID' @Core.Computed;
 
-    order                @title: 'Fuel Order' @mandatory
-                          @Common.ValueListWithFixedValues: false;
     ticket_number        @title: 'Ticket Number' @mandatory;
     flight_number        @title: 'Flight' @Common.FieldControl: #ReadOnly;
     aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
@@ -193,4 +191,27 @@ annotate TicketService.FuelTickets with {
     match_status          @title: 'Match Status' @Common.FieldControl: #ReadOnly;
     verified_by           @title: 'Verified By' @Common.FieldControl: #ReadOnly;
     verified_at           @title: 'Verified At' @Common.FieldControl: #ReadOnly;
+
+    // THE F4 ITSELF. Mirrors FuelOrders.flight in order-fiori-annotations.cds
+    // exactly: Text + TextArrangement make the field display the order
+    // number instead of the raw GUID once picked; ValueList is what puts
+    // the search-help icon on the field at all - annotating order_ID alone
+    // (as the earlier draft of this file did) gives neither.
+    order @(
+        Common: {
+            Text: order.order_number,
+            TextArrangement: #TextFirst,
+            ValueList: {
+                Label: 'Fuel Order',
+                CollectionPath: 'FuelOrders',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: order_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'order_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'station_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'status' }
+                ]
+            }
+        }
+    );
 };
