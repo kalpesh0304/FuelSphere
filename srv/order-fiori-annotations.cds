@@ -1007,27 +1007,15 @@ annotate FuelOrderService.FuelTickets with @(
                 Target : '@UI.FieldGroup#Verification',
                 Label  : 'Verification'
             },
-            // A ticket's two ends. The delivery is where its mass is
-            // reconciled against the gauge; the order is what it was raised
-            // against - and where its SUPPLIER lives, since FUEL_TICKETS has
-            // none of its own.
+            // The delivery is where the ticket's mass is reconciled against
+            // the gauge. The order and aircraft drill-ins that used to sit
+            // beside this were removed - redundant with the Fuel Order &
+            // Flight facet above, which already shows both.
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'TicketDelivery',
                 Target : 'delivery/@UI.FieldGroup#Reconciliation',
                 Label  : 'Delivery Reconciliation'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'TicketOrder',
-                Target : 'order/@UI.FieldGroup#OrderDetails',
-                Label  : 'Fuel Order'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'TicketTail',
-                Target : 'tail/@UI.FieldGroup#RegistrationKey',
-                Label  : 'Aircraft'
             }
         ],
 
@@ -1691,7 +1679,15 @@ annotate FuelOrderService.FuelTickets with {
                      @Common.FieldControl: #ReadOnly;
     meter_start      @Measures.Unit: uom_code  @title: 'Meter Start';
     meter_end        @Measures.Unit: uom_code  @title: 'Meter End';
-    uom_code         @title: 'Unit of Measure';
+    // F4 - was missing entirely here (present on TicketService's copy of
+    // this same field, not on this one).
+    uom_code         @title: 'Unit of Measure'
+                     @Common.ValueList: {
+                         CollectionPath: 'UnitsOfMeasure',
+                         Parameters: [
+                             { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: uom_code, ValueListProperty: 'uom_code' }
+                         ]
+                     };
 
     density_value    @Measures.Unit: density_uom  @title: 'Density';
     density_uom      @title: 'Density Unit';
@@ -1712,7 +1708,11 @@ annotate FuelOrderService.FuelTickets with {
     order @(
         Common: {
             Label: 'Fuel Order',
-            FieldControl: #ReadOnly
+            FieldControl: #ReadOnly,
+            // Same fix as TicketService's order field: without these two,
+            // the field showed the raw GUID instead of the order number.
+            Text: order.order_number,
+            TextArrangement: #TextOnly
         }
     );
     delivery         @title: 'Delivery';

@@ -192,12 +192,25 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // once order_ID is known.
         // ====================================================================
         const populateTicketFromOrder = async (req) => {
-            if (req.data.order_ID === undefined) return;
-            if (!req.data.order_ID) return;
+            // Same fallback as TicketService's populateFromOrder: resolve
+            // order_ID from this request if it just changed, otherwise from
+            // the stored draft row. For an inline-added ticket order_ID
+            // should already be set by the framework from the parent nav
+            // path, but this stays robust either way.
+            let orderId = req.data.order_ID;
+            if (orderId === undefined) {
+                const id = req.data.ID || _id(req.params);
+                if (!id) return;
+                const stored = await SELECT.one.from(FuelTickets.drafts)
+                    .columns('order_ID')
+                    .where({ ID: id });
+                orderId = stored && stored.order_ID;
+            }
+            if (!orderId) return;
 
             const order = await SELECT.one.from(FuelOrders)
                 .columns('flight_ID', 'uom_code', 'supplier_ID')
-                .where({ ID: req.data.order_ID });
+                .where({ ID: orderId });
             if (!order) return;
 
             if (order.flight_ID) {

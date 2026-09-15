@@ -158,13 +158,28 @@ module.exports = class TicketService extends cds.ApplicationService {
         // by hand after the fact for an unrelated reason.
         // ====================================================================
         const populateFromOrder = async (req) => {
-            if (req.data.order_ID === undefined) return;
-            if (!req.data.order_ID) return; // cleared - leave whatever the user had
+            // Resolve the order this ticket is linked to from THIS request
+            // if it is being set right now; otherwise from whatever the
+            // draft row already has stored. Covers both "order_ID is the
+            // field that just changed" and "some OTHER field changed on a
+            // draft that already has an order" - a value-help selection
+            // that does not land in req.data the way a typed value does
+            // would otherwise silently skip population entirely.
+            let orderId = req.data.order_ID;
+            if (orderId === undefined) {
+                const id = req.data.ID || _id(req.params);
+                if (!id) return;
+                const stored = await SELECT.one.from(FuelTickets.drafts)
+                    .columns('order_ID')
+                    .where({ ID: id });
+                orderId = stored && stored.order_ID;
+            }
+            if (!orderId) return; // cleared, or genuinely no order yet
 
             const { FuelOrders } = this.entities;
             const order = await SELECT.one.from(FuelOrders)
                 .columns('flight_ID', 'uom_code', 'supplier_ID')
-                .where({ ID: req.data.order_ID });
+                .where({ ID: orderId });
             if (!order) return;
 
             if (order.flight_ID) {
