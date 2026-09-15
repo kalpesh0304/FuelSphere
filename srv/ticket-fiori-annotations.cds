@@ -124,27 +124,38 @@ annotate TicketService.FuelTickets with @(
             ]
         },
 
+        // Same field set as FuelOrderService.FuelTickets' #TicketDetails
+        // (order-fiori-annotations.cds) - identical create screen either way.
         FieldGroup #TicketDetails: {
             Data: [
-                { Value: internal_number },
                 { Value: ticket_number },
-                { Value: delivery_timestamp },
+                { Value: internal_number },
                 { Value: quantity },
                 { Value: uom_code },
+                { Value: delivery_timestamp },
                 { Value: supplier_ticket_ref },
-                { Value: ticket_source }
+                { Value: ticket_source },
+                { Value: ticket_capture_source, ![@UI.Importance]: #Medium },
+                { Value: status },
+                { Value: match_status }
             ]
         },
 
+        // Same field set as FuelOrderService.FuelTickets' #Measurement.
         FieldGroup #Measurement: {
             Data: [
                 { Value: meter_start },
                 { Value: meter_end },
                 { Value: quantity_metered },
+                { Value: quantity_flag },
                 { Value: density_value },
                 { Value: density_uom },
+                { Value: density_basis },
                 { Value: density_temp_c },
-                { Value: quantity_kg }
+                { Value: quantity_kg },
+                { Value: batch_coa_ref },
+                { Value: vehicle_id },
+                { Value: meter_serial }
             ]
         },
 
@@ -166,11 +177,13 @@ annotate TicketService.FuelTickets with {
     // delivery_number fields use elsewhere in this codebase.
     internal_number     @title: 'Fuel Ticket ID' @Core.Computed;
 
+    // Same titles/units as FuelOrderService.FuelTickets (order-fiori-
+    // annotations.cds) throughout this block - identical field-for-field.
     ticket_number        @title: 'Ticket Number' @mandatory;
     flight_number        @title: 'Flight' @Common.FieldControl: #ReadOnly;
     aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
-    quantity             @title: 'Quantity' @mandatory;
-    uom_code             @title: 'UoM'
+    quantity             @title: 'Claimed Quantity' @mandatory @Measures.Unit: uom_code;
+    uom_code             @title: 'Unit of Measure'
                           @Common.ValueList: {
                               CollectionPath: 'UnitsOfMeasure',
                               Parameters: [
@@ -178,15 +191,21 @@ annotate TicketService.FuelTickets with {
                               ]
                           };
     delivery_timestamp   @title: 'Delivery Time' @mandatory;
-    meter_start          @title: 'Meter Start';
-    meter_end            @title: 'Meter End';
-    quantity_metered     @title: 'Metered Quantity' @Common.FieldControl: #ReadOnly;
-    quantity_kg          @title: 'Mass (kg)' @Common.FieldControl: #ReadOnly;
-    density_value        @title: 'Density';
-    density_uom          @title: 'Density UoM';
-    density_temp_c       @title: 'Density Temp (°C)';
+    meter_start          @title: 'Meter Start' @Measures.Unit: uom_code;
+    meter_end            @title: 'Meter End' @Measures.Unit: uom_code;
+    quantity_metered     @title: 'Metered Quantity' @Measures.Unit: uom_code @Common.FieldControl: #ReadOnly;
+    quantity_flag        @title: 'Quantity Basis';
+    quantity_kg          @title: 'Uplift by Meter (kg)' @Common.FieldControl: #ReadOnly;
+    density_value        @title: 'Density' @Measures.Unit: density_uom;
+    density_uom          @title: 'Density Unit';
+    density_basis        @title: 'Density Basis';
+    density_temp_c       @title: 'Density Temperature (°C)';
+    batch_coa_ref         @title: 'Batch Certificate';
+    vehicle_id             @title: 'Vehicle';
+    meter_serial           @title: 'Meter Serial';
     supplier_ticket_ref  @title: 'Supplier Reference';
-    ticket_source         @title: 'Ticket Source';
+    ticket_source          @title: 'Ticket Source';
+    ticket_capture_source  @title: 'Capture Source';
     status                @title: 'Status' @Common.FieldControl: #ReadOnly;
     match_status          @title: 'Match Status' @Common.FieldControl: #ReadOnly;
     verified_by           @title: 'Verified By' @Common.FieldControl: #ReadOnly;

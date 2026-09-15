@@ -962,7 +962,24 @@ annotate FuelOrderService.FuelTickets with @(
             match_status
         ],
 
+        // Matches TicketService.FuelTickets' create screen, which has this
+        // same compact status strip already.
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#TicketStatus', Label: 'Status' }
+        ],
+
         Facets: [
+            // FIRST, matching TicketService.FuelTickets' create screen
+            // exactly (ticket-fiori-annotations.cds): order/flight/aircraft
+            // together, ahead of the ticket's own details. Here the order is
+            // already known (composition child of the order being edited),
+            // so all three render read-only rather than as an F4 pick.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'OrderFlight',
+                Target : '@UI.FieldGroup#OrderFlight',
+                Label  : 'Fuel Order & Flight'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#TicketDetails',
@@ -1002,13 +1019,24 @@ annotate FuelOrderService.FuelTickets with @(
             }
         ],
 
+        // Order, flight and aircraft together - all three read-only here,
+        // auto-populated the moment order_ID is known (populateTicketFromOrder
+        // in order-service.js), which for a ticket added inline is immediately,
+        // from the parent nav path.
+        FieldGroup#OrderFlight: {
+            Label: 'Fuel Order & Flight',
+            Data: [
+                { Value: order_ID },
+                { Value: flight_number,  ![@UI.Importance]: #High },
+                { Value: aircraft_reg,   ![@UI.Importance]: #Medium }
+            ]
+        },
+
         FieldGroup#TicketDetails: {
             Label: 'Ticket Details',
             Data: [
                 { Value: ticket_number, Label: 'Ticket Number' },
                 { Value: internal_number, Label: 'Internal Number' },
-                { Value: aircraft_reg, Label: 'Aircraft Registration' },
-                { Value: flight_number, Label: 'Flight Number' },
                 { Value: quantity, Label: 'Claimed Quantity' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_timestamp, Label: 'Delivery Time' },
@@ -1053,6 +1081,13 @@ annotate FuelOrderService.FuelTickets with @(
             Data: [
                 { Value: verified_by, Label: 'Verified By' },
                 { Value: verified_at, Label: 'Verified At' }
+            ]
+        },
+
+        FieldGroup#TicketStatus: {
+            Data: [
+                { Value: status },
+                { Value: match_status }
             ]
         }
     }
@@ -1170,9 +1205,19 @@ annotate FuelOrderService.FuelTickets with {
                             { LocalProperty: ID,           SemanticObjectProperty: 'ID' },
                             { LocalProperty: flight_number, SemanticObjectProperty: 'flight_number' }
                         ];
-    internal_number     @title: 'Internal Number' @Common.FieldControl: #ReadOnly;
-    aircraft_reg        @title: 'Aircraft Reg';
-    flight_number       @title: 'Flight';
+    internal_number     @title: 'Fuel Ticket ID' @Common.FieldControl: #ReadOnly;
+    // Read-only here: the order is already known (this ticket is being
+    // added inline to it), unlike TicketService's standalone create screen
+    // where order is the first, explicit F4 pick. Same three fields, same
+    // auto-population hook - just no picker needed on this side.
+    //
+    // order_ID itself is NOT annotated here - the compiler does not see it
+    // as an element at this point in the file ("has no element order_ID";
+    // CDS synthesizes the FK later than this block is resolved). Label and
+    // FieldControl are set on the "order" association instead, further down
+    // this file, and CDS propagates both onto order_ID from there.
+    aircraft_reg        @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
+    flight_number       @title: 'Flight' @Common.FieldControl: #ReadOnly;
     quantity            @title: 'Quantity (kg)' @mandatory;
     uom_code            @title: 'UoM';
     delivery_timestamp  @title: 'Delivery Time' @mandatory;
@@ -1649,7 +1694,10 @@ annotate FuelOrderService.FuelTickets with {
     ticket_source    @title: 'Ticket Source';
     match_status     @title: 'Match Status' @Common.FieldControl: #ReadOnly;
 
-    order            @title: 'Fuel Order';
+    // Read-only here: the order is already known (this ticket belongs to
+    // it already, by composition), unlike TicketService's standalone
+    // create screen where order is the first, explicit F4 pick.
+    order            @title: 'Fuel Order' @Common.FieldControl: #ReadOnly;
     delivery         @title: 'Delivery';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
