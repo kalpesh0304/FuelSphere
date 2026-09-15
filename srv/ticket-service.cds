@@ -20,21 +20,23 @@ service TicketService {
      * FuelTickets - Standalone Fuel Ticket Entity
      * Draft-enabled for independent ticket management
      *
-     * order is mandatory here, scoped to this service's presentation layer
-     * only - a ticket cannot be created through this app without first
-     * selecting the Fuel Order it belongs to. Flight-related fields then
-     * auto-populate from that order (order-service.js-equivalent hooks in
-     * ticket-service.js), and internal_number is generated from the
-     * resolved flight, not the station.
+     * order is NOT mandatory here - matches db/schema.cds decision A1: fuel
+     * is routinely delivered with no order in the system at all, and this
+     * app accepts that ticket same as any other capture path does. A ticket
+     * captured through this app can instead reference a Flight directly, or
+     * neither, or both - nothing here or in ticket-service.js gates on it.
      *
-     * db/schema.cds's order association stays optional - other capture
-     * paths (captureTicketForOrder already requires an orderId parameter of
-     * its own; unattached-ticket capture elsewhere) are unaffected.
+     * Picking an order auto-fills the flight fields from it (populateFromOrder
+     * in ticket-service.js). Picking a flight directly (no order) auto-fills
+     * aircraft_reg from it instead (populateFromFlight). internal_number is
+     * generated from whichever flight is resolved either way, falling back
+     * to station numbering where only an order is available, and left unset
+     * where neither is.
      */
     @odata.draft.enabled
     entity FuelTickets as projection on db.FUEL_TICKETS {
         *,
-        order    : redirected to FuelOrders @mandatory,
+        order    : redirected to FuelOrders,
         delivery : redirected to FuelDeliveries,
         virtual null as statusCriticality : Integer
     } actions {
@@ -76,6 +78,11 @@ service TicketService {
         *,
         order : redirected to FuelOrders
     };
+
+    // Value-help target for flight_number's F4 - the alternative to picking
+    // an order.
+    @readonly
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE;
 
     @readonly
     entity Airports as projection on db.MASTER_AIRPORTS;

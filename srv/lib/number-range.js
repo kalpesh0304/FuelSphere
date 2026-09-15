@@ -30,6 +30,15 @@
  *
  *   Ticket    FT-{flight}-{YYYYMMDD}-{NNNN}
  *   Delivery  EPD-{flight}-{YYYYMMDD}-{NNNN}
+ *
+ * Tail-keyed variant, for standalone deliveries with no order selected.
+ * FUEL_DELIVERIES.order is optional by design (decision B2 - a delivery
+ * hangs off the aircraft, not a single order), so unlike tickets there is no
+ * station fallback available: FUEL_DELIVERIES carries no station field at
+ * all. aircraft_reg is @mandatory on the entity, so it is the one dimension
+ * guaranteed present when there is no order to resolve a flight from:
+ *
+ *   Delivery  EPD-{tail}-{YYYYMMDD}-{NNNN}
  */
 
 const cds = require('@sap/cds');
@@ -144,6 +153,9 @@ const allocateTicketNumber   = (stationCode, date) => allocate(PREFIX.TICKET, st
 const allocateTicketNumberByFlight   = (flightNumber, date) => allocate(PREFIX.TICKET, flightNumber, date, 'Flight');
 const allocateDeliveryNumberByFlight = (flightNumber, date) => allocate(PREFIX.DELIVERY, flightNumber, date, 'Flight');
 
+// Tail-keyed fallback for a standalone delivery with no order selected.
+const allocateDeliveryNumberByTail = (tailReg, date) => allocate(PREFIX.DELIVERY, tailReg, date, 'Aircraft');
+
 /**
  * Convert an allocation failure into a request error.
  * Returns true when the error was handled, so the caller can stop.
@@ -166,5 +178,6 @@ module.exports = {
     allocateTicketNumber,
     allocateTicketNumberByFlight,
     allocateDeliveryNumberByFlight,
+    allocateDeliveryNumberByTail,
     reportAllocationError
 };

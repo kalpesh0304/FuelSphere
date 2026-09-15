@@ -13,6 +13,8 @@ const XLSX = require('xlsx');
 const {
     allocateOrderNumber,
     allocateDeliveryNumber,
+    allocateDeliveryNumberByFlight,
+    allocateDeliveryNumberByTail,
     allocateTicketNumber,
     allocateTicketNumberByFlight,
     reportAllocationError
@@ -165,6 +167,78 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // entity. Root and child behave differently; check which one you have.
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
+
+        // ====================================================================
+        // FUEL DELIVERIES — embedded, added inline while editing a Fuel
+        // Order's own draft. order_ID arrives already set, same mechanism
+        // documented on populateTicketFromOrder below: the framework sets it
+        // from the /FuelOrders(id)/deliveries nav-property path before any
+        // before-handler runs.
+        //
+        // Registered BEFORE resolveDeliveryTail: an aircraft_reg that this
+        // hook writes from the order's flight must have its tail_registration
+        // resolved in the same request, and resolveDeliveryTail only acts
+        // when req.data.aircraft_reg is already present in THIS request.
+        // ====================================================================
+        const populateDeliveryFromOrder = async (req) => {
+            let orderId = req.data.order_ID;
+            if (orderId === undefined) {
+                const id = req.data.ID || _id(req.params);
+                if (!id) return;
+                const stored = await SELECT.one.from(FuelDeliveries.drafts)
+                    .columns('order_ID')
+                    .where({ ID: id });
+                orderId = stored && stored.order_ID;
+            }
+            if (!orderId) return;
+
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('flight_ID', 'uom_code')
+                .where({ ID: orderId });
+            if (!order) return;
+
+            if (order.flight_ID) {
+                const flight = await SELECT.one.from(FlightSchedule)
+                    .columns('aircraft_reg')
+                    .where({ ID: order.flight_ID });
+                if (flight && req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
+            }
+            if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'],
+            [FuelDeliveries, FuelDeliveries.drafts], populateDeliveryFromOrder);
+
+        // Flight-based delivery_number, generated once when the row is first
+        // added. Falls back to tail-based numbering where the order carries
+        // no flight (D46) - FUEL_DELIVERIES has no station field to fall
+        // back to the way tickets do, but aircraft_reg is @mandatory, so it
+        // is the one dimension guaranteed present.
+        this.before('CREATE', [FuelDeliveries, FuelDeliveries.drafts], async (req) => {
+            if (req.data.delivery_number) return;
+            if (!req.data.order_ID) return; // no parent context - nothing to number from
+
+            let flightNumber = null;
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('flight_ID')
+                .where({ ID: req.data.order_ID });
+            if (order && order.flight_ID) {
+                const flight = await SELECT.one.from(FlightSchedule)
+                    .columns('flight_number')
+                    .where({ ID: order.flight_ID });
+                flightNumber = flight && flight.flight_number;
+            }
+
+            try {
+                if (flightNumber) {
+                    req.data.delivery_number = await allocateDeliveryNumberByFlight(flightNumber, req.data.delivery_date);
+                } else if (req.data.aircraft_reg) {
+                    req.data.delivery_number = await allocateDeliveryNumberByTail(req.data.aircraft_reg, req.data.delivery_date);
+                }
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
+            }
+        });
 
         // WP-07B. Never blockable — the fuel is on the aircraft. Reads its own
         // row, so the draft path is registered too.

@@ -1306,7 +1306,11 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         // then no parameter could permit one.
         tail                : Association to AIRCRAFT_REGISTRATIONS;
         sales_order         : Association to FUEL_SALES_ORDERS;  // Link to supplier's sales order
-        delivery_number     : String(25) @mandatory;    // EPD-{STATION}-{YYYYMMDD}-{SEQ}
+        // Widened from 25: the flight-keyed and tail-keyed formats (WP-?,
+        // fuelDeliveries standalone app) substitute a flight number or a
+        // 10-char aircraft_reg for the 3-char station, and EPD-{10 chars}-
+        // {YYYYMMDD}-{SEQ} is 28 characters at the worst case.
+        delivery_number     : String(30) @mandatory;    // EPD-{STATION|FLIGHT|TAIL}-{YYYYMMDD}-{SEQ}
 
         // Delivery Details
         delivery_date       : Date @mandatory;          // Actual delivery date
@@ -1500,7 +1504,10 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         delivery            : Association to FUEL_DELIVERIES;  // Optional link to specific delivery
 
         ticket_number       : String(50) @mandatory;    // Physical ticket number from supplier
-        internal_number     : String(25);               // FT-{STATION}-{YYYYMMDD}-{SEQ}
+        // Widened from 25: the flight-keyed format (fuelTickets standalone
+        // app) substitutes a flight number for the 3-char station, and
+        // FT-{10 chars}-{YYYYMMDD}-{SEQ} is 27 characters at the worst case.
+        internal_number     : String(30);               // FT-{STATION|FLIGHT}-{YYYYMMDD}-{SEQ}
 
         // Flight Reference
         aircraft_reg        : String(10);               // Aircraft registration

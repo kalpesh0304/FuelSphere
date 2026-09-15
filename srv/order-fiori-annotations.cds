@@ -631,6 +631,18 @@ annotate FuelOrderService.FuelOrders @(
 // FUEL DELIVERIES - Line Item in Order Detail and standalone List
 // ============================================================================
 
+// order_ID is fixed here by the nav-property path the moment a delivery is
+// added inline (same mechanism documented on FuelTickets' equivalent below) -
+// never chosen by the user in this context. flight_number and aircraft_reg
+// still need the UI told to re-fetch them once populateDeliveryFromOrder
+// (order-service.js) writes them into the draft on the row's first CREATE.
+annotate FuelOrderService.FuelDeliveries with @(
+    Common.SideEffects #OrderPicked: {
+        SourceProperties : [order_ID],
+        TargetProperties : [flight_number, aircraft_reg, uom_code]
+    }
+);
+
 annotate FuelOrderService.FuelDeliveries with @(
     UI: {
         HeaderInfo: {
@@ -696,6 +708,12 @@ annotate FuelOrderService.FuelDeliveries with @(
         Facets: [
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'AircraftOrder',
+                Target : '@UI.FieldGroup#AircraftOrder',
+                Label  : 'Aircraft & Fuel Order'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#DeliveryDetails',
                 Label  : 'Delivery Details'
             },
@@ -729,31 +747,44 @@ annotate FuelOrderService.FuelDeliveries with @(
                 Target : '@UI.FieldGroup#Reconciliation',
                 Label  : 'FOB Reconciliation'
             },
-            // The order this delivery was made against. The navigation worked
-            // and had no section. `tail` is NOT here - FuelOrderService has
-            // no annotation block for AircraftRegistrations, so that facet
-            // would render empty.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'DeliveryOrder',
-                Target : 'order/@UI.FieldGroup#OrderDetails',
-                Label  : 'Fuel Order'
-            },
+            // Full aircraft-register drill-down (type, record status,
+            // operator) - genuinely more than the aircraft_reg string shown
+            // in #AircraftOrder above, so this stays even though the
+            // redundant DeliveryOrder facet (order/@UI.FieldGroup#OrderDetails)
+            // it used to sit beside did not.
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'DeliveryTail',
                 Target : 'tail/@UI.FieldGroup#RegistrationKey',
-                Label  : 'Aircraft'
+                Label  : 'Aircraft Register'
             }
         ],
 
+        // THE AIRCRAFT, PICKED FIRST — decision B2: a delivery hangs off the
+        // aircraft, not a single order (one refuelling event can have two
+        // suppliers, one delivery). order_ID is fixed by the nav-property
+        // path here and reads as read-only because of it; aircraft_reg and
+        // flight_number auto-populate the moment order_ID lands (same
+        // populateDeliveryFromOrder hook as the standalone app), and stay
+        // editable so a tail correction is still possible.
+        FieldGroup#AircraftOrder: {
+            Data: [
+                { Value: aircraft_reg,  ![@UI.Importance]: #High },
+                { Value: order_ID },
+                { Value: flight_number, ![@UI.Importance]: #Medium }
+            ]
+        },
+
+        // Same field set as DeliveryService.FuelDeliveries' #DeliveryDetails
+        // (delivery-fiori-annotations.cds) - identical create screen either
+        // way. aircraft_reg/flight_number live in #AircraftOrder above now,
+        // not duplicated here.
         FieldGroup#DeliveryDetails: {
             Label: 'Delivery Details',
             Data: [
                 { Value: delivery_number, Label: 'Delivery Number' },
                 { Value: delivery_date, Label: 'Delivery Date' },
                 { Value: delivery_time, Label: 'Delivery Time' },
-                { Value: aircraft_reg, Label: 'Aircraft Registration' },
                 { Value: delivered_quantity, Label: 'Delivered Quantity' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_method, Label: 'Delivery Method' },
@@ -861,8 +892,17 @@ annotate FuelOrderService.FuelDeliveries with {
     refuel_end_utc               @title: 'Refuel End (UTC)';
     refuel_complete              @title: 'Refuel Complete';
     ID                  @UI.Hidden;
-    delivery_number     @title: 'Delivery Number' @Common.FieldControl: #ReadOnly;
-    flight_number       @title: 'Flight';
+    delivery_number     @title: 'Delivery Number' @Core.Computed;
+    flight_number       @title: 'Flight' @Common.FieldControl: #ReadOnly;
+    aircraft_reg        @title: 'Aircraft Registration' @mandatory
+                         @Common.ValueList: {
+                             Label: 'Aircraft Registration',
+                             CollectionPath: 'AircraftRegistrations',
+                             Parameters: [
+                                 { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: aircraft_reg, ValueListProperty: 'registration' },
+                                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_type_code' }
+                             ]
+                         };
     delivery_date       @title: 'Delivery Date' @mandatory;
     delivery_time       @title: 'Delivery Time' @mandatory;
     delivered_quantity  @title: 'Delivered Qty (kg)' @mandatory;
@@ -893,6 +933,25 @@ annotate FuelOrderService.FuelDeliveries with {
     variance_percentage @title: 'Variance (%)' @Common.FieldControl: #ReadOnly;
     variance_flag       @title: 'Variance Flag' @Common.FieldControl: #ReadOnly;
     variance_reason     @title: 'Variance Reason' @UI.MultiLineText;
+
+    // NOT marked FieldControl:ReadOnly or Core.Computed, despite being fixed
+    // by the nav-property path and never user-edited here. EMPIRICALLY:
+    // either annotation makes CAP's generic handler strip order_ID from a
+    // deep-insert via .../FuelOrders(id)/deliveries entirely - the framework
+    // needs to write this association from the nav context on create, and a
+    // "read-only" marking blocks that write same as a real one, leaving
+    // order_ID null and the create's read-back returning 204 with an empty
+    // body (which the Fiori Elements frontend then renders as "Invalid
+    // resource path"). No ValueList/F4 is offered on this field in this
+    // service, so there is no UI affordance to edit it even though it is not
+    // formally locked.
+    order @(
+        Common: {
+            Label: 'Fuel Order',
+            Text: order.order_number,
+            TextArrangement: #TextOnly
+        }
+    );
 };
 
 // ============================================================================
@@ -1705,12 +1764,23 @@ annotate FuelOrderService.FuelTickets with {
     // Read-only here: the order is already known (this ticket belongs to
     // it already, by composition), unlike TicketService's standalone
     // create screen where order is the first, explicit F4 pick.
+    // NOT FieldControl:ReadOnly, despite being fixed by the nav-property
+    // path and never user-edited here. EMPIRICALLY: that annotation (and
+    // Core.Computed, tried and rejected too) makes CAP's generic handler
+    // strip order_ID from a deep-insert via .../FuelOrders(id)/tickets
+    // entirely - the framework writes this association from the nav
+    // context on create, and a "read-only" marking blocks that write same
+    // as a real one, leaving order_ID null and the create's read-back
+    // returning 204 with an empty body. The frontend then has nothing to
+    // navigate to and renders "Invalid resource path ...tickets($uid=...)" -
+    // this was the actual cause of that error, not the creationMode
+    // setting fixed earlier (that fix stays; it was necessary but not
+    // sufficient). No ValueList/F4 is offered on this field in this
+    // service, so there is no UI affordance to edit it even though it is
+    // not formally locked.
     order @(
         Common: {
             Label: 'Fuel Order',
-            FieldControl: #ReadOnly,
-            // Same fix as TicketService's order field: without these two,
-            // the field showed the raw GUID instead of the order number.
             Text: order.order_number,
             TextArrangement: #TextOnly
         }
@@ -1723,7 +1793,8 @@ annotate FuelOrderService.FuelTickets with {
 };
 
 annotate FuelOrderService.FuelDeliveries with {
-    aircraft_reg        @title: 'Aircraft Registration';
+    // aircraft_reg's title/mandatory/ValueList now live on the earlier
+    // annotate block above, alongside the rest of the AircraftOrder facet.
     delivered_quantity  @Measures.Unit: uom_code;
     uom_code            @title: 'Unit of Measure';
     delivery_method     @title: 'Delivery Method';

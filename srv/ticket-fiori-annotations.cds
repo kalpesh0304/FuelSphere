@@ -2,11 +2,12 @@
  * FuelSphere - Ticket Service Fiori Annotations
  *
  * UI for the standalone Fuel Ticket create/edit app (TicketService,
- * /odata/v4/tickets). A ticket here always belongs to a Fuel Order -
- * order is @mandatory in ticket-service.cds - and picking one auto-fills
- * the flight fields via the before-PATCH hook in ticket-service.js.
- * internal_number is generated the same way, on Create; it is never
- * user-entered.
+ * /odata/v4/tickets). Neither a Fuel Order nor a Flight is required - decision
+ * A1, an order-less ticket is legitimate - but picking either is offered.
+ * Picking an order auto-fills the flight fields from it; picking a flight
+ * directly auto-fills aircraft_reg instead (both via before-PATCH hooks in
+ * ticket-service.js). internal_number is generated from whichever flight is
+ * resolved either way, on Create; it is never user-entered.
  */
 
 using TicketService from './ticket-service';
@@ -46,6 +47,29 @@ annotate TicketService.FuelOrders with {
 };
 
 // ============================================================================
+// FlightSchedule - value-help target for flight_number, the alternative to
+// picking an order.
+// ============================================================================
+annotate TicketService.FlightSchedule with @(
+    UI.LineItem: [
+        { Value: flight_number,       Label: 'Flight' },
+        { Value: flight_date,         Label: 'Date' },
+        { Value: origin_airport,      Label: 'From' },
+        { Value: destination_airport, Label: 'To' },
+        { Value: aircraft_reg,        Label: 'Aircraft Reg' }
+    ]
+);
+
+annotate TicketService.FlightSchedule with {
+    ID                  @UI.Hidden;
+    flight_number       @title: 'Flight';
+    flight_date         @title: 'Date';
+    origin_airport       @title: 'From';
+    destination_airport  @title: 'To';
+    aircraft_reg         @title: 'Aircraft Reg';
+};
+
+// ============================================================================
 // UnitsOfMeasure - value-help target for uom_code.
 // ============================================================================
 annotate TicketService.UnitsOfMeasure with @(
@@ -76,6 +100,12 @@ annotate TicketService.FuelTickets with @(
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
         TargetProperties : [flight_number, aircraft_reg, uom_code, supplier_ticket_ref]
+    },
+    // The alternative path: picking a flight directly, with no order,
+    // auto-fills aircraft_reg (populateFromFlight in ticket-service.js).
+    Common.SideEffects #FlightPicked: {
+        SourceProperties : [flight_number],
+        TargetProperties : [aircraft_reg]
     }
 );
 
@@ -133,9 +163,12 @@ annotate TicketService.FuelTickets with @(
             ]
         },
 
-        // THE ORDER, PICKED FIRST — everything else in this group is
-        // auto-populated the moment it's selected (ticket-service.js's
-        // populateFromOrder), and reads as read-only because of it.
+        // THE ORDER OR THE FLIGHT, PICKED FIRST — neither is required
+        // (decision A1), but picking either is offered. Picking an order
+        // auto-fills flight_number/aircraft_reg from it (populateFromOrder);
+        // picking a flight directly auto-fills aircraft_reg instead
+        // (populateFromFlight). aircraft_reg reads read-only because of it
+        // either way.
         FieldGroup #OrderFlight: {
             Data: [
                 { Value: order_ID },
@@ -200,7 +233,21 @@ annotate TicketService.FuelTickets with {
     // Same titles/units as FuelOrderService.FuelTickets (order-fiori-
     // annotations.cds) throughout this block - identical field-for-field.
     ticket_number        @title: 'Ticket Number' @mandatory;
-    flight_number        @title: 'Flight' @Common.FieldControl: #ReadOnly;
+    // Editable, not FieldControl:ReadOnly - the alternative to picking an
+    // order (populateFromFlight in ticket-service.js). Still auto-fills
+    // aircraft_reg once picked, same as an order pick does.
+    flight_number         @title: 'Flight'
+                          @Common.ValueList: {
+                              Label: 'Flight',
+                              CollectionPath: 'FlightSchedule',
+                              Parameters: [
+                                  { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_number, ValueListProperty: 'flight_number' },
+                                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_date' },
+                                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' },
+                                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' }
+                              ]
+                          };
     aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
     quantity             @title: 'Claimed Quantity' @mandatory @Measures.Unit: uom_code;
     uom_code             @title: 'Unit of Measure'

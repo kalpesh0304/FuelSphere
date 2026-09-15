@@ -448,6 +448,58 @@ annotate TicketService.getTicketsByOrder with @(requires: ['ePODCapture', 'ePODA
 annotate TicketService.getUnattachedTickets with @(requires: ['ePODCapture', 'ePODApprove', 'AdminAccess']);
 
 // ============================================================================
+// DELIVERY SERVICE - Authorization (Standalone Delivery Management)
+// ============================================================================
+
+using DeliveryService from './delivery-service';
+
+// Service-level: Require authenticated user
+annotate DeliveryService with @(requires: 'authenticated-user');
+
+// FuelDeliveries - Full CRUD for development
+annotate DeliveryService.FuelDeliveries with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: 'CREATE', to: ['ePODCapture', 'AdminAccess'] },
+    { grant: 'UPDATE', to: ['ePODCapture', 'ePODApprove', 'AdminAccess'] },
+    { grant: 'DELETE', to: ['AdminAccess'] },
+
+    // Mirrors FuelOrderService.FuelDeliveries' grants for the same two
+    // actions (D22).
+    { grant: 'verifyQuantity', to: ['ePODCapture', 'ePODApprove'] },
+    { grant: 'dispute',        to: ['ePODApprove'] }
+]);
+
+// Delivery actions
+annotate DeliveryService.FuelDeliveries actions {
+    @(requires: ['ePODCapture', 'ePODApprove'])
+    verifyQuantity;
+
+    @(requires: ['ePODApprove'])
+    dispute;
+};
+
+// Reference data - Read-only
+annotate DeliveryService.FuelOrders with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }
+]);
+
+annotate DeliveryService.AircraftRegistrations with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess'] }
+]);
+
+annotate DeliveryService.Airports with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess'] }
+]);
+
+annotate DeliveryService.Suppliers with @(restrict: [
+    { grant: 'READ', to: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess'] }
+]);
+
+// Service-level functions
+annotate DeliveryService.generateDeliveryNumber with @(requires: ['ePODCapture']);
+annotate DeliveryService.getDeliveriesByOrder with @(requires: ['ePODCapture', 'ePODApprove', 'ReportView', 'AdminAccess']);
+
+// ============================================================================
 // BURN SERVICE - Authorization (Fuel Burn & ROB Tracking)
 // ============================================================================
 
