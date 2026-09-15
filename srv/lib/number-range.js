@@ -20,6 +20,16 @@
  *   Order     FO-{station}-{YYYYMMDD}-{NNNN}
  *   Delivery  EPD-{station}-{YYYYMMDD}-{NNNN}
  *   Ticket    FT-{station}-{YYYYMMDD}-{NNNN}
+ *
+ * Flight-keyed variants, for the standalone Ticket/Delivery create apps
+ * (fuelTickets, fuelDeliveries), which number by the flight they capture
+ * fuel for rather than the station - a different traceability question, not
+ * a replacement. Order numbering is untouched; it stays station-keyed.
+ * Same allocator, same NUMBER_RANGES table, only the range_key dimension
+ * differs:
+ *
+ *   Ticket    FT-{flight}-{YYYYMMDD}-{NNNN}
+ *   Delivery  EPD-{flight}-{YYYYMMDD}-{NNNN}
  */
 
 const cds = require('@sap/cds');
@@ -50,9 +60,13 @@ const PREFIX = {
  */
 const MISSING_STATION_CODE = 'EPD450';
 
-function missingStationMessage(prefix) {
-    return `EPD450: Station code is required to generate a ${prefix} number. ` +
-           `The record cannot be numbered without a traceable station.`;
+// Same failure class regardless of which dimension is missing - a numbering
+// key the allocator cannot substitute for. One code, message text picks the
+// dimension name, rather than minting a second EPD4xx code for what is the
+// same situation one axis over.
+function missingDimensionMessage(prefix, dimensionLabel) {
+    return `EPD450: ${dimensionLabel} is required to generate a ${prefix} number. ` +
+           `The record cannot be numbered without a traceable ${dimensionLabel.toLowerCase()}.`;
 }
 
 /** YYYYMMDD for a Date, an ISO date string, or today when omitted. */
@@ -95,32 +109,40 @@ async function nextSequence(rangeKey) {
 }
 
 /**
- * Allocate the next number for a prefix, station and date.
+ * Allocate the next number for a prefix, a dimension value (station or
+ * flight number) and a date.
  *
- * Throws when the station code is missing. Callers inside a handler should
- * catch and convert to req.error, so the caller sees EPD450 rather than a
- * generic failure.
+ * Throws when the dimension value is missing. Callers inside a handler
+ * should catch and convert to req.error, so the caller sees EPD450 rather
+ * than a generic failure.
  *
+ * @param {string} dimensionLabel  Only affects the error message - defaults
+ *        to 'Station' so every existing station-keyed call site is
+ *        unchanged. Pass 'Flight' for the flight-keyed variants below.
  * @returns {Promise<string>} e.g. 'FO-MNL-20260316-0001'
  */
-async function allocate(prefix, stationCode, date) {
-    const stn = typeof stationCode === 'string' ? stationCode.trim().toUpperCase() : '';
-    if (!stn) {
-        const err = new Error(missingStationMessage(prefix));
+async function allocate(prefix, dimensionValue, date, dimensionLabel = 'Station') {
+    const val = typeof dimensionValue === 'string' ? dimensionValue.trim().toUpperCase() : '';
+    if (!val) {
+        const err = new Error(missingDimensionMessage(prefix, dimensionLabel));
         err.code = MISSING_STATION_CODE;
         throw err;
     }
 
     const dateStr = dateKey(date);
-    const rangeKey = `${prefix}-${stn}-${dateStr}`;
+    const rangeKey = `${prefix}-${val}-${dateStr}`;
     const seq = await nextSequence(rangeKey);
 
-    return `${prefix}-${stn}-${dateStr}-${String(seq).padStart(SEQUENCE_WIDTH, '0')}`;
+    return `${prefix}-${val}-${dateStr}-${String(seq).padStart(SEQUENCE_WIDTH, '0')}`;
 }
 
 const allocateOrderNumber    = (stationCode, date) => allocate(PREFIX.ORDER, stationCode, date);
 const allocateDeliveryNumber = (stationCode, date) => allocate(PREFIX.DELIVERY, stationCode, date);
 const allocateTicketNumber   = (stationCode, date) => allocate(PREFIX.TICKET, stationCode, date);
+
+// Flight-keyed variants for the standalone Ticket/Delivery create apps.
+const allocateTicketNumberByFlight   = (flightNumber, date) => allocate(PREFIX.TICKET, flightNumber, date, 'Flight');
+const allocateDeliveryNumberByFlight = (flightNumber, date) => allocate(PREFIX.DELIVERY, flightNumber, date, 'Flight');
 
 /**
  * Convert an allocation failure into a request error.
@@ -142,5 +164,7 @@ module.exports = {
     allocateOrderNumber,
     allocateDeliveryNumber,
     allocateTicketNumber,
+    allocateTicketNumberByFlight,
+    allocateDeliveryNumberByFlight,
     reportAllocationError
 };

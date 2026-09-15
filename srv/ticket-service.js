@@ -6,7 +6,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
-const { allocateTicketNumber, reportAllocationError } = require('./lib/number-range');
+const { allocateTicketNumber, allocateTicketNumberByFlight, reportAllocationError } = require('./lib/number-range');
 const { deriveTicketMassKg } = require('./lib/fuel-uom');
 const { reconcileDelivery } = require('./lib/fob-reconciliation');
 const { resolveTail } = require('./lib/tail-resolver');
@@ -144,44 +144,97 @@ module.exports = class TicketService extends cds.ApplicationService {
             for (const id of ids) await reconcileDelivery(id);
         });
 
-        this.before('CREATE', FuelTickets, async (req) => {
-            // WP-10 / A1: a ticket without an order is UNMATCHED, not invalid.
-            //
-            // The check is against UNMATCHED rather than undefined because
-            // FuelTickets is draft-enabled: the CDS default populates the draft
-            // row, so by activation the field already reads 'UNMATCHED' and is
-            // never undefined. An explicitly set value other than the default
-            // is left alone.
-            if (req.data.order_ID && (!req.data.match_status || req.data.match_status === 'UNMATCHED')) {
-                req.data.match_status = 'MATCHED';
-            } else if (!req.data.order_ID && !req.data.match_status) {
-                req.data.match_status = 'UNMATCHED';
+        // ====================================================================
+        // ORDER-DRIVEN AUTO-POPULATION — live, during draft editing.
+        //
+        // Fires on every PATCH to the draft (not just at final activation),
+        // so the create screen visibly fills in flight_number and
+        // aircraft_reg as soon as the user picks a Fuel Order via F4 - not
+        // only after they hit the final Create/Save button.
+        //
+        // Registered on the draft only. Once activated the fields are
+        // already set from here; re-deriving on every subsequent edit of an
+        // ACTIVE ticket would silently overwrite a value someone corrected
+        // by hand after the fact for an unrelated reason.
+        // ====================================================================
+        const populateFromOrder = async (req) => {
+            if (req.data.order_ID === undefined) return;
+            if (!req.data.order_ID) return; // cleared - leave whatever the user had
+
+            const { FuelOrders } = this.entities;
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('flight_ID', 'uom_code')
+                .where({ ID: req.data.order_ID });
+            if (!order) return;
+
+            if (order.flight_ID) {
+                const flight = await cds.db.run(SELECT.one
+                    .from('fuelsphere.FLIGHT_SCHEDULE')
+                    .columns('flight_number', 'aircraft_reg')
+                    .where({ ID: order.flight_ID }));
+                if (flight) {
+                    if (req.data.flight_number === undefined) req.data.flight_number = flight.flight_number;
+                    if (req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
+                }
             }
+            if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+        };
+        this.before(['PATCH', 'UPDATE'], FuelTickets.drafts, populateFromOrder);
+
+        this.before('CREATE', FuelTickets, async (req) => {
+            // A ticket created through THIS app requires an order - the
+            // @mandatory on the association covers the UI, this covers any
+            // caller that bypasses it. Other capture paths (bulk import,
+            // captureTicketForOrder's own orderId parameter) are untouched;
+            // this hook only runs for a draft activated through FuelTickets.
+            if (!req.data.order_ID) {
+                return req.error(400, 'EPD452: A Fuel Order must be selected before a ticket can be created through this app.');
+            }
+            req.data.match_status = 'MATCHED';
 
             // Auto-generate internal number if not provided
             if (req.data.internal_number) return;
 
-            // The station is derived from the parent order. The 'XXX' fallback
-            // is gone: a ticket that cannot be traced to a station is not
-            // numbered (D17).
-            let stationCode = null;
-            if (req.data.order_ID) {
+            // Resolved independently of populateFromOrder above, so
+            // numbering does not depend on the draft-PATCH hook having run
+            // for this exact field on this exact request.
+            let flightNumber = req.data.flight_number || null;
+            if (!flightNumber) {
+                const { FuelOrders } = this.entities;
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('flight_ID')
+                    .where({ ID: req.data.order_ID });
+                if (order && order.flight_ID) {
+                    const flight = await cds.db.run(SELECT.one
+                        .from('fuelsphere.FLIGHT_SCHEDULE')
+                        .columns('flight_number')
+                        .where({ ID: order.flight_ID }));
+                    flightNumber = flight && flight.flight_number;
+                }
+            }
+
+            // No flight traceable from the order - the order exists but
+            // carries no flight (D46: some orders have none). Numbered by
+            // station instead of refusing outright, same fallback shape as
+            // the pre-existing station path.
+            if (!flightNumber) {
                 const { FuelOrders } = this.entities;
                 const order = await SELECT.one.from(FuelOrders)
                     .columns('station_code')
                     .where({ ID: req.data.order_ID });
-                stationCode = order && order.station_code;
+                try {
+                    req.data.internal_number = order && order.station_code
+                        ? await allocateTicketNumber(order.station_code)
+                        : null;
+                } catch (e) {
+                    if (reportAllocationError(req, e)) return;
+                    throw e;
+                }
+                return;
             }
 
-            // WP-10: with no order there is no station, so there is no number
-            // to allocate. internal_number is optional and stays null until the
-            // ticket is matched — attachToOrder allocates it then. Refusing the
-            // ticket here would put the fuel outside the system, which is the
-            // whole point of A1.
-            if (!stationCode) return;
-
             try {
-                req.data.internal_number = await allocateTicketNumber(stationCode);
+                req.data.internal_number = await allocateTicketNumberByFlight(flightNumber, req.data.delivery_timestamp);
             } catch (e) {
                 if (reportAllocationError(req, e)) return;
                 throw e;

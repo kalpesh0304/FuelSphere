@@ -19,11 +19,22 @@ service TicketService {
     /**
      * FuelTickets - Standalone Fuel Ticket Entity
      * Draft-enabled for independent ticket management
+     *
+     * order is mandatory here, scoped to this service's presentation layer
+     * only - a ticket cannot be created through this app without first
+     * selecting the Fuel Order it belongs to. Flight-related fields then
+     * auto-populate from that order (order-service.js-equivalent hooks in
+     * ticket-service.js), and internal_number is generated from the
+     * resolved flight, not the station.
+     *
+     * db/schema.cds's order association stays optional - other capture
+     * paths (captureTicketForOrder already requires an orderId parameter of
+     * its own; unattached-ticket capture elsewhere) are unaffected.
      */
     @odata.draft.enabled
     entity FuelTickets as projection on db.FUEL_TICKETS {
         *,
-        order    : redirected to FuelOrders,
+        order    : redirected to FuelOrders @mandatory,
         delivery : redirected to FuelDeliveries,
         virtual null as statusCriticality : Integer
     } actions {
@@ -71,6 +82,10 @@ service TicketService {
 
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
+
+    // Value-help target for uom_code's F4.
+    @readonly
+    entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
 
     // ========================================================================
     // SERVICE-LEVEL FUNCTIONS

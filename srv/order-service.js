@@ -13,6 +13,8 @@ const XLSX = require('xlsx');
 const {
     allocateOrderNumber,
     allocateDeliveryNumber,
+    allocateTicketNumber,
+    allocateTicketNumberByFlight,
     reportAllocationError
 } = require('./lib/number-range');
 const {
@@ -174,6 +176,87 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelDeliveries, FuelDeliveries.drafts], resolveDeliveryTail);
+
+        // ====================================================================
+        // FUEL TICKETS — embedded, added inline while editing a Fuel Order's
+        // own draft. FUEL_TICKETS is a draft composition CHILD of
+        // FUEL_ORDERS (same shape as FuelDeliveries above), so this
+        // registers on the draft too, not the active entity alone - see the
+        // comment on deriveGauge above for why.
+        //
+        // A ticket added here already carries order_ID: the framework sets
+        // it from the /FuelOrders(id)/tickets nav-property path before any
+        // before-handler runs, so there is nothing to pick - unlike
+        // TicketService's standalone create screen, where order is the
+        // first, explicit F4 selection. Same population logic either way,
+        // once order_ID is known.
+        // ====================================================================
+        const populateTicketFromOrder = async (req) => {
+            if (req.data.order_ID === undefined) return;
+            if (!req.data.order_ID) return;
+
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('flight_ID', 'uom_code')
+                .where({ ID: req.data.order_ID });
+            if (!order) return;
+
+            if (order.flight_ID) {
+                const flight = await SELECT.one.from(FlightSchedule)
+                    .columns('flight_number', 'aircraft_reg')
+                    .where({ ID: order.flight_ID });
+                if (flight) {
+                    if (req.data.flight_number === undefined) req.data.flight_number = flight.flight_number;
+                    if (req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
+                }
+            }
+            if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'],
+            [FuelTickets, FuelTickets.drafts], populateTicketFromOrder);
+
+        // Flight-based internal_number, generated once when the row is
+        // first added - not on every later edit of that same draft row.
+        this.before('CREATE', [FuelTickets, FuelTickets.drafts], async (req) => {
+            if (req.data.internal_number) return;
+            if (!req.data.order_ID) return; // no parent context - nothing to number from
+
+            let flightNumber = req.data.flight_number || null;
+            if (!flightNumber) {
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('flight_ID')
+                    .where({ ID: req.data.order_ID });
+                if (order && order.flight_ID) {
+                    const flight = await SELECT.one.from(FlightSchedule)
+                        .columns('flight_number')
+                        .where({ ID: order.flight_ID });
+                    flightNumber = flight && flight.flight_number;
+                }
+            }
+
+            // D46: some orders carry no flight. Falls back to station
+            // numbering rather than leaving the ticket unnumbered, matching
+            // the same fallback TicketService uses.
+            if (!flightNumber) {
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('station_code')
+                    .where({ ID: req.data.order_ID });
+                if (!order || !order.station_code) return;
+                try {
+                    req.data.internal_number = await allocateTicketNumber(order.station_code);
+                } catch (e) {
+                    if (reportAllocationError(req, e)) return;
+                    throw e;
+                }
+                return;
+            }
+
+            try {
+                req.data.internal_number = await allocateTicketNumberByFlight(flightNumber, req.data.delivery_timestamp);
+            } catch (e) {
+                if (reportAllocationError(req, e)) return;
+                throw e;
+            }
+        });
 
         // WP-17: a gauge reading typically arrives AFTER the tickets, so the
         // reconciliation has to re-run when the delivery changes and not only
