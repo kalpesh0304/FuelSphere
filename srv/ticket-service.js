@@ -163,7 +163,7 @@ module.exports = class TicketService extends cds.ApplicationService {
 
             const { FuelOrders } = this.entities;
             const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID', 'uom_code')
+                .columns('flight_ID', 'uom_code', 'supplier_ID')
                 .where({ ID: req.data.order_ID });
             if (!order) return;
 
@@ -178,8 +178,22 @@ module.exports = class TicketService extends cds.ApplicationService {
                 }
             }
             if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+
+            // Defaulted from the order's own supplier, so the field starts
+            // with something traceable rather than blank - the ticket's
+            // OWN reference (what the supplier printed on their paperwork)
+            // still overwrites it the moment the user types one.
+            if (req.data.supplier_ticket_ref === undefined && order.supplier_ID) {
+                const supplier = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                    .columns('supplier_code')
+                    .where({ ID: order.supplier_ID });
+                if (supplier && supplier.supplier_code) req.data.supplier_ticket_ref = supplier.supplier_code;
+            }
         };
-        this.before(['PATCH', 'UPDATE'], FuelTickets.drafts, populateFromOrder);
+        // Registered on both the draft and the active entity, CREATE/UPDATE/
+        // PATCH alike - matches order-service.js's proven pattern for this
+        // shape of hook exactly (resolveDeliveryTail et al).
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelTickets, FuelTickets.drafts], populateFromOrder);
 
         this.before('CREATE', FuelTickets, async (req) => {
             // A ticket created through THIS app requires an order - the

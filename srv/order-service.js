@@ -196,7 +196,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!req.data.order_ID) return;
 
             const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID', 'uom_code')
+                .columns('flight_ID', 'uom_code', 'supplier_ID')
                 .where({ ID: req.data.order_ID });
             if (!order) return;
 
@@ -210,6 +210,16 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 }
             }
             if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+
+            // Defaulted from the order's own supplier - same as
+            // TicketService's populateFromOrder - so the field starts with
+            // something traceable rather than blank.
+            if (req.data.supplier_ticket_ref === undefined && order.supplier_ID) {
+                const supplier = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                    .columns('supplier_code')
+                    .where({ ID: order.supplier_ID });
+                if (supplier && supplier.supplier_code) req.data.supplier_ticket_ref = supplier.supplier_code;
+            }
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelTickets, FuelTickets.drafts], populateTicketFromOrder);

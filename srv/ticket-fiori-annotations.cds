@@ -35,6 +35,10 @@ annotate TicketService.FuelOrders with @(
 );
 
 annotate TicketService.FuelOrders with {
+    // Hidden so the F4 popup shows only the readable columns - it would
+    // otherwise add the raw GUID as a column via the ValueList's InOut
+    // parameter below.
+    ID            @UI.Hidden;
     order_number  @title: 'Order Number';
     station_code  @title: 'Station';
     flight_number @title: 'Flight';
@@ -59,6 +63,22 @@ annotate TicketService.UnitsOfMeasure with {
 // ============================================================================
 // FuelTickets - the create/edit screen itself.
 // ============================================================================
+
+// Without this, the server-derived flight_number/aircraft_reg/uom_code/
+// supplier_ticket_ref (populateFromOrder in ticket-service.js) are correctly
+// written to the draft, but the UI never re-fetches them after the PATCH
+// that set order_ID - the exact symptom observed: fields staying blank
+// after picking an order. This is what tells Fiori Elements to refresh
+// them. Entity-level with a qualifier and SourceProperties - NOT nested
+// inside order's own Common block above, which silently drops it (no
+// SourceProperties there for SideEffects to key off).
+annotate TicketService.FuelTickets with @(
+    Common.SideEffects #OrderPicked: {
+        SourceProperties : [order_ID],
+        TargetProperties : [flight_number, aircraft_reg, uom_code, supplier_ticket_ref]
+    }
+);
+
 annotate TicketService.FuelTickets with @(
     UI: {
         HeaderInfo: {
@@ -211,15 +231,18 @@ annotate TicketService.FuelTickets with {
     verified_by           @title: 'Verified By' @Common.FieldControl: #ReadOnly;
     verified_at           @title: 'Verified At' @Common.FieldControl: #ReadOnly;
 
-    // THE F4 ITSELF. Mirrors FuelOrders.flight in order-fiori-annotations.cds
-    // exactly: Text + TextArrangement make the field display the order
-    // number instead of the raw GUID once picked; ValueList is what puts
-    // the search-help icon on the field at all - annotating order_ID alone
-    // (as the earlier draft of this file did) gives neither.
+    // THE F4 ITSELF. Text + TextOnly make the field display just the order
+    // number once picked (TextOnly, not TextFirst - TextFirst shows
+    // "order_number (GUID)", which is what was actually rendering).
+    // ValueList is what puts the search-help icon on the field at all -
+    // annotating order_ID alone (as an earlier draft of this file did)
+    // gives neither. Label is set here too - dropped when this block was
+    // first written, which is why the field rendered with no label at all.
     order @(
         Common: {
+            Label: 'Fuel Order',
             Text: order.order_number,
-            TextArrangement: #TextFirst,
+            TextArrangement: #TextOnly,
             ValueList: {
                 Label: 'Fuel Order',
                 CollectionPath: 'FuelOrders',

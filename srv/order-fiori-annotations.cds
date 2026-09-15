@@ -899,6 +899,18 @@ annotate FuelOrderService.FuelDeliveries with {
 // FUEL TICKETS - Line Item in Order Detail
 // ============================================================================
 
+// Matches TicketService.FuelTickets' equivalent (ticket-fiori-annotations.cds)
+// exactly. order_ID doesn't actually change here after row creation (it's
+// fixed by composition), but populateTicketFromOrder in order-service.js
+// still runs on the row's own first CREATE - this is what tells the UI to
+// display what it derived, same mechanism, for consistency.
+annotate FuelOrderService.FuelTickets with @(
+    Common.SideEffects #OrderPicked: {
+        SourceProperties : [order_ID],
+        TargetProperties : [flight_number, aircraft_reg, uom_code, supplier_ticket_ref]
+    }
+);
+
 annotate FuelOrderService.FuelTickets with @(
     UI: {
         HeaderInfo: {
@@ -1697,7 +1709,12 @@ annotate FuelOrderService.FuelTickets with {
     // Read-only here: the order is already known (this ticket belongs to
     // it already, by composition), unlike TicketService's standalone
     // create screen where order is the first, explicit F4 pick.
-    order            @title: 'Fuel Order' @Common.FieldControl: #ReadOnly;
+    order @(
+        Common: {
+            Label: 'Fuel Order',
+            FieldControl: #ReadOnly
+        }
+    );
     delivery         @title: 'Delivery';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
