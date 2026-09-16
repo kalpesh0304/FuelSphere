@@ -65,9 +65,24 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
         // ====================================================================
         // VIRTUAL ELEMENTS
+        //
+        // REGISTERED ON THE DRAFTS TOO, and that is not tidiness. These are
+        // `virtual null as ...` elements: nothing in the database holds
+        // them, so a read that skips this handler returns a row with the
+        // property ABSENT rather than null. The UI then fails to resolve
+        // statusCriticality on a draft row, the list binding never
+        // completes, and the page sits on a busy indicator forever - which
+        // is exactly what "Save keeps loading" looked like on an order whose
+        // deliveries were still drafts. The console said so plainly:
+        //
+        //   Failed to drill-down into (...,IsActiveEntity=false)
+        //   /statusCriticality, invalid segment: statusCriticality
+        //
+        // A draft row needs its virtual elements as much as an active one -
+        // more so, because the editing screens are where drafts are read.
         // ====================================================================
 
-        this.after(['READ'], FuelOrders, (data) => {
+        this.after(['READ'], [FuelOrders, FuelOrders.drafts], (data) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (!item) return;
@@ -90,7 +105,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             });
         });
 
-        this.after(['READ'], FuelDeliveries, (data) => {
+        this.after(['READ'], [FuelDeliveries, FuelDeliveries.drafts], (data) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (!item) return;
