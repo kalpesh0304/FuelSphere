@@ -551,7 +551,10 @@ annotate BurnService.ROBLedger with @(restrict: [
     // A FLOOR, NOT A CORRECT ANSWER. Several warrant a higher scope; those are
     // flagged in the pull request for a production review, not decided here.
     { grant: 'approveAdjustment', to: ['BurnDataEdit', 'AdminAccess'] },
-    { grant: 'rejectAdjustment',  to: ['BurnDataEdit', 'AdminAccess'] }
+    { grant: 'rejectAdjustment',  to: ['BurnDataEdit', 'AdminAccess'] },
+    // Placeholder action - granted so the button is reachable at all (D22),
+    // at the same floor as the other two. It writes nothing today.
+    { grant: 'recalculate',       to: ['BurnDataEdit', 'AdminAccess'] }
 ]);
 
 // ----------------------------------------------------------------------------

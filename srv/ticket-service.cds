@@ -37,8 +37,12 @@ service TicketService {
     entity FuelTickets as projection on db.FUEL_TICKETS {
         *,
         order    : redirected to FuelOrders,
+        flight   : redirected to FlightSchedule,
         delivery : redirected to FuelDeliveries,
-        virtual null as statusCriticality : Integer
+        virtual null as statusCriticality : Integer,
+        // Drives density_value/density_uom's FieldControl: mandatory on a
+        // volume ticket, optional on a mass one. See applyDensityFieldControl.
+        virtual null as densityFieldControl : Integer @UI.Hidden
     } actions {
         /**
          * Attach ticket to delivery

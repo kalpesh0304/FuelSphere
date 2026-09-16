@@ -340,22 +340,41 @@ annotate BurnService.ROBLedger with @(
         ],
 
         // --- List Report Table ---
+        //
+        // Column order follows the tail-wise ROB / stock value / MAP layout:
+        // flight date, flight, sector, line type, then the movement (qty,
+        // rate, value) and then the running balance (qty, value, MAP). The
+        // three unsigned movement columns that used to sit here
+        // (uplift/burn/adjustment) are on the object page instead - the
+        // signed qty_kg says the same thing in one column, which is what
+        // makes the balance columns beside it read as a running total.
         LineItem: [
             { Value: tail_number, Label: 'Aircraft', ![@UI.Importance]: #High },
-            { Value: record_date, Label: 'Date', ![@UI.Importance]: #High },
-            { Value: record_time, Label: 'Time', ![@UI.Importance]: #Medium },
-            { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #High },
-            { Value: entry_type, Label: 'Entry Type', ![@UI.Importance]: #High },
-            { Value: opening_rob_kg, Label: 'Opening ROB (kg)', ![@UI.Importance]: #High },
-            { Value: uplift_kg, Label: 'Uplift (kg)', ![@UI.Importance]: #Medium },
-            { Value: burn_kg, Label: 'Burn (kg)', ![@UI.Importance]: #Medium },
-            { Value: adjustment_kg, Label: 'Adjustment (kg)', ![@UI.Importance]: #Low },
-            { Value: closing_rob_kg, Label: 'Closing ROB (kg)', ![@UI.Importance]: #High },
-            { Value: rob_percentage, Label: 'ROB %', ![@UI.Importance]: #Medium },
+            { Value: record_date, Label: 'Flight date', ![@UI.Importance]: #High },
+            { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: sector, Label: 'Sector', ![@UI.Importance]: #High },
+            { Value: entry_type, Label: 'Line type', ![@UI.Importance]: #High },
+            { Value: qty_kg, Label: 'Qty kg', ![@UI.Importance]: #High },
+            { Value: rate_usd_per_kg, Label: 'Rate USD/kg', ![@UI.Importance]: #High },
+            { Value: value_usd, Label: 'Value USD', ![@UI.Importance]: #High },
+            { Value: closing_rob_kg, Label: 'Balance qty kg', ![@UI.Importance]: #High },
+            { Value: balance_value_usd, Label: 'Balance value USD', ![@UI.Importance]: #High },
+            { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #High },
+            { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #Low },
+            { Value: rob_percentage, Label: 'ROB %', ![@UI.Importance]: #Low },
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'BurnService.importROBInitialExcel',
                 Label  : 'Upload ROB Data',
+                Inline : false
+            },
+            // Placeholder - the handler returns the row untouched and says
+            // so. See burn-service.cds for why it is declared rather than
+            // left out until the calculation is specified.
+            {
+                $Type  : 'UI.DataFieldForAction',
+                Action : 'BurnService.recalculate',
+                Label  : 'Re-Calculate',
                 Inline : false
             }
         ],
@@ -385,9 +404,24 @@ annotate BurnService.ROBLedger with @(
 
         FieldGroup #ROBSummary: {
             Data: [
-                { Value: closing_rob_kg, Label: 'Closing ROB (kg)' },
+                { Value: closing_rob_kg, Label: 'Balance qty kg' },
+                { Value: balance_value_usd, Label: 'Balance value USD' },
+                { Value: map_usd_per_kg, Label: 'MAP USD/kg' },
                 { Value: rob_percentage, Label: 'ROB %' },
                 { Value: max_capacity_kg, Label: 'Max Capacity (kg)' }
+            ]
+        },
+
+        // The movement this row records, beside the balance it produced.
+        FieldGroup #ROBMovement: {
+            Data: [
+                { Value: sector, Label: 'Sector' },
+                { Value: qty_kg, Label: 'Qty kg' },
+                { Value: rate_usd_per_kg, Label: 'Rate USD/kg' },
+                { Value: value_usd, Label: 'Value USD' },
+                { Value: uplift_kg, Label: 'Uplift (kg)' },
+                { Value: burn_kg, Label: 'Burn (kg)' },
+                { Value: adjustment_kg, Label: 'Adjustment (kg)' }
             ]
         },
 
@@ -406,6 +440,7 @@ annotate BurnService.ROBLedger with @(
                 ID     : 'ROBQuantities',
                 Label  : 'Quantities',
                 Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBMovement', Label: 'Movement' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBQuantityDetails', Label: 'Quantities' }
                 ]
             },
@@ -539,7 +574,17 @@ annotate BurnService.ROBLedger with {
     uplift_kg              @title: 'Uplift (kg)';
     burn_kg                @title: 'Burn (kg)';
     adjustment_kg          @title: 'Adjustment (kg)';
-    closing_rob_kg         @title: 'Closing ROB (kg)' @Common.FieldControl: #ReadOnly;
+    closing_rob_kg         @title: 'Balance qty kg' @Common.FieldControl: #ReadOnly;
+    // All derived by the posting that wrote the row (srv/lib/rob-uplift.js),
+    // never typed: a balance or a moving average someone can edit by hand is
+    // not a ledger.
+    sector                 @title: 'Sector'            @Common.FieldControl: #ReadOnly;
+    qty_kg                 @title: 'Qty kg'            @Common.FieldControl: #ReadOnly;
+    rate_usd_per_kg        @title: 'Rate USD/kg'       @Common.FieldControl: #ReadOnly;
+    value_usd              @title: 'Value USD'         @Common.FieldControl: #ReadOnly;
+    balance_value_usd      @title: 'Balance value USD' @Common.FieldControl: #ReadOnly;
+    map_usd_per_kg         @title: 'MAP USD/kg'        @Common.FieldControl: #ReadOnly;
+    fuel_ticket            @title: 'Fuel Ticket';
     max_capacity_kg        @title: 'Max Capacity (kg)';
     rob_percentage         @title: 'ROB %' @Common.FieldControl: #ReadOnly;
     adjustment_reason      @title: 'Adjustment Reason' @UI.MultiLineText;

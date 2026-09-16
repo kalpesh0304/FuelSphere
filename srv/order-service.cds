@@ -178,7 +178,13 @@ service FuelOrderService {
     entity FuelDeliveries as projection on db.FUEL_DELIVERIES {
         *,
         order : redirected to FuelOrders,
-        order.flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
+        flight : redirected to FlightSchedule,
+        // COALESCED, not read through `order` alone: a delivery captured
+        // against a flight directly carries no order (B2), and reading only
+        // order.flight left the flight blank on exactly those rows. The
+        // order's flight stays the fallback so every delivery seeded before
+        // FUEL_DELIVERIES.flight existed still resolves one.
+        coalesce(flight.flight_number, order.flight.flight_number) as flight_number : String(10),
         virtual null as statusCriticality   : Integer,
         virtual null as varianceCriticality : Integer
     } actions {
@@ -261,7 +267,11 @@ service FuelOrderService {
     entity FuelTickets as projection on db.FUEL_TICKETS {
         *,
         order    : redirected to FuelOrders,
-        delivery : redirected to FuelDeliveries
+        flight   : redirected to FlightSchedule,
+        delivery : redirected to FuelDeliveries,
+        // Mirrors TicketService.FuelTickets - density is mandatory on a
+        // volume ticket on this screen too.
+        virtual null as densityFieldControl : Integer @UI.Hidden
     } actions {
         /**
          * Attach ticket to delivery

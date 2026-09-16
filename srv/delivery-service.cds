@@ -38,9 +38,11 @@ service DeliveryService {
     @odata.draft.enabled
     entity FuelDeliveries as projection on db.FUEL_DELIVERIES {
         *,
-        order : redirected to FuelOrders,
-        order.flight.flight_number as flight_number,
-        tail  : redirected to AircraftRegistrations,
+        order  : redirected to FuelOrders,
+        flight : redirected to FlightSchedule,
+        // Coalesced - see the note on FuelOrderService.FuelDeliveries.
+        coalesce(flight.flight_number, order.flight.flight_number) as flight_number : String(10),
+        tail   : redirected to AircraftRegistrations,
         virtual null as statusCriticality   : Integer,
         virtual null as varianceCriticality : Integer
     } actions {
@@ -74,7 +76,12 @@ service DeliveryService {
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
 
-    // Value-help target for aircraft_reg's F4.
+    // Value-help target for the flight F4 - the alternative to picking an
+    // order, and the other way to identify the aircraft.
+    @readonly
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE;
+
+    // Nav target for `tail`; aircraft_reg itself is derived, not picked.
     @readonly
     entity AircraftRegistrations as projection on db.AIRCRAFT_REGISTRATIONS;
 

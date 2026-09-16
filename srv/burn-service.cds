@@ -99,6 +99,20 @@ service BurnService {
         fuel_delivery   : redirected to FuelDeliveries
     } actions {
         /**
+         * Re-Calculate - PLACEHOLDER, DELIBERATELY DOES NOTHING.
+         *
+         * Requested as a button with no behaviour behind it yet. It is
+         * declared and granted so the button renders and is reachable (D22:
+         * a bound action with no grant is refused for every user, including
+         * one holding all scopes), and its handler says so rather than
+         * recomputing something half-defined. What "re-calculate" should
+         * recompute - closing_rob_kg from the uplift and burn rows,
+         * stock_value, or both - is not decided, and guessing here would put
+         * a number on screen nobody specified.
+         */
+        action recalculate() returns ROBLedger;
+
+        /**
          * Approve adjustment (Ops Manager only)
          */
         action approveAdjustment() returns ROBLedger;

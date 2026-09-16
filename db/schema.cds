@@ -1210,6 +1210,11 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         requested_time      : Time;                     // Requested delivery time
 
         // Priority & Status
+        // @assert.range renders the enum as a dropdown instead of a free
+        // text box (it emits Validation.AllowedValues) AND enforces it -
+        // same pairing as match_status and fob_source. A CDS enum without
+        // it is advisory: CAP accepts any string.
+        @assert.range: true
         priority            : OrderPriority default 'Normal';
         status              : OrderStatus default 'Draft';
 
@@ -1291,6 +1296,15 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         // delivery, so a mandatory FK to one of them is wrong. Orders resolve
         // transitively through the tickets.
         order               : Association to FUEL_ORDERS;
+        // The delivery's OWN flight, and the reason it is not read through
+        // `order` the way the FLIGHT_FUEL_DELIVERIES view does: order is
+        // optional by B2 above, so an order-less delivery had no route to a
+        // flight at all and nothing to derive aircraft_reg from. The capture
+        // screens let a user pick EITHER an order (this is then set from
+        // order.flight) or a flight directly (order stays empty) - one of the
+        // two identifies the aircraft, which is what B2 says the delivery
+        // actually hangs off.
+        flight              : Association to FLIGHT_SCHEDULE;
         aircraft_reg        : String(10) @mandatory;    // Join key: tail + date + departure time (REQ-FL-010)
         // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
         // existing constraint and this is optional, always.
@@ -1524,6 +1538,13 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // it would make an unknown tail structurally impossible to record, and
         // then no parameter could permit one.
         tail                : Association to AIRCRAFT_REGISTRATIONS;
+        // The ticket's flight, beside the flight_number string rather than
+        // replacing it - same reasoning as `tail` beside `aircraft_reg` two
+        // lines up. The string is the value AS RECEIVED and survives a
+        // flight the schedule has never heard of; the association is what a
+        // capture screen picks from, and what carries flight_date onto the
+        // screen without a second column to keep in step.
+        flight              : Association to FLIGHT_SCHEDULE;
         flight_number       : String(10);               // Flight number
 
         // ------------------------------------------------------------------
@@ -1569,6 +1590,24 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         quantity_kg         : Decimal(15,2);            // EPD453: quantity_metered x density_value, normalised to kg
 
         batch_coa_ref       : String(50);               // Certificate of analysis, for density disputes
+
+        // ====================================================================
+        // THE TICKET'S OWN VALUE. rate_per_litre is typed from the supplier's
+        // paperwork; total_amount is derived and never typed.
+        //
+        // DERIVED FROM quantity_metered WHERE THERE IS ONE, and from
+        // quantity otherwise - the same precedence the mass derivation uses.
+        // The metered figure is what the bowser actually delivered; the
+        // claimed quantity is what the supplier wrote down, and where the
+        // two disagree EPD411 already says so. Billing the metered figure
+        // and billing the claimed one are different numbers, and this picks
+        // the measured one deliberately.
+        //
+        // NOT a currency-typed pair: FUEL_TICKETS carries no currency_code,
+        // and inventing one here would put a second, unreconciled currency
+        // beside the order's. The rate is per litre of uom_code.
+        rate_per_litre      : Decimal(15,4);            // Typed from the supplier's paperwork
+        total_amount        : Decimal(15,2);            // Derived: rate_per_litre x metered (or claimed) quantity
 
         // Timing
         delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket
@@ -3488,6 +3527,39 @@ entity ROB_LEDGER : cuid, AuditTrail {
 
         // Validation
         rob_percentage      : Decimal(5,2);               // ROB as % of capacity
+
+        // ====================================================================
+        // THE VALUED LEDGER. One row per movement, carrying the movement AND
+        // the running balance in both quantity and money, so a tail's stock
+        // value and its moving average price read off the latest row rather
+        // than being recomputed from the whole history every time.
+        //
+        // qty_kg IS SIGNED where uplift_kg/burn_kg above are not: this is
+        // the movement as a ledger reads it (+ uplift, - burn), and a single
+        // signed column is what makes the running balance a running total.
+        // The three unsigned columns stay - they are what the burn
+        // reconciliation and the ROB harnesses read.
+        //
+        // KILOGRAMS AND USD PER KILOGRAM THROUGHOUT. A ticket's rate is per
+        // LITRE and its metered quantity is in the ticket's own uom_code, so
+        // the uplift posting converts: it carries the ticket's mass
+        // (quantity_kg) and divides the ticket's value by it. Putting litres
+        // in this column beside kilograms from a burn row would make the
+        // balance a sum of two different units - WP-11's whole subject.
+        sector              : String(20);                 // e.g. AEP - COR, as flown
+        qty_kg              : Decimal(15,2);              // Signed movement: + uplift, - burn
+        // On an uplift this is the price paid; on a burn it is the MAP the
+        // fuel was consumed at, which is why a burn changes the balance
+        // value but never the MAP.
+        rate_usd_per_kg     : Decimal(15,4);              // Movement rate
+        value_usd           : Decimal(15,2);              // qty_kg x rate_usd_per_kg
+        balance_value_usd   : Decimal(15,2);              // Running value of closing_rob_kg
+        map_usd_per_kg      : Decimal(15,4);              // balance_value_usd / closing_rob_kg
+
+        // The ticket this row was posted from, where it was posted from one.
+        // Idempotency depends on it: the uplift posting refuses to write a
+        // second row for a ticket that already has one.
+        fuel_ticket         : Association to FUEL_TICKETS;
 
         // Adjustment Details (if entry_type = ADJUSTMENT)
         adjustment_reason   : String(500);                // Reason for manual adjustment

@@ -87,9 +87,26 @@ annotate DeliveryService.UnitsOfMeasure with {
 // order is picked - entity-level with SourceProperties, not nested inside
 // order's own Common block below (that silently drops it).
 annotate DeliveryService.FuelDeliveries with @(
+    // EVERY TargetProperties ENTRY IS A QUOTED STRING, and that is the whole
+    // annotation working or silently doing nothing. TargetProperties is
+    // Collection(Edm.String) in the vocabulary: a quoted entry compiles to
+    // <String> and Fiori Elements re-reads it, an unquoted one compiles to
+    // <Path> and is ignored. This block previously mixed the two, which is
+    // why the flight and aircraft stayed blank after picking an order while
+    // the values were being written to the draft correctly all along. The
+    // one pre-existing SideEffects in this codebase that demonstrably worked
+    // (FuelOrders #updTotAmt) quotes its entry; this now matches it.
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
-        TargetProperties : [flight_number, aircraft_reg, uom_code]
+        TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
+                            'flight_number', 'aircraft_reg', 'uom_code']
+    },
+    // The other way in: a flight picked directly names the aircraft, with
+    // no order involved (populateFromOrderOrFlight in delivery-service.js).
+    Common.SideEffects #FlightPicked: {
+        SourceProperties : [flight_ID],
+        TargetProperties : ['flight/flight_number', 'flight/flight_date',
+                            'flight_number', 'aircraft_reg']
     }
 );
 
@@ -128,37 +145,33 @@ annotate DeliveryService.FuelDeliveries with @(
             { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #Medium }
         ],
 
-        HeaderFacets: [
-            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DeliveryStatus', Label: 'Status' }
-        ],
-
+        // Four facets, matching FuelOrderService.FuelDeliveries exactly.
+        // Header, Variance, Signatures, S/4HANA References and the aircraft
+        // register drill-down were all dropped from both screens together.
         Facets: [
             { $Type: 'UI.ReferenceFacet', ID: 'AircraftOrder',       Target: '@UI.FieldGroup#AircraftOrder',       Label: 'Aircraft & Fuel Order' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryDetails',     Target: '@UI.FieldGroup#DeliveryDetails',     Label: 'Delivery Details' },
             { $Type: 'UI.ReferenceFacet', ID: 'QualityMeasurements', Target: '@UI.FieldGroup#QualityMeasurements', Label: 'Quality Measurements' },
             { $Type: 'UI.ReferenceFacet', ID: 'AircraftGauge',       Target: '@UI.FieldGroup#AircraftGauge',       Label: 'Aircraft Gauge (FQIS)' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Reconciliation',      Target: '@UI.FieldGroup#Reconciliation',      Label: 'FOB Reconciliation' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Variance',            Target: '@UI.FieldGroup#Variance',            Label: 'Variance' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Signatures',          Target: '@UI.FieldGroup#Signatures',          Label: 'Signatures' },
-            { $Type: 'UI.ReferenceFacet', ID: 'S4HANAReferences',    Target: '@UI.FieldGroup#S4HANAReferences',    Label: 'S/4HANA References' }
+            { $Type: 'UI.ReferenceFacet', ID: 'Reconciliation',      Target: '@UI.FieldGroup#Reconciliation',      Label: 'FOB Reconciliation' }
         ],
 
-        FieldGroup #DeliveryStatus: {
-            Data: [
-                { Value: status },
-                { Value: recon_status }
-            ]
-        },
-
-        // THE AIRCRAFT, PICKED FIRST — decision B2. order is an optional F4
-        // pick alongside it; everything else in this group auto-populates
-        // the moment an order is selected (delivery-service.js's
-        // populateFromOrder).
+        // PICK AN ORDER OR A FLIGHT; THE FLIGHT DATE AND THE AIRCRAFT FOLLOW.
+        // The two pickers sit above the two fields they derive.
+        //
+        // flight_date and aircraft_reg are read THROUGH THE ASSOCIATION
+        // (flight.flight_date), not as columns of their own, and that is what
+        // makes them fill in on the CREATE screen at all: a create screen is
+        // a draft row, and a calculated column on a draft reads null, while a
+        // path through an association is fetched with $expand and resolves.
+        // The earlier `flight_number` column was calculated, which is exactly
+        // why the flight showed blank while an order was selected.
         FieldGroup #AircraftOrder: {
             Data: [
-                { Value: aircraft_reg,  ![@UI.Importance]: #High },
                 { Value: order_ID },
-                { Value: flight_number, ![@UI.Importance]: #Medium }
+                { Value: flight_ID },
+                { Value: flight.flight_date, Label: 'Flight Date' },
+                { Value: aircraft_reg, ![@UI.Importance]: #High }
             ]
         },
 
@@ -205,30 +218,6 @@ annotate DeliveryService.FuelDeliveries with @(
                 { Value: fob_source },
                 { Value: fob_delta_kg },
                 { Value: supplier_count }
-            ]
-        },
-
-        FieldGroup #Variance: {
-            Data: [
-                { Value: quantity_variance },
-                { Value: variance_percentage },
-                { Value: variance_flag },
-                { Value: variance_reason }
-            ]
-        },
-
-        FieldGroup #Signatures: {
-            Data: [
-                { Value: pilot_name },
-                { Value: ground_crew_name }
-            ]
-        },
-
-        FieldGroup #S4HANAReferences: {
-            Data: [
-                { Value: s4_gr_number },
-                { Value: s4_gr_year },
-                { Value: s4_gr_item }
             ]
         }
     }
@@ -279,21 +268,22 @@ annotate DeliveryService.FuelDeliveries with {
     s4_gr_item              @title: 'GR Item' @Common.FieldControl: #ReadOnly;
     status                  @title: 'Status' @Common.FieldControl: #ReadOnly;
 
-    // THE F4 ITSELF. Aircraft Registration - the primary identifying field
-    // (decision B2), so unlike order below it stays editable even once
-    // auto-populated from a picked order.
-    aircraft_reg @title: 'Aircraft Registration' @mandatory
-                 @Common.ValueList: {
-                     Label: 'Aircraft Registration',
-                     CollectionPath: 'AircraftRegistrations',
-                     Parameters: [
-                         { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: aircraft_reg, ValueListProperty: 'registration' },
-                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_type_code' }
-                     ]
-                 };
+    // DISPLAY-ONLY, AND NOT AN INPUT. aircraft_reg is REQ-FL-010's join key
+    // (tail + date + departure time); a registration typed by hand that
+    // disagrees with the order or flight it sits beside is a join key
+    // pointing at nothing. It is derived from whichever of the two was
+    // picked (populateFromOrderOrFlight) and shown, never typed.
+    //
+    // Safe to mark read-only here where the same marking on `order` is not:
+    // this value is written by a before-handler, which runs after CAP has
+    // stripped read-only fields from the inbound payload, whereas order_ID
+    // on the embedded screens is written by the framework itself from the
+    // nav path and gets stripped with it.
+    aircraft_reg @title: 'Aircraft Registration' @Common.FieldControl: #ReadOnly;
 
-    // Optional F4 - Text + TextOnly so the field shows just the order
-    // number once picked, not "order_number (GUID)".
+    // THE TWO PICKERS. Either one identifies the aircraft; neither is
+    // required (B2), and picking an order fills the flight in as well.
+    // Text + TextOnly so each shows its readable value, not a GUID.
     order @(
         Common: {
             Label: 'Fuel Order',
@@ -312,4 +302,46 @@ annotate DeliveryService.FuelDeliveries with {
             }
         }
     );
+
+    flight @(
+        Common: {
+            Label: 'Flight',
+            Text: flight.flight_number,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Flight',
+                CollectionPath: 'FlightSchedule',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_date' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' }
+                ]
+            }
+        }
+    );
+};
+
+// ============================================================================
+// FlightSchedule - value-help target for the flight F4.
+// ============================================================================
+annotate DeliveryService.FlightSchedule with @(
+    UI.LineItem: [
+        { Value: flight_number,       Label: 'Flight' },
+        { Value: flight_date,         Label: 'Date' },
+        { Value: origin_airport,      Label: 'From' },
+        { Value: destination_airport, Label: 'To' },
+        { Value: aircraft_reg,        Label: 'Aircraft Reg' }
+    ]
+);
+
+annotate DeliveryService.FlightSchedule with {
+    ID                   @UI.Hidden;
+    flight_number        @title: 'Flight';
+    flight_date          @title: 'Date';
+    origin_airport       @title: 'From';
+    destination_airport  @title: 'To';
+    aircraft_reg         @title: 'Aircraft Reg';
 };

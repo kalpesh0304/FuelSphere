@@ -78,55 +78,83 @@ module.exports = class DeliveryService extends cds.ApplicationService {
         this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
 
         // ====================================================================
-        // ORDER-DRIVEN AUTO-POPULATION — live, during draft editing.
+        // ORDER- AND FLIGHT-DRIVEN AUTO-POPULATION — live, during draft
+        // editing. TWO WAYS IN, ONE OUTCOME: the aircraft.
         //
-        // Unlike TicketService's populateFromOrder, order here is OPTIONAL
-        // (decision B2), so this simply does nothing when no order is
-        // selected - it does not gate creation the way TicketService's
-        // before-CREATE hook does.
+        //   pick an ORDER   -> flight comes from order.flight, aircraft_reg
+        //                      and uom_code follow from there
+        //   pick a FLIGHT   -> aircraft_reg follows from it, order stays
+        //                      empty (B2: a delivery need not have one)
         //
-        // flight_number is NOT written here: FUEL_DELIVERIES has no
-        // flight_number column (unlike FUEL_TICKETS), only the projection's
-        // `order.flight.flight_number as flight_number` computed path in
-        // delivery-service.cds, which re-reads automatically from whatever
-        // order_ID is now set - nothing to assign, only to list as a
-        // SideEffects target so the UI re-fetches it.
+        // aircraft_reg is never typed by hand on these screens - it is
+        // display-only there, because a registration that disagrees with the
+        // flight it was picked from is a join key pointing at nothing
+        // (REQ-FL-010).
         //
         // Registered BEFORE resolveDeliveryTail below, so an aircraft_reg
-        // that arrives here from the order's flight still gets its
-        // tail_registration resolved in the same request - registering it
-        // the other way round would leave a freshly auto-populated
-        // aircraft_reg with no resolved tail until the user touched the
-        // field directly.
+        // that arrives here still gets its tail_registration resolved in the
+        // same request - registering it the other way round would leave a
+        // freshly auto-populated aircraft_reg with no resolved tail until
+        // the user touched the field directly.
         // ====================================================================
-        const populateFromOrder = async (req) => {
+        const readStored = async (req, ...columns) => {
+            const id = req.data.ID || _id(req.params);
+            if (!id) return null;
+            return SELECT.one.from(FuelDeliveries.drafts).columns(...columns).where({ ID: id });
+        };
+
+        const applyFlight = async (req, flightId) => {
+            if (!flightId) return;
+            const flight = await cds.db.run(SELECT.one
+                .from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('aircraft_reg')
+                .where({ ID: flightId }));
+            if (flight) req.data.aircraft_reg = flight.aircraft_reg;
+        };
+
+        // THE ORDER WINS WHERE BOTH ARE PRESENT, and that is not arbitrary:
+        // the order names the flight it was raised for, so a flight picked
+        // separately is the weaker claim about the same uplift.
+        const populateFromOrderOrFlight = async (req) => {
+            const orderTouched  = req.data.order_ID !== undefined;
+            const flightTouched = req.data.flight_ID !== undefined;
+            if (!orderTouched && !flightTouched) return;
+
             let orderId = req.data.order_ID;
             if (orderId === undefined) {
-                const id = req.data.ID || _id(req.params);
-                if (!id) return;
-                const stored = await SELECT.one.from(FuelDeliveries.drafts)
-                    .columns('order_ID')
-                    .where({ ID: id });
+                const stored = await readStored(req, 'order_ID');
                 orderId = stored && stored.order_ID;
             }
-            if (!orderId) return; // cleared, or genuinely no order picked
 
-            const { FuelOrders } = this.entities;
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID', 'uom_code')
-                .where({ ID: orderId });
-            if (!order) return;
-
-            if (order.flight_ID) {
-                const flight = await cds.db.run(SELECT.one
-                    .from('fuelsphere.FLIGHT_SCHEDULE')
-                    .columns('aircraft_reg')
-                    .where({ ID: order.flight_ID }));
-                if (flight && req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
+            if (orderId) {
+                const { FuelOrders } = this.entities;
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('flight_ID', 'uom_code')
+                    .where({ ID: orderId });
+                if (!order) return;
+                // The order's flight becomes the delivery's own, so an
+                // order-less delivery and an ordered one answer "which
+                // flight?" from the same field.
+                if (order.flight_ID) {
+                    req.data.flight_ID = order.flight_ID;
+                    await applyFlight(req, order.flight_ID);
+                }
+                if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+                return;
             }
-            if (req.data.uom_code === undefined && order.uom_code) req.data.uom_code = order.uom_code;
+
+            // No order - the flight was picked directly, or the order was
+            // just cleared. Either way the flight on the row is what names
+            // the aircraft now.
+            let flightId = req.data.flight_ID;
+            if (flightId === undefined) {
+                const stored = await readStored(req, 'flight_ID');
+                flightId = stored && stored.flight_ID;
+            }
+            if (flightId) await applyFlight(req, flightId);
+            else if (flightTouched) req.data.aircraft_reg = null; // flight cleared
         };
-        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelDeliveries, FuelDeliveries.drafts], populateFromOrder);
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelDeliveries, FuelDeliveries.drafts], populateFromOrderOrFlight);
 
         // WP-07B. Never blockable - the fuel is on the aircraft whether the
         // tail resolves or not. Reads its own row, so the draft path is
@@ -142,17 +170,26 @@ module.exports = class DeliveryService extends cds.ApplicationService {
         // ====================================================================
         // DELIVERY NUMBER GENERATION
         //
-        // Flight-based where an order is selected and resolves to one -
-        // same traceability question TicketService answers for tickets.
-        // Tail-based where there is no order: FUEL_DELIVERIES carries no
-        // station field to fall back to, but aircraft_reg is @mandatory, so
-        // it is the one dimension guaranteed present.
+        // Flight-based wherever a flight resolves - from the delivery's own
+        // flight first, since populateFromOrderOrFlight has already copied
+        // the order's onto it, and from the order only as a fallback for a
+        // row written by some other caller. Tail-based where neither does:
+        // FUEL_DELIVERIES carries no station field to fall back to, but
+        // aircraft_reg is @mandatory, so it is the one dimension guaranteed
+        // present.
         // ====================================================================
         this.before('CREATE', FuelDeliveries, async (req) => {
             if (req.data.delivery_number) return;
 
             let flightNumber = null;
-            if (req.data.order_ID) {
+            if (req.data.flight_ID) {
+                const flight = await cds.db.run(SELECT.one
+                    .from('fuelsphere.FLIGHT_SCHEDULE')
+                    .columns('flight_number')
+                    .where({ ID: req.data.flight_ID }));
+                flightNumber = flight && flight.flight_number;
+            }
+            if (!flightNumber && req.data.order_ID) {
                 const { FuelOrders } = this.entities;
                 const order = await SELECT.one.from(FuelOrders)
                     .columns('flight_ID')
@@ -166,15 +203,25 @@ module.exports = class DeliveryService extends cds.ApplicationService {
                 }
             }
 
+            // D46: an order with no flight still names a station, which is
+            // what the original EPD-{STATION} format used. The tail is the
+            // last resort, for a delivery raised against no order at all.
+            let stationCode = null;
+            if (!flightNumber && req.data.order_ID) {
+                const { FuelOrders } = this.entities;
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('station_code').where({ ID: req.data.order_ID });
+                stationCode = order && order.station_code;
+            }
+
             try {
                 if (flightNumber) {
                     req.data.delivery_number = await allocateDeliveryNumberByFlight(flightNumber, req.data.delivery_date);
+                } else if (stationCode) {
+                    req.data.delivery_number = await allocateDeliveryNumber(stationCode, req.data.delivery_date);
                 } else if (req.data.aircraft_reg) {
                     req.data.delivery_number = await allocateDeliveryNumberByTail(req.data.aircraft_reg, req.data.delivery_date);
                 }
-                // Neither resolves - aircraft_reg is @mandatory on the entity
-                // itself, so draftActivate's own input validation refuses the
-                // row before this would ever matter.
             } catch (e) {
                 if (reportAllocationError(req, e)) return;
                 throw e;

@@ -57,8 +57,7 @@ annotate FuelOrderService.FuelOrders with @(
                 Criticality: statusCriticality,
                 ![@UI.Importance]: #High
             },
-            { Value: total_amount, Label: 'Total Amount', ![@UI.Importance]: #Medium },
-            { Value: currency_code, Label: 'Currency', ![@UI.Importance]: #Low },
+
             { Value: priority, Label: 'Priority', Criticality: priorityCriticality, ![@UI.Importance]: #Medium },
             { Value: s4_po_number, Label: 'PO Number', ![@UI.Importance]: #Low }
             // No cross-app nav DataField here: this LineItem is FuelOrders'
@@ -99,12 +98,11 @@ annotate FuelOrderService.FuelOrders with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#OrderQuantity',
                 Label  : 'Quantity'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#OrderAmount',
-                Label  : 'Amount'
             }
+            // The Amount header facet held unit price, total and currency.
+            // All three are off the Fuel Order screens now, so the facet and
+            // its field group went with them rather than being left to
+            // render an empty panel.
         ],
 
         // Field Groups for Header
@@ -127,13 +125,10 @@ annotate FuelOrderService.FuelOrders with @(
             ]
         },
 
-        FieldGroup#OrderAmount: {
-            Label: 'Amount',
-            Data: [
-                { Value: total_amount, Label: 'Total' },
-                { Value: currency_code, Label: 'Currency' }
-            ]
-        },
+        // unit_price and total_amount removed from every Fuel Order screen.
+        // The columns and the derivation in order-service.js stay - Invoice,
+        // Planning and Analytics all read total_amount, and a three-way
+        // match with no order value to match against is not a match.
 
         // Object Page Facets (Sections)
         Facets: [
@@ -248,9 +243,7 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: ordered_quantity_kg, Label: 'Planned Mass (kg)' },
                 { Value: conversion_density, Label: 'Conversion Density' },
                 { Value: conversion_source, Label: 'Density Source' },
-                { Value: unit_price, Label: 'Unit Price' },
-                { Value: total_amount, Label: 'Total Amount' },
-                { Value: currency_code, Label: 'Currency' },
+
                 // WP-33
                 { Value: is_tankering, Label: 'Tankering' },
                 { Value: tankering_sectors, Label: 'Tankering Sectors' }
@@ -639,7 +632,10 @@ annotate FuelOrderService.FuelOrders @(
 annotate FuelOrderService.FuelDeliveries with @(
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
-        TargetProperties : [flight_number, aircraft_reg, uom_code]
+        // All quoted - an unquoted entry compiles to <Path> and Fiori
+        // Elements ignores it. See DeliveryService.FuelDeliveries' copy.
+        TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
+                            'flight_number', 'aircraft_reg', 'uom_code']
     }
 );
 
@@ -724,21 +720,6 @@ annotate FuelOrderService.FuelDeliveries with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#Signatures',
-                Label  : 'Signatures'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#S4HANAReferences',
-                Label  : 'S/4HANA References'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#Variance',
-                Label  : 'Variance'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#AircraftGauge',
                 Label  : 'Aircraft Gauge (FQIS)'
             },
@@ -746,32 +727,28 @@ annotate FuelOrderService.FuelDeliveries with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Reconciliation',
                 Label  : 'FOB Reconciliation'
-            },
-            // Full aircraft-register drill-down (type, record status,
-            // operator) - genuinely more than the aircraft_reg string shown
-            // in #AircraftOrder above, so this stays even though the
-            // redundant DeliveryOrder facet (order/@UI.FieldGroup#OrderDetails)
-            // it used to sit beside did not.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'DeliveryTail',
-                Target : 'tail/@UI.FieldGroup#RegistrationKey',
-                Label  : 'Aircraft Register'
             }
         ],
 
-        // THE AIRCRAFT, PICKED FIRST — decision B2: a delivery hangs off the
-        // aircraft, not a single order (one refuelling event can have two
-        // suppliers, one delivery). order_ID is fixed by the nav-property
-        // path here and reads as read-only because of it; aircraft_reg and
-        // flight_number auto-populate the moment order_ID lands (same
-        // populateDeliveryFromOrder hook as the standalone app), and stay
-        // editable so a tail correction is still possible.
+        // ALL THREE READ-ONLY HERE, because all three are already decided:
+        // the delivery is being raised from inside the order, so order_ID
+        // comes from the nav path, the flight comes from the order, and
+        // aircraft_reg comes from the flight (populateDeliveryFromOrder).
+        // There is nothing for the operator to choose - unlike the
+        // standalone app, where order and flight are the two pickers.
+        //
+        // SHOWN THROUGH THE ASSOCIATION (order.order_number, not order_ID),
+        // and that is deliberate rather than cosmetic. A path through an
+        // association renders read-only AND renders the readable value, so
+        // this gets display mode without the @Common.FieldControl: #ReadOnly
+        // that would break the create - see the note on the order field
+        // below for what that annotation does to a deep insert.
         FieldGroup#AircraftOrder: {
             Data: [
-                { Value: aircraft_reg,  ![@UI.Importance]: #High },
-                { Value: order_ID },
-                { Value: flight_number, ![@UI.Importance]: #Medium }
+                { Value: order.order_number,   Label: 'Fuel Order' },
+                { Value: flight.flight_number, Label: 'Flight' },
+                { Value: flight.flight_date,   Label: 'Flight Date' },
+                { Value: aircraft_reg,         ![@UI.Importance]: #High }
             ]
         },
 
@@ -848,40 +825,10 @@ annotate FuelOrderService.FuelDeliveries with @(
             ]
         },
 
-        FieldGroup#Signatures: {
-            Label: 'Digital Signatures',
-            Data: [
-                { Value: pilot_name, Label: 'Pilot Name' },
-                { Value: ground_crew_name, Label: 'Ground Crew Name' },
-                // WP-31 step 3. MOVED to the evidence layer. The facet still
-                // shows when and where the signature was taken; it reads
-                // captured_at and capture_location on the document instead of
-                // two columns on the delivery. Same purpose, new path.
-                { Value: signature_pilot_document.captured_at, Label: 'Signature Time' },
-                { Value: signature_pilot_document.capture_location, Label: 'Location' },
-                { Value: signature_pilot_document.image_uri, Label: 'Pilot Signature' },
-                { Value: signature_crew_document.image_uri, Label: 'Ground Crew Signature' }
-            ]
-        },
-
-        FieldGroup#S4HANAReferences: {
-            Label: 'S/4HANA References',
-            Data: [
-                { Value: s4_gr_number, Label: 'Goods Receipt Number' },
-                { Value: s4_gr_year, Label: 'GR Year' },
-                { Value: s4_gr_item, Label: 'GR Item' }
-            ]
-        },
-
-        FieldGroup#Variance: {
-            Label: 'Quantity Variance',
-            Data: [
-                { Value: quantity_variance, Label: 'Variance (kg)' },
-                { Value: variance_percentage, Label: 'Variance (%)' },
-                { Value: variance_flag, Label: 'Variance Flag' },
-                { Value: variance_reason, Label: 'Variance Reason' }
-            ]
-        }
+        // #Signatures, #S4HANAReferences and #Variance removed together with
+        // their facets, on both delivery screens. The fields themselves stay
+        // on the entity and keep their labels below - they are still read by
+        // the signature capture action and the reconciliation.
     }
 );
 
@@ -894,15 +841,12 @@ annotate FuelOrderService.FuelDeliveries with {
     ID                  @UI.Hidden;
     delivery_number     @title: 'Delivery Number' @Core.Computed;
     flight_number       @title: 'Flight' @Common.FieldControl: #ReadOnly;
-    aircraft_reg        @title: 'Aircraft Registration' @mandatory
-                         @Common.ValueList: {
-                             Label: 'Aircraft Registration',
-                             CollectionPath: 'AircraftRegistrations',
-                             Parameters: [
-                                 { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: aircraft_reg, ValueListProperty: 'registration' },
-                                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_type_code' }
-                             ]
-                         };
+    // Display-only and derived, never typed - see the same field on
+    // DeliveryService.FuelDeliveries for why (REQ-FL-010's join key).
+    // Read-only is safe on THIS field where it is not on order: a
+    // before-handler writes it, and those run after CAP strips read-only
+    // fields from the inbound payload.
+    aircraft_reg        @title: 'Aircraft Registration' @Common.FieldControl: #ReadOnly;
     delivery_date       @title: 'Delivery Date' @mandatory;
     delivery_time       @title: 'Delivery Time' @mandatory;
     delivered_quantity  @title: 'Delivered Qty (kg)' @mandatory;
@@ -952,6 +896,14 @@ annotate FuelOrderService.FuelDeliveries with {
             TextArrangement: #TextOnly
         }
     );
+
+    flight @(
+        Common: {
+            Label: 'Flight',
+            Text: flight.flight_number,
+            TextArrangement: #TextOnly
+        }
+    );
 };
 
 // ============================================================================
@@ -966,7 +918,18 @@ annotate FuelOrderService.FuelDeliveries with {
 annotate FuelOrderService.FuelTickets with @(
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
-        TargetProperties : [flight_number, aircraft_reg, uom_code, supplier_ticket_ref]
+        // All quoted - see the note on FuelDeliveries' copy above.
+        TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
+                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref']
+    },
+    // Matches TicketService.FuelTickets' #AmountInputs.
+    Common.SideEffects #AmountInputs: {
+        SourceProperties : [rate_per_litre, meter_start, meter_end, quantity],
+        TargetProperties : ['quantity_metered', 'quantity_kg', 'total_amount']
+    },
+    Common.SideEffects #UomChanged: {
+        SourceProperties : [uom_code],
+        TargetProperties : ['densityFieldControl', 'density_value', 'density_uom', 'quantity_kg']
     }
 );
 
@@ -1063,6 +1026,12 @@ annotate FuelOrderService.FuelTickets with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
+                ID     : 'Pricing',
+                Target : '@UI.FieldGroup#Pricing',
+                Label  : 'Rate & Amount'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Verification',
                 Label  : 'Verification'
             },
@@ -1082,12 +1051,18 @@ annotate FuelOrderService.FuelTickets with @(
         // auto-populated the moment order_ID is known (populateTicketFromOrder
         // in order-service.js), which for a ticket added inline is immediately,
         // from the parent nav path.
+        // order shown through the association rather than as order_ID: a
+        // path renders read-only AND renders the order number instead of the
+        // GUID, which is what order_ID showed in edit mode. The read-only
+        // annotation that would otherwise do this breaks the deep insert -
+        // see the note on the order field below.
         FieldGroup#OrderFlight: {
             Label: 'Fuel Order & Flight',
             Data: [
-                { Value: order_ID },
-                { Value: flight_number,  ![@UI.Importance]: #High },
-                { Value: aircraft_reg,   ![@UI.Importance]: #Medium }
+                { Value: order.order_number,   Label: 'Fuel Order' },
+                { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+                { Value: flight.flight_date,   Label: 'Flight Date' },
+                { Value: aircraft_reg,         ![@UI.Importance]: #Medium }
             ]
         },
 
@@ -1132,6 +1107,16 @@ annotate FuelOrderService.FuelTickets with @(
                 // WP-33
                 { Value: vehicle_id, Label: 'Vehicle' },
                 { Value: meter_serial, Label: 'Meter Serial' }
+            ]
+        },
+
+        // Same group as TicketService.FuelTickets' #Pricing - identical
+        // screen either way.
+        FieldGroup#Pricing: {
+            Label: 'Rate & Amount',
+            Data: [
+                { Value: rate_per_litre },
+                { Value: total_amount }
             ]
         },
 
@@ -1748,11 +1733,17 @@ annotate FuelOrderService.FuelTickets with {
                          ]
                      };
 
-    density_value    @Measures.Unit: density_uom  @title: 'Density';
-    density_uom      @title: 'Density Unit';
+    // Mandatory on a litre ticket here too - same rule as the standalone
+    // screen, same per-row control.
+    density_value    @Measures.Unit: density_uom  @title: 'Density'
+                     @Common.FieldControl: densityFieldControl;
+    density_uom      @title: 'Density Unit'
+                     @Common.FieldControl: densityFieldControl;
     density_basis    @title: 'Density Basis';
     density_temp_c   @title: 'Density Temperature (°C)';
     quantity_flag    @title: 'Quantity Basis';
+    rate_per_litre   @title: 'Rate (per litre)';
+    total_amount     @title: 'Total Amount' @Core.Computed;
 
     // One of the three. The meter's answer to "how much fuel went on".
     quantity_kg      @title: 'Uplift by Meter (kg)' @Common.FieldControl: #ReadOnly;
@@ -1782,6 +1773,13 @@ annotate FuelOrderService.FuelTickets with {
         Common: {
             Label: 'Fuel Order',
             Text: order.order_number,
+            TextArrangement: #TextOnly
+        }
+    );
+    flight @(
+        Common: {
+            Label: 'Flight',
+            Text: flight.flight_number,
             TextArrangement: #TextOnly
         }
     );
@@ -1927,16 +1925,10 @@ annotate FuelOrderService.AircraftRegistrations with @(
             Title          : { Value: registration },
             Description    : { Value: aircraft_type_code }
         },
-        FieldGroup #RegistrationKey: {
-            Data: [
-                { Value: registration,       Label: 'Registration' },
-                { Value: aircraft_type_code, Label: 'Type' },
-                // PROVISIONAL blocks order creation (MDM402) and does not
-                // block ticket capture. Both pages that reach this block are
-                // capture pages.
-                { Value: record_status,      Label: 'Record Status' },
-                { Value: operator_code,      Label: 'Operator' }
-            ]
-        }
+        // #RegistrationKey removed with the Aircraft Register facet that was
+        // its only reader in this service. HeaderInfo stays: `tail` is still
+        // a navigable association, so the target still needs a name and a
+        // title when someone reaches it. BurnService keeps its own copy of
+        // the field group for the facets that still show one there.
     }
 );

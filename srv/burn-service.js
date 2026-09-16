@@ -333,6 +333,16 @@ module.exports = class BurnService extends cds.ApplicationService {
         // ROB LEDGER ACTIONS
         // ====================================================================
 
+        // PLACEHOLDER. The button exists; the calculation does not, and this
+        // returns the row untouched rather than recomputing something
+        // half-specified. See the action's declaration in burn-service.cds.
+        this.on('recalculate', ROBLedger, async (req) => {
+            const entry = await SELECT.one.from(ROBLedger).where({ ID: _id(req.params) });
+            if (!entry) return req.error(404, 'ROB entry not found');
+            req.info(200, 'Re-Calculate is not implemented yet - nothing was changed.');
+            return entry;
+        });
+
         this.on('approveAdjustment', ROBLedger, async (req) => {
             const entry = await SELECT.one.from(ROBLedger).where({ ID: _id(req.params) });
             if (!entry) return req.error(404, 'ROB entry not found');

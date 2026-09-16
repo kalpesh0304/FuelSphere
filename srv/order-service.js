@@ -39,6 +39,8 @@ const {
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
 const { createSignatureDocuments } = require('./lib/signature-documents');
+const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
+const { postTicketUplift } = require('./lib/rob-uplift');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -197,7 +199,12 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 .where({ ID: orderId });
             if (!order) return;
 
+            // The order's flight becomes the delivery's OWN flight, so the
+            // capture screen answers "which flight?" from one field whether
+            // the row came from an order or was raised against a flight
+            // directly in the standalone app (B2 - see FUEL_DELIVERIES.flight).
             if (order.flight_ID) {
+                if (req.data.flight_ID === undefined) req.data.flight_ID = order.flight_ID;
                 const flight = await SELECT.one.from(FlightSchedule)
                     .columns('aircraft_reg')
                     .where({ ID: order.flight_ID });
@@ -207,38 +214,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelDeliveries, FuelDeliveries.drafts], populateDeliveryFromOrder);
-
-        // Flight-based delivery_number, generated once when the row is first
-        // added. Falls back to tail-based numbering where the order carries
-        // no flight (D46) - FUEL_DELIVERIES has no station field to fall
-        // back to the way tickets do, but aircraft_reg is @mandatory, so it
-        // is the one dimension guaranteed present.
-        this.before('CREATE', [FuelDeliveries, FuelDeliveries.drafts], async (req) => {
-            if (req.data.delivery_number) return;
-            if (!req.data.order_ID) return; // no parent context - nothing to number from
-
-            let flightNumber = null;
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID')
-                .where({ ID: req.data.order_ID });
-            if (order && order.flight_ID) {
-                const flight = await SELECT.one.from(FlightSchedule)
-                    .columns('flight_number')
-                    .where({ ID: order.flight_ID });
-                flightNumber = flight && flight.flight_number;
-            }
-
-            try {
-                if (flightNumber) {
-                    req.data.delivery_number = await allocateDeliveryNumberByFlight(flightNumber, req.data.delivery_date);
-                } else if (req.data.aircraft_reg) {
-                    req.data.delivery_number = await allocateDeliveryNumberByTail(req.data.aircraft_reg, req.data.delivery_date);
-                }
-            } catch (e) {
-                if (reportAllocationError(req, e)) return;
-                throw e;
-            }
-        });
 
         // WP-07B. Never blockable — the fuel is on the aircraft. Reads its own
         // row, so the draft path is registered too.
@@ -288,11 +263,15 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!order) return;
 
             if (order.flight_ID) {
+                // The order's flight becomes the ticket's own - same reason
+                // as on the delivery: flight_date reaches the screen through
+                // the association rather than a column kept in step by hand.
+                req.data.flight_ID = order.flight_ID;
                 const flight = await SELECT.one.from(FlightSchedule)
                     .columns('flight_number', 'aircraft_reg')
                     .where({ ID: order.flight_ID });
                 if (flight) {
-                    if (req.data.flight_number === undefined) req.data.flight_number = flight.flight_number;
+                    req.data.flight_number = flight.flight_number;
                     if (req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
                 }
             }
@@ -311,47 +290,192 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelTickets, FuelTickets.drafts], populateTicketFromOrder);
 
-        // Flight-based internal_number, generated once when the row is
-        // first added - not on every later edit of that same draft row.
-        this.before('CREATE', [FuelTickets, FuelTickets.drafts], async (req) => {
-            if (req.data.internal_number) return;
-            if (!req.data.order_ID) return; // no parent context - nothing to number from
+        // THE SAME DERIVATION THE TICKET APP RUNS, and it was missing here
+        // entirely: a ticket added inline to an order landed with a null
+        // quantity_metered and a null quantity_kg, while the identical
+        // ticket captured through TicketService had both. One shared
+        // implementation now (srv/lib/ticket-measurement.js), so the metered
+        // quantity, the mass and the amount cannot drift between the two
+        // screens the way they already had.
+        const deriveTicketFigures = async (req) => {
+            let stored = {};
+            if (req.event !== 'CREATE') {
+                const id = req.data.ID || _id(req.params);
+                if (id) {
+                    stored = await SELECT.one.from(req.target)
+                        .columns('quantity', 'uom_code', 'quantity_metered',
+                                 'density_value', 'density_uom', 'meter_start', 'meter_end',
+                                 'rate_per_litre')
+                        .where({ ID: id }) || {};
+                }
+            }
+            const { values, error, warning } =
+                await deriveTicketMeasurement(fieldReader(req.data, stored));
+            if (error) return req.error(400, error);
+            if (warning) req.warn(200, warning);
+            Object.assign(req.data, values);
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'],
+            [FuelTickets, FuelTickets.drafts], deriveTicketFigures);
 
-            let flightNumber = req.data.flight_number || null;
+        // Density mandatory on a litre ticket here too - same rule, same
+        // implementation, so the two ticket screens cannot disagree about
+        // which fields are required.
+        this.after(['READ'], [FuelTickets, FuelTickets.drafts], async (data) => {
+            await applyDensityFieldControl(data, isMassUom);
+        });
+
+        // ====================================================================
+        // THE ORDER'S CHILDREN, AT SAVE — numbering, and the rescue.
+        //
+        // NUMBERED HERE AND NOT ON THE DRAFT ROW'S OWN CREATE, which is
+        // where this used to sit. Adding a line to the table drafted a row
+        // immediately, and drafting a row drew a number from the range - so
+        // an operator who clicked Add and then discarded had already burned
+        // sequence 0007 for that flight and day, and the next real ticket
+        // took 0008 with nothing at 0007. Worse on screen: the ID appeared
+        // filled in before a single mandatory field was, which reads as a
+        // saved record. Numbers are drawn when the order is SAVED, against
+        // the children actually being saved.
+        //
+        // THE RESCUE IS THE SECOND HALF, and it is a data-loss fix rather
+        // than a nicety. Draft activation REPLACES the order's child set
+        // with the draft's copy. A ticket or delivery created through
+        // TicketService/DeliveryService while this order sat open in edit
+        // mode is not in that copy - the draft snapshot predates it - so the
+        // save DELETED it, silently, and it is somebody's uplift record.
+        // Measured, not theorised: four deliveries before the save, three
+        // after.
+        //
+        // Only rows created AFTER the draft was opened are re-attached. A
+        // row that existed when the draft started and is missing now was
+        // deleted by the operator on purpose, and resurrecting that would be
+        // its own bug. The draft's own creation time is the discriminator;
+        // created_at has second precision, so the comparison floors to the
+        // second and re-attaches on a tie - erring towards keeping a record
+        // rather than dropping one.
+        // ====================================================================
+        const numberTicket = async (row) => {
+            if (row.internal_number || !row.order_ID) return;
+            let flightNumber = row.flight_number || null;
             if (!flightNumber) {
                 const order = await SELECT.one.from(FuelOrders)
-                    .columns('flight_ID')
-                    .where({ ID: req.data.order_ID });
+                    .columns('flight_ID').where({ ID: row.order_ID });
                 if (order && order.flight_ID) {
                     const flight = await SELECT.one.from(FlightSchedule)
-                        .columns('flight_number')
-                        .where({ ID: order.flight_ID });
+                        .columns('flight_number').where({ ID: order.flight_ID });
                     flightNumber = flight && flight.flight_number;
                 }
             }
-
-            // D46: some orders carry no flight. Falls back to station
-            // numbering rather than leaving the ticket unnumbered, matching
-            // the same fallback TicketService uses.
-            if (!flightNumber) {
-                const order = await SELECT.one.from(FuelOrders)
-                    .columns('station_code')
-                    .where({ ID: req.data.order_ID });
-                if (!order || !order.station_code) return;
-                try {
-                    req.data.internal_number = await allocateTicketNumber(order.station_code);
-                } catch (e) {
-                    if (reportAllocationError(req, e)) return;
-                    throw e;
-                }
+            if (flightNumber) {
+                row.internal_number = await allocateTicketNumberByFlight(flightNumber, row.delivery_timestamp);
                 return;
             }
+            // D46: some orders carry no flight. Station numbering rather
+            // than leaving the ticket unnumbered.
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('station_code').where({ ID: row.order_ID });
+            if (order && order.station_code) {
+                row.internal_number = await allocateTicketNumber(order.station_code);
+            }
+        };
+
+        const numberDelivery = async (row) => {
+            if (row.delivery_number || !row.order_ID) return;
+            let flightNumber = null;
+            const flightId = row.flight_ID;
+            if (flightId) {
+                const flight = await SELECT.one.from(FlightSchedule)
+                    .columns('flight_number').where({ ID: flightId });
+                flightNumber = flight && flight.flight_number;
+            }
+            if (!flightNumber) {
+                const order = await SELECT.one.from(FuelOrders)
+                    .columns('flight_ID').where({ ID: row.order_ID });
+                if (order && order.flight_ID) {
+                    const flight = await SELECT.one.from(FlightSchedule)
+                        .columns('flight_number').where({ ID: order.flight_ID });
+                    flightNumber = flight && flight.flight_number;
+                }
+            }
+            if (flightNumber) {
+                row.delivery_number = await allocateDeliveryNumberByFlight(flightNumber, row.delivery_date);
+                return;
+            }
+            // D46: the order carries no flight. The order's station still
+            // names where the fuel went, which is what the original
+            // EPD-{STATION} format was; the tail is the last resort, for a
+            // delivery raised with no order at all.
+            const order = await SELECT.one.from(FuelOrders)
+                .columns('station_code').where({ ID: row.order_ID });
+            if (order && order.station_code) {
+                row.delivery_number = await allocateDeliveryNumber(order.station_code, row.delivery_date);
+            } else if (row.aircraft_reg) {
+                row.delivery_number = await allocateDeliveryNumberByTail(row.aircraft_reg, row.delivery_date);
+            }
+        };
+
+        /** When this order's draft was opened, or null where that is unknowable. */
+        const draftOpenedAt = async (orderId) => {
+            const draft = await cds.db.run(SELECT.one.from('FuelOrderService.FuelOrders.drafts')
+                .columns('DraftAdministrativeData_DraftUUID').where({ ID: orderId }));
+            if (!draft || !draft.DraftAdministrativeData_DraftUUID) return null;
+            const admin = await cds.db.run(SELECT.one.from('DRAFT.DraftAdministrativeData')
+                .where({ DraftUUID: draft.DraftAdministrativeData_DraftUUID }));
+            const at = admin && (admin.CreationDateTime || admin.CreatedAt);
+            if (!at) return null;
+            const d = new Date(at);
+            d.setMilliseconds(0);   // created_at carries seconds only
+            return d;
+        };
+
+        this.before('SAVE', FuelOrders, async (req) => {
+            const orderId = req.data.ID;
+            if (!orderId) return;
+
+            const since = await draftOpenedAt(orderId);
+            const rescue = async (nav, entity) => {
+                const inDraft = req.data[nav];
+                if (!Array.isArray(inDraft)) return;
+                const known = new Set(inDraft.map(r => r && r.ID));
+                const active = await SELECT.from(entity).where({ order_ID: orderId });
+                for (const row of active) {
+                    if (known.has(row.ID)) continue;
+                    if (since && new Date(row.created_at) < since) continue; // deleted on purpose
+                    inDraft.push(row);
+                }
+            };
+
+            await rescue('tickets', FuelTickets);
+            await rescue('deliveries', FuelDeliveries);
 
             try {
-                req.data.internal_number = await allocateTicketNumberByFlight(flightNumber, req.data.delivery_timestamp);
+                for (const row of (req.data.tickets || []))    await numberTicket(row);
+                for (const row of (req.data.deliveries || [])) await numberDelivery(row);
             } catch (e) {
                 if (reportAllocationError(req, e)) return;
                 throw e;
+            }
+        });
+
+        // The uplift reaches the ROB ledger for tickets added from inside an
+        // order. AFTER the save, because a composition child never fires its
+        // own CREATE on the active entity - the path TicketService uses does
+        // not exist here, which is exactly how the ledger would have gained
+        // rows for one capture route and not the other.
+        //
+        // Reads the rows back rather than trusting req.data: the numbers
+        // this posts (quantity_kg, total_amount, tail_registration) are
+        // written by before-handlers, and the stored row is where they have
+        // certainly landed. postTicketUplift is idempotent, so a later save
+        // of the same order re-reads the same tickets and writes nothing.
+        this.after('SAVE', FuelOrders, async (data, req) => {
+            const orderId = (data && data.ID) || req.data.ID;
+            if (!orderId) return;
+            const tickets = await SELECT.from(FuelTickets).where({ order_ID: orderId });
+            for (const t of tickets) {
+                const { reason } = await postTicketUplift(t);
+                if (reason) req.info(200, `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
             }
         });
 

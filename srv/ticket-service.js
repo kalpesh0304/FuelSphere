@@ -7,7 +7,9 @@
 const cds = require('@sap/cds');
 const { SELECT, UPDATE } = cds.ql;
 const { allocateTicketNumber, allocateTicketNumberByFlight, reportAllocationError } = require('./lib/number-range');
-const { deriveTicketMassKg } = require('./lib/fuel-uom');
+const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
+const { isMassUom } = require('./lib/fuel-uom');
+const { postTicketUplift } = require('./lib/rob-uplift');
 const { reconcileDelivery } = require('./lib/fob-reconciliation');
 const { resolveTail } = require('./lib/tail-resolver');
 
@@ -23,6 +25,13 @@ module.exports = class TicketService extends cds.ApplicationService {
         // ====================================================================
         // VIRTUAL ELEMENTS
         // ====================================================================
+
+        // Density is mandatory where the quantity is in litres - see
+        // applyDensityFieldControl. Registered on the draft too: the create
+        // screen is a draft, and that is where the asterisk has to appear.
+        this.after(['READ'], [FuelTickets, FuelTickets.drafts], async (data) => {
+            await applyDensityFieldControl(data, isMassUom);
+        });
 
         this.after(['READ'], FuelTickets, (data) => {
             const items = Array.isArray(data) ? data : [data];
@@ -55,59 +64,39 @@ module.exports = class TicketService extends cds.ApplicationService {
         const deriveMeasurement = async (req) => {
             const d = req.data;
 
-            // On UPDATE req.data carries only what changed, so the derivation
-            // has to read the stored row for the inputs the caller did not
-            // send. Without this, correcting a meter reading alone would
-            // null quantity_kg because density arrived as undefined.
+            // On anything but CREATE req.data carries only what changed, so
+            // the derivation has to read the stored row for the inputs the
+            // caller did not send. Without this, correcting a meter reading
+            // alone would null quantity_kg because density arrived undefined.
+            //
+            // Read from req.target, not from FuelTickets: the same handler
+            // serves the draft and the active entity, and reading the wrong
+            // one returns nothing for a draft in progress. Same reasoning as
+            // deriveGauge in order-service.js.
             let stored = {};
-            if (req.event === 'UPDATE') {
+            if (req.event !== 'CREATE') {
                 const id = req.data.ID || _id(req.params);
                 if (id) {
-                    stored = await SELECT.one.from(FuelTickets)
+                    stored = await SELECT.one.from(req.target)
                         .columns('quantity', 'uom_code', 'quantity_metered',
-                                 'density_value', 'density_uom', 'meter_start', 'meter_end')
+                                 'density_value', 'density_uom', 'meter_start', 'meter_end',
+                                 'rate_per_litre')
                         .where({ ID: id }) || {};
                 }
             }
-            const at = (field) => (d[field] !== undefined ? d[field] : stored[field]);
-
-            // quantity_metered = meter_end - meter_start, where both are
-            // present. An explicitly supplied quantity_metered is left alone;
-            // some suppliers transmit a total without the two readings.
-            const start = at('meter_start'), end = at('meter_end');
-            if (start !== null && start !== undefined && end !== null && end !== undefined) {
-                const metered = Number((Number(end) - Number(start)).toFixed(2));
-                if (metered < 0) {
-                    return req.error(400, `EPD411: Meter end ${end} is below meter start ${start}.`);
-                }
-                d.quantity_metered = metered;
-            }
-
-            // EPD411 - the meter reading does not match the ticket quantity.
-            //
-            // A warning, not a rejection. Decision A1 is that fuel is
-            // recorded even when the paperwork is imperfect; refusing the
-            // ticket would put the uplift outside the system, which is the
-            // failure this whole area exists to prevent. The mismatch is
-            // surfaced for the matching workbench to chase.
-            const metered = Number(at('quantity_metered'));
-            const claimed = Number(at('quantity'));
-            if (metered > 0 && claimed > 0 && Math.abs(metered - claimed) > 0.01) {
-                req.warn(200, `EPD411: Metered quantity ${metered} does not match ticket quantity ${claimed}.`);
-            }
-
-            // quantity_kg - EPD453. Null where an input is missing; a derived
-            // value with a missing input is null, never zero.
-            const derived = await deriveTicketMassKg({
-                quantity_metered: at('quantity_metered'),
-                uom_code: at('uom_code'),
-                density_value: at('density_value'),
-                density_uom: at('density_uom')
-            });
-            d.quantity_kg = derived.quantity_kg;
+            const { values, error, warning } =
+                await deriveTicketMeasurement(fieldReader(d, stored));
+            if (error) return req.error(400, error);
+            if (warning) req.warn(200, warning);
+            Object.assign(d, values);
         };
 
-        this.before(['CREATE', 'UPDATE'], FuelTickets, deriveMeasurement);
+        // Registered on the draft too, so the metered quantity, the mass and
+        // the amount fill in AS THE OPERATOR TYPES the meter readings and the
+        // rate, rather than only once the ticket is activated. EPD411 lands
+        // on the draft with them, which is where a meter span running
+        // backwards is worth catching.
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelTickets, FuelTickets.drafts], deriveMeasurement);
 
         // WP-07B. A ticket is NEVER blockable, whatever UNKNOWN_TAIL_POLICY
         // says. Fuel is already in the tanks when a ticket is written, and
@@ -142,6 +131,20 @@ module.exports = class TicketService extends cds.ApplicationService {
             }
             if (req.data && req.data.delivery_ID) ids.add(req.data.delivery_ID);
             for (const id of ids) await reconcileDelivery(id);
+        });
+
+        // The uplift reaches the ROB ledger. After the write, not before:
+        // this reads the ticket's own derived mass and amount, and both are
+        // set by the before-handlers above. Registered on CREATE only - a
+        // correction to an existing ticket must not post the same fuel
+        // twice, and postTicketUplift refuses a second row for a ticket it
+        // has already posted anyway.
+        this.after('CREATE', FuelTickets, async (data, req) => {
+            for (const row of (Array.isArray(data) ? data : [data])) {
+                if (!row) continue;
+                const { reason } = await postTicketUplift(row);
+                if (reason) req.info(200, `ROB ledger not updated: ${reason}.`);
+            }
         });
 
         // ====================================================================
@@ -183,12 +186,16 @@ module.exports = class TicketService extends cds.ApplicationService {
             if (!order) return;
 
             if (order.flight_ID) {
+                // The order's flight becomes the ticket's own, so flight_date
+                // reaches the screen through one association rather than a
+                // second column kept in step by hand.
+                req.data.flight_ID = order.flight_ID;
                 const flight = await cds.db.run(SELECT.one
                     .from('fuelsphere.FLIGHT_SCHEDULE')
                     .columns('flight_number', 'aircraft_reg')
                     .where({ ID: order.flight_ID }));
                 if (flight) {
-                    if (req.data.flight_number === undefined) req.data.flight_number = flight.flight_number;
+                    req.data.flight_number = flight.flight_number;
                     if (req.data.aircraft_reg === undefined) req.data.aircraft_reg = flight.aircraft_reg;
                 }
             }
@@ -218,8 +225,7 @@ module.exports = class TicketService extends cds.ApplicationService {
         // caller already set.
         // ====================================================================
         const populateFromFlight = async (req) => {
-            if (req.data.flight_number === undefined) return;
-            if (req.data.aircraft_reg !== undefined) return; // caller already set it
+            if (req.data.flight_ID === undefined) return;
 
             let orderId = req.data.order_ID;
             if (orderId === undefined) {
@@ -231,17 +237,21 @@ module.exports = class TicketService extends cds.ApplicationService {
                     orderId = stored && stored.order_ID;
                 }
             }
-            if (orderId) return; // an order is set - that hook owns this field
+            if (orderId) return; // an order is set - that hook owns these fields
 
-            const flightNumber = req.data.flight_number;
-            if (!flightNumber) return; // cleared
+            if (!req.data.flight_ID) {           // flight cleared
+                req.data.flight_number = null;
+                req.data.aircraft_reg = null;
+                return;
+            }
 
             const flight = await cds.db.run(SELECT.one
                 .from('fuelsphere.FLIGHT_SCHEDULE')
-                .columns('aircraft_reg')
-                .where({ flight_number: flightNumber })
-                .orderBy('flight_date desc'));
-            if (flight) req.data.aircraft_reg = flight.aircraft_reg;
+                .columns('flight_number', 'aircraft_reg')
+                .where({ ID: req.data.flight_ID }));
+            if (!flight) return;
+            req.data.flight_number = flight.flight_number;
+            req.data.aircraft_reg = flight.aircraft_reg;
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelTickets, FuelTickets.drafts], populateFromFlight);
 
