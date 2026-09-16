@@ -383,11 +383,24 @@ annotate BurnService.ROBLedger with @(
         ],
 
         // --- Default Sort ---
+        // NEWEST POSTING FIRST, not newest flight date.
+        //
+        // record_date on an uplift is the FLIGHT's date, which for a ticket
+        // captured after the fact is not today - so a row posted this
+        // morning for a flight in March sorted six months down the list and
+        // read as "the uplift never reached the ledger". It had; it was just
+        // nowhere near the top.
+        //
+        // Insertion order is also the TRUTHFUL order for this table: the
+        // running balance and the MAP are computed by adding each movement
+        // to the one before it, so created_at is the sequence the arithmetic
+        // actually followed. Sorting by flight date showed a balance column
+        // in an order the balances were never calculated in.
         PresentationVariant: {
             SortOrder: [
+                { Property: created_at, Descending: true },
                 { Property: record_date, Descending: true },
-                { Property: record_time, Descending: true },
-                { Property: tail_number, Descending: false }
+                { Property: record_time, Descending: true }
             ],
             Visualizations: ['@UI.LineItem']
         },

@@ -15,6 +15,13 @@ const {
 const { deriveGaugeFigures } = require('./lib/fuel-uom');
 const { resolveTail } = require('./lib/tail-resolver');
 
+/**
+ * The unit a gauge-driven quantity is in. 'KG' is UNIT_OF_MEASURE's code for
+ * it - NOT 'KGM', which is the SAP ISO code on the same row and is not what
+ * uom_code holds.
+ */
+const MASS_UOM = 'KG';
+
 const _id = (params) => {
     const p = params[0];
     return typeof p === 'object' ? p.ID : p;
@@ -74,6 +81,25 @@ module.exports = class DeliveryService extends cds.ApplicationService {
             });
             d.fob_delta_kg = derived.fob_delta_kg;
             d.ground_burn_kg = derived.ground_burn_kg;
+
+            // DELIVERED QUANTITY IS THE GAUGE UPLIFT. The aircraft's own
+            // reading is what went into the tanks - after minus before - so
+            // the figure is derived rather than typed, and the field is
+            // read-only on the screen.
+            //
+            // KILOGRAMS, AND THE UNIT IS SET TO SAY SO. An FQIS reports mass
+            // and has no other unit to report in, so a delivered quantity
+            // driven by the gauge is kilograms whatever uom_code said before
+            // - leaving it on LTR would label a mass figure as a volume, and
+            // every reader downstream (the reconciliation, the ROB ledger,
+            // the invoice match) would take it at its word.
+            //
+            // Left untouched where either reading is missing rather than
+            // zeroed: a zero would claim nothing was delivered.
+            if (derived.fob_delta_kg !== null && derived.fob_delta_kg !== undefined) {
+                d.delivered_quantity = derived.fob_delta_kg;
+                d.uom_code = MASS_UOM;
+            }
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
 

@@ -636,6 +636,11 @@ annotate FuelOrderService.FuelDeliveries with @(
         // Elements ignores it. See DeliveryService.FuelDeliveries' copy.
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
                             'flight_number', 'aircraft_reg', 'uom_code']
+    },
+    // Matches DeliveryService.FuelDeliveries' #GaugeReadings.
+    Common.SideEffects #GaugeReadings: {
+        SourceProperties : [fob_before_kg, fob_after_kg, fob_at_arrival_kg],
+        TargetProperties : ['delivered_quantity', 'uom_code', 'fob_delta_kg', 'ground_burn_kg']
     }
 );
 
@@ -839,7 +844,13 @@ annotate FuelOrderService.FuelDeliveries with {
     refuel_end_utc               @title: 'Refuel End (UTC)';
     refuel_complete              @title: 'Refuel Complete';
     ID                  @UI.Hidden;
-    delivery_number     @title: 'Delivery Number' @Core.Computed;
+    // FieldControl BESIDE Core.Computed, not instead of it. Core.Computed
+    // stops draftActivate demanding a value the server has not written yet;
+    // it does NOT take the asterisk off the field, because the @mandatory on
+    // FUEL_DELIVERIES.delivery_number still renders one. The grid therefore
+    // showed "Delivery Number *" on a field only the server ever fills.
+    delivery_number     @title: 'Delivery Number' @Core.Computed
+                        @Common.FieldControl: #ReadOnly;
     flight_number       @title: 'Flight' @Common.FieldControl: #ReadOnly;
     // Display-only and derived, never typed - see the same field on
     // DeliveryService.FuelDeliveries for why (REQ-FL-010's join key).
@@ -849,7 +860,9 @@ annotate FuelOrderService.FuelDeliveries with {
     aircraft_reg        @title: 'Aircraft Registration' @Common.FieldControl: #ReadOnly;
     delivery_date       @title: 'Delivery Date' @mandatory;
     delivery_time       @title: 'Delivery Time' @mandatory;
-    delivered_quantity  @title: 'Delivered Qty (kg)' @mandatory;
+    // Derived from the gauge - see the note on the standalone copy.
+    delivered_quantity  @title: 'Delivered Qty (kg)'
+                        @Core.Computed @Common.FieldControl: #ReadOnly;
     temperature         @title: 'Temperature (C)';
     density             @title: 'Density (kg/L)';
     temperature_corrected_qty @title: 'Corrected Qty (kg)';

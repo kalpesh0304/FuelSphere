@@ -107,6 +107,12 @@ annotate DeliveryService.FuelDeliveries with @(
         SourceProperties : [flight_ID],
         TargetProperties : ['flight/flight_number', 'flight/flight_date',
                             'flight_number', 'aircraft_reg']
+    },
+    // The delivered quantity IS the gauge uplift, so typing either reading
+    // has to re-read it - and the two derived gauge figures beside it.
+    Common.SideEffects #GaugeReadings: {
+        SourceProperties : [fob_before_kg, fob_after_kg, fob_at_arrival_kg],
+        TargetProperties : ['delivered_quantity', 'uom_code', 'fob_delta_kg', 'ground_burn_kg']
     }
 );
 
@@ -226,14 +232,22 @@ annotate DeliveryService.FuelDeliveries with @(
 annotate DeliveryService.FuelDeliveries with {
     // THE ID FIELD — server-generated on Create, never user-entered. Matches
     // TicketService.FuelTickets.internal_number's treatment exactly.
-    delivery_number      @title: 'Fuel Delivery ID' @Core.Computed;
+    // FieldControl beside Core.Computed - see the note on the embedded copy.
+    delivery_number      @title: 'Fuel Delivery ID' @Core.Computed
+                         @Common.FieldControl: #ReadOnly;
 
     // Same titles/units as FuelOrderService.FuelDeliveries (order-fiori-
     // annotations.cds) throughout this block - identical field-for-field.
     flight_number         @title: 'Flight' @Common.FieldControl: #ReadOnly;
     delivery_date         @title: 'Delivery Date' @mandatory;
     delivery_time         @title: 'Delivery Time' @mandatory;
-    delivered_quantity    @title: 'Delivered Quantity' @mandatory @Measures.Unit: uom_code;
+    // DERIVED FROM THE GAUGE, NOT TYPED: after-uplift minus before-uplift
+    // (deriveGauge in delivery-service.js). @Core.Computed so draftActivate
+    // does not demand a value the operator no longer supplies - the column
+    // is still @mandatory on the entity - and FieldControl so the asterisk
+    // comes off a field nobody can fill.
+    delivered_quantity    @title: 'Delivered Quantity' @Measures.Unit: uom_code
+                          @Core.Computed @Common.FieldControl: #ReadOnly;
     uom_code              @title: 'Unit of Measure'
                            @Common.ValueList: {
                                CollectionPath: 'UnitsOfMeasure',

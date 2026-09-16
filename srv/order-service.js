@@ -152,6 +152,14 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             });
             d.fob_delta_kg = derived.fob_delta_kg;
             d.ground_burn_kg = derived.ground_burn_kg;
+
+            // Delivered quantity IS the gauge uplift, and the unit follows it
+            // to kilograms - see the identical derivation in
+            // delivery-service.js. Both screens, one rule.
+            if (derived.fob_delta_kg !== null && derived.fob_delta_kg !== undefined) {
+                d.delivered_quantity = derived.fob_delta_kg;
+                d.uom_code = 'KG';
+            }
         };
 
         // Registered on the draft entity as well as the active one, and this

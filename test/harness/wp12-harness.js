@@ -261,10 +261,23 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
         out(`ROB_LEDGER.uplift_kg untouched`);
     });
 
-    it('EXIT-5b — the four delivered_quantity sites are unchanged', async () => {
+    // EXIT-5b GUARDED delivered_quantity AGAINST BEING DERIVED, and that
+    // decision has since been taken deliberately: the capture screens now
+    // compute it from the aircraft gauge (after-uplift minus before-uplift)
+    // and show it read-only, because the FQIS reading is the measurement and
+    // a typed figure beside it is a second opinion nobody reconciles.
+    //
+    // WHAT THE GUARD STILL PROTECTS IS THE PART THAT MATTERED. The column
+    // keeps its @mandatory in db/schema.cds - the value is still required,
+    // it is simply derived rather than typed. RefuelerService still writes
+    // it directly on its own path, which never sees a gauge. And the EPD401
+    // readers in order-service.js are still there. Only the UI-level
+    // @mandatory moved, to @Core.Computed, so draftActivate stops demanding
+    // a value the operator no longer supplies.
+    it('EXIT-5b — delivered_quantity is derived on the screens, typed everywhere else', async () => {
         const sites = [
             ['db/schema.cds', /delivered_quantity\s*:\s*Decimal\(12,2\)\s*@mandatory/],
-            ['srv/order-fiori-annotations.cds', /delivered_quantity\s+@title:.*@mandatory/],
+            ['srv/order-fiori-annotations.cds', /delivered_quantity\s+@title:[\s\S]{0,120}@Core\.Computed/],
             ['srv/refueler-service.js', /delivered_quantity:\s*deliveredQuantity/]
         ];
         for (const [f, re] of sites) {
@@ -275,7 +288,7 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
         const writers = (ref.match(/delivered_quantity:\s*deliveredQuantity/g) || []).length;
         const readers = (fs.readFileSync(`${PROJECT}/srv/order-service.js`, 'utf8')
             .match(/delivery\.delivered_quantity/g) || []).length;
-        out(`@mandatory: 2 sites intact  ·  refueler writers: ${writers}  ·  order-service readers: ${readers}`);
+        out(`@mandatory: schema intact, screens derived  ·  refueler writers: ${writers}  ·  order-service readers: ${readers}`);
         assert.strictEqual(writers, 2, 'both direct writers must remain — derivation is WP-17');
         assert.ok(readers >= 5, 'the EPD401 readers must remain');
     });
