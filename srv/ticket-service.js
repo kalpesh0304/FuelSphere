@@ -33,7 +33,20 @@ module.exports = class TicketService extends cds.ApplicationService {
             await applyDensityFieldControl(data, isMassUom);
         });
 
-        this.after(['READ'], FuelTickets, (data) => {
+        // Drafts too. statusCriticality is a `virtual null as ...` element:
+        // no column holds it, so a read that skips this handler returns the
+        // property ABSENT rather than null, and a UI that binds it cannot
+        // resolve it - the list binding never completes and the page hangs
+        // on a busy indicator. That is exactly what FuelOrderService's copy
+        // of this handler did to the Fuel Order page until it was registered
+        // on the drafts.
+        //
+        // It has never bitten HERE only because this app's LineItem computes
+        // criticality with an inline $edmJson expression instead of binding
+        // the virtual element, so it is never requested. That is a reason it
+        // is dormant, not a reason it is safe: binding the element anywhere
+        // on a draft screen would hang this app the same way.
+        this.after(['READ'], [FuelTickets, FuelTickets.drafts], (data) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (!item) return;

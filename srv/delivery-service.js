@@ -35,7 +35,12 @@ module.exports = class DeliveryService extends cds.ApplicationService {
         // VIRTUAL ELEMENTS
         // ====================================================================
 
-        this.after(['READ'], FuelDeliveries, (data) => {
+        // Drafts too - see the note on TicketService's copy. statusCriticality
+        // and varianceCriticality are virtual elements, and a draft read that
+        // skips this handler returns them ABSENT, which hangs any screen that
+        // binds them. Dormant here only because this app's LineItem uses an
+        // inline $edmJson expression instead.
+        this.after(['READ'], [FuelDeliveries, FuelDeliveries.drafts], (data) => {
             const items = Array.isArray(data) ? data : [data];
             items.forEach(item => {
                 if (!item) return;
