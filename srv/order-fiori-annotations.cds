@@ -1369,8 +1369,16 @@ annotate FuelOrderService.FlightSchedule with @(
 
 annotate FuelOrderService.FlightSchedule with {
     ID                   @UI.Hidden;
-    flight_number        @title: 'Flight Number';
-    flight_date          @title: 'Date';
+    // READ-ONLY HERE, AND THAT IS ABOUT THE TICKET SCREEN, NOT THIS ONE.
+    // Both fields are @mandatory on FLIGHT_SCHEDULE, and a ticket or
+    // delivery that displays them through its `flight` association inherits
+    // that: the Fuel Order & Flight panel rendered "Flight *" and "Flight
+    // Date *" as REQUIRED fields the operator had no way to fill, because
+    // they are derived from the order. The entity is already @readonly in
+    // this service, so saying so per field takes the asterisk off without
+    // changing what anyone can edit.
+    flight_number        @title: 'Flight Number' @Common.FieldControl: #ReadOnly;
+    flight_date          @title: 'Date'          @Common.FieldControl: #ReadOnly;
     aircraft_type        @title: 'Aircraft Type';
     aircraft_reg         @title: 'Registration';
     origin_airport       @title: 'Origin';

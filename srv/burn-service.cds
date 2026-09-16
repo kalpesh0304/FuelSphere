@@ -96,7 +96,13 @@ service BurnService {
         airport         : redirected to Airports,
         flight          : redirected to FlightSchedule,
         fuel_burn       : redirected to FuelBurns,
-        fuel_delivery   : redirected to FuelDeliveries
+        fuel_delivery   : redirected to FuelDeliveries,
+        // Redirected so the ledger can show the ticket and order NUMBERS
+        // rather than two GUIDs - a path through an unredirected
+        // association reaches an entity outside this service and renders
+        // nothing.
+        fuel_ticket     : redirected to FuelTickets,
+        fuel_order      : redirected to FuelOrders
     } actions {
         /**
          * Re-Calculate - PLACEHOLDER, DELIBERATELY DOES NOTHING.
@@ -233,6 +239,14 @@ service BurnService {
 
     @readonly
     entity FuelOrders as projection on db.FUEL_ORDERS;
+
+    // Nav target for ROBLedger.fuel_ticket - the ledger shows the ticket
+    // number the uplift came from. Read-only: TicketService owns capture.
+    @readonly
+    entity FuelTickets as projection on db.FUEL_TICKETS {
+        *,
+        order : redirected to FuelOrders
+    };
 
     // ========================================================================
     // SERVICE-LEVEL ACTIONS

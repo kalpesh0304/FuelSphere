@@ -3548,6 +3548,15 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // balance a sum of two different units - WP-11's whole subject.
         sector              : String(20);                 // e.g. AEP - COR, as flown
         qty_kg              : Decimal(15,2);              // Signed movement: + uplift, - burn
+
+        // The metered figure AS DELIVERED, beside the kilograms the balance
+        // is kept in. Both are carried because they answer different
+        // questions: the bowser and the invoice are in litres, the ledger
+        // and the reconciliation are in kilograms, and the density that
+        // links them belongs to the ticket rather than to this row. Null on
+        // a mass ticket - converting back would need a density this row
+        // does not hold.
+        volume_l            : Decimal(15,2);              // Metered volume, litres
         // On an uplift this is the price paid; on a burn it is the MAP the
         // fuel was consumed at, which is why a burn changes the balance
         // value but never the MAP.
@@ -3560,6 +3569,11 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // Idempotency depends on it: the uplift posting refuses to write a
         // second row for a ticket that already has one.
         fuel_ticket         : Association to FUEL_TICKETS;
+        // The order that ticket was raised against, carried so the ledger
+        // row answers "which order paid for this?" without walking through
+        // the ticket. Null where the ticket had no order - A1 permits that,
+        // and the uplift still happened.
+        fuel_order          : Association to FUEL_ORDERS;
 
         // Adjustment Details (if entry_type = ADJUSTMENT)
         adjustment_reason   : String(500);                // Reason for manual adjustment

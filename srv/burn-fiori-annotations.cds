@@ -354,6 +354,9 @@ annotate BurnService.ROBLedger with @(
             { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
             { Value: sector, Label: 'Sector', ![@UI.Importance]: #High },
             { Value: entry_type, Label: 'Line type', ![@UI.Importance]: #High },
+            { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket', ![@UI.Importance]: #High },
+            { Value: fuel_order.order_number, Label: 'Fuel Order', ![@UI.Importance]: #High },
+            { Value: volume_l, Label: 'Volume (L)', ![@UI.Importance]: #High },
             { Value: qty_kg, Label: 'Qty kg', ![@UI.Importance]: #High },
             { Value: rate_usd_per_kg, Label: 'Rate USD/kg', ![@UI.Importance]: #High },
             { Value: value_usd, Label: 'Value USD', ![@UI.Importance]: #High },
@@ -416,6 +419,9 @@ annotate BurnService.ROBLedger with @(
         FieldGroup #ROBMovement: {
             Data: [
                 { Value: sector, Label: 'Sector' },
+                { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket' },
+                { Value: fuel_order.order_number, Label: 'Fuel Order' },
+                { Value: volume_l, Label: 'Volume (L)' },
                 { Value: qty_kg, Label: 'Qty kg' },
                 { Value: rate_usd_per_kg, Label: 'Rate USD/kg' },
                 { Value: value_usd, Label: 'Value USD' },
@@ -584,7 +590,9 @@ annotate BurnService.ROBLedger with {
     value_usd              @title: 'Value USD'         @Common.FieldControl: #ReadOnly;
     balance_value_usd      @title: 'Balance value USD' @Common.FieldControl: #ReadOnly;
     map_usd_per_kg         @title: 'MAP USD/kg'        @Common.FieldControl: #ReadOnly;
+    volume_l               @title: 'Volume (L)'        @Common.FieldControl: #ReadOnly;
     fuel_ticket            @title: 'Fuel Ticket';
+    fuel_order             @title: 'Fuel Order';
     max_capacity_kg        @title: 'Max Capacity (kg)';
     rob_percentage         @title: 'ROB %' @Common.FieldControl: #ReadOnly;
     adjustment_reason      @title: 'Adjustment Reason' @UI.MultiLineText;

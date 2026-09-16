@@ -34,6 +34,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT, INSERT } = cds.ql;
+const { toLitres } = require('./fuel-uom');
 
 const LEDGER = 'fuelsphere.ROB_LEDGER';
 
@@ -139,8 +140,14 @@ async function postTicketUplift(ticket) {
         sequence,
         flight_ID: flightId,
         fuel_ticket_ID: ticket.ID,
+        // Null where the ticket had no order - A1 permits an order-less
+        // ticket, and the uplift still belongs in the ledger.
+        fuel_order_ID: ticket.order_ID || null,
         entry_type: 'UPLIFT',
         sector,
+        // The metered figure as delivered. Null on a mass ticket rather
+        // than back-converted through a density this row does not hold.
+        volume_l: toLitres(ticket.quantity_metered ?? ticket.quantity, ticket.uom_code),
         // The unsigned columns the burn reconciliation reads, beside the
         // signed one the valued ledger reads.
         opening_rob_kg: openingQty,

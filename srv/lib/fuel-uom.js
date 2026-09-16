@@ -153,6 +153,23 @@ function isConvertibleVolumeUom(uomCode) {
 }
 
 /**
+ * A metered quantity expressed in LITRES, or null where it cannot be.
+ *
+ * Volume in, volume out: litres are the metered figure itself, scaled by
+ * the unit's litre factor. A MASS quantity is not converted back here -
+ * that needs the delivery density, and the caller that has it (the mass
+ * derivation) is going the other way. Null rather than an assumed density,
+ * for the same reason gallons derive nothing: a volume that depends on a
+ * density nobody recorded is a number that cannot be checked.
+ */
+function toLitres(quantity, uomCode) {
+    const qty = Number(quantity);
+    if (!(qty > 0) || !uomCode) return null;
+    const factor = LITRES_PER_VOLUME_UNIT[uomCode];
+    return factor ? Number((qty * factor).toFixed(2)) : null;
+}
+
+/**
  * Is this a mass unit?
  *
  * Read from UNIT_OF_MEASURE.uom_category rather than a list in code, so a
@@ -252,6 +269,7 @@ module.exports = {
     planMassToOrderVolume,
     conversionFields,
     isMassUom,
+    toLitres,
     deriveTicketMassKg,
     deriveGaugeFigures
 };

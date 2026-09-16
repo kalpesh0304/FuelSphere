@@ -182,6 +182,23 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // resolved in the same request, and resolveDeliveryTail only acts
         // when req.data.aircraft_reg is already present in THIS request.
         // ====================================================================
+        // THE PARENT ORDER, ACTIVE FIRST AND THEN THE DRAFT.
+        //
+        // A ticket or delivery added to an order that HAS NEVER BEEN SAVED
+        // has no active parent to read: the order exists only in the drafts
+        // table until the first activation. Reading the active table alone
+        // found nothing and every derivation downstream quietly did nothing -
+        // flight, aircraft registration and supplier reference all stayed
+        // blank on the create screen, and the number was never allocated.
+        // It looked like the auto-population had broken; it had only ever
+        // been exercised against orders that already existed.
+        const readOrder = async (orderId, ...columns) => {
+            if (!orderId) return null;
+            const pick = (q) => (columns.length ? q.columns(...columns) : q);
+            return (await pick(SELECT.one.from(FuelOrders)).where({ ID: orderId }))
+                || (await pick(SELECT.one.from(FuelOrders.drafts)).where({ ID: orderId }));
+        };
+
         const populateDeliveryFromOrder = async (req) => {
             let orderId = req.data.order_ID;
             if (orderId === undefined) {
@@ -194,9 +211,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             }
             if (!orderId) return;
 
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID', 'uom_code')
-                .where({ ID: orderId });
+            const order = await readOrder(orderId, 'flight_ID', 'uom_code');
             if (!order) return;
 
             // The order's flight becomes the delivery's OWN flight, so the
@@ -257,9 +272,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             }
             if (!orderId) return;
 
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('flight_ID', 'uom_code', 'supplier_ID')
-                .where({ ID: orderId });
+            const order = await readOrder(orderId, 'flight_ID', 'uom_code', 'supplier_ID');
             if (!order) return;
 
             if (order.flight_ID) {
@@ -359,11 +372,10 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (row.internal_number || !row.order_ID) return;
             let flightNumber = row.flight_number || null;
             if (!flightNumber) {
-                const order = await SELECT.one.from(FuelOrders)
-                    .columns('flight_ID').where({ ID: row.order_ID });
-                if (order && order.flight_ID) {
+                const parent = await readOrder(row.order_ID, 'flight_ID');
+                if (parent && parent.flight_ID) {
                     const flight = await SELECT.one.from(FlightSchedule)
-                        .columns('flight_number').where({ ID: order.flight_ID });
+                        .columns('flight_number').where({ ID: parent.flight_ID });
                     flightNumber = flight && flight.flight_number;
                 }
             }
@@ -373,8 +385,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             }
             // D46: some orders carry no flight. Station numbering rather
             // than leaving the ticket unnumbered.
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('station_code').where({ ID: row.order_ID });
+            const order = await readOrder(row.order_ID, 'station_code');
             if (order && order.station_code) {
                 row.internal_number = await allocateTicketNumber(order.station_code);
             }
@@ -390,11 +401,10 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 flightNumber = flight && flight.flight_number;
             }
             if (!flightNumber) {
-                const order = await SELECT.one.from(FuelOrders)
-                    .columns('flight_ID').where({ ID: row.order_ID });
-                if (order && order.flight_ID) {
+                const parent = await readOrder(row.order_ID, 'flight_ID');
+                if (parent && parent.flight_ID) {
                     const flight = await SELECT.one.from(FlightSchedule)
-                        .columns('flight_number').where({ ID: order.flight_ID });
+                        .columns('flight_number').where({ ID: parent.flight_ID });
                     flightNumber = flight && flight.flight_number;
                 }
             }
@@ -406,8 +416,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             // names where the fuel went, which is what the original
             // EPD-{STATION} format was; the tail is the last resort, for a
             // delivery raised with no order at all.
-            const order = await SELECT.one.from(FuelOrders)
-                .columns('station_code').where({ ID: row.order_ID });
+            const order = await readOrder(row.order_ID, 'station_code');
             if (order && order.station_code) {
                 row.delivery_number = await allocateDeliveryNumber(order.station_code, row.delivery_date);
             } else if (row.aircraft_reg) {
