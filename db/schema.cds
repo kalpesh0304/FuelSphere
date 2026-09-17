@@ -3575,6 +3575,28 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // and the uplift still happened.
         fuel_order          : Association to FUEL_ORDERS;
 
+        // ====================================================================
+        // REPLAY ORDER AND THE RECALCULATION STAMP.
+        //
+        // line_order sorts the movements WITHIN a flight date: uplift before
+        // burn before adjustment. It is a column rather than a rule derived
+        // from entry_type because the order has to hold in a SQL sort as well
+        // as in the replay, and entry_type sorts alphabetically into
+        // ADJUSTMENT, FLIGHT, INITIAL, UPLIFT - which is the wrong order and
+        // silently so. Burning before an uplift consumes at the old average
+        // price and burning after consumes at the blended one, so the
+        // sequence is worth money.
+        //
+        // The stamp is the whole audit trail by decision: who recalculated
+        // and when, no history of superseded values.
+        // ====================================================================
+        line_order          : Integer;                    // 0 opening, 1 uplift, 2 burn, 3 adjustment
+        recalculated_by     : String(100);                // Last recalculation, user
+        recalculated_at     : Timestamp;                  // Last recalculation, when
+        // Set where the replay could not stand behind the figure - a balance
+        // that went to zero or below, where an average price has no meaning.
+        recalc_flagged      : Boolean default false;
+
         // Adjustment Details (if entry_type = ADJUSTMENT)
         adjustment_reason   : String(500);                // Reason for manual adjustment
         adjustment_approved_by : String(100);             // Approver (Ops Manager)

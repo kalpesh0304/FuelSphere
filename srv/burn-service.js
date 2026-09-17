@@ -11,6 +11,7 @@
 
 const cds = require('@sap/cds');
 const { resolveTail } = require('./lib/tail-resolver');
+const { recalculateTail, lineOrderOf } = require('./lib/rob-recalculate');
 const {
     PHASE, SOURCE, BASIS,
     rateForTail, deriveCycle, allocate, splitBlockBurn
@@ -333,14 +334,30 @@ module.exports = class BurnService extends cds.ApplicationService {
         // ROB LEDGER ACTIONS
         // ====================================================================
 
-        // PLACEHOLDER. The button exists; the calculation does not, and this
-        // returns the row untouched rather than recomputing something
-        // half-specified. See the action's declaration in burn-service.cds.
+        // RECALCULATE THE WHOLE AIRCRAFT, not the row the button was pressed
+        // on. Balances run per tail: restating one row and leaving the rest
+        // would produce a ledger whose own columns disagree with each other.
+        //
+        // No period guard yet - period close is a later feature, and the
+        // replay is written so the guard becomes a filter on which rows it
+        // may rewrite rather than a change to the arithmetic.
         this.on('recalculate', ROBLedger, async (req) => {
-            const entry = await SELECT.one.from(ROBLedger).where({ ID: _id(req.params) });
+            const entry = await SELECT.one.from(ROBLedger)
+                .columns('ID', 'tail_number').where({ ID: _id(req.params) });
             if (!entry) return req.error(404, 'ROB entry not found');
-            req.info(200, 'Re-Calculate is not implemented yet - nothing was changed.');
-            return entry;
+            if (!entry.tail_number) return req.error(400, 'This entry names no aircraft to recalculate.');
+
+            const r = await recalculateTail(entry.tail_number, req.user.id);
+
+            const parts = [`${r.rows} entries replayed for ${r.tail}.`,
+                           `Closing ${r.closingQty} kg valued ${r.closingValue}`,
+                           r.map === null ? 'with no average price.' : `at ${r.map} per kg.`];
+            if (r.openingAssumed) parts.push('Opening balance valued at the first priced uplift for this aircraft - an assumption, not a recorded cost.');
+            if (r.unpriced) parts.push(`${r.unpriced} uplift(s) carry no price and were valued at zero - enter a rate on the ticket and recalculate.`);
+            if (r.flagged) parts.push(`${r.flagged} row(s) flagged: the balance reached zero or below, so the average price there is the last good one.`);
+            req.info(200, parts.join(' '));
+
+            return SELECT.one.from(ROBLedger).where({ ID: entry.ID });
         });
 
         this.on('approveAdjustment', ROBLedger, async (req) => {

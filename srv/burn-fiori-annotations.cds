@@ -383,24 +383,25 @@ annotate BurnService.ROBLedger with @(
         ],
 
         // --- Default Sort ---
-        // NEWEST POSTING FIRST, not newest flight date.
+        // FLIGHT DATE, THEN UPLIFT BEFORE BURN - the order the ledger is
+        // read in and the order Re-Calculate replays in, so the balance
+        // columns appear in the sequence they were actually computed in.
         //
-        // record_date on an uplift is the FLIGHT's date, which for a ticket
-        // captured after the fact is not today - so a row posted this
-        // morning for a flight in March sorted six months down the list and
-        // read as "the uplift never reached the ledger". It had; it was just
-        // nowhere near the top.
+        // line_order carries the within-day sequence because entry_type
+        // sorts alphabetically into ADJUSTMENT, FLIGHT, INITIAL, UPLIFT,
+        // which is the wrong order and wrong in a way nobody would see.
         //
-        // Insertion order is also the TRUTHFUL order for this table: the
-        // running balance and the MAP are computed by adding each movement
-        // to the one before it, so created_at is the sequence the arithmetic
-        // actually followed. Sorting by flight date showed a balance column
-        // in an order the balances were never calculated in.
+        // THE COST OF THIS CHOICE, recorded because it was made knowingly: a
+        // ticket captured today for an old flight sorts to that old date, not
+        // to the top, so it can look as though nothing was posted. Sorting by
+        // posting order instead showed new rows immediately but displayed the
+        // balances out of the sequence they were calculated in.
         PresentationVariant: {
             SortOrder: [
-                { Property: created_at, Descending: true },
-                { Property: record_date, Descending: true },
-                { Property: record_time, Descending: true }
+                { Property: tail_number, Descending: false },
+                { Property: record_date, Descending: false },
+                { Property: line_order, Descending: false },
+                { Property: record_time, Descending: false }
             ],
             Visualizations: ['@UI.LineItem']
         },
@@ -424,7 +425,9 @@ annotate BurnService.ROBLedger with @(
                 { Value: balance_value_usd, Label: 'Balance value USD' },
                 { Value: map_usd_per_kg, Label: 'MAP USD/kg' },
                 { Value: rob_percentage, Label: 'ROB %' },
-                { Value: max_capacity_kg, Label: 'Max Capacity (kg)' }
+                { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
+                { Value: recalculated_by, Label: 'Last Recalculated By' },
+                { Value: recalculated_at, Label: 'Last Recalculated On' }
             ]
         },
 
@@ -606,6 +609,10 @@ annotate BurnService.ROBLedger with {
     volume_l               @title: 'Volume (L)'        @Common.FieldControl: #ReadOnly;
     fuel_ticket            @title: 'Fuel Ticket';
     fuel_order             @title: 'Fuel Order';
+    line_order             @title: 'Line Order'             @UI.Hidden;
+    recalc_flagged         @title: 'Check Balance'          @Common.FieldControl: #ReadOnly;
+    recalculated_by        @title: 'Last Recalculated By'   @Common.FieldControl: #ReadOnly;
+    recalculated_at        @title: 'Last Recalculated On'   @Common.FieldControl: #ReadOnly;
     max_capacity_kg        @title: 'Max Capacity (kg)';
     rob_percentage         @title: 'ROB %' @Common.FieldControl: #ReadOnly;
     adjustment_reason      @title: 'Adjustment Reason' @UI.MultiLineText;

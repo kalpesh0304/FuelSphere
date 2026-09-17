@@ -105,16 +105,19 @@ service BurnService {
         fuel_order      : redirected to FuelOrders
     } actions {
         /**
-         * Re-Calculate - PLACEHOLDER, DELIBERATELY DOES NOTHING.
+         * Re-Calculate - replay THIS ROW'S AIRCRAFT and restate its ledger.
          *
-         * Requested as a button with no behaviour behind it yet. It is
-         * declared and granted so the button renders and is reachable (D22:
-         * a bound action with no grant is refused for every user, including
-         * one holding all scopes), and its handler says so rather than
-         * recomputing something half-defined. What "re-calculate" should
-         * recompute - closing_rob_kg from the uplift and burn rows,
-         * stock_value, or both - is not decided, and guessing here would put
-         * a number on screen nobody specified.
+         * Scope is the whole tail from its opening balance, not the row the
+         * button sits on: balances run per aircraft, so restating one row
+         * would leave the ledger's own columns disagreeing with each other.
+         *
+         * Rules in srv/lib/rob-recalculate.js - flight-date order, uplift
+         * before burn, MAP moves on uplift only, adjustments valued as
+         * burns, unpriced uplifts worth zero until a rate is entered on the
+         * ticket. Overwrites the valued columns and stamps who ran it and
+         * when; superseded values are not kept.
+         *
+         * Finance-scoped, because it restates posted figures.
          */
         action recalculate() returns ROBLedger;
 

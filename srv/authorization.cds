@@ -552,9 +552,10 @@ annotate BurnService.ROBLedger with @(restrict: [
     // flagged in the pull request for a production review, not decided here.
     { grant: 'approveAdjustment', to: ['BurnDataEdit', 'AdminAccess'] },
     { grant: 'rejectAdjustment',  to: ['BurnDataEdit', 'AdminAccess'] },
-    // Placeholder action - granted so the button is reachable at all (D22),
-    // at the same floor as the other two. It writes nothing today.
-    { grant: 'recalculate',       to: ['BurnDataEdit', 'AdminAccess'] }
+    // Finance, not operations: this restates posted values across a whole
+    // aircraft's ledger. Narrowed from BurnDataEdit when the replay was
+    // implemented - the placeholder wrote nothing, this does.
+    { grant: 'recalculate',       to: ['FinancePost', 'AdminAccess'] }
 ]);
 
 // ----------------------------------------------------------------------------
