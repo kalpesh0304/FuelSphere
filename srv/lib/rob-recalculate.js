@@ -185,11 +185,17 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
         } else if (move.kind === 'burn') {
             // Consumed at the prevailing MAP, which is why a burn never moves
             // it. A burn before any priced uplift consumes at zero.
+            //
+            // Quantity and value are both SIGNED NEGATIVE, the rate is not:
+            // the ledger reads "-2,295 kg at 1.1345 = -2,603.68", which is the
+            // form the signed-off specimen uses. rob-burn.js writes the same
+            // signs at posting time, so a replay restates a burn row rather
+            // than inverting it.
             const atMap = map === null ? 0 : map;
             rowRate = atMap;
-            rowValue = money(move.qty * atMap);
+            rowValue = money(-move.qty * atMap);
             balQty = Number((balQty - move.qty).toFixed(2));
-            balValue = money(balValue - rowValue);
+            balValue = money(balValue + rowValue);
             qtySigned = -move.qty;
         } else {
             qtySigned = 0; rowRate = null; rowValue = null;

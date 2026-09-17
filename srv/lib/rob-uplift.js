@@ -35,6 +35,8 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT } = cds.ql;
 const { toLitres } = require('./fuel-uom');
+const { postPrecedingBurn } = require('./rob-burn');
+const { LINE_ORDER } = require('./rob-recalculate');
 
 const LEDGER = 'fuelsphere.ROB_LEDGER';
 
@@ -68,9 +70,22 @@ async function postTicketUplift(ticket) {
     // Idempotent: a ticket posts once. Re-activating a corrected ticket must
     // not add a second uplift of the same fuel. Silent by design - this is
     // the expected path on every re-save, not something to report.
+    //
+    // Narrowed by entry_type, and this check is also what makes the burn below
+    // idempotent: returning here short-circuits the whole posting, so a
+    // re-saved ticket re-attempts neither row. The narrowing is belt and
+    // braces - burn rows carry no ticket link - but it states the intent,
+    // which is that THIS ticket's UPLIFT is what must not be written twice.
     const existing = await cds.db.run(SELECT.one.from(LEDGER)
-        .columns('ID').where({ fuel_ticket_ID: ticket.ID }));
+        .columns('ID').where({ fuel_ticket_ID: ticket.ID, entry_type: 'UPLIFT' }));
     if (existing) return { ID: null, reason: null };
+
+    // THE BURN COMES FIRST, and must, for two reasons. The fuel was consumed
+    // before this uplift went on board, so the ledger reads in that order; and
+    // the `last` row read immediately below has to be the burn, not the stale
+    // position from the previous flight, or this uplift opens at a balance the
+    // aircraft no longer held.
+    const burn = await postPrecedingBurn(ticket, tail);
 
     // The previous row for this tail IS the opening balance. Ordered the way
     // the ledger is read - date, then time, then the within-day sequence.
@@ -139,6 +154,10 @@ async function postTicketUplift(ticket) {
         record_time: recordTime,
         sequence,
         flight_ID: flightId,
+        // Uplift before burn within one flight date - the same ordering
+        // rob-recalculate.js replays by, stamped at write time so a ledger
+        // that has never been recalculated still sorts correctly.
+        line_order: LINE_ORDER.UPLIFT,
         fuel_ticket_ID: ticket.ID,
         // Null where the ticket had no order - A1 permits an order-less
         // ticket, and the uplift still belongs in the ledger.
@@ -165,7 +184,11 @@ async function postTicketUplift(ticket) {
         data_source: 'TICKET',
         is_estimated: false
     }));
-    return { ID, reason: null };
+    // The uplift posted, so there is no reason to report about it. Any reason
+    // travelling back now belongs to the BURN - typically a missing Meter
+    // Start - and the caller says it, because an operator who sees an uplift
+    // appear and no burn would otherwise read the gap as a defect.
+    return { ID, reason: burn.reason, burnID: burn.ID, burnKg: burn.qty };
 }
 
 module.exports = { postTicketUplift };

@@ -506,8 +506,13 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!orderId) return;
             const tickets = await SELECT.from(FuelTickets).where({ order_ID: orderId });
             for (const t of tickets) {
-                const { reason } = await postTicketUplift(t);
-                if (reason) req.info(200, `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
+                // A reason WITH an ID means the uplift landed and only the
+                // inferred burn did not - see the same distinction in
+                // ticket-service.js.
+                const { ID, reason } = await postTicketUplift(t);
+                if (reason) req.info(200, ID
+                    ? `Ticket ${t.ticket_number}: uplift posted to the ROB ledger, but the previous leg's burn was not: ${reason}.`
+                    : `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
             }
         });
 

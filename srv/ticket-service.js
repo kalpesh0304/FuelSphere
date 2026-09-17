@@ -155,8 +155,14 @@ module.exports = class TicketService extends cds.ApplicationService {
         this.after('CREATE', FuelTickets, async (data, req) => {
             for (const row of (Array.isArray(data) ? data : [data])) {
                 if (!row) continue;
-                const { reason } = await postTicketUplift(row);
-                if (reason) req.info(200, `ROB ledger not updated: ${reason}.`);
+                // A reason WITH an ID means the uplift landed and only the
+                // inferred burn did not - a different message, because
+                // "not updated" would be untrue and would send someone
+                // looking for a row that is already there.
+                const { ID, reason } = await postTicketUplift(row);
+                if (reason) req.info(200, ID
+                    ? `Uplift posted to the ROB ledger, but the previous leg's burn was not: ${reason}.`
+                    : `ROB ledger not updated: ${reason}.`);
             }
         });
 
