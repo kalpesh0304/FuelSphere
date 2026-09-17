@@ -344,7 +344,7 @@ annotate DeliveryService.FuelDeliveries with {
 annotate DeliveryService.FlightSchedule with @(
     UI.LineItem: [
         { Value: flight_number,       Label: 'Flight' },
-        { Value: flight_date,         Label: 'Date' },
+        { Value: flight_date,         Label: 'Flight Date' },
         { Value: origin_airport,      Label: 'From' },
         { Value: destination_airport, Label: 'To' },
         { Value: aircraft_reg,        Label: 'Aircraft Reg' }
@@ -354,7 +354,7 @@ annotate DeliveryService.FlightSchedule with @(
 annotate DeliveryService.FlightSchedule with {
     ID                   @UI.Hidden;
     flight_number        @title: 'Flight';
-    flight_date          @title: 'Date';
+    flight_date          @title: 'Flight Date';
     origin_airport       @title: 'From';
     destination_airport  @title: 'To';
     aircraft_reg         @title: 'Aircraft Reg';

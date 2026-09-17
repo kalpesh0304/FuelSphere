@@ -830,7 +830,7 @@ annotate BurnService.FlightSchedule with @(
         FieldGroup #BurnFlightIdentity: {
             Data: [
                 { Value: flight_number, Label: 'Flight' },
-                { Value: flight_date,   Label: 'Date' },
+                { Value: flight_date,   Label: 'Flight Date' },
                 { Value: airline_code,  Label: 'Airline' },
                 { Value: aircraft_reg,  Label: 'Registration' },
                 { Value: status,        Label: 'Status' }

@@ -443,7 +443,7 @@ annotate PlanningService.FlightSchedule with @(
         // --- List Report Table ---
         LineItem: [
             { Value: flight_number, Label: 'Flight Number' },
-            { Value: flight_date, Label: 'Date' },
+            { Value: flight_date, Label: 'Flight Date' },
             { Value: airline_code, Label: 'Airline' },
             { Value: aircraft_type, Label: 'Aircraft Type' },
             { Value: aircraft_reg, Label: 'Registration' },
@@ -955,7 +955,7 @@ annotate PlanningService.FlightSchedule with {
     actual_origin                 @title: 'Actual Origin (resolved)';
     actual_destination            @title: 'Actual Destination (resolved)';
     flight_number        @title: 'Flight Number';
-    flight_date          @title: 'Date';
+    flight_date          @title: 'Flight Date';
     aircraft_type        @title: 'Aircraft Type';
     aircraft_reg         @title: 'Registration';
     origin_airport       @title: 'Origin';

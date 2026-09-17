@@ -205,6 +205,10 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: requested_date, Label: 'Requested Date' },
                 { Value: requested_time, Label: 'Requested Time' },
                 { Value: flight_ID, Label: 'Flight' },
+                // Read through the association, so it follows whatever flight
+                // is picked without a second column to keep in step - and it
+                // resolves on a draft row, which a calculated column does not.
+                { Value: flight.flight_date, Label: 'Flight Date' },
                 { Value: priority, Label: 'Priority' },
                 { Value: status, Label: 'Status' },
                 { Value: notes, Label: 'Notes' },
@@ -479,8 +483,14 @@ annotate FuelOrderService.FuelOrders with {
 
     flight @(
         Common: {
+            Label: 'Flight',
             Text: flight.flight_number,
-            TextArrangement: #TextFirst,
+            // TextOnly, not TextFirst. TextFirst renders the text AND the key
+            // it stands for - "AC412 (e5f6a7b8-5555-4000...)" - which puts a
+            // GUID in front of an operator on the order screen. The key is
+            // still what the field holds and what the F4 writes back; it is
+            // simply not something anyone needs to read.
+            TextArrangement: #TextOnly,
             ValueList: {
                 Label: 'Flight Schedule',
                 CollectionPath: 'FlightSchedule',
@@ -606,12 +616,20 @@ annotate FuelOrderService.FuelOrders with {
 annotate FuelOrderService.FuelOrders @(
     Common.SideEffects #StationChanged : {
         SourceProperties : [ station_code ],
-        TargetEntities   : [ 
-            airport, 
-            supplier, 
+        TargetEntities   : [
+            airport,
+            supplier,
             contract,
             product
         ]
+    },
+
+    // Picking a flight fills the flight date beside it. TargetEntities rather
+    // than TargetProperties because the date is read THROUGH the association -
+    // naming `flight` re-reads the whole target and the displayed date with it.
+    Common.SideEffects #FlightPicked : {
+        SourceProperties : [ flight_ID ],
+        TargetEntities   : [ flight ]
     },
 
     Common.SideEffects #updTotAmt : {
@@ -1302,7 +1320,7 @@ annotate FuelOrderService.FlightSchedule with @(
             // makes it the join key rather than flight_number + date.
             { Value: flight_leg_id, Label: 'Flight Leg ID', ![@UI.Importance]: #Medium },
             { Value: flight_number, Label: 'Flight Number' },
-            { Value: flight_date, Label: 'Date' },
+            { Value: flight_date, Label: 'Flight Date' },
             { Value: aircraft_type, Label: 'Aircraft Type' },
             { Value: aircraft_reg, Label: 'Registration' },
             { Value: origin_airport, Label: 'Origin' },
@@ -1391,7 +1409,7 @@ annotate FuelOrderService.FlightSchedule with {
     // this service, so saying so per field takes the asterisk off without
     // changing what anyone can edit.
     flight_number        @title: 'Flight Number' @Common.FieldControl: #ReadOnly;
-    flight_date          @title: 'Date'          @Common.FieldControl: #ReadOnly;
+    flight_date          @title: 'Flight Date'   @Common.FieldControl: #ReadOnly;
     aircraft_type        @title: 'Aircraft Type';
     aircraft_reg         @title: 'Registration';
     origin_airport       @title: 'Origin';
