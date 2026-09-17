@@ -44,7 +44,9 @@ annotate DeliveryService.FuelOrders with {
     ID            @UI.Hidden;
     order_number  @title: 'Order Number';
     station_code  @title: 'Station';
-    flight_number @title: 'Flight';
+    // See ticket-fiori-annotations.cds: #ReadOnly strips the @mandatory
+    // inherited through the flight association.
+    flight_number @title: 'Flight' @Common.FieldControl: #ReadOnly;
     status        @title: 'Status';
 };
 

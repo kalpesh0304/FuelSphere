@@ -40,7 +40,42 @@ service BurnService {
         flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
-        destination_airport : redirected to Airports
+        destination_airport : redirected to Airports,
+
+        // ====================================================================
+        // THE FLIGHT-WISE SUMMARY COLUMNS (report 2 of 6).
+        //
+        // One row per leg, assembled from FLIGHT_SCHEDULE, FLIGHT_DISPATCH,
+        // FUEL_TICKETS, APU_USAGE and ROB_LEDGER. burn-summary.js holds the
+        // arithmetic and the reasoning; this is only the declaration.
+        //
+        // VIRTUAL, NOT STORED, and deliberately. Every one of these is a fact
+        // that already exists somewhere else - a gauge reading, a ticket, a
+        // dispatched figure, a price. Copying them onto FUEL_BURNS would
+        // create a second copy free to drift from the first, and the report
+        // would then be reporting the copy rather than the operation. The cost
+        // is that they cannot be sorted or filtered server-side, which is the
+        // right trade for a derived column.
+        // ====================================================================
+        virtual null as flight_date_v          : Date,
+        virtual null as sector                 : String(12),
+        virtual null as dispatch_kg            : Decimal(12,2),
+        virtual null as fqis_out_kg            : Decimal(12,2),
+        virtual null as fqis_in_kg             : Decimal(12,2),
+        virtual null as uplift_l               : Decimal(15,2),
+        virtual null as specific_gravity       : Decimal(8,4),
+        virtual null as expected_delta_kg      : Decimal(12,2),
+        virtual null as actual_delta_kg        : Decimal(12,2),
+        virtual null as uplift_value_usd       : Decimal(15,2),
+        virtual null as block_burn_kg          : Decimal(12,2),
+        virtual null as block_burn_value_usd   : Decimal(15,2),
+        virtual null as apu_hours              : Decimal(8,2),
+        virtual null as apu_rate_kg_hr         : Decimal(8,2),
+        virtual null as apu_burn_value_usd     : Decimal(15,2),
+        virtual null as engine_burn_split_kg   : Decimal(12,2),
+        virtual null as engine_burn_value_usd  : Decimal(15,2),
+        virtual null as map_usd_per_kg         : Decimal(15,4),
+        virtual null as arrival_rob_kg         : Decimal(12,2)
     } actions {
         /**
          * Confirm burn record

@@ -35,18 +35,51 @@ annotate BurnService.FuelBurns with @(
         ],
 
         // --- List Report Table ---
+        //
+        // THE FLIGHT-WISE SUMMARY, in the order report 2 of 6 prints it. That
+        // report is split over two tables for legibility and is ONE row per
+        // flight; this is that row. Captured quantities first, then the
+        // consumption split, then the record's own status columns.
+        //
+        // Importance is what makes a table this wide usable: #High survives
+        // the responsive collapse onto a phone, #Medium and #Low drop into the
+        // pop-in. The identifying columns and the two figures the report is
+        // actually about - block burn and its value - are the ones kept.
         LineItem: [
-            { Value: tail_number, Label: 'Aircraft', ![@UI.Importance]: #High },
-            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
-            { Value: burn_date, Label: 'Burn Date', ![@UI.Importance]: #High },
-            { Value: origin_airport, Label: 'Origin', ![@UI.Importance]: #High },
-            { Value: destination_airport, Label: 'Destination', ![@UI.Importance]: #High },
-            { Value: actual_burn_kg, Label: 'Actual Burn (kg)', ![@UI.Importance]: #High },
-            { Value: planned_burn_kg, Label: 'Planned Burn (kg)', ![@UI.Importance]: #Medium },
-            { Value: variance_kg, Label: 'Variance (kg)', ![@UI.Importance]: #Medium },
-            { Value: variance_pct, Label: 'Variance %', ![@UI.Importance]: #Medium },
+            // ---- identity -------------------------------------------------
+            { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: flight_date_v, Label: 'Flight date', ![@UI.Importance]: #High },
+            { Value: sector, Label: 'Sector', ![@UI.Importance]: #High },
+            { Value: tail_number, Label: 'Tail', ![@UI.Importance]: #High },
+
+            // ---- captured quantities --------------------------------------
+            { Value: dispatch_kg, Label: 'Dispatch kg', ![@UI.Importance]: #Medium },
+            { Value: fqis_out_kg, Label: 'FQIS out kg', ![@UI.Importance]: #Medium },
+            { Value: fqis_in_kg, Label: 'FQIS in kg', ![@UI.Importance]: #Medium },
+            { Value: uplift_l, Label: 'Uplift L', ![@UI.Importance]: #Medium },
+            { Value: specific_gravity, Label: 'Sp. gravity', ![@UI.Importance]: #Low },
+            { Value: expected_delta_kg, Label: 'Expected delta kg', ![@UI.Importance]: #Low },
+            { Value: actual_delta_kg, Label: 'Actual delta kg', ![@UI.Importance]: #Medium },
+            { Value: uplift_value_usd, Label: 'Uplift value USD', ![@UI.Importance]: #Medium },
+
+            // ---- consumption, APU and engine split ------------------------
+            { Value: block_burn_kg, Label: 'Block burn kg', ![@UI.Importance]: #High },
+            { Value: block_burn_value_usd, Label: 'Block burn value USD', ![@UI.Importance]: #High },
+            { Value: apu_hours, Label: 'APU hours', ![@UI.Importance]: #Low },
+            { Value: apu_rate_kg_hr, Label: 'APU rate kg/h', ![@UI.Importance]: #Low },
+            { Value: apu_burn_kg, Label: 'APU burn kg', ![@UI.Importance]: #Medium },
+            { Value: apu_burn_value_usd, Label: 'APU burn value USD', ![@UI.Importance]: #Low },
+            { Value: engine_burn_split_kg, Label: 'Engine burn kg', ![@UI.Importance]: #Medium },
+            { Value: engine_burn_value_usd, Label: 'Engine burn value USD', ![@UI.Importance]: #Low },
+            { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #Medium },
+            { Value: arrival_rob_kg, Label: 'Arrival ROB kg', ![@UI.Importance]: #Medium },
+
+            // ---- the burn record's own columns ----------------------------
+            { Value: planned_burn_kg, Label: 'Planned Burn (kg)', ![@UI.Importance]: #Low },
+            { Value: variance_kg, Label: 'Variance (kg)', ![@UI.Importance]: #Low },
+            { Value: variance_pct, Label: 'Variance %', ![@UI.Importance]: #Low },
             { Value: variance_status, Label: 'Variance Status', ![@UI.Importance]: #Medium },
-            { Value: data_source, Label: 'Source', ![@UI.Importance]: #Medium },
+            { Value: data_source, Label: 'Source', ![@UI.Importance]: #Low },
             { Value: status, Label: 'Status', ![@UI.Importance]: #High },
             {
                 $Type  : 'UI.DataFieldForAction',
@@ -250,6 +283,38 @@ annotate BurnService.FuelBurns with @(
 
 // FuelBurns field-level annotations
 annotate BurnService.FuelBurns with {
+    // ------------------------------------------------------------------
+    // The Flight-Wise Summary columns.
+    //
+    // ALL READ-ONLY, without exception. Every one is derived or fetched from
+    // another entity by burn-summary.js, so an input field would accept a
+    // keystroke, discard it on the next read, and teach the user that this
+    // screen loses data. #ReadOnly is what says "this is a reported figure".
+    //
+    // No @Measures.Unit anywhere here either: the unit is in the label, the
+    // way the report prints it, and a measure annotation on a virtual element
+    // would need a currency or UoM column beside it that does not exist.
+    // ------------------------------------------------------------------
+    flight_date_v                 @title: 'Flight date'            @Common.FieldControl: #ReadOnly;
+    sector                        @title: 'Sector'                 @Common.FieldControl: #ReadOnly;
+    dispatch_kg                   @title: 'Dispatch kg'            @Common.FieldControl: #ReadOnly;
+    fqis_out_kg                   @title: 'FQIS out kg'            @Common.FieldControl: #ReadOnly;
+    fqis_in_kg                    @title: 'FQIS in kg'             @Common.FieldControl: #ReadOnly;
+    uplift_l                      @title: 'Uplift L'               @Common.FieldControl: #ReadOnly;
+    specific_gravity              @title: 'Sp. gravity'            @Common.FieldControl: #ReadOnly;
+    expected_delta_kg             @title: 'Expected delta kg'      @Common.FieldControl: #ReadOnly;
+    actual_delta_kg               @title: 'Actual delta kg'        @Common.FieldControl: #ReadOnly;
+    uplift_value_usd              @title: 'Uplift value USD'       @Common.FieldControl: #ReadOnly;
+    block_burn_kg                 @title: 'Block burn kg'          @Common.FieldControl: #ReadOnly;
+    block_burn_value_usd          @title: 'Block burn value USD'   @Common.FieldControl: #ReadOnly;
+    apu_hours                     @title: 'APU hours'              @Common.FieldControl: #ReadOnly;
+    apu_rate_kg_hr                @title: 'APU rate kg/h'          @Common.FieldControl: #ReadOnly;
+    apu_burn_value_usd            @title: 'APU burn value USD'     @Common.FieldControl: #ReadOnly;
+    engine_burn_split_kg          @title: 'Engine burn kg'         @Common.FieldControl: #ReadOnly;
+    engine_burn_value_usd         @title: 'Engine burn value USD'  @Common.FieldControl: #ReadOnly;
+    map_usd_per_kg                @title: 'MAP USD/kg'             @Common.FieldControl: #ReadOnly;
+    arrival_rob_kg                @title: 'Arrival ROB kg'         @Common.FieldControl: #ReadOnly;
+
     ID                            @UI.Hidden;
     tail_number                   @title: 'Aircraft Tail';
     flight_number                 @title: 'Flight';

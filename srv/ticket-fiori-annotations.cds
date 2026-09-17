@@ -42,7 +42,11 @@ annotate TicketService.FuelOrders with {
     ID            @UI.Hidden;
     order_number  @title: 'Order Number';
     station_code  @title: 'Station';
-    flight_number @title: 'Flight';
+    // #ReadOnly strips the @mandatory this inherits from
+    // FLIGHT_SCHEDULE.flight_number by being displayed through the
+    // association. Without it the F4 list paints an asterisk on a column
+    // nobody can type into.
+    flight_number @title: 'Flight' @Common.FieldControl: #ReadOnly;
     status        @title: 'Status';
 };
 

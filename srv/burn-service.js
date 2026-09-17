@@ -12,6 +12,7 @@
 const cds = require('@sap/cds');
 const { resolveTail } = require('./lib/tail-resolver');
 const { recalculateTail, lineOrderOf } = require('./lib/rob-recalculate');
+const { applyFlightSummary } = require('./lib/burn-summary');
 const {
     PHASE, SOURCE, BASIS,
     rateForTail, deriveCycle, allocate, splitBlockBurn
@@ -47,6 +48,21 @@ async function burnLadder(absPct, asOfDate) {
 module.exports = class BurnService extends cds.ApplicationService {
     async init() {
         const { FuelBurns, ROBLedger, FuelBurnExceptions } = this.entities;
+
+        // ====================================================================
+        // THE FLIGHT-WISE SUMMARY COLUMNS
+        //
+        // Registered on the DRAFT as well as the active entity, and that is
+        // not optional. A virtual element whose handler runs on only one of
+        // the two comes back ABSENT from the other - not null, absent - and
+        // Fiori then fails to drill down into the property it was told to
+        // render, leaving the page spinning with no error anywhere the user
+        // can see. This app is draft-enabled, so a burn opened for edit reads
+        // from .drafts and would hit exactly that.
+        // ====================================================================
+        this.after(['READ'], [FuelBurns, FuelBurns.drafts], async (data) => {
+            await applyFlightSummary(data);
+        });
 
         // ====================================================================
         // FUEL BURN ACTIONS

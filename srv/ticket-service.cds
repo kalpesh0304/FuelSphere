@@ -74,7 +74,10 @@ service TicketService {
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
         airport  : redirected to Airports,
-        supplier : redirected to Suppliers
+        supplier : redirected to Suppliers,
+        // See the identical note in delivery-service.cds: the order F4 lists a
+        // Flight column that had no element behind it.
+        flight.flight_number as flight_number
     };
 
     @readonly

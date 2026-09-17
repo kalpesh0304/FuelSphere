@@ -67,7 +67,12 @@ service DeliveryService {
     entity FuelOrders as projection on db.FUEL_ORDERS {
         *,
         airport  : redirected to Airports,
-        supplier : redirected to Suppliers
+        supplier : redirected to Suppliers,
+        // FUEL_ORDERS carries only the flight ASSOCIATION, never a flight
+        // number of its own. The order F4 has been asking for this column
+        // since it was written and rendering it empty - D50 could not see it
+        // because a stale service count aborted the sweep before it ran.
+        flight.flight_number as flight_number
     };
 
     @readonly

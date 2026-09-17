@@ -146,9 +146,16 @@ describe('D50 — no annotation on any service points at nothing', () => {
     out('three plants, three reports: absent property, absent navigation, absent term');
   });
 
-  it('EXIT-3  ALL FIFTEEN SERVICES, zero dangling', () => {
+  // SIXTEEN SINCE DeliveryService LANDED. The count is a guard against a
+  // service silently failing to compile and the sweep then reporting "zero
+  // dangling" across a set that quietly shrank - so it is raised deliberately
+  // when a service is added, never loosened to >=.
+  //
+  // It fires BEFORE the sweep, which is why a stale constant is worse than it
+  // looks: the whole dangling check was skipped for as long as it was wrong.
+  it('EXIT-3  ALL SIXTEEN SERVICES, zero dangling', () => {
     const names = Object.keys(edmx).sort();
-    assert.strictEqual(names.length, 15, `expected 15 services, compiled ${names.length}`);
+    assert.strictEqual(names.length, 16, `expected 16 services, compiled ${names.length}`);
 
     let TP = 0, TF = 0; const bad = [];
     const rows = [];
