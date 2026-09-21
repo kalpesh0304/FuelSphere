@@ -71,6 +71,11 @@ service BurnService {
         virtual null as block_burn_value_usd   : Decimal(15,2),
         virtual null as apu_hours              : Decimal(8,2),
         virtual null as apu_rate_kg_hr         : Decimal(8,2),
+        // Summed from the APU_USAGE cycles, per the derivation table - NOT
+        // the stored FUEL_BURNS.apu_burn_kg beside it, which is meant to be
+        // that same sum and currently reads 0.00 while the cycles are
+        // populated. The stored column keeps its object-page meaning.
+        virtual null as apu_burn_sum_kg        : Decimal(12,2),
         virtual null as apu_burn_value_usd     : Decimal(15,2),
         virtual null as engine_burn_split_kg   : Decimal(12,2),
         virtual null as engine_burn_value_usd  : Decimal(15,2),

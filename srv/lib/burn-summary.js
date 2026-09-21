@@ -1,52 +1,64 @@
 /**
  * FuelSphere - the Flight-Wise Summary columns on the Fuel Burns list.
  *
- * ONE ROW PER FLIGHT, ASSEMBLED FROM FIVE ENTITIES. The report prints as two
+ * ONE ROW PER FLIGHT, ASSEMBLED FROM SIX ENTITIES. The report prints as two
  * tables only because it does not fit the page; it is one row per leg, and
- * every column on it comes from somewhere else:
+ * almost nothing on it lives on FUEL_BURNS.
  *
- *   FLIGHT_SCHEDULE   flight date, sector, the FQIS pair (OUT and IN)
- *   FLIGHT_DISPATCH   the dispatched block fuel
- *   FUEL_TICKETS      uplift litres, specific gravity, mass, value
- *   APU_USAGE         running minutes and the rate they were costed at
- *   ROB_LEDGER        the moving average price the consumption is valued at
+ * THE FIELD DERIVATION TABLE IS THE SPECIFICATION. Each mapping below cites
+ * it, because several are NOT the obvious choice and the obvious choice is
+ * wrong in a way that still produces a plausible number:
  *
- * THE ARITHMETIC, as the specimen and the dispatcher's worksheet both state it:
+ *   Dispatch kg     FLIGHT_DISPATCH.required_uplift_kg - NOT block_fuel_kg.
+ *                   Block fuel is what the aircraft must depart with; the
+ *                   report wants what dispatch asked to be PUT ON.
+ *   Sp. gravity     VOLUME-WEIGHTED across the tickets, not the first one's
+ *                   density. Two suppliers at different densities give a
+ *                   blend, and the first ticket's figure is just one of them.
+ *   Actual delta    FUEL_DELIVERIES fob_after - fob_before. THE GAUGE, not
+ *                   the ticket. Expected delta is what the ticket says and
+ *                   actual is what the aircraft saw - taking both from the
+ *                   tickets would make them equal by construction and delete
+ *                   the discrepancy the pair exists to show.
+ *   APU rate        AIRCRAFT_REGISTRATIONS.apu_burn_rate_kg_hr - the tail's
+ *                   rate, not the rate stamped on a cycle.
+ *   APU burn kg     SUM OF THE APU_USAGE CYCLES, not FUEL_BURNS.apu_burn_kg.
+ *                   The stored column is meant to be that sum, and in the
+ *                   current data it is 0.00 while the cycles are populated.
  *
- *   block burn      = FQIS out - FQIS in          3,776 - 1,402 = 2,374
- *   APU burn        = APU hours x rate kg/h       0.80 x 110     =    88
- *   engine burn     = block burn - APU burn       2,374 - 88     = 2,286
- *   expected delta  = uplift litres x gravity     3,262 x 0.800  = 2,610
- *   actual delta    = the ticket's measured mass                 = 2,596
- *   <movement> value = <movement> kg x MAP        2,374 x 1.1438 = 2,715.38
+ * HELD - PENDING SHAILESH. The five APU and engine figures are NOT signed
+ * off. The report subtracts APU from block burn, but block burn is gauge-out
+ * less gauge-in and holds only what burned inside that window; APU fuel
+ * burned before pushback is not in it, so subtracting understates the engine
+ * burn. They are computed here so the screen is populated and the question
+ * can be argued against real numbers - they are not settled.
  *
- * EXPECTED AND ACTUAL DELTA ARE BOTH KEPT, and the gap between them is the
- * reason the report exists. Expected is what the uplift SHOULD have massed at
- * the ticket's gravity; actual is what the aircraft's gauges say arrived, and
- * only the actual figure enters the fuel ledger. Collapsing them to one column
- * would delete the discrepancy the reader is looking for.
+ * WHY THE BASE COLUMNS ARE RE-READ, and this is the whole reason the first
+ * version showed a page of blanks: an after-READ handler receives only the
+ * columns the CLIENT selected. Fiori issues $select for the LineItem columns
+ * and nothing else, so flight_ID - which no column displays - arrived
+ * undefined, every flight-keyed lookup missed, and the report silently fell
+ * back to burn_date and nulls. A derivation must never depend on a column
+ * happening to be in someone's $select.
  *
- * ENGINE BURN IS DERIVED HERE, NOT READ FROM FUEL_BURNS.engine_burn_kg. The
- * stored column is actual_burn_kg - apu_burn_kg; this one is the FQIS delta
- * less the same APU figure. They agree whenever actual_burn_kg agrees with the
- * gauges, and where they do not, the row on screen still adds up - block less
- * APU is exactly engine, every time, which is the property a reader checks
- * first. The stored column keeps its own meaning on the object page.
- *
- * BATCHED, NOT PER ROW. Five queries for a page of any size: a list report asks
- * for thirty rows at a time and a per-row lookup would be a hundred and fifty
- * round trips to paint one screen.
+ * BATCHED, NOT PER ROW. A fixed number of queries for a page of any size.
  */
 
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
 const { toLitres } = require('./fuel-uom');
 
-const FLIGHTS   = 'fuelsphere.FLIGHT_SCHEDULE';
-const DISPATCH  = 'fuelsphere.FLIGHT_DISPATCH';
-const TICKETS   = 'fuelsphere.FUEL_TICKETS';
-const APU       = 'fuelsphere.APU_USAGE';
-const LEDGER    = 'fuelsphere.ROB_LEDGER';
+const BURNS      = 'fuelsphere.FUEL_BURNS';
+const FLIGHTS    = 'fuelsphere.FLIGHT_SCHEDULE';
+const DISPATCH   = 'fuelsphere.FLIGHT_DISPATCH';
+const TICKETS    = 'fuelsphere.FUEL_TICKETS';
+const DELIVERIES = 'fuelsphere.FUEL_DELIVERIES';
+const APU        = 'fuelsphere.APU_USAGE';
+const LEDGER     = 'fuelsphere.ROB_LEDGER';
+const REGS       = 'fuelsphere.AIRCRAFT_REGISTRATIONS';
+
+/** The base columns the derivation needs, whatever the client asked for. */
+const BASE = ['flight_ID', 'tail_number', 'burn_date', 'actual_burn_kg'];
 
 const num   = (v) => (v === null || v === undefined ? null : Number(v));
 const money = (v) => (v === null ? null : Number(Number(v).toFixed(2)));
@@ -86,13 +98,31 @@ function groupBy(rows, key) {
  * @param {object|object[]} data  the rows the handler was given
  */
 async function applyFlightSummary(data) {
-    const rows = Array.isArray(data) ? data : [data];
+    const all = Array.isArray(data) ? data : [data];
+    const rows = all.filter(r => r && r.ID);
     if (!rows.length) return;
 
-    const flightIds = [...new Set(rows.map(r => r && r.flight_ID).filter(Boolean))];
-    const tails     = [...new Set(rows.map(r => r && r.tail_number).filter(Boolean))];
+    // ---- resolve the base columns, whatever the client selected ----------
+    // Kept OUT of the rows themselves: writing flight_ID onto a payload that
+    // did not ask for it would return a property the client never requested.
+    const resolved = new Map(rows.map(r => [r.ID, Object.fromEntries(BASE.map(k => [k, r[k]]))]));
+    const gaps = rows.filter(r => BASE.some(k => r[k] === undefined));
+    if (gaps.length) {
+        const stored = await cds.db.run(SELECT.from(BURNS)
+            .columns('ID', ...BASE)
+            .where({ ID: { in: gaps.map(r => r.ID) } }));
+        for (const s of stored) {
+            const into = resolved.get(s.ID);
+            // Only the gaps: a draft carries edits the active row has not seen.
+            if (into) for (const k of BASE) if (into[k] === undefined) into[k] = s[k];
+        }
+    }
+    const of = (row) => resolved.get(row.ID) || {};
 
-    // ---- the five source reads ------------------------------------------
+    const flightIds = [...new Set(rows.map(r => of(r).flight_ID).filter(Boolean))];
+    const tails     = [...new Set(rows.map(r => of(r).tail_number).filter(Boolean))];
+
+    // ---- the source reads -------------------------------------------------
     const flights = flightIds.length ? await cds.db.run(SELECT.from(FLIGHTS)
         .columns('ID', 'flight_number', 'flight_date', 'origin_airport',
                  'destination_airport', 'fob_at_out_kg', 'fob_at_in_kg')
@@ -100,26 +130,76 @@ async function applyFlightSummary(data) {
     const flightById = new Map(flights.map(f => [f.ID, f]));
 
     const dispatches = flightIds.length ? await cds.db.run(SELECT.from(DISPATCH)
-        .columns('flight_schedule_ID', 'block_fuel_kg', 'dispatch_qty_kg')
+        .columns('flight_schedule_ID', 'required_uplift_kg')
         .where({ flight_schedule_ID: { in: flightIds } })) : [];
     const dispatchByFlight = groupBy(dispatches, 'flight_schedule_ID');
 
-    const tickets = flightIds.length ? await cds.db.run(SELECT.from(TICKETS)
-        .columns('flight_ID', 'quantity', 'quantity_metered', 'quantity_kg',
-                 'uom_code', 'density_value', 'total_amount')
-        .where({ flight_ID: { in: flightIds } })) : [];
-    const ticketsByFlight = groupBy(tickets, 'flight_ID');
+    // TICKETS REACH A FLIGHT TWO WAYS, and the second is not redundant. The
+    // association is the intended link, but it was added late and the tickets
+    // already in the system carry only a flight_number string - so on existing
+    // data the association route finds nothing at all. The fallback matches on
+    // flight_number + flight_date, which is the SAME key FLIGHT_DISPATCH is
+    // documented as matching FLIGHT_SCHEDULE on, so it is the system's own
+    // convention rather than a new one invented here.
+    //
+    // The date is part of the key deliberately: a flight number alone repeats
+    // every day, and matching on it would attach Tuesday's uplift to Monday's
+    // leg. A ticket captured on a different date than the flight simply does
+    // not match, and its columns stay blank - which is the honest outcome.
+    const TKT_COLS = ['flight_ID', 'flight_number', 'delivery_ID', 'quantity',
+                      'quantity_metered', 'uom_code', 'density_value',
+                      'total_amount', 'delivery_timestamp'];
+    const byFlightId = flightIds.length ? await cds.db.run(SELECT.from(TICKETS)
+        .columns(...TKT_COLS).where({ flight_ID: { in: flightIds } })) : [];
 
-    // Keyed on the ALLOCATED flight - the cycle's own flight_ID may be absent
-    // (an overnight cycle carries none) and allocation is what decides which
-    // leg bears the cost.
+    const numbers = [...new Set(flights.map(f => f.flight_number).filter(Boolean))];
+    const byNumber = numbers.length ? await cds.db.run(SELECT.from(TICKETS)
+        .columns(...TKT_COLS)
+        .where({ flight_number: { in: numbers }, flight_ID: null })) : [];
+
+    const ticketsByFlight = groupBy(byFlightId, 'flight_ID');
+    for (const t of byNumber) {
+        const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
+        for (const f of flights) {
+            if (f.flight_number !== t.flight_number) continue;
+            if (day && day !== String(f.flight_date).slice(0, 10)) continue;
+            if (!ticketsByFlight.has(f.ID)) ticketsByFlight.set(f.ID, []);
+            ticketsByFlight.get(f.ID).push(t);
+        }
+    }
+    const tickets = [...byFlightId, ...byNumber];
+
+    // The gauge readings. Reached two ways because a delivery can carry the
+    // flight directly OR be linked only through the tickets written against
+    // it - seed data predates the delivery's flight association, so the
+    // ticket route is the one that resolves on existing records.
+    // Two queries rather than one OR: CDS QL has no object form for a
+    // disjunction, and a raw expression here would be the only untyped
+    // fragment in the file for no gain at this size.
+    const DEL_COLS = ['ID', 'flight_ID', 'fob_before_kg', 'fob_after_kg', 'fob_delta_kg'];
+    const deliveryIds = [...new Set(tickets.map(t => t.delivery_ID).filter(Boolean))];
+    const byFlight = flightIds.length ? await cds.db.run(SELECT.from(DELIVERIES)
+        .columns(...DEL_COLS).where({ flight_ID: { in: flightIds } })) : [];
+    const byId = deliveryIds.length ? await cds.db.run(SELECT.from(DELIVERIES)
+        .columns(...DEL_COLS).where({ ID: { in: deliveryIds } })) : [];
+    const deliveries = [...new Map([...byFlight, ...byId].map(d => [d.ID, d])).values()];
+    const deliveryById = new Map(deliveries.map(d => [d.ID, d]));
+    const deliveriesByFlight = groupBy(deliveries, 'flight_ID');
+
+    // Keyed on the ALLOCATED flight - a cycle's own flight_ID may be absent
+    // (an overnight cycle carries none) and allocation decides which leg pays.
     const apuCycles = flightIds.length ? await cds.db.run(SELECT.from(APU)
-        .columns('allocated_flight_ID', 'running_minutes', 'burn_rate_kg_hr')
+        .columns('allocated_flight_ID', 'running_minutes', 'apu_burn_kg')
         .where({ allocated_flight_ID: { in: flightIds } })) : [];
     const apuByFlight = groupBy(apuCycles, 'allocated_flight_ID');
 
-    // The whole ledger for the tails on this page, so the MAP lookup below is
-    // a scan of an array rather than a query per row.
+    // The tail's APU rate, per the derivation table - a property of the
+    // aircraft, not of any one cycle.
+    const regs = tails.length ? await cds.db.run(SELECT.from(REGS)
+        .columns('registration', 'apu_burn_rate_kg_hr')
+        .where({ registration: { in: tails } })) : [];
+    const rateByTail = new Map(regs.map(r => [r.registration, num(r.apu_burn_rate_kg_hr)]));
+
     const ledger = tails.length ? await cds.db.run(SELECT.from(LEDGER)
         .columns('tail_number', 'record_date', 'line_order', 'record_time',
                  'sequence', 'map_usd_per_kg')
@@ -141,68 +221,81 @@ async function applyFlightSummary(data) {
 
     // ---- assemble ---------------------------------------------------------
     for (const row of rows) {
-        if (!row) continue;
-        const f = row.flight_ID ? flightById.get(row.flight_ID) : null;
+        const base = of(row);
+        const f = base.flight_ID ? flightById.get(base.flight_ID) : null;
 
-        // Flight date and sector. Taken from the SCHEDULE where there is one,
-        // because that is the operational record; the burn's own burn_date is
-        // when the record was written and can differ for a late capture.
-        row.flight_date_v = f ? f.flight_date : (row.burn_date || null);
+        // Flight date and sector come from the SCHEDULE. burn_date is when the
+        // record was written and drifts from the flight on a late capture.
+        row.flight_date_v = f ? f.flight_date : (base.burn_date || null);
         row.sector = f && f.origin_airport && f.destination_airport
             ? `${f.origin_airport} - ${f.destination_airport}` : null;
 
-        // FQIS. The gauge at chocks-off and chocks-on: everything in the
-        // consumption half of the report is the gap between these two.
         const fqisOut = f ? num(f.fob_at_out_kg) : null;
         const fqisIn  = f ? num(f.fob_at_in_kg)  : null;
         row.fqis_out_kg = fqisOut;
         row.fqis_in_kg  = fqisIn;
-        // The same number as FQIS in, named for what the reader wants from it.
-        row.arrival_rob_kg = fqisIn;
+        row.arrival_rob_kg = fqisIn;   // the same number, named for its use
 
-        // Dispatched block fuel. block_fuel_kg is the figure derived from the
-        // seven regulated components; dispatch_qty_kg is the dispatcher's
-        // confirmed number and stands in where the stack was never captured.
-        const disp = dispatchByFlight.get(row.flight_ID) || [];
-        row.dispatch_kg = mass(total(disp, d => num(d.block_fuel_kg)))
-            ?? mass(total(disp, d => num(d.dispatch_qty_kg)));
+        const disp = dispatchByFlight.get(base.flight_ID) || [];
+        row.dispatch_kg = mass(total(disp, d => num(d.required_uplift_kg)));
 
-        // The uplift, from the tickets against this leg. Summed: a leg can be
-        // fuelled by two suppliers and the report prints one row per flight.
-        const tks = ticketsByFlight.get(row.flight_ID) || [];
-        const litres = total(tks, t => toLitres(t.quantity_metered ?? t.quantity, t.uom_code));
+        // ---- the uplift, from the tickets against this leg ----------------
+        const tks = ticketsByFlight.get(base.flight_ID) || [];
+        const perTicket = tks.map(t => ({
+            l: toLitres(t.quantity_metered ?? t.quantity, t.uom_code),
+            sg: num(t.density_value),
+            amt: num(t.total_amount)
+        }));
+        const litres = total(perTicket, t => t.l);
         row.uplift_l = mass(litres);
-        row.actual_delta_kg = mass(total(tks, t => num(t.quantity_kg)));
-        row.uplift_value_usd = money(total(tks, t => num(t.total_amount)));
+        row.uplift_value_usd = money(total(perTicket, t => t.amt));
 
-        // The TICKET's gravity, not mass divided by litres. Dividing would
-        // define expected delta as equal to actual delta and the comparison
-        // the two columns exist for would read zero on every row.
-        const gravity = tks.map(t => num(t.density_value)).find(v => v !== null && v !== undefined);
-        row.specific_gravity = gravity === undefined ? null : rate4(gravity);
+        // Volume-weighted: sum(L x SG) / sum(L), over the tickets that carry
+        // both. A simple average would let a 50-litre top-up pull the blend as
+        // hard as a 3,000-litre uplift.
+        const weighable = perTicket.filter(t => t.l !== null && t.sg !== null);
+        const weightedL = total(weighable, t => t.l);
+        row.specific_gravity = (weightedL && weightedL > 0)
+            ? rate4(total(weighable, t => t.l * t.sg) / weightedL) : null;
+
         row.expected_delta_kg = (litres !== null && row.specific_gravity !== null)
             ? mass(litres * row.specific_gravity) : null;
 
-        // Consumption. FQIS-derived where both readings exist; actual_burn_kg
-        // is the fallback and is documented as being the block burn.
+        // ---- what the gauge saw -------------------------------------------
+        const direct = deliveriesByFlight.get(base.flight_ID) || [];
+        const viaTickets = [...new Set(tks.map(t => t.delivery_ID).filter(Boolean))]
+            .map(id => deliveryById.get(id)).filter(Boolean);
+        const dels = [...new Map([...direct, ...viaTickets].map(d => [d.ID, d])).values()];
+        row.actual_delta_kg = mass(total(dels, d => {
+            const delta = num(d.fob_delta_kg);
+            if (delta !== null) return delta;
+            const a = num(d.fob_after_kg), b = num(d.fob_before_kg);
+            return (a !== null && b !== null) ? a - b : null;
+        }));
+
+        // ---- consumption ---------------------------------------------------
+        // FQIS-derived where both readings exist; actual_burn_kg is the
+        // documented fallback and is itself the block burn.
         const block = (fqisOut !== null && fqisIn !== null)
-            ? mass(fqisOut - fqisIn) : num(row.actual_burn_kg);
+            ? mass(fqisOut - fqisIn) : num(base.actual_burn_kg);
         row.block_burn_kg = block;
 
-        const apuKg = num(row.apu_burn_kg);
-        const cycles = apuByFlight.get(row.flight_ID) || [];
+        const cycles = apuByFlight.get(base.flight_ID) || [];
         const minutes = total(cycles, c => num(c.running_minutes));
         row.apu_hours = minutes === null ? null : Number((minutes / 60).toFixed(2));
-        const cycleRate = cycles.map(c => num(c.burn_rate_kg_hr)).find(v => v !== null && v !== undefined);
-        row.apu_rate_kg_hr = cycleRate === undefined ? null : mass(cycleRate);
+        row.apu_rate_kg_hr = mass(rateByTail.has(base.tail_number)
+            ? rateByTail.get(base.tail_number) : null);
+        const apuKg = mass(total(cycles, c => num(c.apu_burn_kg)));
+        row.apu_burn_sum_kg = apuKg;
 
-        // Guaranteed to add up on screen - see the header note.
+        // HELD - see the header. Block less APU may understate the engine burn.
         row.engine_burn_split_kg = (block !== null && apuKg !== null)
             ? mass(block - apuKg) : (block !== null ? block : null);
 
-        // Valuation. Every movement on the row is costed at the one price the
-        // tail's stock stood at, so the three values sum the way the masses do.
-        const map = mapAt(row.tail_number, row.flight_date_v);
+        // ---- valuation ------------------------------------------------------
+        // Every movement at the one price the tail's stock stood at, so the
+        // three values sum exactly the way the three masses do.
+        const map = mapAt(base.tail_number, row.flight_date_v);
         row.map_usd_per_kg = map;
         const at = (kgv) => (map === null || kgv === null ? null : money(kgv * map));
         row.block_burn_value_usd  = at(block);

@@ -67,7 +67,7 @@ annotate BurnService.FuelBurns with @(
             { Value: block_burn_value_usd, Label: 'Block burn value USD', ![@UI.Importance]: #High },
             { Value: apu_hours, Label: 'APU hours', ![@UI.Importance]: #Low },
             { Value: apu_rate_kg_hr, Label: 'APU rate kg/h', ![@UI.Importance]: #Low },
-            { Value: apu_burn_kg, Label: 'APU burn kg', ![@UI.Importance]: #Medium },
+            { Value: apu_burn_sum_kg, Label: 'APU burn kg', ![@UI.Importance]: #Medium },
             { Value: apu_burn_value_usd, Label: 'APU burn value USD', ![@UI.Importance]: #Low },
             { Value: engine_burn_split_kg, Label: 'Engine burn kg', ![@UI.Importance]: #Medium },
             { Value: engine_burn_value_usd, Label: 'Engine burn value USD', ![@UI.Importance]: #Low },
@@ -309,6 +309,7 @@ annotate BurnService.FuelBurns with {
     block_burn_value_usd          @title: 'Block burn value USD'   @Common.FieldControl: #ReadOnly;
     apu_hours                     @title: 'APU hours'              @Common.FieldControl: #ReadOnly;
     apu_rate_kg_hr                @title: 'APU rate kg/h'          @Common.FieldControl: #ReadOnly;
+    apu_burn_sum_kg               @title: 'APU burn kg'            @Common.FieldControl: #ReadOnly;
     apu_burn_value_usd            @title: 'APU burn value USD'     @Common.FieldControl: #ReadOnly;
     engine_burn_split_kg          @title: 'Engine burn kg'         @Common.FieldControl: #ReadOnly;
     engine_burn_value_usd         @title: 'Engine burn value USD'  @Common.FieldControl: #ReadOnly;

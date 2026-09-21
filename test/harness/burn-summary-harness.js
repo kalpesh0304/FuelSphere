@@ -1,30 +1,33 @@
 /**
- * THE FLIGHT-WISE SUMMARY - ONE ROW ASSEMBLED FROM FIVE ENTITIES.
+ * THE FLIGHT-WISE SUMMARY - ONE ROW ASSEMBLED FROM SIX ENTITIES.
  *
- * Report 2 of 6 prints one row per leg with twenty-three columns, and not one
- * of the interesting ones lives on FUEL_BURNS. The flight date and the gauge
- * pair are on FLIGHT_SCHEDULE, the dispatched block fuel on FLIGHT_DISPATCH,
- * the uplift on FUEL_TICKETS, the APU minutes on APU_USAGE, and the price the
- * whole consumption half is valued at on ROB_LEDGER. A report assembled from
- * five sources has five ways to be quietly wrong, which is what this is for.
+ * Report 2 of 6 prints one row per leg, and almost nothing on it lives on
+ * FUEL_BURNS. The flight date and the gauge pair are on FLIGHT_SCHEDULE, the
+ * dispatched uplift on FLIGHT_DISPATCH, the ticket figures on FUEL_TICKETS,
+ * the measured mass on FUEL_DELIVERIES, the APU minutes on APU_USAGE, the
+ * APU rate on AIRCRAFT_REGISTRATIONS, and the price the consumption half is
+ * valued at on ROB_LEDGER. Six sources, six ways to be quietly wrong.
  *
- * THE CRITERION IS THE SPECIMEN, not this code's own arithmetic. Every figure
- * below is transcribed from the AR1304 row of the demo pack. Where the
- * implementation and the specimen disagree, the specimen is right.
+ * THE FIELD DERIVATION TABLE IS THE CRITERION, and several of its mappings
+ * are not the obvious one - Dispatch is required_uplift_kg not block fuel,
+ * gravity is volume-weighted not the first ticket's, actual delta is the
+ * DELIVERY gauge not the ticket mass, the APU rate is the TAIL's not the
+ * cycle's. Each of those is a place where the obvious choice still yields a
+ * plausible number, which is exactly why they are asserted individually.
  *
- *   EXIT-1  AR1304 reproduces the specimen row EXACTLY, all twenty columns
+ *   EXIT-1  AR1304 reproduces the specimen row, every column, at the sources
+ *           the derivation table names
  *   EXIT-2  the row ADDS UP: block less APU is engine, in mass and in money,
  *           and the three values are the three masses at one price
- *   EXIT-3  expected and actual delta are DIFFERENT numbers and both survive.
- *           Deriving gravity from mass/litres would make them identical and
- *           delete the discrepancy the report exists to show
- *   EXIT-4  the virtual properties are PRESENT over OData on the active entity
- *           AND on the draft. Absent on either is the infinite-spinner bug:
- *           Fiori cannot drill into a property the payload does not carry
- *   EXIT-5  a leg with nothing captured reads BLANK, not zero. Zero says
- *           "measured, and it was nothing"
- *   EXIT-6  two tickets on one leg SUM - the report is one row per flight, not
- *           one row per ticket
+ *   EXIT-3  expected and actual delta come from DIFFERENT sources and stay
+ *           different numbers - ticket against gauge
+ *   EXIT-4  the virtuals are PRESENT over OData, active entity and draft
+ *   EXIT-5  A NARROW $select STILL POPULATES THE ROW. This is the defect that
+ *           shipped: Fiori selects only the displayed columns, flight_ID is
+ *           not one of them, and the whole report silently went blank
+ *   EXIT-6  nothing captured reads BLANK, not zero
+ *   EXIT-7  two tickets sum, and gravity blends BY VOLUME - a small top-up
+ *           must not pull the blend as hard as a large uplift
  */
 const PROJECT = require('node:path').resolve(__dirname, '..', '..');
 process.env.CDS_ENV = 'development';
@@ -49,28 +52,36 @@ const SPEC = {
     uplift_l: 3262, specific_gravity: 0.8, expected_delta_kg: 2609.6,
     actual_delta_kg: 2596, uplift_value_usd: 2984.73,
     block_burn_kg: 2374, block_burn_value_usd: 2715.38,
-    apu_hours: 0.8, apu_rate_kg_hr: 110, apu_burn_kg: 88, apu_burn_value_usd: 100.65,
+    apu_hours: 0.8, apu_rate_kg_hr: 110, apu_burn_sum_kg: 88, apu_burn_value_usd: 100.65,
     engine_burn_split_kg: 2286, engine_burn_value_usd: 2614.73,
     map_usd_per_kg: 1.1438, arrival_rob_kg: 1402
 };
 
+// The gauge pair behind actual delta: 3,776 - 1,180 = 2,596.
+const FOB_BEFORE = 1180, FOB_AFTER = 3776;
+
 let flightId, burnId;
 
 async function seed({ tickets = 1, captured = true } = {}) {
-    // Cleared first, and this is not housekeeping. Every case below seeds the
-    // SAME tail, and the MAP lookup walks that tail's whole ledger - so a row
-    // left behind by the previous case is read by the next one as a price that
-    // legitimately prevails. EXIT-5 found exactly that: a leg with nothing
-    // captured still reported a MAP, because an earlier test had left one.
+    // Cleared first, and this is not housekeeping. Every case seeds the SAME
+    // tail, and the MAP lookup walks that tail's whole ledger - a row left by
+    // the previous case reads as a price that legitimately prevails.
     for (const e of ['fuelsphere.ROB_LEDGER', 'fuelsphere.APU_USAGE', 'fuelsphere.FUEL_BURNS']) {
         await cds.db.run(DELETE.from(e).where({ tail_number: SPEC.tail }));
     }
     await cds.db.run(DELETE.from('fuelsphere.FUEL_TICKETS').where({ aircraft_reg: SPEC.tail }));
+    await cds.db.run(DELETE.from('fuelsphere.FUEL_DELIVERIES').where({ aircraft_reg: SPEC.tail }));
     await cds.db.run(DELETE.from('fuelsphere.FLIGHT_DISPATCH').where({ flight_number: SPEC.flight }));
     await cds.db.run(DELETE.from('fuelsphere.FLIGHT_SCHEDULE').where({ flight_number: SPEC.flight }));
+    await cds.db.run(DELETE.from('fuelsphere.AIRCRAFT_REGISTRATIONS').where({ registration: SPEC.tail }));
 
     flightId = cds.utils.uuid();
     burnId = cds.utils.uuid();
+
+    await cds.db.run(INSERT.into('fuelsphere.AIRCRAFT_REGISTRATIONS').entries({
+        registration: SPEC.tail,
+        apu_burn_rate_kg_hr: captured ? SPEC.apu_rate_kg_hr : null
+    }));
 
     await cds.db.run(INSERT.into('fuelsphere.FLIGHT_SCHEDULE').entries({
         ID: flightId, flight_number: SPEC.flight, flight_date: SPEC.date,
@@ -80,24 +91,35 @@ async function seed({ tickets = 1, captured = true } = {}) {
     }));
 
     if (captured) {
+        // Dispatch kg is required_uplift_kg. block_fuel_kg is seeded at a
+        // DIFFERENT value on purpose - if the derivation reads the wrong
+        // column, EXIT-1 sees 3,100 where it expects 2,600.
         await cds.db.run(INSERT.into('fuelsphere.FLIGHT_DISPATCH').entries({
             ID: cds.utils.uuid(), dispatch_order_id: 'FO-AR1304',
             flight_number: SPEC.flight, flight_date: SPEC.date,
-            flight_schedule_ID: flightId, block_fuel_kg: SPEC.dispatch_kg
+            flight_schedule_ID: flightId,
+            required_uplift_kg: SPEC.dispatch_kg, block_fuel_kg: 3100
         }));
 
-        // One ticket, or the same uplift split across two suppliers - the
-        // report prints one row per FLIGHT either way.
+        // The gauge. Actual delta comes from HERE, never from the tickets.
+        const deliveryId = cds.utils.uuid();
+        await cds.db.run(INSERT.into('fuelsphere.FUEL_DELIVERIES').entries({
+            ID: deliveryId, delivery_number: 'D-AR1304', aircraft_reg: SPEC.tail,
+            flight_ID: flightId, fob_before_kg: FOB_BEFORE, fob_after_kg: FOB_AFTER,
+            fob_delta_kg: FOB_AFTER - FOB_BEFORE
+        }));
+
+        // One ticket, or a split across two suppliers at DIFFERENT densities
+        // so the volume weighting has something to get wrong.
         const parts = tickets === 2
-            ? [{ l: 2000, kg: 1592, amt: 1830.11 }, { l: 1262, kg: 1004, amt: 1154.62 }]
-            : [{ l: SPEC.uplift_l, kg: SPEC.actual_delta_kg, amt: SPEC.uplift_value_usd }];
+            ? [{ l: 2000, sg: 0.79, amt: 1830.11 }, { l: 1262, sg: 0.8158, amt: 1154.62 }]
+            : [{ l: SPEC.uplift_l, sg: SPEC.specific_gravity, amt: SPEC.uplift_value_usd }];
         for (const [i, p] of parts.entries()) {
             await cds.db.run(INSERT.into('fuelsphere.FUEL_TICKETS').entries({
                 ID: cds.utils.uuid(), ticket_number: `T-AR1304-${i}`,
-                flight_ID: flightId, aircraft_reg: SPEC.tail,
+                flight_ID: flightId, delivery_ID: deliveryId, aircraft_reg: SPEC.tail,
                 uom_code: 'LTR', quantity: p.l, quantity_metered: p.l,
-                quantity_kg: p.kg, density_value: SPEC.specific_gravity,
-                total_amount: p.amt
+                density_value: p.sg, total_amount: p.amt
             }));
         }
 
@@ -105,14 +127,15 @@ async function seed({ tickets = 1, captured = true } = {}) {
             ID: cds.utils.uuid(), tail_number: SPEC.tail,
             apu_start_utc: `${SPEC.date}T09:00:00Z`, apu_stop_utc: `${SPEC.date}T09:48:00Z`,
             usage_phase: 'TURNAROUND', apu_source: 'CALCULATED',
-            running_minutes: 48, burn_rate_kg_hr: SPEC.apu_rate_kg_hr,
-            apu_burn_kg: SPEC.apu_burn_kg, allocated_flight_ID: flightId
+            running_minutes: 48, burn_rate_kg_hr: 999,   // deliberately wrong: the
+            apu_burn_kg: SPEC.apu_burn_sum_kg,           // rate must come from the TAIL
+            allocated_flight_ID: flightId
         }));
 
         await cds.db.run(INSERT.into('fuelsphere.ROB_LEDGER').entries({
             ID: cds.utils.uuid(), tail_number: SPEC.tail, record_date: SPEC.date,
             record_time: '10:00:00', sequence: 1, line_order: 1, entry_type: 'UPLIFT',
-            opening_rob_kg: 1180, uplift_kg: SPEC.actual_delta_kg, burn_kg: 0,
+            opening_rob_kg: FOB_BEFORE, uplift_kg: SPEC.actual_delta_kg, burn_kg: 0,
             adjustment_kg: 0, closing_rob_kg: SPEC.fqis_out_kg,
             map_usd_per_kg: SPEC.map_usd_per_kg, balance_value_usd: 4318.99,
             data_source: 'TICKET', is_estimated: false
@@ -121,9 +144,11 @@ async function seed({ tickets = 1, captured = true } = {}) {
 
     await cds.db.run(INSERT.into('fuelsphere.FUEL_BURNS').entries({
         ID: burnId, tail_number: SPEC.tail, flight_ID: flightId,
-        burn_date: SPEC.date, actual_burn_kg: SPEC.block_burn_kg,
-        apu_burn_kg: captured ? SPEC.apu_burn_kg : null,
-        engine_burn_kg: captured ? SPEC.engine_burn_split_kg : null,
+        burn_date: '2026-10-15',          // deliberately NOT the flight date
+        actual_burn_kg: SPEC.block_burn_kg,
+        // Stored 0.00 while the cycles carry 88 - exactly the live data's
+        // shape, so reading the wrong column shows up as a zero.
+        apu_burn_kg: 0, engine_burn_kg: 0,
         data_source: 'ACARS', status: 'PRELIMINARY'
     }));
 }
@@ -138,59 +163,59 @@ async function summarise() {
 describe('Fuel Burns - the Flight-Wise Summary columns', () => {
     before(test.data.reset);
 
-    it('EXIT-1 - AR1304 reproduces the specimen row', async () => {
+    it('EXIT-1 - AR1304 reproduces the specimen row from the named sources', async () => {
         await seed();
         const r = await summarise();
 
-        assert.strictEqual(String(r.flight_date_v).slice(0, 10), SPEC.date, 'flight date');
+        // Flight date from the SCHEDULE, not the burn record's own date.
+        assert.strictEqual(String(r.flight_date_v).slice(0, 10), SPEC.date,
+            'flight date must come from FLIGHT_SCHEDULE, not burn_date');
         assert.strictEqual(r.sector, SPEC.sector, 'sector');
         for (const key of ['dispatch_kg', 'fqis_out_kg', 'fqis_in_kg', 'uplift_l',
                            'specific_gravity', 'expected_delta_kg', 'actual_delta_kg',
                            'uplift_value_usd', 'block_burn_kg', 'block_burn_value_usd',
-                           'apu_hours', 'apu_rate_kg_hr', 'apu_burn_value_usd',
-                           'engine_burn_split_kg', 'engine_burn_value_usd',
-                           'map_usd_per_kg', 'arrival_rob_kg']) {
+                           'apu_hours', 'apu_rate_kg_hr', 'apu_burn_sum_kg',
+                           'apu_burn_value_usd', 'engine_burn_split_kg',
+                           'engine_burn_value_usd', 'map_usd_per_kg', 'arrival_rob_kg']) {
             assert.strictEqual(n(r[key]), SPEC[key], `${key}: expected ${SPEC[key]}, got ${r[key]}`);
         }
-        out(`AR1304: block ${n(r.block_burn_kg)} kg = ${n(r.block_burn_value_usd)} USD ` +
-            `at MAP ${n(r.map_usd_per_kg)}; engine ${n(r.engine_burn_split_kg)}, APU ${n(r.apu_burn_kg)}`);
+        out(`AR1304: dispatch ${n(r.dispatch_kg)} (required_uplift, not block fuel), ` +
+            `APU rate ${n(r.apu_rate_kg_hr)} from the tail, APU ${n(r.apu_burn_sum_kg)} kg from the cycles`);
     });
 
     it('EXIT-2 - the row adds up, in mass and in money', async () => {
         await seed();
         const r = await summarise();
 
-        assert.strictEqual(n(r.block_burn_kg) - n(r.apu_burn_kg), n(r.engine_burn_split_kg),
+        assert.strictEqual(n(r.block_burn_kg) - n(r.apu_burn_sum_kg), n(r.engine_burn_split_kg),
             'block - APU must equal engine, in kilograms');
         assert.ok(Math.abs(n(r.block_burn_value_usd) - n(r.apu_burn_value_usd) - n(r.engine_burn_value_usd)) < 0.01,
             'block - APU must equal engine, in dollars');
-        // Every movement priced at the one MAP.
         for (const [kgKey, usdKey] of [['block_burn_kg', 'block_burn_value_usd'],
-                                       ['apu_burn_kg', 'apu_burn_value_usd'],
+                                       ['apu_burn_sum_kg', 'apu_burn_value_usd'],
                                        ['engine_burn_split_kg', 'engine_burn_value_usd']]) {
             const implied = n(r[usdKey]) / n(r[kgKey]);
             assert.ok(Math.abs(implied - n(r.map_usd_per_kg)) < 0.0005,
                 `${usdKey} is not ${kgKey} at the MAP (implied ${implied.toFixed(4)})`);
         }
-        // And the block burn is the gauge pair, not a copy of actual_burn_kg.
         assert.strictEqual(n(r.block_burn_kg), n(r.fqis_out_kg) - n(r.fqis_in_kg),
             'block burn is FQIS out - FQIS in');
-        out(`adds up: ${n(r.block_burn_kg)} - ${n(r.apu_burn_kg)} = ${n(r.engine_burn_split_kg)} kg, ` +
+        out(`adds up: ${n(r.block_burn_kg)} - ${n(r.apu_burn_sum_kg)} = ${n(r.engine_burn_split_kg)} kg, ` +
             `${n(r.block_burn_value_usd)} - ${n(r.apu_burn_value_usd)} = ${n(r.engine_burn_value_usd)} USD`);
     });
 
-    it('EXIT-3 - expected and actual delta stay different numbers', async () => {
+    it('EXIT-3 - expected is the ticket, actual is the gauge, and they differ', async () => {
         await seed();
         const r = await summarise();
 
         assert.notStrictEqual(n(r.expected_delta_kg), n(r.actual_delta_kg),
-            'the two delta columns collapsed to one number - gravity was derived, not read');
-        // Rounded on both sides: 3262 x 0.8 is 2609.6000000000004 in binary
-        // floating point, and the stored column is Decimal(12,2).
+            'the two delta columns collapsed - both were taken from the same source');
         assert.strictEqual(n(r.expected_delta_kg),
             Number((n(r.uplift_l) * n(r.specific_gravity)).toFixed(2)),
-            'expected delta is litres x the TICKET gravity');
-        out(`expected ${n(r.expected_delta_kg)} kg vs actual ${n(r.actual_delta_kg)} kg ` +
+            'expected delta is litres x the ticket gravity');
+        assert.strictEqual(n(r.actual_delta_kg), FOB_AFTER - FOB_BEFORE,
+            'actual delta is the DELIVERY gauge pair, not any ticket figure');
+        out(`ticket says ${n(r.expected_delta_kg)} kg, gauge saw ${n(r.actual_delta_kg)} kg ` +
             `- a ${(n(r.expected_delta_kg) - n(r.actual_delta_kg)).toFixed(1)} kg discrepancy, visible`);
     });
 
@@ -199,18 +224,16 @@ describe('Fuel Burns - the Flight-Wise Summary columns', () => {
         const COLS = ['flight_date_v', 'sector', 'dispatch_kg', 'fqis_out_kg', 'fqis_in_kg',
                       'uplift_l', 'specific_gravity', 'expected_delta_kg', 'actual_delta_kg',
                       'uplift_value_usd', 'block_burn_kg', 'block_burn_value_usd', 'apu_hours',
-                      'apu_rate_kg_hr', 'apu_burn_value_usd', 'engine_burn_split_kg',
-                      'engine_burn_value_usd', 'map_usd_per_kg', 'arrival_rob_kg'];
+                      'apu_rate_kg_hr', 'apu_burn_sum_kg', 'apu_burn_value_usd',
+                      'engine_burn_split_kg', 'engine_burn_value_usd', 'map_usd_per_kg',
+                      'arrival_rob_kg'];
 
         const active = await test.GET(`${B}/FuelBurns(ID=${burnId},IsActiveEntity=true)`);
         assert.strictEqual(active.status, 200);
         const missing = COLS.filter(c => !(c in active.data));
         assert.strictEqual(missing.length, 0,
             `ABSENT from the active payload (Fiori cannot drill into these): ${missing.join(', ')}`);
-        assert.strictEqual(n(active.data.block_burn_kg), SPEC.block_burn_kg, 'value survives OData');
 
-        // The draft. This is the registration that was missed on three other
-        // services this release and produced a page that span forever.
         await test.POST(`${B}/FuelBurns(ID=${burnId},IsActiveEntity=true)/BurnService.draftEdit`, {});
         const draft = await test.GET(`${B}/FuelBurns(ID=${burnId},IsActiveEntity=false)`);
         assert.strictEqual(draft.status, 200);
@@ -222,33 +245,63 @@ describe('Fuel Burns - the Flight-Wise Summary columns', () => {
         out(`all ${COLS.length} columns present over OData, active and draft`);
     });
 
-    it('EXIT-5 - nothing captured reads blank, not zero', async () => {
+    it('EXIT-5 - a narrow $select still populates the row', async () => {
+        await seed();
+
+        // EXACTLY what the list report asks for: the displayed columns and
+        // nothing else. flight_ID is absent, and the first version of this
+        // derivation read it straight off the payload - so every flight-keyed
+        // lookup missed and the whole report rendered blank in production.
+        const sel = ['ID', 'tail_number', 'flight_date_v', 'sector', 'dispatch_kg',
+                     'fqis_out_kg', 'fqis_in_kg', 'block_burn_kg', 'block_burn_value_usd',
+                     'apu_burn_sum_kg', 'engine_burn_split_kg', 'map_usd_per_kg'].join(',');
+        const res = await test.GET(`${B}/FuelBurns?$select=${sel}&$filter=ID eq ${burnId}`);
+        assert.strictEqual(res.status, 200);
+        const r = res.data.value[0];
+        assert.ok(r, 'the row must come back');
+
+        assert.strictEqual(String(r.flight_date_v).slice(0, 10), SPEC.date,
+            'flight date fell back to burn_date - the flight lookup missed under $select');
+        assert.strictEqual(r.sector, SPEC.sector, 'sector blank under $select');
+        assert.strictEqual(n(r.fqis_out_kg), SPEC.fqis_out_kg, 'FQIS blank under $select');
+        assert.strictEqual(n(r.block_burn_kg), SPEC.block_burn_kg, 'block burn blank under $select');
+        assert.strictEqual(n(r.block_burn_value_usd), SPEC.block_burn_value_usd,
+            'block burn value blank under $select');
+        out(`narrow $select (${sel.split(',').length} columns, no flight_ID): row fully populated`);
+    });
+
+    it('EXIT-6 - nothing captured reads blank, not zero', async () => {
         await seed({ captured: false });
         const r = await summarise();
 
         for (const key of ['dispatch_kg', 'fqis_out_kg', 'fqis_in_kg', 'uplift_l',
                            'specific_gravity', 'expected_delta_kg', 'actual_delta_kg',
                            'uplift_value_usd', 'apu_hours', 'apu_rate_kg_hr',
-                           'map_usd_per_kg', 'arrival_rob_kg']) {
+                           'apu_burn_sum_kg', 'map_usd_per_kg', 'arrival_rob_kg']) {
             assert.strictEqual(r[key], null, `${key} must be blank, got ${r[key]}`);
         }
-        // Block burn still falls back to the stored figure - that one IS known.
         assert.strictEqual(n(r.block_burn_kg), SPEC.block_burn_kg,
             'block burn falls back to actual_burn_kg when the gauges are missing');
         assert.strictEqual(r.block_burn_value_usd, null, 'with no MAP there is no value');
         out('uncaptured leg: blanks throughout, block burn from actual_burn_kg, no invented zeros');
     });
 
-    it('EXIT-6 - two tickets on one leg sum into one row', async () => {
+    it('EXIT-7 - two tickets sum, and gravity blends by volume', async () => {
         await seed({ tickets: 2 });
         const r = await summarise();
 
         assert.strictEqual(n(r.uplift_l), SPEC.uplift_l, 'litres must sum across the split');
-        assert.strictEqual(n(r.actual_delta_kg), SPEC.actual_delta_kg, 'mass must sum');
         assert.strictEqual(n(r.uplift_value_usd), SPEC.uplift_value_usd, 'value must sum');
-        assert.strictEqual(n(r.specific_gravity), SPEC.specific_gravity,
-            'gravity is a property of the fuel, not a sum');
-        out(`split delivery: 2 tickets -> ${n(r.uplift_l)} L, ${n(r.actual_delta_kg)} kg, ` +
-            `${n(r.uplift_value_usd)} USD in one row`);
+
+        // (2000 x 0.79 + 1262 x 0.8158) / 3262 = 0.7999..., NOT the 0.8029
+        // a plain average of the two densities would give.
+        const weighted = (2000 * 0.79 + 1262 * 0.8158) / 3262;
+        assert.strictEqual(n(r.specific_gravity), Number(weighted.toFixed(4)),
+            'gravity must be volume-weighted, not averaged and not the first ticket');
+        const plainAverage = Number(((0.79 + 0.8158) / 2).toFixed(4));
+        assert.notStrictEqual(n(r.specific_gravity), plainAverage,
+            'instrument check: the weighting is indistinguishable from a plain average here');
+        out(`split delivery: 2 tickets -> ${n(r.uplift_l)} L at blended SG ${n(r.specific_gravity)} ` +
+            `(a plain average would say ${plainAverage})`);
     });
 });
