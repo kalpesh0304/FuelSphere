@@ -139,6 +139,7 @@ annotate DeliveryService.FuelDeliveries with @(
             { Value: delivery_number,    Label: 'Delivery Number', ![@UI.Importance]: #High },
             { Value: aircraft_reg,       Label: 'Aircraft Reg',    ![@UI.Importance]: #High },
             { Value: flight_number,      Label: 'Flight',          ![@UI.Importance]: #Medium },
+            { Value: flight_date,        Label: 'Flight Date',     ![@UI.Importance]: #Medium },
             { Value: delivery_date,      Label: 'Date',            ![@UI.Importance]: #High },
             { Value: delivered_quantity, Label: 'Delivered',       ![@UI.Importance]: #High },
             { Value: uom_code,           Label: 'UoM',             ![@UI.Importance]: #Medium },
@@ -150,7 +151,16 @@ annotate DeliveryService.FuelDeliveries with @(
                     { $If: [ { $In: [{ $Path: 'status' }, ['Verified', 'Posted']] }, 3, 2 ] } ] } },
                 ![@UI.Importance]: #High
             },
-            { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #Medium }
+            { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #Medium },
+            { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
+            {
+                Value: flight_variance_status,
+                Label: 'Flight Variance Status',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } },
+                ![@UI.Importance]: #Medium
+            }
         ],
 
         // Four facets, matching FuelOrderService.FuelDeliveries exactly.
@@ -161,7 +171,8 @@ annotate DeliveryService.FuelDeliveries with @(
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryDetails',     Target: '@UI.FieldGroup#DeliveryDetails',     Label: 'Delivery Details' },
             { $Type: 'UI.ReferenceFacet', ID: 'QualityMeasurements', Target: '@UI.FieldGroup#QualityMeasurements', Label: 'Quality Measurements' },
             { $Type: 'UI.ReferenceFacet', ID: 'AircraftGauge',       Target: '@UI.FieldGroup#AircraftGauge',       Label: 'Aircraft Gauge (FQIS)' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Reconciliation',      Target: '@UI.FieldGroup#Reconciliation',      Label: 'FOB Reconciliation' }
+            { $Type: 'UI.ReferenceFacet', ID: 'Reconciliation',      Target: '@UI.FieldGroup#Reconciliation',      Label: 'FOB Reconciliation' },
+            { $Type: 'UI.ReferenceFacet', ID: 'FlightVariance',      Target: '@UI.FieldGroup#FlightVariance',      Label: 'Variance' }
         ],
 
         // PICK AN ORDER OR A FLIGHT; THE FLIGHT DATE AND THE AIRCRAFT FOLLOW.
@@ -227,6 +238,38 @@ annotate DeliveryService.FuelDeliveries with @(
                 { Value: fob_delta_kg },
                 { Value: supplier_count }
             ]
+        },
+
+        // ====================================================================
+        // VARIANCE - the flight-level comparison, in its own section.
+        //
+        // SEPARATE FROM FOB RECONCILIATION BECAUSE IT IS A DIFFERENT SCOPE AND
+        // A DIFFERENT QUESTION. That group compares ONE delivery's gauge pair
+        // against the tickets written to that delivery, and reads metered
+        // minus gauge - "did the supplier bill more than the aircraft
+        // received". This compares everything put on the aircraft for the LEG
+        // against every ticket raised for it, and reads delivered minus
+        // metered - "did we get what we were billed for". Sitting them in one
+        // group invited the two signed numbers to be read as one figure
+        // disagreeing with itself.
+        //
+        // Both totals are shown with the variance. A variance whose inputs are
+        // hidden cannot be checked, and the first thing anyone does with one is
+        // ask which side moved.
+        // ====================================================================
+        FieldGroup #FlightVariance: {
+            Data: [
+                {
+                    Value: flight_variance_status,
+                    Criticality: { $edmJson: { $If: [
+                        { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
+                        { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
+                },
+                { Value: flight_variance_kg },
+                { Value: flight_delivered_kg },
+                { Value: flight_metered_kg },
+                { Value: flight_tolerance_kg }
+            ]
         }
     }
 );
@@ -241,6 +284,8 @@ annotate DeliveryService.FuelDeliveries with {
     // Same titles/units as FuelOrderService.FuelDeliveries (order-fiori-
     // annotations.cds) throughout this block - identical field-for-field.
     flight_number         @title: 'Flight' @Common.FieldControl: #ReadOnly;
+    // See the identical note in ticket-fiori-annotations.cds.
+    flight_date           @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
     delivery_date         @title: 'Delivery Date' @mandatory;
     delivery_time         @title: 'Delivery Time' @mandatory;
     // DERIVED FROM THE GAUGE, NOT TYPED: after-uplift minus before-uplift
@@ -272,6 +317,14 @@ annotate DeliveryService.FuelDeliveries with {
     fob_rounding_kg         @title: 'Reading Rounding (kg)';
     recon_status            @title: 'Reconciliation Status' @Common.FieldControl: #ReadOnly;
     recon_variance_kg       @title: 'Reconciliation Variance (kg)' @Common.FieldControl: #ReadOnly;
+    // All computed by flight-variance.js on every write, so all read-only:
+    // an input field here would take a keystroke and discard it on the next
+    // reconciliation.
+    flight_variance_kg      @title: 'Flight Variance (kg)' @Common.FieldControl: #ReadOnly;
+    flight_variance_status  @title: 'Flight Variance Status' @Common.FieldControl: #ReadOnly;
+    flight_delivered_kg     @title: 'Total Delivered, Flight (kg)' @Common.FieldControl: #ReadOnly;
+    flight_metered_kg       @title: 'Total Metered, Flight (kg)' @Common.FieldControl: #ReadOnly;
+    flight_tolerance_kg     @title: 'Tolerance (kg)' @Common.FieldControl: #ReadOnly;
     supplier_count          @title: 'Suppliers on this Refuelling' @Common.FieldControl: #ReadOnly;
     quantity_variance       @title: 'Variance (kg)' @Common.FieldControl: #ReadOnly;
     variance_percentage     @title: 'Variance (%)' @Common.FieldControl: #ReadOnly;

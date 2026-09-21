@@ -1465,6 +1465,35 @@ entity FUEL_DELIVERIES : cuid, AuditTrail {
         delivery_method     : String(3);                // IATA-02: HYD hydrant, REF refueller
 
         // ====================================================================
+        // THE FLIGHT-LEVEL VARIANCE, beside the delivery-level one above.
+        //
+        // TWO CONTROLS, TWO SCOPES, AND THE SECOND IS NOT THE FIRST RENAMED.
+        // recon_variance_kg compares ONE delivery's gauge pair against the
+        // tickets written to THAT delivery. This compares everything put on
+        // the AIRCRAFT for a flight against every ticket raised for it - a leg
+        // fuelled through two deliveries reconciles here and cannot there,
+        // because neither delivery sees the other's tickets.
+        //
+        // AND THE SIGNS ARE OPPOSITE, deliberately, because the questions are.
+        // EPD461 asks "did the supplier bill more than the aircraft received"
+        // and reads metered minus gauge. This asks "what did the aircraft end
+        // up holding against what we were billed for" and reads delivered
+        // minus metered: positive means MORE fuel on board than ticketed,
+        // negative means less. Flipping either to match the other would make
+        // one of the two answer a question nobody asked.
+        //
+        // Kilograms on both sides. delivered_quantity is forced to KG and the
+        // ticket figure is quantity_kg - the metered quantity normalised
+        // through its density (EPD453). Comparing the raw metered number
+        // would subtract litres from kilograms.
+        // ====================================================================
+        flight_variance_kg     : Decimal(12,2);         // Σ delivered (flight) − Σ ticket quantity_kg (flight)
+        flight_variance_status : ReconStatus default 'NOT_RECONCILED';
+        flight_metered_kg      : Decimal(12,2);         // Σ ticket quantity_kg for the flight. The comparison's basis
+        flight_delivered_kg    : Decimal(12,2);         // Σ delivered_quantity for the flight
+        flight_tolerance_kg    : Decimal(12,2);         // The band the status was decided against
+
+        // ====================================================================
         // WP-33 - the refuelling window (decision F2). fob_before_kg and
         // fob_after_kg above say WHAT the gauge read; nothing said WHEN.
         // F22 is the completion signal - IATA's message carries one, the

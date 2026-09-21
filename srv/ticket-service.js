@@ -11,6 +11,7 @@ const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = requi
 const { isMassUom } = require('./lib/fuel-uom');
 const { postTicketUplift } = require('./lib/rob-uplift');
 const { reconcileDelivery } = require('./lib/fob-reconciliation');
+const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-variance');
 const { resolveTail } = require('./lib/tail-resolver');
 
 const _id = (params) => {
@@ -139,11 +140,18 @@ module.exports = class TicketService extends cds.ApplicationService {
         this.after(['CREATE', 'UPDATE'], FuelTickets, async (data, req) => {
             const rows = Array.isArray(data) ? data : [data];
             const ids = new Set();
+            const flights = new Set();
             for (const r of rows) {
                 if (r && r.delivery_ID) ids.add(r.delivery_ID);
+                if (r && r.flight_ID) flights.add(r.flight_ID);
             }
             if (req.data && req.data.delivery_ID) ids.add(req.data.delivery_ID);
+            if (req.data && req.data.flight_ID) flights.add(req.data.flight_ID);
             for (const id of ids) await reconcileDelivery(id);
+            // The flight-level variance moves whenever a ticket does - it is
+            // the ticket side of the comparison. Keyed on the FLIGHT, so a
+            // ticket with no delivery still updates the leg it belongs to.
+            for (const f of flights) await reconcileFlight(f);
         });
 
         // The uplift reaches the ROB ledger. After the write, not before:
@@ -454,8 +462,10 @@ module.exports = class TicketService extends cds.ApplicationService {
 
             // WP-17: the delivery gains a ticket, and may have lost one.
             await reconcileDelivery(deliveryId);
+            await reconcileFlightForDelivery(deliveryId);
             if (ticket.delivery_ID && ticket.delivery_ID !== deliveryId) {
                 await reconcileDelivery(ticket.delivery_ID);
+                await reconcileFlightForDelivery(ticket.delivery_ID);
             }
 
             req.info(200, `Ticket ${ticket.ticket_number} attached to delivery ${delivery.delivery_number}.`);
@@ -502,7 +512,10 @@ module.exports = class TicketService extends cds.ApplicationService {
             // WP-17: matching supplies the ticket's supplier, so a delivery
             // that read NOT_ATTRIBUTABLE for an unresolved ticket may now
             // attribute — or may turn out to have two suppliers after all.
-            if (ticket.delivery_ID) await reconcileDelivery(ticket.delivery_ID);
+            if (ticket.delivery_ID) {
+                await reconcileDelivery(ticket.delivery_ID);
+                await reconcileFlightForDelivery(ticket.delivery_ID);
+            }
 
             req.info(200, `Ticket ${ticket.ticket_number} matched to order ${order.order_number}.`);
             return SELECT.one.from(FuelTickets).where({ ID: ticket.ID });

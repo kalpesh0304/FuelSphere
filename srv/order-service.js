@@ -34,10 +34,12 @@ const {
 const {
     reconcile: reconcileFigures,
     reconcileDelivery,
+
     resolveTolerance, resolveToleranceFromStore,
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
+const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-variance');
 const { createSignatureDocuments } = require('./lib/signature-documents');
 const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
 const { postTicketUplift } = require('./lib/rob-uplift');
@@ -514,6 +516,24 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     ? `Ticket ${t.ticket_number}: uplift posted to the ROB ledger, but the previous leg's burn was not: ${reason}.`
                     : `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
             }
+
+            // The flight variance, for the same reason the uplift is posted
+            // here: a composition child never fires its own CREATE on the
+            // active entity, so a delivery or ticket added inside the order's
+            // draft reaches the database with no handler having seen it.
+            // Without this the figure would be maintained on the standalone
+            // apps and stale on the embedded ones.
+            const deliveries = await SELECT.from(FuelDeliveries)
+                .columns('ID', 'flight_ID').where({ order_ID: orderId });
+            const flights = new Set([
+                ...tickets.map(t => t.flight_ID).filter(Boolean),
+                ...deliveries.map(d => d.flight_ID).filter(Boolean)
+            ]);
+            for (const f of flights) await reconcileFlight(f);
+            // Deliveries with no flight still get their own comparison.
+            for (const d of deliveries) {
+                if (!d.flight_ID) await reconcileFlightForDelivery(d.ID);
+            }
         });
 
         // WP-17: a gauge reading typically arrives AFTER the tickets, so the
@@ -528,7 +548,10 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // that computation reads only its own row, this one reads children.
         this.after(['UPDATE'], FuelDeliveries, async (data, req) => {
             const rows = Array.isArray(data) ? data : [data];
-            for (const r of rows) if (r && r.ID) await reconcileDelivery(r.ID);
+            for (const r of rows) if (r && r.ID) {
+                await reconcileDelivery(r.ID);
+                await reconcileFlightForDelivery(r.ID);
+            }
         });
 
         this.before(['PATCH', 'UPDATE'], [FuelOrders, FuelOrders.drafts], async (req) => {

@@ -185,6 +185,8 @@ service FuelOrderService {
         // order's flight stays the fallback so every delivery seeded before
         // FUEL_DELIVERIES.flight existed still resolves one.
         coalesce(flight.flight_number, order.flight.flight_number) as flight_number : String(10),
+        // Same coalesce, same reasons - see flight_number directly above.
+        coalesce(flight.flight_date, order.flight.flight_date) as flight_date : Date,
         virtual null as statusCriticality   : Integer,
         virtual null as varianceCriticality : Integer
     } actions {
@@ -269,6 +271,8 @@ service FuelOrderService {
         order    : redirected to FuelOrders,
         flight   : redirected to FlightSchedule,
         delivery : redirected to FuelDeliveries,
+        // Mirrors TicketService.FuelTickets - see the note there.
+        coalesce(flight.flight_date, order.flight.flight_date) as flight_date : Date,
         // Mirrors TicketService.FuelTickets - density is mandatory on a
         // volume ticket on this screen too.
         virtual null as densityFieldControl : Integer @UI.Hidden

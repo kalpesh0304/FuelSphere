@@ -42,6 +42,11 @@ service DeliveryService {
         flight : redirected to FlightSchedule,
         // Coalesced - see the note on FuelOrderService.FuelDeliveries.
         coalesce(flight.flight_number, order.flight.flight_number) as flight_number : String(10),
+        // Coalesced for exactly the reason flight_number is: a delivery raised
+        // against a flight directly carries no order, and one seeded before
+        // FUEL_DELIVERIES.flight existed carries only the order's. A column
+        // rather than a path so the LIST can sort and filter on it.
+        coalesce(flight.flight_date, order.flight.flight_date) as flight_date : Date,
         tail   : redirected to AircraftRegistrations,
         virtual null as statusCriticality   : Integer,
         virtual null as varianceCriticality : Integer

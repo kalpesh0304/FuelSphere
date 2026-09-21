@@ -155,6 +155,7 @@ annotate TicketService.FuelTickets with @(
             { Value: ticket_number,      Label: 'Ticket Number',  ![@UI.Importance]: #High },
             { Value: order.order_number, Label: 'Order',          ![@UI.Importance]: #High },
             { Value: flight_number,      Label: 'Flight',         ![@UI.Importance]: #High },
+            { Value: flight_date,        Label: 'Flight Date',    ![@UI.Importance]: #Medium },
             { Value: aircraft_reg,       Label: 'Aircraft Reg',   ![@UI.Importance]: #Medium },
             { Value: quantity,           Label: 'Quantity',       ![@UI.Importance]: #High },
             { Value: uom_code,           Label: 'UoM',            ![@UI.Importance]: #Medium },
@@ -275,6 +276,11 @@ annotate TicketService.FuelTickets with {
     // below so a pick names one flight ROW (and so carries its date), where
     // picking a flight NUMBER named a string that recurs every day it flies.
     flight_number         @title: 'Flight' @Common.FieldControl: #ReadOnly;
+    // #ReadOnly for two reasons, not one: it is derived from the flight the
+    // user picked, and without it the column inherits the @mandatory on
+    // FLIGHT_SCHEDULE.flight_date and paints an asterisk on a field nobody
+    // can type into.
+    flight_date           @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
     aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
     quantity             @title: 'Claimed Quantity' @mandatory @Measures.Unit: uom_code;
     uom_code             @title: 'Unit of Measure'

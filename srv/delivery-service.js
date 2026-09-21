@@ -14,6 +14,7 @@ const {
 } = require('./lib/number-range');
 const { deriveGaugeFigures } = require('./lib/fuel-uom');
 const { resolveTail } = require('./lib/tail-resolver');
+const { reconcileFlightForDelivery } = require('./lib/flight-variance');
 
 /**
  * The unit a gauge-driven quantity is in. 'KG' is UNIT_OF_MEASURE's code for
@@ -209,6 +210,26 @@ module.exports = class DeliveryService extends cds.ApplicationService {
         // aircraft_reg is @mandatory, so it is the one dimension guaranteed
         // present.
         // ====================================================================
+        // ====================================================================
+        // THE FLIGHT-LEVEL VARIANCE - delivered less metered, for the leg.
+        //
+        // Registered AFTER the write, not before: the computation sums this
+        // delivery's own delivered_quantity, so the row has to have landed.
+        // On CREATE as well as UPDATE because the figure is wanted the moment
+        // a delivery exists - a blank variance column on a brand-new delivery
+        // is the state this was asked to remove.
+        //
+        // Delivery-scoped rather than flight-scoped at the entry point:
+        // reconcileFlightForDelivery widens to the flight where there is one
+        // and falls back to this delivery's own tickets where there is not,
+        // which decision A1 explicitly permits.
+        // ====================================================================
+        this.after(['CREATE', 'UPDATE'], FuelDeliveries, async (data) => {
+            for (const r of (Array.isArray(data) ? data : [data])) {
+                if (r && r.ID) await reconcileFlightForDelivery(r.ID);
+            }
+        });
+
         this.before('CREATE', FuelDeliveries, async (req) => {
             if (req.data.delivery_number) return;
 

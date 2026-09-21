@@ -39,6 +39,11 @@ service TicketService {
         order    : redirected to FuelOrders,
         flight   : redirected to FlightSchedule,
         delivery : redirected to FuelDeliveries,
+        // The ticket's own flight where it has one, the order's otherwise -
+        // a ticket may be raised against either (A1). A column rather than an
+        // association path so the LIST can sort and filter on it; the object
+        // page reads flight.flight_date through the association as before.
+        coalesce(flight.flight_date, order.flight.flight_date) as flight_date : Date,
         virtual null as statusCriticality : Integer,
         // Drives density_value/density_uom's FieldControl: mandatory on a
         // volume ticket, optional on a mass one. See applyDensityFieldControl.

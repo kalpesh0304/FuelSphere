@@ -675,6 +675,7 @@ annotate FuelOrderService.FuelDeliveries with @(
         LineItem: [
             { Value: delivery_number, Label: 'Delivery Number', ![@UI.Importance]: #High },
             { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
+            { Value: flight_date, Label: 'Flight Date', ![@UI.Importance]: #Medium },
             { Value: delivery_date, Label: 'Date', ![@UI.Importance]: #High },
             { Value: delivery_time, Label: 'Time', ![@UI.Importance]: #Medium },
             { Value: delivered_quantity, Label: 'Delivered (kg)', ![@UI.Importance]: #High },
@@ -703,6 +704,15 @@ annotate FuelOrderService.FuelDeliveries with @(
                 ![@UI.Importance]: #High
             },
             { Value: recon_variance_kg, Label: 'Recon Variance (kg)', ![@UI.Importance]: #High },
+            { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
+            {
+                Value: flight_variance_status,
+                Label: 'Flight Variance Status',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
+                    { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } },
+                ![@UI.Importance]: #Medium
+            },
             { Value: fob_source, Label: 'FQIS Source', ![@UI.Importance]: #Medium },
 
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
@@ -750,6 +760,11 @@ annotate FuelOrderService.FuelDeliveries with @(
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#Reconciliation',
                 Label  : 'FOB Reconciliation'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                Target : '@UI.FieldGroup#FlightVariance',
+                Label  : 'Variance'
             }
         ],
 
@@ -845,6 +860,27 @@ annotate FuelOrderService.FuelDeliveries with @(
                 // Attribution requires exactly one. Two suppliers on one gauge
                 // pair produce a figure belonging to neither.
                 { Value: supplier_count, Label: 'Suppliers on this Refuelling' }
+            ]
+        },
+
+        // VARIANCE - the flight-level comparison, in its own section.
+        // Identical to DeliveryService.FuelDeliveries' #FlightVariance, field
+        // for field; the reasoning for keeping it out of #Reconciliation above
+        // is written out there.
+        FieldGroup#FlightVariance: {
+            Label: 'Variance',
+            Data: [
+                {
+                    Value: flight_variance_status,
+                    Label: 'Flight Variance Status',
+                    Criticality: { $edmJson: { $If: [
+                        { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
+                        { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
+                },
+                { Value: flight_variance_kg,  Label: 'Flight Variance (kg)' },
+                { Value: flight_delivered_kg, Label: 'Total Delivered, Flight (kg)' },
+                { Value: flight_metered_kg,   Label: 'Total Metered, Flight (kg)' },
+                { Value: flight_tolerance_kg, Label: 'Tolerance (kg)' }
             ]
         },
 
@@ -978,6 +1014,7 @@ annotate FuelOrderService.FuelTickets with @(
             { Value: internal_number, Label: 'Internal Number', ![@UI.Importance]: #Medium },
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #High },
+            { Value: flight_date, Label: 'Flight Date', ![@UI.Importance]: #Medium },
             // WP-11/WP-12: the claimed figure and the metered figure are
             // different numbers and both carry a unit. @Measures.Unit puts
             // uom_code against each rather than in a column of its own,
@@ -1261,6 +1298,10 @@ annotate FuelOrderService.SourceDocuments with {
 
 annotate FuelOrderService.FuelTickets with {
     // WP-33
+    // #ReadOnly for two reasons: derived from the picked flight, and without
+    // it the column inherits FLIGHT_SCHEDULE.flight_date's @mandatory and
+    // paints an asterisk on a field nobody can type into.
+    flight_date                  @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
     vehicle_id                   @title: 'Vehicle';
     meter_serial                 @title: 'Meter Serial';
     // WP-31. On the ASSOCIATION, because CAP propagates it to the generated
@@ -1835,6 +1876,15 @@ annotate FuelOrderService.FuelDeliveries with {
     delivered_quantity  @Measures.Unit: uom_code;
     uom_code            @title: 'Unit of Measure';
     delivery_method     @title: 'Delivery Method';
+    // See the note on FuelOrderService.FuelTickets.flight_date.
+    flight_date         @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
+    // Computed by flight-variance.js on every write - read-only for the same
+    // reason the reconciliation fields are.
+    flight_variance_kg      @title: 'Flight Variance (kg)' @Common.FieldControl: #ReadOnly;
+    flight_variance_status  @title: 'Flight Variance Status' @Common.FieldControl: #ReadOnly;
+    flight_delivered_kg     @title: 'Total Delivered, Flight (kg)' @Common.FieldControl: #ReadOnly;
+    flight_metered_kg       @title: 'Total Metered, Flight (kg)' @Common.FieldControl: #ReadOnly;
+    flight_tolerance_kg     @title: 'Tolerance (kg)' @Common.FieldControl: #ReadOnly;
 
     // Same statement as the ledger's INITIAL row, for the same reason: an
     // arrival figure with no arriving leg behind it reads as a carried
