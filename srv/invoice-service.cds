@@ -111,7 +111,33 @@ service InvoiceService {
             when 'CLEAR' then 3
             when 'GATED' then 1
             else 0
-        end as gateCriticality : Integer
+        end as gateCriticality : Integer,
+
+        // ====================================================================
+        // WP-36 - THE HEADER LIST VIEW. Every figure below is the SUM of the
+        // line figures, computed by srv/lib/invoice-summary.js so the header
+        // and line views cannot disagree about one invoice. Virtual because
+        // each is derived from data held elsewhere; a stored copy would be
+        // free to drift from the lines it summarises.
+        // ====================================================================
+        virtual null as flight_number_v    : String(10),
+        virtual null as flight_date_v      : Date,
+        virtual null as dep_airport        : String(3),
+        virtual null as arr_airport        : String(3),
+        virtual null as flight_status_v    : String(20),
+        virtual null as invoice_status_v   : String(20),
+        virtual null as received_date_v    : Date,
+        virtual null as total_lines        : Integer,
+        virtual null as reconciled_lines   : Integer,
+        virtual null as unreconciled_lines : Integer,
+        virtual null as total_inv_amount   : Decimal(15,2),
+        virtual null as wavg_inv_rate      : Decimal(15,4),
+        virtual null as total_inv_qty_kg   : Decimal(15,2),
+        virtual null as wavg_tkt_rate      : Decimal(15,4),
+        virtual null as total_tkt_qty_kg   : Decimal(15,2),
+        virtual null as total_tkt_amount   : Decimal(15,2),
+        virtual null as variance_value     : Decimal(15,2),
+        virtual null as tolerance_v        : String(20)
     } actions {
         /**
          * Check for duplicate invoice
@@ -171,6 +197,16 @@ service InvoiceService {
         action postToS4HANA() returns FIPostingResult;
 
         /**
+         * Record payment - SIMULATED, like postToS4HANA.
+         *
+         * Separate from posting on purpose. The status column the users
+         * asked for reads In process / Posted / Paid; generating payment
+         * figures at posting would mean no invoice could ever rest at
+         * Posted - every one would jump straight to Paid.
+         */
+        action recordPayment() returns Invoices;
+
+        /**
          * Cancel/reverse invoice
          * Creates reversal document if already posted
          */
@@ -198,6 +234,7 @@ service InvoiceService {
         uom         : redirected to UnitsOfMeasure,
         delivery    : redirected to FuelDeliveries,
         fuel_order  : redirected to FuelOrders,
+        flight      : redirected to FlightSchedule,
 
         // A line that resolved to a ticket is green whichever key got it
         // there; one that did not is red, because an unresolved line is the
@@ -224,7 +261,34 @@ service InvoiceService {
             when po_number is null          then 0
             when po_number <> resolved_po_number then 2
             else 3
-        end as poAgreementCriticality : Integer
+        end as poAgreementCriticality : Integer,
+
+        // ====================================================================
+        // WP-37 - THE LINE ITEM LIST VIEW. The flight, the parent invoice
+        // header fields, both sides of the comparison in kilograms, and the
+        // three variances. See srv/lib/invoice-summary.js for why each is
+        // derived the way it is.
+        // ====================================================================
+        virtual null as flight_number_v       : String(10),
+        virtual null as flight_date_v         : Date,
+        virtual null as dep_airport           : String(3),
+        virtual null as arr_airport           : String(3),
+        virtual null as flight_status_v       : String(20),
+        virtual null as vendor_invoice_number : String(30),
+        virtual null as sap_invoice_number_v  : String(16),
+        virtual null as invoice_status_v      : String(20),
+        virtual null as received_date_v       : Date,
+        virtual null as s4_document_number_v  : String(10),
+        virtual null as posting_date_v        : Date,
+        virtual null as s4_payment_document_v : String(10),
+        virtual null as payment_date_v        : Date,
+        virtual null as inv_qty_kg            : Decimal(15,2),
+        virtual null as inv_rate_kg           : Decimal(15,4),
+        virtual null as total_variance        : Decimal(15,2),
+        virtual null as qty_variance_kg       : Decimal(15,2),
+        virtual null as price_variance        : Decimal(15,2),
+        virtual null as tolerance_breach      : String(10),
+        virtual null as tolerance_v           : String(30)
     } actions {
         /**
          * Match single line item
@@ -561,6 +625,23 @@ service InvoiceService {
     entity Airports as projection on db.MASTER_AIRPORTS {
         *,
         country : redirected to Countries
+    };
+
+    // WP-35. Exposed because INVOICE_ITEMS.flight points here, and an
+    // association whose target sits outside the service is dropped whole -
+    // the navigation AND the generated flight_ID with it, and silently.
+    //
+    // The line item list reads five columns through it: flight number,
+    // flight date, origin, destination and status.
+    @readonly
+    entity FlightSchedule as projection on db.FLIGHT_SCHEDULE {
+        key ID,
+        flight_number,
+        flight_date,
+        origin_airport,
+        destination_airport,
+        status,
+        aircraft_reg
     };
 
     @readonly

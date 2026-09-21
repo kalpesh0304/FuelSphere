@@ -26,6 +26,7 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const C = require('./lib/invoice-checks');
+const { applyHeaderSummary, applyLineSummary } = require('./lib/invoice-summary');
 
 const _id = (params) => {
     const p = params[params.length - 1];
@@ -36,7 +37,26 @@ const today = () => new Date().toISOString().slice(0, 10);
 module.exports = class InvoiceService extends cds.ApplicationService {
     async init() {
 
-        const { Invoices, InvoiceExceptions } = this.entities;
+        const { Invoices, InvoiceExceptions, InvoiceItems } = this.entities;
+
+        // ================================================================
+        // WP-36 / WP-37 - THE HEADER AND LINE ITEM VIEWS.
+        //
+        // On the DRAFT as well as the active entity, and that is not
+        // optional. Invoices is draft-enabled and InvoiceItems is its
+        // composition child, so both have a .drafts twin. A virtual whose
+        // handler runs on only one of the pair comes back ABSENT from the
+        // other - not null, absent - and Fiori then fails to drill into a
+        // property it was told to render, leaving the page spinning with no
+        // error the user can see. That exact bug hit three services earlier
+        // in this project.
+        // ================================================================
+        this.after(['READ'], [Invoices, Invoices.drafts], async (data) => {
+            await applyHeaderSummary(data);
+        });
+        this.after(['READ'], [InvoiceItems, InvoiceItems.drafts], async (data) => {
+            await applyLineSummary(data);
+        });
 
         // ================================================================
         // THE VALIDATION RUN
@@ -198,11 +218,45 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         /** Write back what the resolution produced, so it is re-explainable. */
         const persistResolution = async (result) => {
             for (const [itemId, res] of result.resolutions) {
+                const t = res.ticket || null;
+
+                // WP-35 - WHAT THE TICKET SAID, captured at match time.
+                //
+                // Held on the line rather than read through the association
+                // on every view, so the figure a variance was computed FROM
+                // survives a later correction to the ticket. Written as null
+                // when the line no longer resolves, so a re-run that loses its
+                // match clears the old figures instead of keeping stale ones
+                // beside a ticket it no longer points at.
+                const tktKg  = t && t.quantity_kg  != null ? Number(t.quantity_kg)  : null;
+                const tktAmt = t && t.total_amount != null ? Number(t.total_amount) : null;
+                const tktRate = (tktKg && tktAmt != null)
+                    ? Number((tktAmt / tktKg).toFixed(4)) : null;
+
+                // The flight goes on the LINE - decision Q1. The ticket's own
+                // association where it has one; otherwise its flight number on
+                // its delivery date, the key FLIGHT_DISPATCH already matches
+                // on. Number alone would attach a recurring flight to the
+                // wrong day, so an ambiguous match writes nothing.
+                let flightId = t ? (t.flight_ID || null) : null;
+                if (t && !flightId && t.flight_number) {
+                    const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
+                    const where = day ? { flight_number: t.flight_number, flight_date: day }
+                                      : { flight_number: t.flight_number };
+                    const hits = await SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+                        .columns('ID').where(where);
+                    if (hits.length === 1) flightId = hits[0].ID;
+                }
+
                 await UPDATE('fuelsphere.INVOICE_ITEMS').set({
-                    ticket_ID: (res.ticket && res.ticket.ID) || null,
+                    ticket_ID: (t && t.ID) || null,
                     resolved_po_number: res.resolved_po_number,
                     resolved_gr_number: res.resolved_gr_number,
-                    resolution_source: res.resolution_source
+                    resolution_source: res.resolution_source,
+                    ticket_quantity_kg: tktKg,
+                    ticket_amount: tktAmt,
+                    ticket_rate: tktRate,
+                    flight_ID: flightId
                 }).where({ ID: itemId });
             }
         };
@@ -373,6 +427,99 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         // ================================================================
         // HEADER TOTALS — INV454
         // ================================================================
+        // ================================================================
+        // POSTING AND PAYMENT - SIMULATED.
+        //
+        // Both were declared and never implemented, so neither did anything.
+        // They are simulated here until the real S/4 integration (WP-29)
+        // replaces them, and every message says so: a simulated document
+        // number that reads as a real one is the kind of thing that ends up
+        // quoted to a supplier.
+        //
+        // Numbers are derived from the invoice ID, not a counter. That makes
+        // them stable - the same invoice always simulates to the same
+        // document - and posting twice is refused below anyway.
+        // ================================================================
+        const simNo = (prefix, id, width) => {
+            const h = require('crypto').createHash('sha1').update(String(id)).digest('hex');
+            const digits = String(parseInt(h.slice(0, 12), 16)).slice(-width).padStart(width, '0');
+            return prefix + digits;
+        };
+
+        this.on('postToS4HANA', Invoices, async (req) => {
+            const invoiceId = _id(req.params);
+            const inv = await SELECT.one.from('fuelsphere.INVOICES')
+                .columns('ID', 'invoice_number', 'status', 'posting_gate', 'gross_amount',
+                         'currency_code', 's4_company_code', 'received_date', 'created_at')
+                .where({ ID: invoiceId });
+            if (!inv) return req.error(404, 'Invoice not found.');
+            if (inv.status === 'POSTED' || inv.status === 'PAID') {
+                return req.error(409, `Invoice ${inv.invoice_number} is already `
+                    + `${inv.status.toLowerCase()} and cannot be posted again.`);
+            }
+            if (inv.status === 'CANCELLED') {
+                return req.error(409, `Invoice ${inv.invoice_number} is cancelled.`);
+            }
+            // THE GATE IS THE CONTROL. An invoice with an open gating exception
+            // must not reach the ledger, simulated or not - a demo that posts
+            // through a gate teaches the audience that the gate is decoration.
+            if (inv.posting_gate !== 'CLEAR') {
+                return req.error(409, `Invoice ${inv.invoice_number} cannot be posted: the `
+                    + `posting gate is ${inv.posting_gate}. Run the checks and clear every `
+                    + `gating exception first.`);
+            }
+
+            const today = new Date().toISOString().slice(0, 10);
+            const year = today.slice(0, 4);
+            const docNo = simNo('51', inv.ID, 8);
+            const sapInvoiceNo = simNo('5105', inv.ID + ':inv', 6);
+            const companyCode = inv.s4_company_code || '1000';
+            await UPDATE('fuelsphere.INVOICES').set({
+                status: 'POSTED',
+                fi_posting_status: 'SUCCESS',
+                s4_document_number: docNo,
+                s4_fiscal_year: year,
+                s4_company_code: companyCode,
+                sap_invoice_number: sapInvoiceNo,
+                posting_date: today,
+                // Stamped only if nothing supplied one: when the record
+                // reached FuelSphere is the truthful fallback, not today.
+                received_date: inv.received_date
+                    || (inv.created_at ? String(inv.created_at).slice(0, 10) : today)
+            }).where({ ID: invoiceId });
+
+            req.info(200, `Posted to S/4HANA (SIMULATED): FI document ${docNo}, `
+                + `SAP invoice ${sapInvoiceNo}, posting date ${today}.`);
+            return {
+                success: true, invoiceId, invoiceNumber: inv.invoice_number,
+                s4DocumentNumber: docNo, s4FiscalYear: year, s4CompanyCode: companyCode,
+                postingDate: today, postedAmount: inv.gross_amount,
+                currency: inv.currency_code,
+                message: 'Simulated posting - no document was created in S/4HANA.'
+            };
+        });
+
+        this.on('recordPayment', Invoices, async (req) => {
+            const invoiceId = _id(req.params);
+            const inv = await SELECT.one.from('fuelsphere.INVOICES')
+                .columns('ID', 'invoice_number', 'status').where({ ID: invoiceId });
+            if (!inv) return req.error(404, 'Invoice not found.');
+            // Payment follows posting. Paying an unposted invoice would put a
+            // clearing document against an FI document that does not exist.
+            if (inv.status !== 'POSTED') {
+                return req.error(409, `Only a posted invoice can be paid. `
+                    + `Invoice ${inv.invoice_number} is ${inv.status}.`);
+            }
+            const today = new Date().toISOString().slice(0, 10);
+            const payDoc = simNo('15', inv.ID + ':pay', 8);
+            await UPDATE('fuelsphere.INVOICES').set({
+                status: 'PAID', s4_payment_document: payDoc, payment_date: today
+            }).where({ ID: invoiceId });
+            req.info(200, `Payment recorded (SIMULATED): clearing document ${payDoc}, `
+                + `payment date ${today}.`);
+            return SELECT.one.from(Invoices).where({ ID: invoiceId });
+        });
+
         this.on('recalculateTotals', Invoices, async (req) => {
             const invoiceId = _id(req.params);
             const items = await SELECT.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: invoiceId });

@@ -144,6 +144,12 @@ annotate TicketService.FuelTickets with @(
 
         // WP-UI-01: a list with no filter bar makes an operator scroll.
         SelectionFields: [
+            // FIRST, and it is what the cross-app link needs. A ticket
+            // number arriving as a startup parameter from the invoicing
+            // app is only applied as a filter if it IS a filter field -
+            // otherwise the link lands on an unfiltered list and the
+            // operator hunts for the row they just clicked.
+            ticket_number,
             order_ID,
             flight_number,
             status,

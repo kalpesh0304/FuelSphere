@@ -264,7 +264,6 @@ describe('WP-UI-02 — labels', function () {
         // measured it, and a wrong baseline is worse than none - it would have
         // frozen nine phantom defects into the file as accepted.
         const KNOWN = new Set([
-            'InvoiceService.Invoices -> supplier_ID',
             'InvoiceService.InvoiceExceptions -> status',
             'InvoiceService.ToleranceRules -> company_code',
             'InvoiceService.ToleranceRules -> station_code',

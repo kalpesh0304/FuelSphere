@@ -2430,6 +2430,31 @@ entity SCENARIO_COMPARISON : cuid, AuditTrail {
  * Invoice Status Enumeration
  * Draft → Verified → Posted → Paid → Cancelled
  */
+/**
+ * WP-35. The tolerance VERDICT - a measurement, and nothing else.
+ *
+ * Deliberately two-valued. A third value describing what someone is doing
+ * about it belongs in VarianceReviewStatus; see the note on
+ * INVOICE_ITEMS.tolerance_status for why the two cannot share a column.
+ */
+type ToleranceCheckStatus : String(10) enum {
+    Within   = 'WITHIN';
+    Exceeded = 'EXCEEDED';
+}
+
+/**
+ * WP-35. How far a human has got with an exceeded variance.
+ *
+ * NONE is the resting state and carries no judgement: it means nobody has
+ * picked this up, which on a line WITHIN tolerance is correct and on one
+ * EXCEEDED is a queue. The pair read together is the sentence.
+ */
+type VarianceReviewStatus : String(12) enum {
+    None      = 'NONE';
+    Reviewing = 'REVIEWING';
+    Disputed  = 'DISPUTED';
+}
+
 type InvoiceStatus : String(20) enum {
     Draft       = 'DRAFT';
     Submitted   = 'SUBMITTED';   // WP-09: the documented flow's step between Draft and the three-way match
@@ -2610,6 +2635,35 @@ entity INVOICES : cuid, AuditTrail {
         s4_document_number  : String(10);                 // S/4HANA FI Document Number
         s4_fiscal_year      : String(4);                  // Fiscal year
         s4_company_code     : String(4);                  // Company code
+
+        // ====================================================================
+        // WP-35 - SETTLEMENT, AS THE HEADER LIST REPORTS IT.
+        //
+        // s4_document_number above is the FI document the posting created.
+        // These four are different facts and none of them was derivable from
+        // it: when the paper arrived, what the supplier system calls the
+        // invoice, which document CLEARED it, and when the money moved.
+        //
+        // sap_invoice_number is NOT internal_number. internal_number is
+        // FuelSphere's own handle; this is the number the SAP side knows the
+        // document by, and a query starting from an SAP report begins here.
+        // ====================================================================
+        received_date       : Date;                       // When the invoice reached us. Not invoice_date
+        sap_invoice_number  : String(16);                 // The SAP-side invoice number
+        s4_payment_document : String(10);                 // Clearing document
+        payment_date        : Date;                       // When the money moved
+
+        // The verdict, rolled up from the lines. Stored rather than derived
+        // per read so the header list can sort and filter on it - the same
+        // reason FUEL_DELIVERIES.flight_variance_status is stored.
+        // NO DEFAULT, and that is the fix, not an omission. This column
+        // first shipped as default 'WITHIN', which made every line that was
+        // never checked read as PASSING - an unpriced ticket, a line that
+        // resolved to nothing, all of it green. A measurement must start as
+        // "not measured" (null), because a pass nobody earned is worse than
+        // a blank: the blank sends someone to look, the pass sends them home.
+        // Caught by invoice-views-harness EXIT-5.
+        tolerance_status    : ToleranceCheckStatus;
         fi_posting_status   : String(20);                 // SUCCESS / FAILED / PENDING
 
         // Status & Notes
@@ -2701,6 +2755,65 @@ entity INVOICE_ITEMS : cuid {
         line_match_status   : InvoiceMatchStatus default 'UNMATCHED';
         price_variance_pct  : Decimal(5,2);               // Price variance %
         qty_variance_pct    : Decimal(5,2);               // Quantity variance %
+
+        // ====================================================================
+        // WP-35 - THE FLIGHT, THE SAP LINE, AND THE TICKET SIDE.
+        //
+        // THE FLIGHT SITS ON THE LINE, NOT ON THE INVOICE, and that is the
+        // whole of decision Q1. A supplier invoice routinely spans several
+        // flights; a flight on the header has no single value to hold the
+        // moment it does, and the first multi-flight invoice would have to
+        // either lie or go blank. On the line it is always exactly one. The
+        // header shows it where every line agrees and blank otherwise, which
+        // is a read, not a column.
+        //
+        // It is ALSO reachable as ticket.flight, and that is not a reason to
+        // leave it out: the chain breaks on any line that resolved to no
+        // ticket - resolution_source already records UNRESOLVED - and those
+        // are the lines most worth looking at. Recorded here it survives a
+        // failed resolution.
+        flight              : Association to FLIGHT_SCHEDULE;
+
+        // The supplier's line is line_number. This is what SAP calls it.
+        sap_line_number     : String(6);
+
+        // WHAT THE TICKET SAYS, BESIDE WHAT THE INVOICE CLAIMS. Written by
+        // the matcher from the resolved ticket, never typed on a screen, and
+        // held here rather than read through the association every time so
+        // the figure the variance was computed FROM survives a later
+        // correction to the ticket.
+        //
+        // KILOGRAMS, deliberately. quantity above is in uom_code, usually
+        // litres. A variance that subtracts litres from kilograms is a
+        // number with no meaning that still looks like a finding - the
+        // defect already fixed once in srv/lib/flight-variance.js.
+        ticket_quantity_kg  : Decimal(15,2);              // From ticket.quantity_kg
+        ticket_rate         : Decimal(15,4);              // Per KILOGRAM, not per litre
+        ticket_amount       : Decimal(15,2);              // From ticket.total_amount
+
+        // ====================================================================
+        // TWO AXES, TWO FIELDS - decision Q2.
+        //
+        // The screen asked for one column carrying four values: Within
+        // tolerance, Exceeds tolerance, Exceeded - reviewing, Dispute raised.
+        // The first two are a MEASUREMENT; the last two are where a PERSON
+        // has got to. Collapsed into one column the measurement is destroyed
+        // the moment somebody opens a review, and nobody can answer "how
+        // many lines breached tolerance last month" ever again - only how
+        // many are unreviewed right now.
+        //
+        // Held apart, merged for display. The screen still reads the way it
+        // was drawn.
+        // ====================================================================
+        // NO DEFAULT, and that is the fix, not an omission. This column
+        // first shipped as default 'WITHIN', which made every line that was
+        // never checked read as PASSING - an unpriced ticket, a line that
+        // resolved to nothing, all of it green. A measurement must start as
+        // "not measured" (null), because a pass nobody earned is worse than
+        // a blank: the blank sends someone to look, the pass sends them home.
+        // Caught by invoice-views-harness EXIT-5.
+        tolerance_status    : ToleranceCheckStatus;
+        review_status       : VarianceReviewStatus default 'NONE';
 }
 
 /**

@@ -34,6 +34,9 @@ annotate InvoiceService.Invoices with @(
 
         SelectionFields: [
             invoice_number,
+            // WP-36. The SAP-side number, beside the vendor's. A query that
+            // starts from an SAP report starts here.
+            sap_invoice_number,
             supplier_ID,
             invoice_date,
             status,
@@ -45,7 +48,49 @@ annotate InvoiceService.Invoices with @(
         ],
 
         LineItem: [
-            { Value: invoice_number, Label: 'Invoice Number', ![@UI.Importance]: #High },
+            // ================================================================
+            // WP-36 - THE HEADER LIST VIEW, in the order the spec lists it.
+            //
+            // Spec columns FIRST, the existing invoice-checking columns after
+            // them - decision "add, spec first". Nothing existing is removed
+            // except the two the spec now carries itself (vendor invoice
+            // number and SAP document), so neither appears twice.
+            //
+            // Every figure from total lines onward is the SUM of the line
+            // figures, computed in srv/lib/invoice-summary.js - the header and
+            // line views read one derivation and cannot disagree.
+            // ================================================================
+            { Value: flight_number_v,     Label: 'Flight number',      ![@UI.Importance]: #High },
+            { Value: flight_date_v,       Label: 'Flight date',        ![@UI.Importance]: #High },
+            { Value: dep_airport,         Label: 'Departure airport',  ![@UI.Importance]: #Medium },
+            { Value: arr_airport,         Label: 'Arrival airport',    ![@UI.Importance]: #Medium },
+            { Value: flight_status_v,     Label: 'Flight status',      ![@UI.Importance]: #Medium },
+            { Value: invoice_number,      Label: 'Vendor invoice number', ![@UI.Importance]: #High },
+            { Value: sap_invoice_number,  Label: 'SAP invoice number', ![@UI.Importance]: #High },
+            { Value: invoice_status_v,    Label: 'Invoice status',     ![@UI.Importance]: #High },
+            { Value: received_date_v,     Label: 'Invoice received date', ![@UI.Importance]: #Medium },
+            { Value: s4_document_number,  Label: 'SAP document number', ![@UI.Importance]: #Medium },
+            { Value: posting_date,        Label: 'Invoice posting date', ![@UI.Importance]: #Medium },
+            { Value: s4_payment_document, Label: 'SAP payment document', ![@UI.Importance]: #Low },
+            { Value: payment_date,        Label: 'Payment date',       ![@UI.Importance]: #Low },
+            { Value: total_lines,         Label: 'Total invoice lines', ![@UI.Importance]: #Medium },
+            { Value: reconciled_lines,    Label: 'Lines reconciled to tickets', ![@UI.Importance]: #Medium },
+            { Value: unreconciled_lines,  Label: 'Unreconciled lines', ![@UI.Importance]: #Medium },
+            { Value: total_inv_amount,    Label: 'Total amount (invoice)', ![@UI.Importance]: #High },
+            { Value: wavg_inv_rate,       Label: 'Wgt avg rate, invoice (per kg)', ![@UI.Importance]: #Medium },
+            { Value: total_inv_qty_kg,    Label: 'Total qty, invoice (kg)', ![@UI.Importance]: #Medium },
+            { Value: wavg_tkt_rate,       Label: 'Wgt avg rate, ticket (per kg)', ![@UI.Importance]: #Medium },
+            { Value: total_tkt_qty_kg,    Label: 'Total qty, ticket (kg)', ![@UI.Importance]: #Medium },
+            { Value: total_tkt_amount,    Label: 'Total amount (ticket)', ![@UI.Importance]: #High },
+            { Value: variance_value,      Label: 'Variance, value',    ![@UI.Importance]: #High },
+            {
+                Value: tolerance_v,
+                Label: 'Tolerance check status',
+                Criticality: { $edmJson: { $If: [ { $Eq: [{ $Path: 'tolerance_v' }, 'Exceeded'] }, 1, { $If: [ { $Eq: [{ $Path: 'tolerance_v' }, 'Within'] }, 3, 0 ] } ] } },
+                ![@UI.Importance]: #High
+            },
+
+            // ---- the existing invoice-checking columns ----------------------
             { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
             { Value: invoice_date, Label: 'Invoice Date', ![@UI.Importance]: #High },
             { Value: gross_amount, Label: 'Gross Amount', ![@UI.Importance]: #High },
@@ -96,9 +141,7 @@ annotate InvoiceService.Invoices with @(
             // The pair is the reading; either alone misleads.
             { Value: rules_passed,         Label: 'Passed',      ![@UI.Importance]: #High },
             { Value: rules_not_applicable, Label: 'Not checked', ![@UI.Importance]: #High },
-            { Value: rules_evaluated,      Label: 'Rules run',   ![@UI.Importance]: #Medium },
-
-            { Value: s4_document_number, Label: 'S/4 Doc', ![@UI.Importance]: #Low }
+            { Value: rules_evaluated,      Label: 'Rules run',   ![@UI.Importance]: #Medium }
         ],
 
         PresentationVariant: {
@@ -490,40 +533,77 @@ annotate InvoiceService.InvoiceItems with @(
         },
 
         LineItem: [
-            { Value: line_number, Label: 'Item', ![@UI.Importance]: #High },
-            { Value: description, Label: 'Description', ![@UI.Importance]: #High },
-            { Value: quantity, Label: 'Quantity', ![@UI.Importance]: #High },
-            { Value: unit_price, Label: 'Unit Price', ![@UI.Importance]: #High },
-            { Value: net_amount, Label: 'Net Amount', ![@UI.Importance]: #High },
-
-            // ------------------------------------------------------------
-            // WHAT THE SUPPLIER QUOTED, AND WHAT IT RESOLVED TO.
+            // ================================================================
+            // WP-37 - THE LINE ITEM LIST VIEW, in the order the spec lists it.
             //
-            // ticket_number is the key the supplier actually references -
-            // they do not know our PO - and it was on the entity, in the
-            // seed and on no screen. Six checks in the RESOLUTION group
-            // (INV450, 462, 463, 464, 465, 466) all read from these three
-            // fields, and every one of them was unreadable on the line it
-            // was raised against.
-            // ------------------------------------------------------------
+            // Spec columns FIRST, the existing columns after them. Quantity
+            // and rate appear TWICE, deliberately, and are not duplicates:
+            //   - the spec pair (kg, per kg) sits beside the ticket pair so
+            //     the two can be compared - both in kilograms, decision Q3
+            //   - the as-billed pair (Quantity, Unit Price) keeps its own unit
+            //     from uom_code, because that is what the supplier invoiced
+            //     and what a dispute will quote
+            // A litre figure beside a kilogram figure invites the reader to
+            // subtract one from the other, which is the defect this whole
+            // design exists to prevent.
+            // ================================================================
+            { Value: flight_number_v,       Label: 'Flight number',        ![@UI.Importance]: #High },
+            { Value: flight_date_v,         Label: 'Flight date',          ![@UI.Importance]: #High },
+            { Value: dep_airport,           Label: 'Departure airport',    ![@UI.Importance]: #Medium },
+            { Value: arr_airport,           Label: 'Arrival airport',      ![@UI.Importance]: #Medium },
+            { Value: flight_status_v,       Label: 'Flight status',        ![@UI.Importance]: #Medium },
+            { Value: vendor_invoice_number, Label: 'Vendor invoice number', ![@UI.Importance]: #High },
+            { Value: line_number,           Label: 'Vendor line item',     ![@UI.Importance]: #High },
+            { Value: sap_invoice_number_v,  Label: 'SAP invoice number',   ![@UI.Importance]: #Medium },
+            { Value: sap_line_number,       Label: 'SAP line item',        ![@UI.Importance]: #Medium },
+            { Value: invoice_status_v,      Label: 'Invoice status',       ![@UI.Importance]: #High },
+            { Value: received_date_v,       Label: 'Invoice received date', ![@UI.Importance]: #Medium },
+            { Value: s4_document_number_v,  Label: 'SAP document number',  ![@UI.Importance]: #Medium },
+            { Value: posting_date_v,        Label: 'Invoice posting date', ![@UI.Importance]: #Medium },
+            // CROSS-APP, NOT IN-APP. A plain DataField, with the link supplied
+            // by @Common.SemanticObject on the property. A navigation
+            // annotation on the column WINS over the property-level semantic
+            // link, so the column must not carry one - that is what kept the
+            // click inside the invoicing app before.
             {
-                $Type : 'UI.DataFieldWithNavigationPath',
                 Value : ticket_number,
-                Label : 'Ticket stated',
-                Target: ticket,
+                Label : 'Fuel ticket number',
                 ![@UI.Importance]: #High
             },
+            { Value: s4_payment_document_v, Label: 'SAP payment document', ![@UI.Importance]: #Low },
+            { Value: payment_date_v,        Label: 'Payment date',         ![@UI.Importance]: #Low },
+            { Value: net_amount,            Label: 'Amount (invoice)',     ![@UI.Importance]: #High },
+            { Value: inv_rate_kg,           Label: 'Rate, invoice (per kg)', ![@UI.Importance]: #High },
+            { Value: inv_qty_kg,            Label: 'Qty, invoice (kg)',    ![@UI.Importance]: #High },
+            { Value: ticket_amount,         Label: 'Amount (ticket)',      ![@UI.Importance]: #High },
+            { Value: ticket_rate,           Label: 'Rate, ticket (per kg)', ![@UI.Importance]: #High },
+            { Value: ticket_quantity_kg,    Label: 'Qty, ticket (kg)',     ![@UI.Importance]: #High },
+            { Value: total_variance,        Label: 'Total variance',       ![@UI.Importance]: #High },
+            { Value: qty_variance_kg,       Label: 'Qty variance (kg)',    ![@UI.Importance]: #High },
+            { Value: price_variance,        Label: 'Price variance',       ![@UI.Importance]: #High },
+            {
+                Value: tolerance_v,
+                Label: 'Tolerance check status',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'tolerance_status' }, 'EXCEEDED'] }, 1,
+                    { $If: [ { $Eq: [{ $Path: 'tolerance_status' }, 'WITHIN'] }, 3, 0 ] } ] } },
+                ![@UI.Importance]: #High
+            },
+
+            // ---- the existing columns --------------------------------------
+            { Value: description, Label: 'Description', ![@UI.Importance]: #Medium },
+            { Value: quantity,    Label: 'Quantity (as billed)',   ![@UI.Importance]: #Medium },
+            { Value: unit_price,  Label: 'Unit price (as billed)', ![@UI.Importance]: #Medium },
             {
                 Value: resolution_source,
                 Label: 'Resolved by',
                 Criticality: resolutionCriticality,
-                ![@UI.Importance]: #High
+                ![@UI.Importance]: #Medium
             },
-
-            { Value: tax_code, Label: 'Tax Code', ![@UI.Importance]: #Medium },
-            { Value: tax_amount, Label: 'Tax Amount', ![@UI.Importance]: #Medium },
-            { Value: po_number, Label: 'PO Number', ![@UI.Importance]: #Low },
-            { Value: po_item, Label: 'PO Item', ![@UI.Importance]: #Low }
+            { Value: tax_code,   Label: 'Tax Code',   ![@UI.Importance]: #Low },
+            { Value: tax_amount, Label: 'Tax Amount', ![@UI.Importance]: #Low },
+            { Value: po_number,  Label: 'PO Number',  ![@UI.Importance]: #Low },
+            { Value: po_item,    Label: 'PO Item',    ![@UI.Importance]: #Low }
         ],
 
         Facets: [
@@ -1545,6 +1625,66 @@ annotate InvoiceService.FuelTickets with {
 // the amounts move and the quantities stay, and units-harness EXIT-6 now
 // asserts it at that granularity rather than banning both.
 annotate InvoiceService.InvoiceItems with {
+    // THE TICKET NUMBER IS A DOOR TO ANOTHER APP.
+    //
+    // Mapped through ticket_ID, NOT through this row's own ID. The local
+    // ID here is the INVOICE LINE's - handing that to the tickets app asks
+    // it to open a ticket that does not exist, and it would open empty. The
+    // ticket's identity lives on the association's foreign key.
+    //
+    // ticket_number travels too, so the target can still name what was
+    // asked for when ticket_ID is null - an unresolved line quotes a ticket
+    // number that matched nothing, and that is precisely the line somebody
+    // needs to go and look at.
+    // SUPPRESSING THE LINE'S OWN ID IS THE WHOLE FIX, and it was not
+    // optional. Fiori hands the target the ENTIRE row as parameters, so
+    // ID went across as the INVOICE LINE's id. Mapping ticket_ID onto ID
+    // was not enough - the row's own ID was already in the payload and
+    // won, and the tickets app dutifully tried to open
+    // FuelTickets(ID=<an invoice line>) and answered "we cannot find this
+    // page". Observed, not theorised: the launchpad URL carried
+    // ID=f1c00001-...-0001, which is Invoices.items.ID on that same row.
+    //
+    // Mapping a local property to an EMPTY SemanticObjectProperty removes
+    // it from the payload. So the line's ID is dropped first, then the
+    // ticket's ID takes the name - two different local properties, so the
+    // two rules cannot fight over one source.
+    ticket_number @Common.SemanticObject: 'fueltickets'
+                  @Common.SemanticObjectMapping: [
+                      { LocalProperty: ID,            SemanticObjectProperty: ''   },
+                      { LocalProperty: ticket_ID,     SemanticObjectProperty: 'ID' },
+                      { LocalProperty: ticket_number, SemanticObjectProperty: 'ticket_number' }
+                  ];
+    // WP-35. THE UNIT IS IN THE LABEL WHERE IT IS FIXED, AND ONLY THERE.
+    //
+    // ticket_quantity_kg and ticket_rate are always kilograms - that is the
+    // whole point of holding them - so the basis goes in the label, in
+    // brackets, where a reader comparing two columns can see it without
+    // opening anything. This is the column that silently disagreed with
+    // FUEL_TICKETS.rate_per_litre; a label that says "per kg" is what stops
+    // the next person reading it as a litre rate.
+    //
+    // The CURRENCY is not in the label, deliberately. It varies by invoice,
+    // so @Measures.ISOCurrency renders it beside the value where it is
+    // actually true - a label reading (USD) would be a lie on a EUR invoice.
+    // Same split the file already states above: the currency of an amount is
+    // not ambiguous, the unit of a quantity is.
+    ticket_quantity_kg @title: 'Qty, ticket (kg)'
+                       @Common.FieldControl: #ReadOnly;
+    ticket_rate        @title: 'Rate, ticket (per kg)'
+                       @Measures.ISOCurrency: invoice.currency_code
+                       @Common.FieldControl: #ReadOnly;
+    ticket_amount      @title: 'Amount, ticket'
+                       @Measures.ISOCurrency: invoice.currency_code
+                       @Common.FieldControl: #ReadOnly;
+    sap_line_number    @title: 'SAP Line Item';
+    // Two axes, two columns - decision Q2, confirmed. Merged only for
+    // display, never in storage.
+    tolerance_status   @title: 'Tolerance' @Common.FieldControl: #ReadOnly;
+    review_status      @title: 'Review'    @Common.FieldControl: #ReadOnly;
+    // The invoice side keeps its unit ON THE VALUE, not in the label:
+    // uom_code varies line by line, so no single bracket is true for the
+    // column.
     quantity   @Measures.Unit: uom_code;
     unit_price @Measures.ISOCurrency: invoice.currency_code;
     net_amount @Measures.ISOCurrency: invoice.currency_code;
@@ -1566,3 +1706,131 @@ annotate InvoiceService.InvoiceApprovals with {
     invoice_amount  @Measures.ISOCurrency: invoice.currency_code;
     variance_amount @Measures.ISOCurrency: invoice.currency_code;
 }
+
+
+// ============================================================================
+// WP-35 - settlement and the rolled-up tolerance verdict.
+//
+// sap_invoice_number is NOT internal_number. internal_number is FuelSphere
+// own handle; this is what the SAP side knows the document by, and a query
+// that starts from an SAP report starts here.
+// ============================================================================
+annotate InvoiceService.Invoices with {
+    received_date       @title: 'Invoice Received Date';
+    sap_invoice_number  @title: 'SAP Invoice Number';
+    s4_payment_document @title: 'SAP Payment Document';
+    payment_date        @title: 'Payment Date';
+    tolerance_status    @title: 'Tolerance' @Common.FieldControl: #ReadOnly;
+};
+
+// ============================================================================
+// WP-36 / WP-37 - buttons, filters and titles for the two views.
+// ============================================================================
+
+// POSTING AND PAYMENT, as object page buttons. Both SIMULATED until the S/4
+// integration (WP-29) replaces them; the handlers say so in every message.
+// Two buttons, not one, because the status column reads In process / Posted /
+// Paid - an invoice must be able to rest at Posted.
+annotate InvoiceService.Invoices with @(
+    UI.Identification: [
+        { $Type: 'UI.DataFieldForAction', Action: 'InvoiceService.postToS4HANA',
+          Label: 'Post to S/4 (simulated)' },
+        { $Type: 'UI.DataFieldForAction', Action: 'InvoiceService.recordPayment',
+          Label: 'Record Payment (simulated)' }
+    ]
+);
+
+annotate InvoiceService.Invoices with {
+    flight_number_v    @title: 'Flight number'          @Common.FieldControl: #ReadOnly;
+    flight_date_v      @title: 'Flight date'            @Common.FieldControl: #ReadOnly;
+    dep_airport        @title: 'Departure airport'      @Common.FieldControl: #ReadOnly;
+    arr_airport        @title: 'Arrival airport'        @Common.FieldControl: #ReadOnly;
+    flight_status_v    @title: 'Flight status'          @Common.FieldControl: #ReadOnly;
+    invoice_status_v   @title: 'Invoice status'         @Common.FieldControl: #ReadOnly;
+    received_date_v    @title: 'Invoice received date'  @Common.FieldControl: #ReadOnly;
+    total_lines        @title: 'Total invoice lines'    @Common.FieldControl: #ReadOnly;
+    reconciled_lines   @title: 'Lines reconciled to tickets' @Common.FieldControl: #ReadOnly;
+    unreconciled_lines @title: 'Unreconciled lines'     @Common.FieldControl: #ReadOnly;
+    total_inv_amount   @title: 'Total amount (invoice)' @Common.FieldControl: #ReadOnly
+                       @Measures.ISOCurrency: currency_code;
+    wavg_inv_rate      @title: 'Wgt avg rate, invoice (per kg)' @Common.FieldControl: #ReadOnly
+                       @Measures.ISOCurrency: currency_code;
+    total_inv_qty_kg   @title: 'Total qty, invoice (kg)' @Common.FieldControl: #ReadOnly;
+    wavg_tkt_rate      @title: 'Wgt avg rate, ticket (per kg)' @Common.FieldControl: #ReadOnly
+                       @Measures.ISOCurrency: currency_code;
+    total_tkt_qty_kg   @title: 'Total qty, ticket (kg)' @Common.FieldControl: #ReadOnly;
+    total_tkt_amount   @title: 'Total amount (ticket)'  @Common.FieldControl: #ReadOnly
+                       @Measures.ISOCurrency: currency_code;
+    variance_value     @title: 'Variance, value'        @Common.FieldControl: #ReadOnly
+                       @Measures.ISOCurrency: currency_code;
+    tolerance_v        @title: 'Tolerance check status' @Common.FieldControl: #ReadOnly;
+};
+
+// THE LINE ITEM LIST VIEW'S FILTERS, for its own list report. Every one is a
+// path through a TO-ONE association - invoice or flight - so each is a real
+// server-side filter. A to-many path would name three real things and return
+// nothing forever (D56).
+annotate InvoiceService.InvoiceItems with @(
+    UI.SelectionFields: [
+        flight.flight_number,
+        flight.flight_date,
+        flight.status,
+        flight.origin_airport,
+        invoice.invoice_number,
+        invoice.sap_invoice_number,
+        invoice.supplier_ID,
+        invoice.status
+    ]
+);
+
+annotate InvoiceService.InvoiceItems with {
+    flight_number_v       @title: 'Flight number'          @Common.FieldControl: #ReadOnly;
+    flight_date_v         @title: 'Flight date'            @Common.FieldControl: #ReadOnly;
+    dep_airport           @title: 'Departure airport'      @Common.FieldControl: #ReadOnly;
+    arr_airport           @title: 'Arrival airport'        @Common.FieldControl: #ReadOnly;
+    flight_status_v       @title: 'Flight status'          @Common.FieldControl: #ReadOnly;
+    vendor_invoice_number @title: 'Vendor invoice number'  @Common.FieldControl: #ReadOnly;
+    sap_invoice_number_v  @title: 'SAP invoice number'     @Common.FieldControl: #ReadOnly;
+    invoice_status_v      @title: 'Invoice status'         @Common.FieldControl: #ReadOnly;
+    received_date_v       @title: 'Invoice received date'  @Common.FieldControl: #ReadOnly;
+    s4_document_number_v  @title: 'SAP document number'    @Common.FieldControl: #ReadOnly;
+    posting_date_v        @title: 'Invoice posting date'   @Common.FieldControl: #ReadOnly;
+    s4_payment_document_v @title: 'SAP payment document'   @Common.FieldControl: #ReadOnly;
+    payment_date_v        @title: 'Payment date'           @Common.FieldControl: #ReadOnly;
+    inv_qty_kg            @title: 'Qty, invoice (kg)'      @Common.FieldControl: #ReadOnly;
+    inv_rate_kg           @title: 'Rate, invoice (per kg)' @Common.FieldControl: #ReadOnly
+                          @Measures.ISOCurrency: invoice.currency_code;
+    total_variance        @title: 'Total variance'         @Common.FieldControl: #ReadOnly
+                          @Measures.ISOCurrency: invoice.currency_code;
+    qty_variance_kg       @title: 'Qty variance (kg)'      @Common.FieldControl: #ReadOnly;
+    price_variance        @title: 'Price variance'         @Common.FieldControl: #ReadOnly
+                          @Measures.ISOCurrency: invoice.currency_code;
+    tolerance_breach      @title: 'Tolerance breached on'  @Common.FieldControl: #ReadOnly;
+    tolerance_v           @title: 'Tolerance check status' @Common.FieldControl: #ReadOnly;
+};
+
+// ============================================================================
+// LABELS FOR THE FILTER PATHS - caught by ui02 EXIT-2c.
+//
+// A filter reached through an association takes its label from the TARGET
+// property. FlightSchedule was exposed on this service with none, so the line
+// view's flight filters would have read "flight_number", "status" and so on.
+//
+// supplier is the older case, and it was already visible: the header list's
+// filter bar has been reading "supplier_ID:" to every user. Labelled on the
+// ASSOCIATION, which CAP propagates to the generated key - labelling the key
+// directly is what WP-33 got wrong.
+// ============================================================================
+annotate InvoiceService.FlightSchedule with {
+    ID                  @UI.Hidden;
+    flight_number       @title: 'Flight number';
+    flight_date         @title: 'Flight date';
+    origin_airport      @title: 'Departure airport';
+    destination_airport @title: 'Arrival airport';
+    status              @title: 'Flight status';
+    aircraft_reg        @title: 'Aircraft';
+};
+
+annotate InvoiceService.Invoices with {
+    supplier @title: 'Supplier';
+};
