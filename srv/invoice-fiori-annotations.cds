@@ -607,6 +607,45 @@ annotate InvoiceService.InvoiceItems with @(
         ],
 
         Facets: [
+            // ================================================================
+            // IN SYNC WITH THE LINE ITEMS TABLE - the four sections below.
+            //
+            // Clicking a row used to LOSE most of what the row showed: the
+            // table carried the flight, the settlement fields, the comparison
+            // in kilograms and the variances, and this page carried none of
+            // them. A detail page that shows less than its own list is not a
+            // detail page. These four mirror the table's spec columns in the
+            // table's order; the original four sections follow unchanged.
+            //
+            // One field, one place: line_number and net_amount already sit in
+            // Item Details below, so they are not repeated here. Enforced by
+            // invoice-views-harness EXIT-12, which fails if the table ever
+            // gains a column this page does not show.
+            // ================================================================
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemFlight',
+                Label  : 'Flight',
+                Target : '@UI.FieldGroup#ItemFlight'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemSettlement',
+                Label  : 'Invoice & Settlement',
+                Target : '@UI.FieldGroup#ItemSettlement'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemComparison',
+                Label  : 'Invoice vs Ticket (kg)',
+                Target : '@UI.FieldGroup#ItemComparison'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemVariance',
+                Label  : 'Variance & Tolerance',
+                Target : '@UI.FieldGroup#ItemVariance'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'ItemDetails',
@@ -1841,3 +1880,75 @@ annotate InvoiceService.FlightSchedule with {
 annotate InvoiceService.Invoices with {
     supplier @title: 'Supplier';
 };
+
+// ============================================================================
+// THE LINE ITEM OBJECT PAGE - the four sections that mirror the table.
+//
+// Labels are the TABLE's labels, word for word, so a column read in the list
+// and a field read here are recognisably the same thing. Every value is
+// computed by srv/lib/invoice-summary.js on the same read the table uses -
+// the handler is registered on InvoiceItems and its draft, single-row reads
+// included - so the page and the list cannot disagree about one line.
+// ============================================================================
+annotate InvoiceService.InvoiceItems with @(
+    UI.FieldGroup #ItemFlight: {
+        Data: [
+            { Value: flight_number_v, Label: 'Flight number' },
+            { Value: flight_date_v,   Label: 'Flight date' },
+            { Value: dep_airport,     Label: 'Departure airport' },
+            { Value: arr_airport,     Label: 'Arrival airport' },
+            { Value: flight_status_v, Label: 'Flight status' }
+        ]
+    },
+
+    // The parent invoice's header and settlement fields, as the table shows
+    // them on every line. Vendor line item is this page's title and sits in
+    // Item Details, so it is not repeated.
+    UI.FieldGroup #ItemSettlement: {
+        Data: [
+            { Value: vendor_invoice_number, Label: 'Vendor invoice number' },
+            { Value: sap_invoice_number_v,  Label: 'SAP invoice number' },
+            { Value: sap_line_number,       Label: 'SAP line item' },
+            { Value: invoice_status_v,      Label: 'Invoice status' },
+            { Value: received_date_v,       Label: 'Invoice received date' },
+            { Value: s4_document_number_v,  Label: 'SAP document number' },
+            { Value: posting_date_v,        Label: 'Invoice posting date' },
+            { Value: s4_payment_document_v, Label: 'SAP payment document' },
+            { Value: payment_date_v,        Label: 'Payment date' }
+        ]
+    },
+
+    // BOTH SIDES IN KILOGRAMS, which is the only basis on which they compare.
+    // The as-billed quantity, unit price and amount stay in Item Details in
+    // the supplier's own unit - that is what a dispute will quote.
+    UI.FieldGroup #ItemComparison: {
+        Data: [
+            { Value: inv_rate_kg,        Label: 'Rate, invoice (per kg)' },
+            { Value: inv_qty_kg,         Label: 'Qty, invoice (kg)' },
+            { Value: ticket_amount,      Label: 'Amount (ticket)' },
+            { Value: ticket_rate,        Label: 'Rate, ticket (per kg)' },
+            { Value: ticket_quantity_kg, Label: 'Qty, ticket (kg)' }
+        ]
+    },
+
+    // The measurement and where a person has got to, held apart - decision
+    // Q2 - with the merged display beside them. Breached-on says WHICH band
+    // failed: quantity goes to one reviewer and price to another (WP-39), and
+    // a line that fails both needs both.
+    UI.FieldGroup #ItemVariance: {
+        Data: [
+            { Value: total_variance,  Label: 'Total variance' },
+            { Value: qty_variance_kg, Label: 'Qty variance (kg)' },
+            { Value: price_variance,  Label: 'Price variance' },
+            {
+                Value: tolerance_v,
+                Label: 'Tolerance check status',
+                Criticality: { $edmJson: { $If: [
+                    { $Eq: [{ $Path: 'tolerance_status' }, 'EXCEEDED'] }, 1,
+                    { $If: [ { $Eq: [{ $Path: 'tolerance_status' }, 'WITHIN'] }, 3, 0 ] } ] } }
+            },
+            { Value: tolerance_breach, Label: 'Tolerance breached on' },
+            { Value: review_status,    Label: 'Review' }
+        ]
+    }
+);

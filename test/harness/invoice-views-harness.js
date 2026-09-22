@@ -438,6 +438,101 @@ describe('Invoice views - header, lines, and the ticket link', () => {
             + `twice refused; paid ${h.s4_payment_document} on ${h.payment_date}`);
     });
 
+    // ----------------------------------------------- table <-> object page
+    //
+    // "Show all the line item details on the line item page, and keep both
+    // UIs in sync." Clicking a row used to LOSE 21 of the table's 26 columns.
+    // These two make the sync a property the build enforces, not a state
+    // someone has to remember to maintain.
+
+    /** Values a UI.DataField record shows, from an annotation array. */
+    const valuesOf = (records) => (records || [])
+        .map(r => r && r.Value && (r.Value['='] || r.Value))
+        .filter(v => typeof v === 'string');
+
+    /** Every field the object page can show: its sections plus its title. */
+    function objectPageFields(def) {
+        const out = new Map();                       // field -> section label
+        for (const f of def['@UI.Facets'] || []) {
+            const target = typeof f.Target === 'object' ? f.Target['='] : f.Target;
+            if (!target || target.includes('/')) continue;   // another entity's page
+            const m = /^@UI\.FieldGroup#(\w+)$/.exec(target);
+            if (!m) continue;
+            // CDS stores a record annotation FLATTENED, so the group's Data can
+            // sit under either key depending on how it was written.
+            const data = def[`@UI.FieldGroup#${m[1]}.Data`]
+                || (def[`@UI.FieldGroup#${m[1]}`] || {}).Data || [];
+            for (const v of valuesOf(data)) if (!out.has(v)) out.set(v, f.Label);
+        }
+        const title = def['@UI.HeaderInfo.Title.Value'] || (def['@UI.HeaderInfo'] || {}).Title?.Value;
+        const t = title && (title['='] || title);
+        if (t && !out.has(t)) out.set(t, '(page title)');
+        return out;
+    }
+
+    it('EXIT-12 - every column in the table appears on the object page', async () => {
+        const def = cds.model.definitions['InvoiceService.InvoiceItems'];
+        const table = valuesOf(def['@UI.LineItem']);
+        assert.ok(table.length >= 26, `instrument check: the table should carry the 26 spec columns, found ${table.length}`);
+
+        const page = objectPageFields(def);
+        const missing = table.filter(v => !page.has(v));
+        assert.deepStrictEqual(missing, [],
+            `the object page is OUT OF SYNC - it lacks these table columns: ${missing.join(', ')}`);
+
+        // One field, one place: nothing the page shows appears in two sections.
+        //
+        // A RATCHET, on the ui02 pattern. po_number predates this work and sits
+        // in two sections on purpose: in Resolution it is compared against the
+        // PO reached through the ticket, in Matching it sits with the PO item.
+        // Recorded rather than rearranged - those sections were not in scope.
+        // A NEW duplicate fails; removing this one fails too, until it is taken
+        // off the list, so the list can only shrink.
+        const KNOWN_DUPES = new Set(['po_number']);
+        const seen = new Map(), dupes = [];
+        for (const f of def['@UI.Facets'] || []) {
+            const target = typeof f.Target === 'object' ? f.Target['='] : f.Target;
+            const m = target && /^@UI\.FieldGroup#(\w+)$/.exec(target);
+            if (!m) continue;
+            const data = def[`@UI.FieldGroup#${m[1]}.Data`] || (def[`@UI.FieldGroup#${m[1]}`] || {}).Data || [];
+            for (const v of valuesOf(data)) {
+                if (seen.has(v)) dupes.push(v);
+                else seen.set(v, f.Label);
+            }
+        }
+        const fresh = dupes.filter(v => !KNOWN_DUPES.has(v));
+        assert.deepStrictEqual(fresh, [], `a field appears in two sections: ${fresh.join(', ')}`);
+        const cured = [...KNOWN_DUPES].filter(v => !dupes.includes(v));
+        assert.deepStrictEqual(cured, [],
+            `a known duplicate is gone - take it out of KNOWN_DUPES: ${cured.join(', ')}`);
+        out(`all ${table.length} table columns shown on the object page, across `
+            + `${new Set(page.values()).size} sections; no field repeated`);
+    });
+
+    it('EXIT-13 - the object page read populates, not just declares, those fields', async () => {
+        // A single-row read, selecting what the object page's sections select,
+        // with no ticket_ID among them - the $select trap again.
+        const def = cds.model.definitions['InvoiceService.InvoiceItems'];
+        const fields = [...objectPageFields(def).keys()]
+            .filter(f => !f.includes('.') && def.elements[f]);
+        const r = await test.GET(`${INV}/InvoiceItems(ID=${LINE_ID},IsActiveEntity=true)?$select=${fields.join(',')}`);
+        const row = r.data;
+
+        const expect = {
+            flight_number_v: 'AC412', dep_airport: 'YYZ', arr_airport: 'YUL',
+            vendor_invoice_number: 'INV-WFS-20260416-101'
+        };
+        for (const [k, v] of Object.entries(expect)) {
+            assert.strictEqual(row[k], v, `object page shows ${k}=${row[k]}, expected ${v}`);
+        }
+        for (const k of ['inv_qty_kg', 'ticket_quantity_kg', 'qty_variance_kg', 'invoice_status_v', 'received_date_v']) {
+            assert.ok(row[k] !== null && row[k] !== undefined, `object page field ${k} is empty`);
+        }
+        out(`single-row read of ${fields.length} object page fields: flight ${row.flight_number_v} `
+            + `${row.dep_airport}-${row.arr_airport}, invoice ${row.inv_qty_kg} kg vs ticket `
+            + `${row.ticket_quantity_kg} kg, status ${row.invoice_status_v}`);
+    });
+
     // ------------------------------------------------------------ matcher
     it('EXIT-11 - the matcher persists what the ticket said, and the flight', async () => {
         const V = 'f1c00000-0000-4000-8000-000000000002';
