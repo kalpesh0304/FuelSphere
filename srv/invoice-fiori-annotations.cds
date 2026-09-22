@@ -1636,22 +1636,29 @@ annotate InvoiceService.InvoiceItems with {
     // asked for when ticket_ID is null - an unresolved line quotes a ticket
     // number that matched nothing, and that is precisely the line somebody
     // needs to go and look at.
-    // SUPPRESSING THE LINE'S OWN ID IS THE WHOLE FIX, and it was not
-    // optional. Fiori hands the target the ENTIRE row as parameters, so
-    // ID went across as the INVOICE LINE's id. Mapping ticket_ID onto ID
-    // was not enough - the row's own ID was already in the payload and
-    // won, and the tickets app dutifully tried to open
-    // FuelTickets(ID=<an invoice line>) and answered "we cannot find this
-    // page". Observed, not theorised: the launchpad URL carried
-    // ID=f1c00001-...-0001, which is Invoices.items.ID on that same row.
+    // THE LINE'S OWN ID MUST BE MOVED OUT OF THE WAY - AND THE ORDER MATTERS.
     //
-    // Mapping a local property to an EMPTY SemanticObjectProperty removes
-    // it from the payload. So the line's ID is dropped first, then the
-    // ticket's ID takes the name - two different local properties, so the
-    // two rules cannot fight over one source.
+    // Read from the UI5 source, not assumed. sap.fe.core applies each
+    // mapping as: take the LocalProperty's value, removeSelectOption on it,
+    // then massAddSelectOption under the SemanticObjectProperty name - and
+    // massAdd APPENDS. That single fact explains both failures seen here:
+    //
+    //   1. ticket_ID -> ID alone: ID already held the LINE's id, the ticket's
+    //      was appended beside it, and the URL takes the FIRST value - so the
+    //      tickets app got the line's id and answered with a 404.
+    //   2. ID -> '' to "remove" it: an empty string is falsy, so the target
+    //      name resolved to undefined and the add had no property name at
+    //      all. Link resolution broke and the popover read "No details
+    //      available". An empty target is NOT a removal in the V4 stack.
+    //
+    // So the line's ID is RENAMED to a harmless name the tickets app ignores,
+    // and it is listed FIRST: ID is emptied before ticket_ID is appended to
+    // it, leaving exactly one value - the ticket's. Swap these two lines and
+    // the bug returns. invoice-views-harness EXIT-2 models this algorithm
+    // and asserts both old mappings still fail under it.
     ticket_number @Common.SemanticObject: 'fueltickets'
                   @Common.SemanticObjectMapping: [
-                      { LocalProperty: ID,            SemanticObjectProperty: ''   },
+                      { LocalProperty: ID,            SemanticObjectProperty: 'InvoiceItemID' },
                       { LocalProperty: ticket_ID,     SemanticObjectProperty: 'ID' },
                       { LocalProperty: ticket_number, SemanticObjectProperty: 'ticket_number' }
                   ];

@@ -373,3 +373,56 @@ annotate TicketService.FuelTickets with {
         }
     );
 };
+
+// ============================================================================
+// VIRTUAL ELEMENTS ARE NOT FILTERABLE - and Fiori has to be told.
+//
+// statusCriticality and densityFieldControl are computed per read by
+// ticket-service.js; there is no column behind them, so a $filter on either
+// is rejected by the server with "Virtual elements are not allowed in
+// expressions" - a 500, which reached a user as "Internal Server Error".
+//
+// How it got there: a cross-app link hands the target the whole source row,
+// and the Fuel Tickets list applies every incoming value whose NAME matches
+// one of its own properties as a filter. The invoice row carried a
+// statusCriticality of its own, which matched this virtual one by name.
+// Declaring them non-filterable stops Fiori building a filter on them from
+// ANY source - a startup parameter, an app state, or a user.
+// ============================================================================
+annotate TicketService.FuelTickets with @(
+    Capabilities.FilterRestrictions: {
+        NonFilterableProperties: [ statusCriticality, densityFieldControl ]
+    }
+);
+
+// ============================================================================
+// THE TICKET NUMBER IS THE SEMANTIC KEY - which is what makes the invoice's
+// ticket link land on the ticket.
+//
+// Read from the UI5 source (sap.fe.core RoutingService), not assumed. When an
+// app opens from another app, Fiori decides whether to deep-link straight to
+// an object page by looking for the entity's keys in the startup parameters,
+// and SEMANTIC KEYS ARE CHECKED FIRST:
+//
+//   const m = semanticKey ? keysFromStartupParams(semanticKey) : undefined;
+//   const d = !m ? keysFromStartupParams(technicalKey)      : undefined;
+//
+// With no semantic key declared, Fiori fell back to ID - and ID is exactly
+// the parameter the invoicing app struggles to hand over cleanly, since it
+// passes the whole invoice row and that row has an ID of its own. When the
+// key did not arrive as a single value, there was no deep link, the list
+// loaded instead, and the list applied the invoice's other fields as filters.
+//
+// ticket_number arrives cleanly: it is the number the supplier quoted and the
+// link carries it by name. As the semantic key, Fiori deep-links on it -
+// querying ticket_number and requiring EXACTLY ONE row - and never consults
+// ID at all. It is also simply the right key: it is what a person uses to
+// identify a ticket, and it is already this entity's HeaderInfo title.
+//
+// Relies on ticket numbers being unique (all 30 seeded are). Where two ever
+// collide, Fiori finds two rows, declines to guess, and shows the list
+// filtered to both - a safe failure, not a wrong ticket.
+// ============================================================================
+annotate TicketService.FuelTickets with @(
+    Common.SemanticKey: [ ticket_number ]
+);

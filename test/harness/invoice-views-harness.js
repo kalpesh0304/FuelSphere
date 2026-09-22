@@ -53,26 +53,62 @@ const call = async f => {
 };
 
 /**
- * Fiori's documented SemanticObjectMapping, applied to one row: every LOCAL
- * property is emitted under its mapped name, dropped where mapped to an empty
- * string, and passed through under its own name otherwise. Driven from the
- * annotation in the model, never from a copy in this file - so this asserts
- * what the page actually receives.
+ * THE REAL ALGORITHM, NOT A BELIEF ABOUT IT.
+ *
+ * The first version of this function modelled what I ASSUMED Fiori did - that
+ * an empty SemanticObjectProperty drops a parameter - and it passed while the
+ * launchpad failed. A test that simulates your own assumption cannot catch the
+ * assumption being wrong. This one is transcribed from sap.fe.core's
+ * library-preload, where each mapping is applied as:
+ *
+ *   const o = e["SemanticObjectProperty"] || e["@...SemanticObjectProperty"];
+ *   const i = t.getSelectOption(n);
+ *   if (i) { t.removeSelectOption(n); t.massAddSelectOption(o, i); }
+ *
+ * Three consequences, all reproduced here:
+ *   - massAddSelectOption APPENDS to whatever the target already holds
+ *   - an empty target is FALSY, so o becomes undefined - an add with no name
+ *   - the navigation URL takes the FIRST value of a multi-valued option
  */
 function navParams(row, mapping) {
-    const rename = new Map();
+    const sv = new Map(Object.entries(row).map(([k, v]) => [k, [v]]));
     for (const m of mapping) {
-        const local = typeof m.LocalProperty === 'object' ? m.LocalProperty['='] : m.LocalProperty;
-        rename.set(local, m.SemanticObjectProperty);
+        const local = typeof m.LocalProperty === 'object'
+            ? (m.LocalProperty['='] || m.LocalProperty.$PropertyPath) : m.LocalProperty;
+        const target = m.SemanticObjectProperty || undefined;   // '' is falsy, as in UI5
+        const opt = sv.get(local);
+        if (!opt) continue;
+        sv.delete(local);
+        if (target === undefined) {
+            throw new Error(`massAddSelectOption with no property name (mapping of ${local})`);
+        }
+        sv.set(target, (sv.get(target) || []).concat(opt));      // APPEND
     }
-    const params = {};
-    for (const [k, v] of Object.entries(row)) {
-        if (!rename.has(k)) { if (!(k in params)) params[k] = v; continue; }
-        const target = rename.get(k);
-        if (target === '') continue;            // suppressed
-        params[target] = v;                      // renamed - wins over a passthrough
+    return Object.fromEntries([...sv].map(([k, v]) => [k, v[0]])); // first value wins
+}
+
+/**
+ * THE SECOND PATH - THE POPOVER'S LINK LIST, WHICH DECIDES WHETHER A LINK
+ * EXISTS AT ALL. Transcribed from sap.fe.macros _setObjectMappings, run over
+ * the URL parameters before getLinks. Different semantics from the click:
+ *
+ *   if (t[i]) { ...; t[o] = t[i]; delete t[i]; }       OVERWRITE, not append
+ *   else      { delete t[i]; s.removeParameter(o); }    a null source clears o
+ *
+ * and the target is NOT coerced here - an empty string stays an empty KEY,
+ * which is an intent with a nameless parameter and resolves to no links.
+ */
+function popoverParams(row, mapping) {
+    const t = { ...row };
+    for (const m of mapping) {
+        const i = typeof m.LocalProperty === 'object'
+            ? (m.LocalProperty['='] || m.LocalProperty.$PropertyPath) : m.LocalProperty;
+        const o = m.SemanticObjectProperty;
+        if (i === o) continue;
+        if (t[i]) { t[o] = t[i]; delete t[i]; }
+        else { delete t[i]; delete t[o]; }
     }
-    return params;
+    return t;
 }
 
 describe('Invoice views - header, lines, and the ticket link', () => {
@@ -87,11 +123,19 @@ describe('Invoice views - header, lines, and the ticket link', () => {
 
         assert.match(block, /Term="Common.SemanticObject" String="fueltickets"/,
             'the semantic object must be fueltickets - the intent the tickets app registers');
-        assert.match(block, /PropertyPath="ID"\/>\s*<PropertyValue Property="SemanticObjectProperty" String=""/,
-            "the line's own ID must be SUPPRESSED - it is what produced the 404");
+        // RENAMED, NOT EMPTIED. An empty target is falsy in UI5 and resolves to
+        // undefined - that is what produced "No details available".
+        assert.doesNotMatch(block, /SemanticObjectProperty" String=""/,
+            'an EMPTY SemanticObjectProperty breaks link resolution - it is not a removal');
+        assert.match(block, /PropertyPath="ID"\/>\s*<PropertyValue Property="SemanticObjectProperty" String="InvoiceItemID"/,
+            "the line's own ID must be renamed out of the way");
         assert.match(block, /PropertyPath="ticket_ID"\/>\s*<PropertyValue Property="SemanticObjectProperty" String="ID"/,
             'ticket_ID must travel under the name ID');
-        out('EDMX: fueltickets; line ID -> "" (suppressed); ticket_ID -> ID; ticket_number passed');
+        // ORDER: massAddSelectOption appends, so ID must be emptied BEFORE the
+        // ticket's id is added to it. Swapped, the line id survives as value 1.
+        assert.ok(block.indexOf('PropertyPath="ID"') < block.indexOf('PropertyPath="ticket_ID"'),
+            'the ID rename must come BEFORE ticket_ID -> ID, or the line id is the first value');
+        out('EDMX: fueltickets; line ID -> InvoiceItemID FIRST, then ticket_ID -> ID; ticket_number passed');
     });
 
     it('EXIT-2 - applied to the reported row, the parameters name the TICKET', async () => {
@@ -110,7 +154,50 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         assert.notStrictEqual(p.ID, LINE_ID,
             'the link still sends the invoice LINE id - this is exactly the reported 404');
         assert.strictEqual(p.ticket_number, TICKET_NO, 'ticket_number must travel too');
-        out(`reported row -> ID=${p.ID} (the ticket), not ${LINE_ID} (the line)`);
+
+        // INSTRUMENT CHECK - THE MODEL MUST REPRODUCE BOTH REAL FAILURES.
+        // If it passed the two mappings that broke in the launchpad, it would
+        // be modelling a belief again rather than UI5.
+        const map = (a, b) => ({ LocalProperty: { '=': a }, SemanticObjectProperty: b });
+
+        // Failure 1, as first shipped: the ticket id is APPENDED to the line id.
+        const first = navParams(r.data, [map('ticket_ID', 'ID'), map('ticket_number', 'ticket_number')]);
+        assert.strictEqual(first.ID, LINE_ID,
+            'model must reproduce the 404: the line id survives as the first value');
+
+        // Failure 2, the attempted fix: an empty target has no property name.
+        assert.throws(() => navParams(r.data,
+            [map('ID', ''), map('ticket_ID', 'ID'), map('ticket_number', 'ticket_number')]),
+            /no property name/,
+            'model must reproduce "No details available": an empty target is not a removal');
+
+        // And ORDER: the right mapping, swapped, fails again.
+        const swapped = navParams(r.data,
+            [map('ticket_ID', 'ID'), map('ID', 'InvoiceItemID'), map('ticket_number', 'ticket_number')]);
+        assert.notStrictEqual(swapped.ID, TICKET_ID,
+            'model must show the order matters - swapped, ID no longer carries the ticket');
+
+        // ---- THE POPOVER PATH: does a link exist at all? ------------------
+        const pop = popoverParams(r.data, mapping);
+        assert.strictEqual(pop.ID, TICKET_ID, 'popover path must also resolve ID to the ticket');
+        assert.ok(!('' in pop), 'popover params must carry no nameless parameter');
+
+        // Reproduces attempt 2's "No details available": an empty KEY.
+        const popEmpty = popoverParams(r.data,
+            [map('ID', ''), map('ticket_ID', 'ID'), map('ticket_number', 'ticket_number')]);
+        assert.ok('' in popEmpty,
+            'model must reproduce "No details available": the empty target became a nameless key');
+
+        // Reproduces attempt 1's SPLIT BRAIN: the popover found a valid link
+        // (overwrite gave the ticket) while the click navigated wrong (append
+        // kept the line). That is why it navigated at all - and to a 404.
+        const popFirst = popoverParams(r.data, [map('ticket_ID', 'ID'), map('ticket_number', 'ticket_number')]);
+        assert.strictEqual(popFirst.ID, TICKET_ID, 'attempt 1: the popover saw the ticket, so the link showed');
+        assert.strictEqual(first.ID, LINE_ID, 'attempt 1: yet the click sent the line - the split brain');
+
+        out(`reported row -> ID=${p.ID} on BOTH paths (popover and click). The model `
+            + `reproduces all three launchpad behaviours: attempt 1 link-shows-but-404s, `
+            + `attempt 2 "No details available", and the swap breaking it again.`);
     });
 
     it('EXIT-3 - the ticket opens at that key, and the line key still 404s', async () => {
@@ -133,6 +220,75 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         const r = await test.GET(`${TKT}/FuelTickets?$filter=ticket_number eq '${TICKET_NO}' and IsActiveEntity eq true`);
         assert.strictEqual(r.data.value.length, 1, 'the filter must land on exactly one ticket');
         out(`filter ticket_number='${TICKET_NO}' -> exactly 1 row`);
+    });
+
+    // ------------------------------------------------ the receiving app
+    //
+    // The link reached Fuel Tickets and then failed there with a 500. Two
+    // faults, both on the RECEIVING side, both read from the UI5 source.
+
+    it('EXIT-4b - the tickets app deep-links on ticket_number, exactly one row', async () => {
+        // Fiori checks SEMANTIC keys before technical ones. With one declared,
+        // it deep-links on ticket_number and never consults ID.
+        const sk = cds.model.definitions['TicketService.FuelTickets']['@Common.SemanticKey'] || [];
+        const names = sk.map(s => (typeof s === 'object' ? s['='] : s));
+        assert.deepStrictEqual(names, ['ticket_number'],
+            'ticket_number must be the semantic key, or Fiori falls back to the ID it cannot rely on');
+
+        // The EXACT query Fiori's _createFilterFromKeys builds for a draft
+        // entity whose semantic key lacks IsActiveEntity. It asks for 2 rows
+        // and deep-links only on exactly 1.
+        const f = `ticket_number eq '${TICKET_NO}' and `
+                + `(IsActiveEntity eq false or SiblingEntity/IsActiveEntity eq null)`;
+        const r = await test.GET(`${TKT}/FuelTickets?$filter=${f}&$select=ticket_number,IsActiveEntity&$top=2`);
+        assert.strictEqual(r.data.value.length, 1,
+            `Fiori deep-links only on EXACTLY one row; got ${r.data.value.length}`);
+        assert.strictEqual(r.data.value[0].ticket_number, TICKET_NO);
+
+        // And the value arrives single, which _getKeysFromStartupParams requires
+        // (t[key].length === 1). The navigate model carries it through intact.
+        const mapping = cds.model.definitions['InvoiceService.InvoiceItems']
+            .elements.ticket_number['@Common.SemanticObjectMapping'];
+        const row = (await test.GET(`${INV}/InvoiceItems(ID=${LINE_ID},IsActiveEntity=true)`)).data;
+        assert.strictEqual(navParams(row, mapping).ticket_number, TICKET_NO,
+            'ticket_number must reach the tickets app as a single value');
+        out(`Fiori's deep-link query on ticket_number -> exactly 1 row: ${r.data.value[0].ticket_number}`);
+    });
+
+    it('EXIT-4c - no virtual element can be filtered into a 500', async () => {
+        // Reproduce the reported error first, so this proves something.
+        const boom = await call(() => test.GET(
+            `${TKT}/FuelTickets?$filter=IsActiveEntity eq true and statusCriticality eq 3`));
+        assert.strictEqual(boom.status, 500,
+            'instrument check: a filter on the virtual field must still 500 on the server');
+        assert.match(boom.msg || '', /Virtual elements are not allowed/);
+
+        // The fix is that Fiori is TOLD not to build that filter, from any
+        // source - a startup parameter, an app state, or a user.
+        // CDS stores a record annotation FLATTENED into dotted keys, so this is
+        // not reachable as ['@Capabilities.FilterRestrictions'].NonFilterable...
+        const def = cds.model.definitions['TicketService.FuelTickets'];
+        const raw = def['@Capabilities.FilterRestrictions.NonFilterableProperties']
+            || (def['@Capabilities.FilterRestrictions'] || {}).NonFilterableProperties || [];
+        const nf = raw.map(p => (typeof p === 'object' ? p['='] : p));
+        for (const v of ['statusCriticality', 'densityFieldControl']) {
+            assert.ok(nf.includes(v), `${v} is virtual and must be declared non-filterable`);
+        }
+        // And every virtual element on the entity is covered, so a new one
+        // added later fails this test rather than a user.
+        // Excluding CAP's DRAFT columns. They carry virtual in the model but CAP
+        // resolves them itself, and filtering on them is routine - every draft
+        // list sends IsActiveEntity eq true. Only the service's OWN virtuals,
+        // computed in a handler with no column behind them, reject a filter.
+        const DRAFT = new Set(['IsActiveEntity', 'HasActiveEntity', 'HasDraftEntity',
+            'DraftAdministrativeData', 'DraftAdministrativeData_DraftUUID', 'SiblingEntity']);
+        const virtuals = Object.entries(cds.model.definitions['TicketService.FuelTickets'].elements)
+            .filter(([k, e]) => e.virtual && !DRAFT.has(k)).map(([k]) => k);
+        const uncovered = virtuals.filter(v => !nf.includes(v));
+        assert.deepStrictEqual(uncovered, [],
+            `virtual elements Fiori could still filter on: ${uncovered.join(', ')}`);
+        out(`statusCriticality filter -> 500 on the server (reproduced); all ${virtuals.length} `
+            + `virtual elements declared non-filterable, so Fiori never sends one`);
     });
 
     // ------------------------------------------------------------ line view
