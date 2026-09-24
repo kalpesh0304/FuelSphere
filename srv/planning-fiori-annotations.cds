@@ -536,7 +536,6 @@ annotate PlanningService.FlightSchedule with @(
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightIdentification', Label: 'Identification' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#RouteInfo', Label: 'Route' },
                     // WP-33. Beside the planned route, because it is the same fact observed.
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ActualRouting', Label: 'Actual Routing' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#AircraftInfo', Label: 'Aircraft' }
                 ]
             },
@@ -554,7 +553,6 @@ annotate PlanningService.FlightSchedule with @(
                 Label  : 'Schedule & Timestamps',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ScheduledTimes', Label: 'Scheduled' },
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#EstimatedTimes', Label: 'Estimated' },
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ActualTimes', Label: 'Actual' },
                     // WP-33. Immediately after the Actual timestamps, because the four figures
                     // are read AT those events - aobt / atot / aldt / aibt.
@@ -568,14 +566,6 @@ annotate PlanningService.FlightSchedule with @(
                 Label  : 'Linked Flights & Codeshare',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#LinkedFlightInfo', Label: 'Linked Flights' }
-                ]
-            },
-            {
-                $Type  : 'UI.CollectionFacet',
-                ID     : 'DelayInfo',
-                Label  : 'Delay & Cancellation',
-                Facets : [
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#DelayDetails', Label: 'Delay Details' }
                 ]
             },
             // ================================================================
@@ -598,7 +588,7 @@ annotate PlanningService.FlightSchedule with @(
                 // "fallback" are resolver words; a planner does not think in
                 // rungs, and an empty block here MEANS SOMETHING - this
                 // flight has no arrangement of its own.
-                Label  : 'Designated for this flight',
+                Label  : 'Fuel Supplier Determination (Flight Level)',
                 // A COLLECTION FACET SO THE SENTENCE SITS INSIDE THE SECTION
                 // RATHER THAN BESIDE IT. The block is a LineItem over a
                 // to-many, so no field can be added to the table - the
@@ -613,7 +603,7 @@ annotate PlanningService.FlightSchedule with @(
             },
             {
                 ID     : 'StationDefault',
-                Label  : 'This station''s default',
+                Label  : 'Fuel Supplier Determination (Station Level)',
                 $Type  : 'UI.CollectionFacet',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', ID: 'StationDesignationNote',
@@ -635,7 +625,7 @@ annotate PlanningService.FlightSchedule with @(
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'FlightContacts',
-                Label  : 'Who to ring',
+                Label  : 'Supplier Contact Details',
                 Target : 'contacts/@UI.LineItem#ContactStrip'
             },
             {
@@ -733,8 +723,8 @@ annotate PlanningService.FlightSchedule with @(
             Data: [
                 { Value: origin_airport, Label: 'Origin Airport' },
                 { Value: destination_airport, Label: 'Destination Airport' },
-                { Value: scheduled_departure, Label: 'Departure Time' },
-                { Value: scheduled_arrival, Label: 'Arrival Time' },
+                { Value: scheduled_departure_lt, Label: 'Scheduled Departure Time (LT)' },
+                { Value: scheduled_arrival_lt, Label: 'Scheduled Arrival Time (LT)' },
                 { Value: status, Label: 'Status' }
             ]
         },
@@ -791,19 +781,13 @@ annotate PlanningService.FlightSchedule with @(
 
         FieldGroup #ScheduledTimes: {
             Data: [
-                { Value: sobt, Label: 'SOBT - Scheduled Off Block' },
-                { Value: sibt, Label: 'SIBT - Scheduled In Block' },
-                { Value: scheduled_departure, Label: 'Departure (Local)' },
-                { Value: scheduled_arrival, Label: 'Arrival (Local)' }
+                { Value: sobt, Label: 'SOBT - Scheduled Off Block (UTC)' },
+                { Value: sibt, Label: 'SIBT - Scheduled In Block (UTC)' },
+                { Value: scheduled_departure, Label: 'Scheduled Departure Time (LT, time of day)' },
+                { Value: scheduled_arrival, Label: 'Scheduled Arrival Time (LT, time of day)' }
             ]
         },
 
-        FieldGroup #EstimatedTimes: {
-            Data: [
-                { Value: eobt, Label: 'EOBT - Estimated Off Block' },
-                { Value: eibt, Label: 'EIBT - Estimated In Block' }
-            ]
-        },
 
         FieldGroup #ActualTimes: {
             Data: [
@@ -901,19 +885,12 @@ annotate PlanningService.FlightSchedule with @(
 
         FieldGroup #LinkedFlightInfo: {
             Data: [
-                { Value: linked_flight_number, Label: 'Linked Flight Number' },
-                { Value: linked_flight_date, Label: 'Linked Flight Date' },
+                { Value: linked_flight_number, Label: 'Next Flight Number' },
+                { Value: linked_flight_date, Label: 'Next Flight Date' },
                 { Value: codeshare_flights, Label: 'Codeshare Flights' }
             ]
         },
 
-        FieldGroup #DelayDetails: {
-            Data: [
-                { Value: delay_code, Label: 'IATA Delay Code' },
-                { Value: delay_minutes, Label: 'Delay Duration (min)' },
-                { Value: cancellation_reason, Label: 'Cancellation Reason' }
-            ]
-        },
 
         FieldGroup #AdminInfo: {
             Data: [
@@ -962,6 +939,8 @@ annotate PlanningService.FlightSchedule with {
     destination_airport  @title: 'Destination';
     scheduled_departure  @title: 'Departure';
     scheduled_arrival    @title: 'Arrival';
+    scheduled_departure_lt @title: 'Scheduled Departure Time (LT)';
+    scheduled_arrival_lt   @title: 'Scheduled Arrival Time (LT)';
     status               @title: 'Status';
     airline_code         @title: 'Airline';
     flight_suffix        @title: 'Suffix';
@@ -970,8 +949,8 @@ annotate PlanningService.FlightSchedule with {
     arrival_terminal     @title: 'Arr. Terminal';
     gate_number          @title: 'Gate';
     stand_number         @title: 'Stand';
-    sobt                 @title: 'SOBT (UTC)';
-    sibt                 @title: 'SIBT (UTC)';
+    sobt                 @title: 'SOBT (UTC)' @Common.Timezone: 'UTC';
+    sibt                 @title: 'SIBT (UTC)' @Common.Timezone: 'UTC';
     eobt                 @title: 'EOBT (UTC)';
     eibt                 @title: 'EIBT (UTC)';
     aobt                 @title: 'AOBT (UTC)';
@@ -981,8 +960,8 @@ annotate PlanningService.FlightSchedule with {
     planned_block_mins   @title: 'Planned Block (min)';
     actual_block_mins    @title: 'Actual Block (min)';
     flight_nature        @title: 'Flight Nature';
-    linked_flight_number @title: 'Linked Flight';
-    linked_flight_date   @title: 'Linked Flight Date';
+    linked_flight_number @title: 'Next Flight Number';
+    linked_flight_date   @title: 'Next Flight Date';
     codeshare_flights    @title: 'Codeshare';
     delay_code           @title: 'Delay Code';
     delay_minutes        @title: 'Delay (min)';
@@ -1110,11 +1089,11 @@ annotate PlanningService.AircraftRegistrations with @(
                 { Value: registration,             Label: 'Registration' },
                 { Value: aircraft_type_code,       Label: 'Type' },
                 { Value: aircraft_type.mtow_kg,    Label: 'MTOW (kg)' },
+                { Value: mlw_kg,                   Label: 'MLW (kg)' },
                 { Value: dry_operating_weight_kg,  Label: 'DOW (kg)' },
                 { Value: fuel_capacity_kg,         Label: 'Fuel capacity (kg)' },
                 { Value: apu_burn_rate_kg_hr,      Label: 'APU burn (kg/h)' },
                 { Value: apu_rate_source,          Label: 'APU rate source' },
-                { Value: performance_factor_pct,   Label: 'Performance factor (%)' },
                 { Value: record_status,            Label: 'Register status' }
             ]
         }
@@ -2201,3 +2180,10 @@ annotate PlanningService.FuelBurns with {
     engine_burn_kg @title: 'Engine Burn (kg)'
                    @Common.QuickInfo: 'Block burn less APU in block. Equal to block burn wherever no cycle falls inside the block window, which is everywhere in this dataset.';
 };
+
+// The scheduled date + time (LT) fields are virtual (planning-service.js):
+// not filterable or sortable in the database.
+annotate PlanningService.FlightSchedule with @(
+    Capabilities.FilterRestrictions.NonFilterableProperties: [ scheduled_departure_lt, scheduled_arrival_lt ],
+    Capabilities.SortRestrictions.NonSortableProperties:     [ scheduled_departure_lt, scheduled_arrival_lt ]
+);

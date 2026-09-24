@@ -26,7 +26,9 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const C = require('./lib/invoice-checks');
-const { applyHeaderSummary, applyLineSummary } = require('./lib/invoice-summary');
+const { applyHeaderSummary, applyLineSummary, computeLines } = require('./lib/invoice-summary');
+const { dueDateFor, deriveMatchStatus } = require('./lib/invoice-header');
+const { allocate, reportAllocationError } = require('./lib/number-range');
 
 const _id = (params) => {
     const p = params[params.length - 1];
@@ -37,7 +39,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 module.exports = class InvoiceService extends cds.ApplicationService {
     async init() {
 
-        const { Invoices, InvoiceExceptions, InvoiceItems } = this.entities;
+        const { Invoices, InvoiceExceptions, InvoiceItems, IdrRuleStatus } = this.entities;
 
         // ================================================================
         // WP-36 / WP-37 - THE HEADER AND LINE ITEM VIEWS.
@@ -51,11 +53,14 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         // error the user can see. That exact bug hit three services earlier
         // in this project.
         // ================================================================
-        this.after(['READ'], [Invoices, Invoices.drafts], async (data) => {
-            await applyHeaderSummary(data);
+        const isDraftTarget = (req) => !!(req.target && String(req.target.name).endsWith('.drafts'));
+        this.after(['READ'], [Invoices, Invoices.drafts], async (data, req) => {
+            await applyHeaderSummary(data, { draftItems: InvoiceItems.drafts, draftInvoices: Invoices.drafts,
+                draft: isDraftTarget(req) });
         });
-        this.after(['READ'], [InvoiceItems, InvoiceItems.drafts], async (data) => {
-            await applyLineSummary(data);
+        this.after(['READ'], [InvoiceItems, InvoiceItems.drafts], async (data, req) => {
+            await applyLineSummary(data, isDraftTarget(req)
+                ? { source: InvoiceItems.drafts, headSource: Invoices.drafts } : {});
         });
 
         // ================================================================
@@ -379,7 +384,197 @@ module.exports = class InvoiceService extends cds.ApplicationService {
             }
         });
 
+        // The check's display name on each rule verdict (read-only copy).
+        this.after('READ', IdrRuleStatus, async (data) => {
+            const rows = (Array.isArray(data) ? data : [data]).filter(r => r && r.ID);
+            if (!rows.length) return;
+            const ids = rows.map(r => r.ID);
+            const base = await SELECT.from('fuelsphere.IDR_RULE_STATUS')
+                .columns('ID', 'check_code').where({ ID: { in: ids } });
+            const codes = [...new Set(base.map(b => b.check_code).filter(Boolean))];
+            const reg = codes.length ? await SELECT.from('fuelsphere.INVOICE_CHECK_REGISTRY')
+                .columns('check_code', 'check_name').where({ check_code: { in: codes } }) : [];
+            const nameByCode = new Map(reg.map(r => [r.check_code, r.check_name]));
+            const codeById = new Map(base.map(b => [b.ID, b.check_code]));
+            for (const r of rows) r.check_name_v = nameByCode.get(codeById.get(r.ID)) || null;
+        });
+
+        // ================================================================
+        // LINE NUMBERS ARE GIVEN, NOT TYPED: 10, 20, 30 ... - the next
+        // multiple of ten after the highest line already on the invoice, so a
+        // deleted line leaves its gap rather than being reused. Read from the
+        // DRAFT lines, where a new invoice's lines exist. A number the caller
+        // sends (an import, a test) is kept.
+        // ================================================================
+        this.before(['NEW', 'CREATE'], InvoiceItems.drafts, async (req) => {
+            const d = req.data;
+            if (d.line_number !== undefined && d.line_number !== null) return;
+            const p = req.params && req.params[0];
+            const invoiceId = d.invoice_ID || (p && typeof p === 'object' ? p.ID : p);
+            if (!invoiceId) return;
+            const top = await SELECT.one.from(InvoiceItems.drafts)
+                .columns('max(line_number) as maxLine').where({ invoice_ID: invoiceId });
+            const max = top && top.maxLine ? Number(top.maxLine) : 0;
+            d.line_number = Math.floor(max / 10) * 10 + 10;
+        });
+
+        // ================================================================
+        // A TICKET PICKED ON THE LINE (F4) brings its number and its flight.
+        //
+        // The stated ticket number is set to the picked ticket's, so the
+        // validation run resolves the line to the same ticket rather than
+        // to whatever was typed before. The stored snapshot of the PREVIOUS
+        // ticket (quantity, rate, amount) is cleared - stored wins over live
+        // in invoice-summary.js, and a stale one would compare the line
+        // against a ticket it no longer names. The flight follows the ticket
+        // unless the same request sets one.
+        // ================================================================
+        this.before(['CREATE', 'PATCH', 'UPDATE'], InvoiceItems.drafts, async (req) => {
+            const d = req.data;
+            if (!('ticket_ID' in d)) return;
+            d.ticket_quantity_kg = null;
+            d.ticket_rate = null;
+            d.ticket_amount = null;
+            if (!d.ticket_ID) return;
+            const t = await SELECT.one.from('fuelsphere.FUEL_TICKETS')
+                .columns('ticket_number', 'flight_ID', 'flight_number', 'delivery_timestamp')
+                .where({ ID: d.ticket_ID });
+            if (!t) return;
+            d.ticket_number = t.ticket_number;
+            d.resolution_source = 'TICKET_ID';
+            if ('flight_ID' in d) return;
+            let flightId = t.flight_ID || null;
+            if (!flightId && t.flight_number) {
+                const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
+                const f = await SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE').columns('ID')
+                    .where(day ? { flight_number: t.flight_number, flight_date: day }
+                               : { flight_number: t.flight_number });
+                flightId = f ? f.ID : null;
+            }
+            if (flightId) d.flight_ID = flightId;
+        });
+
+        // ================================================================
+        // THE HEADER, AS THE CLERK WORKS - draft PATCH.
+        //
+        // Supplier -> payment terms -> due date, each following the one
+        // before. On the DRAFT, where the editing happens, and reading the
+        // stored draft for whichever of the three this PATCH did not carry:
+        // picking a supplier must still reach the due date when the invoice
+        // date was typed in an earlier PATCH.
+        // ================================================================
+        // ================================================================
+        // MATCH STATUS, CALCULATED AND STORED.
+        //
+        // Stored rather than shown on read: its colour (matchingCriticality)
+        // is computed in SQL from the stored value, so a read-time override
+        // paints one status's text in another's colour. Called wherever the
+        // lines get resolved to their tickets - on create, and on the Validate
+        // and three-way-match buttons - because that resolution is what the
+        // status is calculated from.
+        // ================================================================
+        const refreshMatchStatus = async (invoiceId) => {
+            const lines = await SELECT.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: invoiceId });
+            const computed = await computeLines(lines);
+            const status = deriveMatchStatus([...computed.values()]);
+            await UPDATE('fuelsphere.INVOICES').set({ match_status: status }).where({ ID: invoiceId });
+            return status;
+        };
+
+        // PATCH and UPDATE both: under lean draft a draft edit arrives as UPDATE
+        // on the .drafts entity - a PATCH-only hook never fires (the order
+        // screens hook both for the same reason).
+        this.before(['PATCH', 'UPDATE'], Invoices.drafts, async (req) => {
+            const d = req.data;
+            if (!['supplier_ID', 'invoice_date', 'payment_terms'].some(k => k in d)) return;
+            const id = _id(req.params);
+            const stored = id ? (await SELECT.one.from(Invoices.drafts)
+                .columns('invoice_date', 'payment_terms').where({ ID: id })) || {} : {};
+
+            // The supplier's own terms, on every pick - changing the supplier
+            // gives that supplier's terms, not whatever the last one had.
+            if ('supplier_ID' in d && d.supplier_ID) {
+                const s = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                    .columns('payment_terms').where({ ID: d.supplier_ID });
+                if (s && s.payment_terms) d.payment_terms = s.payment_terms;
+            }
+            const invoiceDate = 'invoice_date' in d ? d.invoice_date : stored.invoice_date;
+            const terms = 'payment_terms' in d ? d.payment_terms : stored.payment_terms;
+            const due = dueDateFor(invoiceDate, terms);
+            if (due) d.due_date = due;
+        });
+
+        // ================================================================
+        // ON CREATE - the draft is activated.
+        //
+        // NUMBERED AT SAVE, not at draft creation: a discarded draft must not
+        // consume a number, and the supplier the number is keyed on is picked
+        // after the draft exists. Same rule the order screens follow.
+        //
+        // SUBMITTED only from DRAFT, so re-saving an invoice that is already
+        // posted or paid never drags it backwards.
+        // ================================================================
+        this.before('SAVE', Invoices, async (req) => {
+            const d = req.data;
+            if (!d.internal_number && d.supplier_ID) {
+                const s = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                    .columns('supplier_code').where({ ID: d.supplier_ID });
+                if (s && s.supplier_code) {
+                    try {
+                        d.internal_number = await allocate('INV', s.supplier_code,
+                            d.invoice_date || new Date(), 'Supplier');
+                    } catch (e) {
+                        if (reportAllocationError(req, e)) return;
+                        throw e;
+                    }
+                }
+            }
+            if (!d.status || d.status === 'DRAFT') d.status = 'SUBMITTED';
+            if (!d.due_date) {
+                const due = dueDateFor(d.invoice_date, d.payment_terms);
+                if (due) d.due_date = due;
+            }
+            // The header-total check compares stated_net_amount with the lines.
+            // What the clerk typed in Amount Details IS the supplier's stated
+            // figure, so it is mirrored there - the check itself is unchanged.
+            if (d.net_amount !== undefined) d.stated_net_amount = d.net_amount;
+            if (d.gross_amount !== undefined) d.stated_gross_amount = d.gross_amount;
+        });
+
+        // ================================================================
+        // AFTER CREATE - the checks run by themselves.
+        //
+        // "Checks that fired" used to fill only when someone pressed Validate.
+        // It now runs as the invoice is saved, through the SAME runValidation
+        // the button uses, so the automatic and the manual run cannot reach
+        // different verdicts.
+        //
+        // Validation FIRST, then the match status: validation is what resolves
+        // each line to its ticket, and a status computed before that would
+        // read every line as unresolved.
+        // ================================================================
+        this.after('SAVE', Invoices, async (data, req) => {
+            const invoiceId = (data && data.ID) || (req.data && req.data.ID);
+            if (!invoiceId) return;
+            try {
+                await runValidation({
+                    params: [{ ID: invoiceId }], user: req.user,
+                    error: (code, msg) => { throw Object.assign(new Error(msg || code), { code }); },
+                    info: () => {}, warn: () => {}
+                });
+            } catch (e) {
+                // Saved either way. A check that could not run must not undo
+                // the capture - it is reported instead.
+                req.warn(`Invoice saved, but the automatic checks could not run: ${e.message}`);
+            }
+            await refreshMatchStatus(invoiceId);
+        });
+
         this.on('validateForPosting', Invoices, runValidation);
+        this.after(['validateForPosting', 'executeThreeWayMatch'], Invoices, async (_result, req) => {
+            const id = _id(req.params);
+            if (id) await refreshMatchStatus(id);
+        });
 
         // executeThreeWayMatch is the DECLARED name and renaming a declared
         // action is forbidden (rules of engagement). It runs the same

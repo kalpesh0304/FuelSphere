@@ -453,7 +453,10 @@ describe('Invoice views - header, lines, and the ticket link', () => {
     /** Every field the object page can show: its sections plus its title. */
     function objectPageFields(def) {
         const out = new Map();                       // field -> section label
-        for (const f of def['@UI.Facets'] || []) {
+        // HEADER FACETS COUNT. A field shown in the object page HEADER is on
+        // the page: Invoice & Settlement moved there (display only, Sep 2026)
+        // and a sweep that walked sections alone called nine columns missing.
+        for (const f of [...(def['@UI.Facets'] || []), ...(def['@UI.HeaderFacets'] || [])]) {
             const target = typeof f.Target === 'object' ? f.Target['='] : f.Target;
             if (!target || target.includes('/')) continue;   // another entity's page
             const m = /^@UI\.FieldGroup#(\w+)$/.exec(target);

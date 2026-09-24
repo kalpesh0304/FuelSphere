@@ -144,7 +144,10 @@ describe('The service surface this repository declares', () => {
     // to each entity's own block, six referenced groups read as orphans.
     const KNOWN_ORPHAN = new Set([
       'BurnService.FlightSchedule#BurnFlightRoute',
-      'BurnService.FuelDeliveries#BurnDeliveryUplift'
+      'BurnService.FuelDeliveries#BurnDeliveryUplift',
+      // Taken off the Flight Schedule page at the user's request (Sep 2026)
+      // and kept defined, so it returns with one facet line.
+      'PlanningService.FlightSchedule#ActualRouting'
     ]);
     const { orphans } = sweepGroups();
     const fresh = orphans.filter(o => !KNOWN_ORPHAN.has(o));

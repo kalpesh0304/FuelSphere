@@ -48,6 +48,7 @@ const { LINE_ORDER } = require('./rob-recalculate');
 
 const LEDGER     = 'fuelsphere.ROB_LEDGER';
 const DELIVERIES = 'fuelsphere.FUEL_DELIVERIES';
+const TICKETS    = 'fuelsphere.FUEL_TICKETS';
 
 const num   = (v) => (v === null || v === undefined ? null : Number(v));
 const money = (v) => Number(Number(v).toFixed(2));
@@ -92,6 +93,30 @@ async function fuelOnBoardBefore(ticket) {
 }
 
 /**
+ * Fuel on board after the tail's previous uplift, in kilograms: that
+ * ticket's Meter End. This is the rule as signed off - burn = previous
+ * ticket's Meter End less this ticket's Meter Start - and it must not be
+ * replaced by the ledger's closing balance. The two differ whenever the
+ * ledger opened at zero or at a seeded balance, and the closing balance then
+ * read LOWER than this ticket's Meter Start, so no burn was ever posted.
+ * Null where the previous ticket has no Meter End; the caller then falls back
+ * to the ledger balance.
+ */
+async function fuelOnBoardAfterPrevious(tail) {
+    const up = await cds.db.run(SELECT.one.from(LEDGER).columns('fuel_ticket_ID')
+        .where({ tail_number: tail, entry_type: 'UPLIFT', fuel_ticket_ID: { '!=': null } })
+        .orderBy('record_date desc', 'record_time desc', 'sequence desc'));
+    if (!up) return null;
+    const t = await cds.db.run(SELECT.one.from(TICKETS)
+        .columns('meter_end', 'quantity_kg', 'quantity_metered', 'quantity')
+        .where({ ID: up.fuel_ticket_ID }));
+    const end = t ? num(t.meter_end) : null;
+    const factor = t ? massFactor(t) : null;
+    if (end === null || end < 0 || factor === null) return null;
+    return kg(end * factor);
+}
+
+/**
  * Post the burn that preceded this ticket's uplift, if one can be established.
  *
  * Called from postTicketUplift BEFORE the uplift row is written, so the uplift
@@ -130,7 +155,9 @@ async function postPrecedingBurn(ticket, tail) {
     }
 
     const opening = num(prev.closing_rob_kg) || 0;
-    const burnKg = kg(opening - fobBefore);
+    const prevEnd = await fuelOnBoardAfterPrevious(tail);
+    const burnKg = kg((prevEnd === null ? opening : prevEnd) - fobBefore);
+    const closing = kg(opening - burnKg);
 
     // Defensive only: postTicketUplift's own idempotency check returns before
     // this is ever reached a second time for the same ticket, and both inserts
@@ -149,8 +176,12 @@ async function postPrecedingBurn(ticket, tail) {
     // investigate, not a negative burn to post.
     if (burnKg <= 0) {
         return { ID: null, reason: burnKg < 0
-            ? `fuel on board before this uplift (${fobBefore} kg) is higher than the ledger balance (${opening} kg) - no burn posted`
+            ? `Meter Start on this ticket (${fobBefore} kg) is higher than Meter End on the previous one (${prevEnd === null ? opening : prevEnd} kg) - no burn posted`
             : null, qty: null };
+    }
+
+    if (closing < 0) {
+        return { ID: null, reason: `a burn of ${burnKg} kg exceeds the ledger balance of ${opening} kg - no burn posted`, qty: null };
     }
 
     // Consumed at the prevailing MAP, which is therefore carried forward
@@ -177,7 +208,7 @@ async function postPrecedingBurn(ticket, tail) {
 
     const maxCapacity = num(prev.max_capacity_kg);
     const robPct = (maxCapacity && maxCapacity > 0)
-        ? Number(((fobBefore / maxCapacity) * 100).toFixed(2)) : null;
+        ? Number(((closing / maxCapacity) * 100).toFixed(2)) : null;
 
     const ID = cds.utils.uuid();
     await cds.db.run(INSERT.into(LEDGER).entries({
@@ -209,7 +240,7 @@ async function postPrecedingBurn(ticket, tail) {
         // the valued ledger the screen shows.
         burn_kg: burnKg,
         adjustment_kg: 0,
-        closing_rob_kg: fobBefore,
+        closing_rob_kg: closing,
         qty_kg: -burnKg,
         rate_usd_per_kg: rate,
         value_usd: -value,

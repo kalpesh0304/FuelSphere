@@ -218,7 +218,7 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
     });
 
     // ==================================================================
-    it('EXIT-4 — DensityUom rejects a value outside the enum', async () => {
+    it('EXIT-4 — DensityUom is always KGL, whatever is sent', async () => {
         // Instrument check: a good value is accepted, so a rejection below is
         // the assertion firing and not a blanket refusal.
         const ok = await createTicket({
@@ -236,7 +236,10 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
         });
         out(`density_uom='KGX' -> ${bad.status}`);
         out(`  ${bad.msg || JSON.stringify(bad.data)}`);
-        assert.ok(bad.status >= 400, `an out-of-enum density unit must be refused, got ${bad.status}`);
+        // Sep 2026: density unit is always KGL. A sent unit is not refused, it is
+        // replaced - the operator no longer chooses it.
+        assert.ok(ok2xx(bad.status), `capture must not be blocked, got ${bad.status}`);
+        assert.strictEqual(bad.data.density_uom, 'KGL', 'the stored unit must be KGL');
     });
 
     it('EXIT-4b — FobSource and ReconStatus are annotated too', async () => {

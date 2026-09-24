@@ -229,6 +229,8 @@ async function applyFlightSummary(data) {
         row.flight_date_v = f ? f.flight_date : (base.burn_date || null);
         row.sector = f && f.origin_airport && f.destination_airport
             ? `${f.origin_airport} - ${f.destination_airport}` : null;
+        row.departure_airport_v = f ? f.origin_airport || null : null;
+        row.arrival_airport_v   = f ? f.destination_airport || null : null;
 
         const fqisOut = f ? num(f.fob_at_out_kg) : null;
         const fqisIn  = f ? num(f.fob_at_in_kg)  : null;

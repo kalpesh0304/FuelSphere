@@ -244,7 +244,7 @@ describe('ROB ledger - the inferred burn', () => {
         assert.ok(!rows.some(r => r.entry_type === 'FLIGHT'),
             'fuel appearing from nowhere must not be written as a negative burn');
         assert.ok(res.ID, 'the uplift itself still posts - capture is never blocked');
-        assert.ok(res.reason && /higher than the ledger balance/.test(res.reason),
+        assert.ok(res.reason && /higher than Meter End on the previous one/.test(res.reason),
             `the discrepancy must be reported, got: ${res.reason}`);
         out(`discrepancy surfaced, not buried: "${res.reason}"`);
     });
@@ -278,5 +278,22 @@ describe('ROB ledger - the inferred burn', () => {
             assert.ok(n(replayed[i].value_usd) < 0, `row ${i + 1}: a replayed burn must be signed negative`);
         }
         out(`replay parity: ${replayed.length} rows, quantities identical, MAP flat across burns`);
+    });
+    it('EXIT-8 - no ledger history: burn = previous Meter End - this Meter Start', async () => {
+        // The reported case. A tail with NO opening balance: the first uplift
+        // opens at 0 and closes at its own quantity (4000), not at its Meter End
+        // (5000). The old rule read the ledger balance, saw Meter Start 4500
+        // above it, and posted nothing.
+        await cds.db.run(DELETE.from(LEDGER).where({ tail_number: TAIL }));
+        await postTicketUplift(await makeTicket(
+            { leg: 0, fobBefore: 1000, fobAfter: 5000, kg: 4000, amount: 4552 }, '-H'));
+        const res = await postTicketUplift(await makeTicket(
+            { leg: 1, fobBefore: 4500, fobAfter: 6000, kg: 1500, amount: 1707 }, '-H'));
+
+        const burns = (await ledgerRows()).filter(r => r.entry_type === 'FLIGHT');
+        assert.strictEqual(burns.length, 1, `no burn posted; reason: ${res.reason}`);
+        assert.strictEqual(n(burns[0].qty_kg), -500, '5000 Meter End - 4500 Meter Start');
+        assert.strictEqual(n(burns[0].closing_rob_kg), 3500, 'ledger 4000 less the 500 burned');
+        out(`first-ever tail: burn ${burns[0].qty_kg} kg, closing ${burns[0].closing_rob_kg}`);
     });
 });

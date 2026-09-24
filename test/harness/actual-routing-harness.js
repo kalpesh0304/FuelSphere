@@ -44,8 +44,10 @@ describe('Actual routing', () => {
     assert.strictEqual(group('ActualStations'), null,
       '#ActualStations is back. Two field groups for one thing means one of them is on the page and '
     + 'the other is not, and nothing on either says which.');
-    assert.ok(/AnnotationPath="@UI.FieldGroup#ActualRouting"/.test(blk),
-      'no facet references #ActualRouting, so the whole section is off the object page');
+    // OFF THE PAGE BY REQUEST (Sep 2026: "actual routing all fields to be
+    // hidden"). The group stays defined so it returns with one facet line.
+    assert.strictEqual(/AnnotationPath="@UI.FieldGroup#ActualRouting"/.test(blk), false,
+      '#ActualRouting is back on the Flight Schedule page, which was asked to hide it');
     assert.strictEqual(/AnnotationPath="@UI.FieldGroup#ActualStations"/.test(blk), false);
     out('one group, referenced by a facet; #ActualStations folded in and gone');
   });

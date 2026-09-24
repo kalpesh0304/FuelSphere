@@ -19,7 +19,7 @@ annotate BurnService.FuelBurns with @(
         // --- Header ---
         HeaderInfo: {
             TypeName       : 'Fuel Burn',
-            TypeNamePlural : 'Fuel Burns',
+            TypeNamePlural : 'Fuel Overview Report',
             Title          : { Value: tail_number },
             Description    : { Value: burn_date }
         },
@@ -137,14 +137,14 @@ annotate BurnService.FuelBurns with @(
 
         // --- Object Page Sections ---
         Facets: [
+            // Order as requested (Sep 2026): the flight first, then the
+            // aircraft, then the APU / engine split, then everything else as
+            // "Additional Details". Review is off the page.
             {
-                $Type  : 'UI.CollectionFacet',
-                ID     : 'BurnDetails',
-                Label  : 'Burn Details',
-                Facets : [
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightInfo', Label: 'Flight' },
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#TimingInfo', Label: 'Timing' }
-                ]
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnFlight',
+                Target : 'flight/@UI.FieldGroup#BurnFlightIdentity',
+                Label  : 'Flight Details'
             },
             {
                 $Type  : 'UI.CollectionFacet',
@@ -155,51 +155,35 @@ annotate BurnService.FuelBurns with @(
                 ]
             },
             {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnTail',
+                Target : 'tail/@UI.FieldGroup#RegistrationKey',
+                Label  : 'Aircraft Register'
+            },
+            // Both figures on one facet: engine burn is block MINUS apu, and
+            // an unknown APU share makes the engine burn unknown too.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'BurnSplit',
+                Target : '@UI.FieldGroup#BurnSplit',
+                Label  : 'APU and Engine Burn'
+            },
+            {
+                $Type  : 'UI.CollectionFacet',
+                ID     : 'BurnDetails',
+                Label  : 'Additional Details',
+                Facets : [
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#FlightInfo', Label: 'Burn' },
+                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#TimingInfo', Label: 'Timing' }
+                ]
+            },
+            {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'VarianceSection',
                 Label  : 'Variance Analysis',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#VarianceDetails', Label: 'Variance' }
                 ]
-            },
-            {
-                $Type  : 'UI.CollectionFacet',
-                ID     : 'ReviewSection',
-                Label  : 'Review',
-                Facets : [
-                    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ReviewInfo', Label: 'Review' }
-                ]
-            },
-            // ================================================================
-            // UI-B-03. WP-19 built the APU/engine split and nothing showed it.
-            //
-            // Both figures are on the same facet deliberately: engine burn is
-            // block MINUS apu, so reading one without the other invites the
-            // reader to treat the block figure as engine burn. And an unknown
-            // APU share makes the engine burn unknown too - null here means
-            // "not computed", never "zero".
-            // ================================================================
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'BurnSplit',
-                Target : '@UI.FieldGroup#BurnSplit',
-                Label  : 'APU and Engine Split'
-            },
-            // The tail this burn is on. A to-one association whose target is
-            // on this same service, which is what a ReferenceFacet needs.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'BurnTail',
-                Target : 'tail/@UI.FieldGroup#RegistrationKey',
-                Label  : 'Aircraft Register'
-            },
-            // A burn's flight. The navigation worked and had no section
-            // because BurnService.FlightSchedule had no annotation block.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'BurnFlight',
-                Target : 'flight/@UI.FieldGroup#BurnFlightIdentity',
-                Label  : 'Flight'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -225,8 +209,6 @@ annotate BurnService.FuelBurns with @(
             Data: [
                 { Value: tail_number, Label: 'Aircraft Tail' },
                 { Value: burn_date, Label: 'Burn Date' },
-                { Value: data_source, Label: 'Data Source' },
-                { Value: source_message_id, Label: 'Source Message ID' },
                 { Value: status, Label: 'Status' }
             ]
         },
@@ -241,8 +223,8 @@ annotate BurnService.FuelBurns with @(
 
         FieldGroup #RouteInfo: {
             Data: [
-                { Value: origin_airport, Label: 'Departure Airport' },
-                { Value: destination_airport, Label: 'Arrival Airport' }
+                { Value: departure_airport_v, Label: 'Departure Airport' },
+                { Value: arrival_airport_v, Label: 'Arrival Airport' }
             ]
         },
 
@@ -259,16 +241,6 @@ annotate BurnService.FuelBurns with @(
             ]
         },
 
-        FieldGroup #ReviewInfo: {
-            Data: [
-                { Value: requires_review, Label: 'Requires Review' },
-                { Value: review_notes, Label: 'Review Notes' },
-                { Value: reviewed_by, Label: 'Reviewed By' },
-                { Value: reviewed_at, Label: 'Reviewed At' },
-                { Value: confirmed_by, Label: 'Confirmed By' },
-                { Value: confirmed_at, Label: 'Confirmed At' }
-            ]
-        },
 
         FieldGroup #BurnAdmin: {
             Data: [
@@ -424,11 +396,15 @@ annotate BurnService.ROBLedger with @(
             { Value: fuel_order.order_number, Label: 'Fuel Order', ![@UI.Importance]: #High },
             { Value: volume_l, Label: 'Volume (L)', ![@UI.Importance]: #High },
             { Value: qty_kg, Label: 'Qty kg', ![@UI.Importance]: #High },
+            { Value: qty_l, Label: 'Qty L', ![@UI.Importance]: #High },
             { Value: rate_usd_per_kg, Label: 'Rate USD/kg', ![@UI.Importance]: #High },
+            { Value: rate_usd_per_l, Label: 'Rate USD/L', ![@UI.Importance]: #High },
             { Value: value_usd, Label: 'Value USD', ![@UI.Importance]: #High },
             { Value: closing_rob_kg, Label: 'Balance qty kg', ![@UI.Importance]: #High },
+            { Value: closing_rob_l, Label: 'Balance qty L', ![@UI.Importance]: #High },
             { Value: balance_value_usd, Label: 'Balance value USD', ![@UI.Importance]: #High },
             { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #High },
+            { Value: map_usd_per_l, Label: 'MAP USD/L', ![@UI.Importance]: #High },
             { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #Low },
             { Value: rob_percentage, Label: 'ROB %', ![@UI.Importance]: #Low },
             {
@@ -488,10 +464,13 @@ annotate BurnService.ROBLedger with @(
         FieldGroup #ROBSummary: {
             Data: [
                 { Value: closing_rob_kg, Label: 'Balance qty kg' },
+                { Value: closing_rob_l, Label: 'Balance qty L' },
                 { Value: balance_value_usd, Label: 'Balance value USD' },
                 { Value: map_usd_per_kg, Label: 'MAP USD/kg' },
+                { Value: map_usd_per_l, Label: 'MAP USD/L' },
                 { Value: rob_percentage, Label: 'ROB %' },
                 { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
+                { Value: max_capacity_l, Label: 'Max Capacity (L)' },
                 { Value: recalculated_by, Label: 'Last Recalculated By' },
                 { Value: recalculated_at, Label: 'Last Recalculated On' }
             ]
@@ -505,11 +484,16 @@ annotate BurnService.ROBLedger with @(
                 { Value: fuel_order.order_number, Label: 'Fuel Order' },
                 { Value: volume_l, Label: 'Volume (L)' },
                 { Value: qty_kg, Label: 'Qty kg' },
+                { Value: qty_l, Label: 'Qty L' },
                 { Value: rate_usd_per_kg, Label: 'Rate USD/kg' },
+                { Value: rate_usd_per_l, Label: 'Rate USD/L' },
                 { Value: value_usd, Label: 'Value USD' },
                 { Value: uplift_kg, Label: 'Uplift (kg)' },
+                { Value: uplift_l, Label: 'Uplift (L)' },
                 { Value: burn_kg, Label: 'Burn (kg)' },
-                { Value: adjustment_kg, Label: 'Adjustment (kg)' }
+                { Value: burn_l, Label: 'Burn (L)' },
+                { Value: adjustment_kg, Label: 'Adjustment (kg)' },
+                { Value: adjustment_l, Label: 'Adjustment (L)' }
             ]
         },
 
@@ -608,11 +592,18 @@ annotate BurnService.ROBLedger with @(
         FieldGroup #ROBQuantityDetails: {
             Data: [
                 { Value: opening_rob_kg, Label: 'Opening ROB (kg)' },
+                { Value: opening_rob_l, Label: 'Opening ROB (L)' },
                 { Value: uplift_kg, Label: 'Uplift (kg)' },
+                { Value: uplift_l, Label: 'Uplift (L)' },
                 { Value: burn_kg, Label: 'Burn (kg)' },
+                { Value: burn_l, Label: 'Burn (L)' },
                 { Value: adjustment_kg, Label: 'Adjustment (kg)' },
+                { Value: adjustment_l, Label: 'Adjustment (L)' },
                 { Value: closing_rob_kg, Label: 'Closing ROB (kg)' },
+                { Value: closing_rob_l, Label: 'Closing ROB (L)' },
+                { Value: density_kgl, Label: 'Density used for litres (kg/L)' },
                 { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
+                { Value: max_capacity_l, Label: 'Max Capacity (L)' },
                 { Value: rob_percentage, Label: 'ROB %' }
             ]
         },
@@ -962,3 +953,31 @@ annotate BurnService.Airports with @(
         }
     }
 );
+
+// ============================================================================
+// THE LITRE COLUMNS ARE VIRTUAL - read-time conversions (srv/lib/rob-litres.js).
+// A virtual cannot be filtered or sorted in the database ("Virtual elements
+// are not allowed in expressions" -> 500), so the table must not offer it.
+// ============================================================================
+annotate BurnService.ROBLedger with @(
+    Capabilities.FilterRestrictions.NonFilterableProperties: [
+        density_kgl, qty_l, opening_rob_l, uplift_l, burn_l, adjustment_l,
+        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l
+    ],
+    Capabilities.SortRestrictions.NonSortableProperties: [
+        density_kgl, qty_l, opening_rob_l, uplift_l, burn_l, adjustment_l,
+        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l
+    ]
+);
+annotate BurnService.ROBLedger with {
+    density_kgl    @title: 'Density used for litres (kg/L)';
+    qty_l          @title: 'Qty L';
+    opening_rob_l  @title: 'Opening ROB (L)';
+    uplift_l       @title: 'Uplift (L)';
+    burn_l         @title: 'Burn (L)';
+    adjustment_l   @title: 'Adjustment (L)';
+    closing_rob_l  @title: 'Balance qty L';
+    max_capacity_l @title: 'Max Capacity (L)';
+    rate_usd_per_l @title: 'Rate USD/L';
+    map_usd_per_l  @title: 'MAP USD/L';
+};

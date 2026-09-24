@@ -107,7 +107,7 @@ annotate TicketService.FuelTickets with @(
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref']
+                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref', 'currency_code']
     },
     // The alternative path: picking a flight directly, with no order,
     // auto-fills aircraft_reg (populateFromFlight in ticket-service.js).
@@ -165,6 +165,7 @@ annotate TicketService.FuelTickets with @(
             { Value: aircraft_reg,       Label: 'Aircraft Reg',   ![@UI.Importance]: #Medium },
             { Value: quantity,           Label: 'Quantity',       ![@UI.Importance]: #High },
             { Value: uom_code,           Label: 'UoM',            ![@UI.Importance]: #Medium },
+            { Value: rate_per_litre,     Label: 'Rate (per litre)', ![@UI.Importance]: #Medium },
             {
                 Value: status,
                 Label: 'Status',
@@ -238,7 +239,6 @@ annotate TicketService.FuelTickets with @(
                 { Value: quantity_metered },
                 { Value: quantity_flag },
                 { Value: density_value },
-                { Value: density_uom },
                 { Value: density_basis },
                 { Value: density_temp_c },
                 { Value: quantity_kg },
@@ -301,10 +301,11 @@ annotate TicketService.FuelTickets with {
     meter_end            @title: 'Meter End' @Measures.Unit: uom_code;
     quantity_metered     @title: 'Metered Quantity' @Measures.Unit: uom_code @Common.FieldControl: #ReadOnly;
     quantity_flag        @title: 'Quantity Basis';
-    rate_per_litre       @title: 'Rate (per litre)';
+    rate_per_litre       @title: 'Rate (per litre)' @Measures.ISOCurrency: currency_code;
+    currency_code        @title: 'Currency';
     // Derived, never typed - @Core.Computed renders it read-only on the
     // create screen and afterwards, the same treatment internal_number gets.
-    total_amount         @title: 'Total Amount' @Core.Computed;
+    total_amount         @title: 'Total Amount' @Core.Computed @Measures.ISOCurrency: currency_code;
     quantity_kg          @title: 'Uplift by Meter (kg)' @Common.FieldControl: #ReadOnly;
     // MANDATORY ON A LITRE TICKET, optional on a mass one - the control is
     // computed per row (applyDensityFieldControl), because without a density
@@ -312,8 +313,7 @@ annotate TicketService.FuelTickets with {
     // reconciliation and the invoice match all read.
     density_value        @title: 'Density' @Measures.Unit: density_uom
                          @Common.FieldControl: densityFieldControl;
-    density_uom          @title: 'Density Unit'
-                         @Common.FieldControl: densityFieldControl;
+    density_uom          @title: 'Density Unit' @Common.FieldControl: #ReadOnly;   // always KGL - set by ticket-measurement.js
     density_basis        @title: 'Density Basis';
     density_temp_c       @title: 'Density Temperature (°C)';
     batch_coa_ref         @title: 'Batch Certificate';

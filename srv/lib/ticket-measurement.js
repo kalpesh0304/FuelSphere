@@ -17,7 +17,27 @@
  * with EPD411 belongs to the caller.
  */
 
+const cds = require('@sap/cds');
+const { SELECT } = cds.ql;
 const { deriveTicketMassKg } = require('./fuel-uom');
+
+/**
+ * The currency a ticket's rate is in, by default: the contract on its order,
+ * else the order's own currency. Null where the ticket has no order - there is
+ * then no contract to default from, and a guessed currency is worse than none.
+ */
+async function defaultTicketCurrency(orderId) {
+    if (!orderId) return null;
+    const order = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS')
+        .columns('contract_ID', 'currency_code').where({ ID: orderId }));
+    if (!order) return null;
+    if (order.contract_ID) {
+        const c = await cds.db.run(SELECT.one.from('fuelsphere.MASTER_CONTRACTS')
+            .columns('currency_code').where({ ID: order.contract_ID }));
+        if (c && c.currency_code) return c.currency_code;
+    }
+    return order.currency_code || null;
+}
 
 /**
  * @param {object} at  reader for the ticket's fields, merging the request's
@@ -55,13 +75,31 @@ async function deriveTicketMeasurement(at) {
         warning = `EPD411: Metered quantity ${metered} does not match ticket quantity ${claimed}.`;
     }
 
+    // DENSITY IS ALWAYS KG PER LITRE (KGL). The unit is not the operator's to
+    // choose: one unit keeps every density on every screen comparable. A
+    // figure that can only be kg/m3 (above 10 - no fuel is 10 kg per litre)
+    // is converted rather than misread as KGL - whatever unit is stored, since
+    // the draft may already have been stamped KGL before the value arrived.
+    const rawDensity = at('density_value');
+    if (rawDensity !== null && rawDensity !== undefined && Number(rawDensity) > 10) {
+        values.density_value = Number((Number(rawDensity) / 1000).toFixed(4));
+    }
+    values.density_uom = 'KGL';
+
+    // Rate currency from the contract, only while the ticket has none - a
+    // currency the operator set is never overwritten.
+    if (!at('currency_code') && at('order_ID')) {
+        const cur = await defaultTicketCurrency(at('order_ID'));
+        if (cur) values.currency_code = cur;
+    }
+
     // quantity_kg - EPD453. Null where an input is missing; a derived value
     // with a missing input is null, never zero.
     const mass = await deriveTicketMassKg({
         quantity_metered: meteredNow,
         uom_code: at('uom_code'),
-        density_value: at('density_value'),
-        density_uom: at('density_uom')
+        density_value: values.density_value !== undefined ? values.density_value : at('density_value'),
+        density_uom: 'KGL'
     });
     values.quantity_kg = mass.quantity_kg;
 

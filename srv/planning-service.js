@@ -62,6 +62,36 @@ module.exports = class PlanningService extends cds.ApplicationService {
         });
 
         // ====================================================================
+        // SCHEDULED DEPARTURE / ARRIVAL AS DATE AND TIME (local standard time)
+        //
+        // Re-read by ID: an after-READ handler only sees the $select'd
+        // columns, and the object page selects the virtuals without the
+        // three columns they are built from.
+        // ====================================================================
+        this.after('READ', FlightSchedule, async (data) => {
+            const rows = (Array.isArray(data) ? data : [data]).filter(r => r && r.ID);
+            if (!rows.length) return;
+            const base = await SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('ID', 'flight_date', 'scheduled_departure', 'scheduled_arrival')
+                .where({ ID: { in: rows.map(r => r.ID) } });
+            const byId = new Map(base.map(b => [b.ID, b]));
+            const hhmm = (t) => (t ? String(t).slice(0, 5) : null);
+            for (const r of rows) {
+                const b = byId.get(r.ID) || {};
+                const date = b.flight_date ? String(b.flight_date).slice(0, 10) : null;
+                const dep = hhmm(b.scheduled_departure), arr = hhmm(b.scheduled_arrival);
+                r.scheduled_departure_lt = date && dep ? `${date} ${dep}` : null;
+                let arrDate = date;
+                if (date && dep && arr && arr < dep) {
+                    const d = new Date(`${date}T00:00:00Z`);
+                    d.setUTCDate(d.getUTCDate() + 1);
+                    arrDate = d.toISOString().slice(0, 10);
+                }
+                r.scheduled_arrival_lt = arrDate && arr ? `${arrDate} ${arr}` : null;
+            }
+        });
+
+        // ====================================================================
         // AUTO-CREATE DRAFT FUEL ORDER ON FLIGHT SCHEDULE CREATION
         // ====================================================================
 

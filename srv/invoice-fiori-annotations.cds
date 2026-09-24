@@ -60,12 +60,10 @@ annotate InvoiceService.Invoices with @(
             // figures, computed in srv/lib/invoice-summary.js - the header and
             // line views read one derivation and cannot disagree.
             // ================================================================
-            { Value: flight_number_v,     Label: 'Flight number',      ![@UI.Importance]: #High },
-            { Value: flight_date_v,       Label: 'Flight date',        ![@UI.Importance]: #High },
             { Value: dep_airport,         Label: 'Departure airport',  ![@UI.Importance]: #Medium },
             { Value: arr_airport,         Label: 'Arrival airport',    ![@UI.Importance]: #Medium },
             { Value: flight_status_v,     Label: 'Flight status',      ![@UI.Importance]: #Medium },
-            { Value: invoice_number,      Label: 'Vendor invoice number', ![@UI.Importance]: #High },
+            { Value: invoice_number,      Label: 'Supplier invoice number', ![@UI.Importance]: #High },
             { Value: sap_invoice_number,  Label: 'SAP invoice number', ![@UI.Importance]: #High },
             { Value: invoice_status_v,    Label: 'Invoice status',     ![@UI.Importance]: #High },
             { Value: received_date_v,     Label: 'Invoice received date', ![@UI.Importance]: #Medium },
@@ -347,7 +345,8 @@ annotate InvoiceService.Invoices with @(
         FieldGroup#InvoiceGeneral: {
             Label: 'General Information',
             Data: [
-                { Value: invoice_number, Label: 'Invoice Number' },
+                { Value: invoice_number, Label: 'Supplier Invoice Number' },
+                // Generated on create - INV-{supplier}-{date}-{seq}.
                 { Value: internal_number, Label: 'Internal Number' },
                 { Value: invoice_date, Label: 'Invoice Date' },
                 { Value: posting_date, Label: 'Posting Date' },
@@ -360,9 +359,17 @@ annotate InvoiceService.Invoices with @(
         FieldGroup#SupplierInfo: {
             Label: 'Supplier Information',
             Data: [
-                { Value: supplier.supplier_name, Label: 'Supplier Name' },
-                { Value: supplier.supplier_code, Label: 'Supplier Code' },
-                { Value: invoice_number, Label: 'Supplier Invoice #' }
+                // THE PICKER, not two read-only paths. This group used to show
+                // supplier.supplier_name and supplier.supplier_code, which read
+                // through the association and so could never be typed into -
+                // the page had no way to choose a supplier. Picking one fills
+                // the payment terms, which fill the due date.
+                //
+                // The supplier invoice number is NOT repeated here: it already
+                // leads General Information, and one input in two places on the
+                // same page is two boxes for one value.
+                { Value: supplier_ID, Label: 'Supplier' },
+                { Value: supplier.supplier_code, Label: 'Supplier Code' }
             ]
         },
 
@@ -372,9 +379,9 @@ annotate InvoiceService.Invoices with @(
                 { Value: net_amount, Label: 'Net Amount' },
                 { Value: tax_amount, Label: 'Tax Amount' },
                 { Value: gross_amount, Label: 'Gross Amount' },
-                { Value: currency_code, Label: 'Currency' },
-                { Value: discount_percent, Label: 'Discount %' },
-                { Value: discount_date, Label: 'Discount Date' }
+                // One currency drives every amount on the page, through
+                // @Measures.ISOCurrency - picked once here with its value help.
+                { Value: currency_code, Label: 'Currency' }
             ]
         },
 
@@ -390,13 +397,21 @@ annotate InvoiceService.Invoices with @(
         FieldGroup#StatedVsDerived: {
             Label: 'Stated against derived',
             Data: [
-                { Value: stated_net_amount, Label: 'Net - stated by supplier' },
-                { Value: net_amount, Label: 'Net - derived from lines' },
-                { Value: stated_gross_amount, Label: 'Gross - stated by supplier' },
-                { Value: gross_amount, Label: 'Gross - derived from lines' },
-                { Value: tax_amount, Label: 'Tax - derived from lines' },
-                { Value: stated_line_count, Label: 'Lines - stated by supplier' },
-                { Value: currency_code, Label: 'Currency' }
+                // ALL READ-ONLY. Entered = what the clerk typed in Amount
+                // Details, off the supplier's invoice. From lines = what the
+                // line items add up to. The difference is the finding: a
+                // supplier whose printed total does not match their own lines.
+                // Entered values are read-only COPIES - one field cannot be an
+                // input above and read-only here.
+                { Value: entered_net_v,    Label: 'Net - entered' },
+                { Value: derived_net,      Label: 'Net - from lines' },
+                { Value: net_difference,   Label: 'Net difference' },
+                { Value: entered_tax_v,    Label: 'Tax - entered' },
+                { Value: derived_tax,      Label: 'Tax - from lines' },
+                { Value: entered_gross_v,  Label: 'Gross - entered' },
+                { Value: derived_gross,    Label: 'Gross - from lines' },
+                { Value: gross_difference, Label: 'Gross difference' },
+                { Value: total_lines,      Label: 'Lines on invoice' }
             ]
         },
 
@@ -421,8 +436,11 @@ annotate InvoiceService.Invoices with @(
             Data: [
                 { Value: match_status, Label: 'Match Status' },
                 { Value: approval_status, Label: 'Approval Status' },
-                { Value: price_variance, Label: 'Price Variance' },
-                { Value: quantity_variance, Label: 'Quantity Variance' },
+                // Both calculated from the lines, both read-only. Price
+                // (rate) variance removed as asked - value and quantity cover
+                // the invoice-against-tickets question without a third figure.
+                { Value: variance_value,   Label: 'Value Variance' },
+                { Value: qty_variance_ltr, Label: 'Qty Variance (LTR)' },
                 { Value: variance_percentage, Label: 'Variance %' },
                 { Value: requires_dual_approval, Label: 'Requires Dual Approval' }
             ]
@@ -464,7 +482,7 @@ annotate InvoiceService.Invoices with @(
 // Field-level annotations
 annotate InvoiceService.Invoices with {
     ID                   @UI.Hidden;
-    invoice_number       @title: 'Invoice Number' @mandatory;
+    invoice_number       @title: 'Supplier Invoice Number' @mandatory;
     internal_number      @title: 'Internal Number';
     invoice_date         @title: 'Invoice Date' @mandatory;
     posting_date         @title: 'Posting Date';
@@ -496,7 +514,7 @@ annotate InvoiceService.Invoices with {
     gate_evaluated_at    @title: 'Gate Evaluated';
 
     match_status         @title: 'Match Status'
-                         @Common.QuickInfo: 'Whether the three-way match succeeded — purchase order, goods receipt and invoice. INDEPENDENT OF THE POSTING GATE, which is what actually blocks posting: an invoice can be MATCHED and still be GATED, because the match succeeded and the validation rules did not. MATCHED does not mean posted. AND THIS VALUE IS NOT RECOMPUTED: FuelSphere does not perform the three-way match — SAP does, at MIRO — so unlike the Posting Gate beside it, this does not change when you run Validate.';
+                         @Common.QuickInfo: 'Calculated from the line items: MATCHED when every line has resolved to a ticket and is within tolerance, QTY_VARIANCE or PRICE_VARIANCE when a band is breached, EXCEPTION when both are, PARTIAL_MATCH when some lines have not resolved or could not be assessed. Calculated and stored when the invoice is saved and whenever it is validated - the moments each line is resolved to its ticket. INDEPENDENT OF THE POSTING GATE, which is what actually blocks posting: an invoice can be MATCHED and still be GATED.';
     price_variance       @title: 'Price Variance' @Measures.ISOCurrency: currency_code;
     quantity_variance    @title: 'Quantity Variance';
     variance_percentage  @title: 'Variance %';
@@ -532,6 +550,13 @@ annotate InvoiceService.InvoiceItems with @(
             Title          : { Value: line_number }
         },
 
+        // The parent invoice's settlement facts are DISPLAY ONLY and belong to
+        // the whole line, so they sit in the object page HEADER rather than in
+        // a section of their own (requested Sep 2026).
+        HeaderFacets: [
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ItemSettlement', Label: 'Invoice & Settlement' }
+        ],
+
         LineItem: [
             // ================================================================
             // WP-37 - THE LINE ITEM LIST VIEW, in the order the spec lists it.
@@ -547,12 +572,12 @@ annotate InvoiceService.InvoiceItems with @(
             // subtract one from the other, which is the defect this whole
             // design exists to prevent.
             // ================================================================
-            { Value: flight_number_v,       Label: 'Flight number',        ![@UI.Importance]: #High },
+            { Value: flight_ID,             Label: 'Flight number',        ![@UI.Importance]: #High },
             { Value: flight_date_v,         Label: 'Flight date',          ![@UI.Importance]: #High },
             { Value: dep_airport,           Label: 'Departure airport',    ![@UI.Importance]: #Medium },
             { Value: arr_airport,           Label: 'Arrival airport',      ![@UI.Importance]: #Medium },
             { Value: flight_status_v,       Label: 'Flight status',        ![@UI.Importance]: #Medium },
-            { Value: vendor_invoice_number, Label: 'Vendor invoice number', ![@UI.Importance]: #High },
+            { Value: vendor_invoice_number, Label: 'Supplier invoice number', ![@UI.Importance]: #High },
             { Value: line_number,           Label: 'Vendor line item',     ![@UI.Importance]: #High },
             { Value: sap_invoice_number_v,  Label: 'SAP invoice number',   ![@UI.Importance]: #Medium },
             { Value: sap_line_number,       Label: 'SAP line item',        ![@UI.Importance]: #Medium },
@@ -622,17 +647,31 @@ annotate InvoiceService.InvoiceItems with @(
             // invoice-views-harness EXIT-12, which fails if the table ever
             // gains a column this page does not show.
             // ================================================================
+            // Section order as requested (Sep 2026): the flight, the ticket
+            // behind the line, what the supplier billed, the two comparisons,
+            // then where a person got to. Invoice & Settlement and Matching
+            // are header-level context and sit at the end.
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'ItemFlight',
                 Label  : 'Flight',
                 Target : '@UI.FieldGroup#ItemFlight'
             },
+            // FuelTickets was exposed on this service for exactly this facet;
+            // its #TicketFuel group is metered x density = kg, which is the
+            // only place on an AP screen where the volume the supplier billed
+            // meets the mass the aircraft received.
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'ItemSettlement',
-                Label  : 'Invoice & Settlement',
-                Target : '@UI.FieldGroup#ItemSettlement'
+                ID     : 'ItemTicket',
+                Label  : 'The fuel behind this line',
+                Target : '@UI.FieldGroup#ItemTicketPick'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'ItemDetails',
+                Label  : 'Item Details',
+                Target : '@UI.FieldGroup#ItemDetails'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -648,12 +687,6 @@ annotate InvoiceService.InvoiceItems with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                ID     : 'ItemDetails',
-                Label  : 'Item Details',
-                Target : '@UI.FieldGroup#ItemDetails'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
                 ID     : 'ItemResolution',
                 Label  : 'Resolution',
                 Target : '@UI.FieldGroup#ItemResolution'
@@ -663,16 +696,6 @@ annotate InvoiceService.InvoiceItems with @(
                 ID     : 'Matching',
                 Label  : 'Matching',
                 Target : '@UI.FieldGroup#ItemMatching'
-            },
-            // The last hop. FuelTickets was exposed on this service for
-            // exactly this facet; its #TicketFuel group is metered x density
-            // = kg, which is the only place on an AP screen where the volume
-            // the supplier billed meets the mass the aircraft received.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'ItemTicket',
-                Label  : 'The fuel behind this line',
-                Target : 'ticket/@UI.FieldGroup#TicketFuel'
             }
         ],
 
@@ -680,7 +703,7 @@ annotate InvoiceService.InvoiceItems with @(
             Data: [
                 { Value: line_number, Label: 'Line Number' },
                 { Value: description, Label: 'Description' },
-                { Value: product.product_name, Label: 'Product' },
+                { Value: product_ID, Label: 'Product' },
                 { Value: quantity, Label: 'Quantity' },
                 { Value: uom_code, Label: 'UoM' },
                 { Value: unit_price, Label: 'Unit Price' },
@@ -1097,7 +1120,6 @@ annotate InvoiceService.FuelTickets with @(
         ],
         FieldGroup #TicketFuel: {
             Data: [
-                { Value: ticket_number,      Label: 'Ticket' },
                 { Value: quantity_metered,   Label: 'Metered' },
                 { Value: uom_code,           Label: 'Unit' },
                 // The conversion, so the mass is explainable rather than
@@ -1357,7 +1379,7 @@ annotate InvoiceService.IdrRuleStatus with @(
 
         LineItem: [
             { Value: check_code,  Label: 'Check', ![@UI.Importance]: #High },
-            { Value: rule.check_name, Label: 'What it checks', ![@UI.Importance]: #High },
+            { Value: check_name_v, Label: 'What it checks', ![@UI.Importance]: #High },
             { Value: check_group, Label: 'Group', ![@UI.Importance]: #Medium },
             { Value: line_number, Label: 'Line', ![@UI.Importance]: #Medium },
             {
@@ -1438,6 +1460,7 @@ annotate InvoiceService.IdrRuleStatus with @(
 // Titles on every field, because a SelectionFields entry carries no inline
 // label and a filter with a technical name is the ui02 finding.
 annotate InvoiceService.IdrRuleStatus with {
+    check_name_v    @title: 'What it checks' @Common.FieldControl: #ReadOnly;
     check_code      @title: 'Check';
     check_group     @title: 'Check Group';
     line_number     @title: 'Line';
@@ -1718,10 +1741,10 @@ annotate InvoiceService.InvoiceItems with {
     ticket_quantity_kg @title: 'Qty, ticket (kg)'
                        @Common.FieldControl: #ReadOnly;
     ticket_rate        @title: 'Rate, ticket (per kg)'
-                       @Measures.ISOCurrency: invoice.currency_code
+                       @Measures.ISOCurrency: currency_v
                        @Common.FieldControl: #ReadOnly;
     ticket_amount      @title: 'Amount, ticket'
-                       @Measures.ISOCurrency: invoice.currency_code
+                       @Measures.ISOCurrency: currency_v
                        @Common.FieldControl: #ReadOnly;
     sap_line_number    @title: 'SAP Line Item';
     // Two axes, two columns - decision Q2, confirmed. Merged only for
@@ -1732,9 +1755,9 @@ annotate InvoiceService.InvoiceItems with {
     // uom_code varies line by line, so no single bracket is true for the
     // column.
     quantity   @Measures.Unit: uom_code;
-    unit_price @Measures.ISOCurrency: invoice.currency_code;
-    net_amount @Measures.ISOCurrency: invoice.currency_code;
-    tax_amount @Measures.ISOCurrency: invoice.currency_code;
+    unit_price @Measures.ISOCurrency: currency_v;
+    net_amount @Measures.ISOCurrency: currency_v;
+    tax_amount @Measures.ISOCurrency: currency_v;
 }
 
 // THE AMOUNTS MOVE, THE QUANTITIES DO NOT. Four money fields and two
@@ -1835,7 +1858,7 @@ annotate InvoiceService.InvoiceItems with {
     dep_airport           @title: 'Departure airport'      @Common.FieldControl: #ReadOnly;
     arr_airport           @title: 'Arrival airport'        @Common.FieldControl: #ReadOnly;
     flight_status_v       @title: 'Flight status'          @Common.FieldControl: #ReadOnly;
-    vendor_invoice_number @title: 'Vendor invoice number'  @Common.FieldControl: #ReadOnly;
+    vendor_invoice_number @title: 'Supplier invoice number'  @Common.FieldControl: #ReadOnly;
     sap_invoice_number_v  @title: 'SAP invoice number'     @Common.FieldControl: #ReadOnly;
     invoice_status_v      @title: 'Invoice status'         @Common.FieldControl: #ReadOnly;
     received_date_v       @title: 'Invoice received date'  @Common.FieldControl: #ReadOnly;
@@ -1845,12 +1868,12 @@ annotate InvoiceService.InvoiceItems with {
     payment_date_v        @title: 'Payment date'           @Common.FieldControl: #ReadOnly;
     inv_qty_kg            @title: 'Qty, invoice (kg)'      @Common.FieldControl: #ReadOnly;
     inv_rate_kg           @title: 'Rate, invoice (per kg)' @Common.FieldControl: #ReadOnly
-                          @Measures.ISOCurrency: invoice.currency_code;
+                          @Measures.ISOCurrency: currency_v;
     total_variance        @title: 'Total variance'         @Common.FieldControl: #ReadOnly
-                          @Measures.ISOCurrency: invoice.currency_code;
+                          @Measures.ISOCurrency: currency_v;
     qty_variance_kg       @title: 'Qty variance (kg)'      @Common.FieldControl: #ReadOnly;
     price_variance        @title: 'Price variance'         @Common.FieldControl: #ReadOnly
-                          @Measures.ISOCurrency: invoice.currency_code;
+                          @Measures.ISOCurrency: currency_v;
     tolerance_breach      @title: 'Tolerance breached on'  @Common.FieldControl: #ReadOnly;
     tolerance_v           @title: 'Tolerance check status' @Common.FieldControl: #ReadOnly;
 };
@@ -1893,7 +1916,7 @@ annotate InvoiceService.Invoices with {
 annotate InvoiceService.InvoiceItems with @(
     UI.FieldGroup #ItemFlight: {
         Data: [
-            { Value: flight_number_v, Label: 'Flight number' },
+            { Value: flight_ID,       Label: 'Flight number' },
             { Value: flight_date_v,   Label: 'Flight date' },
             { Value: dep_airport,     Label: 'Departure airport' },
             { Value: arr_airport,     Label: 'Arrival airport' },
@@ -1906,7 +1929,7 @@ annotate InvoiceService.InvoiceItems with @(
     // Item Details, so it is not repeated.
     UI.FieldGroup #ItemSettlement: {
         Data: [
-            { Value: vendor_invoice_number, Label: 'Vendor invoice number' },
+            { Value: vendor_invoice_number, Label: 'Supplier invoice number' },
             { Value: sap_invoice_number_v,  Label: 'SAP invoice number' },
             { Value: sap_line_number,       Label: 'SAP line item' },
             { Value: invoice_status_v,      Label: 'Invoice status' },
@@ -1952,3 +1975,221 @@ annotate InvoiceService.InvoiceItems with @(
         ]
     }
 );
+
+// ============================================================================
+// THE INVOICE HEADER - what the clerk types, and what the system decides.
+//
+// Each read-only field below is decided by the system, and the comment says
+// by what. A field the system owns that still accepts a keystroke teaches the
+// user that typing into it does something; it does not, and the next save or
+// read silently puts the system's value back.
+// ============================================================================
+annotate InvoiceService.Invoices with {
+    internal_number        @Common.FieldControl: #ReadOnly;   // generated on create
+    due_date               @Common.FieldControl: #ReadOnly;   // invoice date + payment terms
+    status                 @Common.FieldControl: #ReadOnly;   // SUBMITTED on create, then by action
+    approval_status        @Common.FieldControl: #ReadOnly;   // moved by approve / reject only
+    match_status           @Common.FieldControl: #ReadOnly;   // from the line items
+    variance_percentage    @Common.FieldControl: #ReadOnly;
+    requires_dual_approval @Common.FieldControl: #ReadOnly;
+
+    // ONE CURRENCY, PICKED ONCE. Every amount on the page carries
+    // @Measures.ISOCurrency: currency_code, so choosing it here sets the unit
+    // shown against every amount - they cannot drift apart because there is
+    // only one value behind them all.
+    currency_code @Common.ValueList: {
+        Label: 'Currencies',
+        CollectionPath: 'Currencies',
+        Parameters: [
+            { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: currency_code, ValueListProperty: 'currency_code' },
+            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'currency_name' }
+        ]
+    };
+
+    qty_variance_ltr @title: 'Qty Variance (LTR)'  @Common.FieldControl: #ReadOnly;
+    entered_net_v    @title: 'Net - entered'       @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    entered_tax_v    @title: 'Tax - entered'       @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    entered_gross_v  @title: 'Gross - entered'     @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    derived_net      @title: 'Net - from lines'    @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    derived_tax      @title: 'Tax - from lines'    @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    derived_gross    @title: 'Gross - from lines'  @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    net_difference   @title: 'Net difference'      @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+    gross_difference @title: 'Gross difference'    @Common.FieldControl: #ReadOnly @Measures.ISOCurrency: currency_code;
+};
+
+// The supplier's code and name are shown THROUGH the association, so they
+// inherit @mandatory from MASTER_SUPPLIERS and paint an asterisk on fields
+// nobody can type into. Read-only strips it - the same fix the order screens
+// needed for the flight number.
+annotate InvoiceService.Suppliers with {
+    supplier_code @Common.FieldControl: #ReadOnly;
+    supplier_name @Common.FieldControl: #ReadOnly;
+};
+
+// CHECKS THAT FIRED ARE DETECTED, NEVER ENTERED. The table offered Create and
+// Delete: a hand-made exception would read as a finding the checks produced,
+// and deleting one would hide a real finding. Exceptions are cleared by
+// bypass or by re-running the checks, both of which leave a record.
+// SCOPED TO THE INVOICE PAGE, NOT TO THE ENTITIES. Both tables are read-only
+// where they are EMBEDDED in the invoice - a finding the checks wrote is
+// evidence, and pressing Edit on the invoice must not turn it into an input.
+// The entities stay fully editable in their OWN apps, which is where a person
+// works an exception. Navigation restrictions say exactly that: this parent,
+// through this navigation.
+annotate InvoiceService.Invoices with @(
+    Capabilities.NavigationRestrictions.RestrictedProperties: [
+        {
+            NavigationProperty : exceptions,
+            InsertRestrictions : { Insertable: false },
+            UpdateRestrictions : { Updatable: false },
+            DeleteRestrictions : { Deletable: false }
+        },
+        {
+            NavigationProperty : rule_statuses,
+            InsertRestrictions : { Insertable: false },
+            UpdateRestrictions : { Updatable: false },
+            DeleteRestrictions : { Deletable: false }
+        }
+    ]
+);
+
+// ============================================================================
+// THE LINE'S FLIGHT AND TICKET ARE PICKED, NOT TYPED (Sep 2026).
+//
+// Everything on the line page that compares - flight, invoice vs ticket (kg),
+// variance and tolerance - is computed from flight_ID and ticket_ID
+// (srv/lib/invoice-summary.js). Neither could be set on this page, so a new
+// line computed nothing. Both are now F4 pickers; picking a ticket also fills
+// the flight from it (invoice-service.js), and the side effects below re-read
+// the computed fields the moment either changes.
+// ============================================================================
+annotate InvoiceService.InvoiceItems with {
+    flight @(
+        Common: {
+            Label: 'Flight number',
+            Text: flight.flight_number,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Flight',
+                CollectionPath: 'FlightSchedule',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_date' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'status' }
+                ]
+            }
+        }
+    );
+    ticket @(
+        Common: {
+            Label: 'Ticket number',
+            Text: ticket.ticket_number,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Fuel Ticket',
+                CollectionPath: 'FuelTickets',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: ticket_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'ticket_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'quantity_metered' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'uom_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_timestamp' }
+                ]
+            }
+        }
+    );
+    currency_v @title: 'Currency' @Common.FieldControl: #ReadOnly;
+};
+
+annotate InvoiceService.InvoiceItems with @(
+    UI.FieldGroup #ItemTicketPick: {
+        Data: [
+            { Value: ticket_ID,                 Label: 'Ticket number' },
+            { Value: ticket.quantity_metered,   Label: 'Metered' },
+            { Value: ticket.uom_code,           Label: 'Unit' },
+            { Value: ticket.density_value,      Label: 'Density' },
+            { Value: ticket.quantity_kg,        Label: 'Mass (kg)' },
+            { Value: ticket.aircraft_reg,       Label: 'Aircraft' },
+            { Value: ticket.flight_number,      Label: 'Flight' },
+            { Value: ticket.delivery_timestamp, Label: 'Delivered at' }
+        ]
+    },
+
+    // Picking a flight: its date, airports and status.
+    Common.SideEffects #LineFlightPicked: {
+        SourceProperties : [flight_ID],
+        TargetProperties : ['flight_number_v', 'flight_date_v', 'dep_airport', 'arr_airport', 'flight_status_v']
+    },
+    // Picking a ticket: the ticket section, the flight it was for, and every
+    // comparison and variance figure.
+    Common.SideEffects #LineTicketPicked: {
+        SourceProperties : [ticket_ID],
+        TargetEntities   : [ticket, flight],
+        TargetProperties : ['ticket_number', 'resolution_source', 'flight_ID',
+                            'flight_number_v', 'flight_date_v', 'dep_airport', 'arr_airport', 'flight_status_v',
+                            'inv_rate_kg', 'inv_qty_kg', 'ticket_amount', 'ticket_rate', 'ticket_quantity_kg',
+                            'total_variance', 'qty_variance_kg', 'price_variance',
+                            'tolerance_v', 'tolerance_status', 'tolerance_breach']
+    },
+    // The line's own figures feed the same comparison.
+    Common.SideEffects #LineFigures: {
+        SourceProperties : [quantity, uom_code, unit_price, net_amount, tax_amount],
+        TargetProperties : ['inv_rate_kg', 'inv_qty_kg', 'total_variance', 'qty_variance_kg',
+                            'price_variance', 'tolerance_v', 'tolerance_status', 'tolerance_breach']
+    }
+);
+
+// Line numbers are assigned on create (10, 20, 30 ...) - invoice-service.js.
+annotate InvoiceService.InvoiceItems with {
+    line_number @Common.FieldControl: #ReadOnly;
+};
+
+// The line's product, picked from the product master.
+annotate InvoiceService.InvoiceItems with {
+    product @(
+        Common: {
+            Label: 'Product',
+            Text: product.product_name,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Product',
+                CollectionPath: 'Products',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: product_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'product_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'product_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'product_type' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'specification' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'uom_code' }
+                ]
+            }
+        }
+    );
+};
+
+// The cost centre a line is posted to, from the station mapping. The VALUE is
+// the cost centre code itself (not a key), so the picker writes cost_center
+// straight back - the line stores the code, exactly as S/4HANA expects it.
+annotate InvoiceService.InvoiceItems with {
+    cost_center @(
+        title: 'Cost Center',
+        Common: {
+            ValueList: {
+                Label: 'Cost Center',
+                CollectionPath: 'CostCenters',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: cost_center, ValueListProperty: 'cost_center' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'cost_center_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'company_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'profit_center' }
+                ]
+            }
+        }
+    );
+};

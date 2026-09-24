@@ -72,24 +72,25 @@ describe('Tail performance fields', () => {
         out(`${data.value.length} rows: ${overridden} overridden, ${fellBack} fell back to the type`);
     });
 
-    it('EXIT-3  the three new fields are NULL and NOT INVENTED', async () => {
-        // NOT A PASSING TEST DRESSED AS COVERAGE. No source exists in this
-        // repository for a landing weight, a zero-fuel weight or an engine
-        // burn rate — that is the research half of work package B. Seeding
-        // one to fill a field group is what every criterion this week exists
-        // to prevent.
-        //
-        // It SELF-INVALIDATES: the day a real figure arrives this fails and
-        // asks for a criterion that tests the value rather than recording
-        // its absence.
+    it('EXIT-3  MLW is seeded from the TYPE\'s published figure; MZFW and engine burn stay NULL', async () => {
+        // Sep 2026: the Flight Schedule aircraft block was asked to show MLW.
+        // The figures are the manufacturers' published maximum landing
+        // weights for each type (the common variant of it) - the SOURCE is
+        // this table, and a tail whose airframe differs must be overridden on
+        // the tail master. MZFW and engine burn still have no source: NULL.
+        const PUBLISHED_MLW = { B777: 251290, A223: 61000, DH8D: 28009, A321: 77800, A220: 50802,
+                                A350: 207000, A320: 64500, B38M: 69309, A330: 187000, CRJ9: 33340 };
         const { data } = await test.GET(
-            `/odata/v4/master/AircraftRegistrations?$select=registration,${NEW.join(',')}&$top=60`);
-        const populated = data.value.filter(r => NEW.some(f => r[f] != null));
-        assert.deepStrictEqual(populated.map(r => r.registration), [],
-            `${populated.length} tail(s) now carry MLW, MZFW or an engine burn rate. If the figures are `
-          + `REAL, replace this criterion with one that tests them — and record where they came from, as `
-          + `apu_rate_source does. If they were invented to fill a screen, that is the failure this exists to catch.`);
-        out(`${data.value.length} tails, 0 carry MLW / MZFW / engine burn — no source exists yet`);
+            `/odata/v4/master/AircraftRegistrations?$select=registration,aircraft_type_code,${NEW.join(',')}&$top=60`);
+        for (const r of data.value) {
+            const want = PUBLISHED_MLW[r.aircraft_type_code] ?? null;
+            assert.strictEqual(r.mlw_kg == null ? null : Number(r.mlw_kg), want,
+                `${r.registration} (${r.aircraft_type_code}) MLW is not the published type figure`);
+        }
+        const other = data.value.filter(r => NEW.filter(f => f !== 'mlw_kg').some(f => r[f] != null));
+        assert.deepStrictEqual(other.map(r => r.registration), [],
+            'MZFW or an engine burn rate appeared with no source for it');
+        out(`${data.value.length} tails: MLW = published type figure; MZFW / engine burn still null`);
     });
 
     it('EXIT-4  on the MASTER-DATA page, and NOT on the flight card', async () => {

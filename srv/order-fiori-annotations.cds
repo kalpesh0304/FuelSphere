@@ -987,7 +987,7 @@ annotate FuelOrderService.FuelTickets with @(
         SourceProperties : [order_ID],
         // All quoted - see the note on FuelDeliveries' copy above.
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref']
+                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref', 'currency_code']
     },
     // Matches TicketService.FuelTickets' #AmountInputs.
     Common.SideEffects #AmountInputs: {
@@ -1167,7 +1167,6 @@ annotate FuelOrderService.FuelTickets with @(
                 // Density is per uom_code, which is why density_uom sits
                 // beside it: 0.8020 KGL and 802.0 KGM are the same fuel.
                 { Value: density_value, Label: 'Density' },
-                { Value: density_uom, Label: 'Density Unit' },
                 { Value: density_basis, Label: 'Density Basis' },
                 { Value: density_temp_c, Label: 'Density Temperature (C)' },
                 { Value: quantity_kg, Label: 'Canonical Mass (kg)' },
@@ -1817,12 +1816,12 @@ annotate FuelOrderService.FuelTickets with {
     // screen, same per-row control.
     density_value    @Measures.Unit: density_uom  @title: 'Density'
                      @Common.FieldControl: densityFieldControl;
-    density_uom      @title: 'Density Unit'
-                     @Common.FieldControl: densityFieldControl;
+    density_uom      @title: 'Density Unit' @Common.FieldControl: #ReadOnly;   // always KGL
     density_basis    @title: 'Density Basis';
     density_temp_c   @title: 'Density Temperature (°C)';
     quantity_flag    @title: 'Quantity Basis';
-    rate_per_litre   @title: 'Rate (per litre)';
+    rate_per_litre   @title: 'Rate (per litre)' @Measures.ISOCurrency: currency_code;
+    currency_code    @title: 'Currency';
     total_amount     @title: 'Total Amount' @Core.Computed;
 
     // One of the three. The meter's answer to "how much fuel went on".

@@ -59,6 +59,10 @@ service BurnService {
         // ====================================================================
         virtual null as flight_date_v          : Date,
         virtual null as sector                 : String(12),
+        // Departure / arrival airport from the flight schedule (the burn's own
+        // airport associations are not captured). Filled by burn-summary.js.
+        virtual null as departure_airport_v    : String(3),
+        virtual null as arrival_airport_v      : String(3),
         virtual null as dispatch_kg            : Decimal(12,2),
         virtual null as fqis_out_kg            : Decimal(12,2),
         virtual null as fqis_in_kg             : Decimal(12,2),
@@ -142,7 +146,21 @@ service BurnService {
         // association reaches an entity outside this service and renders
         // nothing.
         fuel_ticket     : redirected to FuelTickets,
-        fuel_order      : redirected to FuelOrders
+        fuel_order      : redirected to FuelOrders,
+
+        // THE SAME ROWS IN LITRES - read-time conversions of the kilogram
+        // columns (srv/lib/rob-litres.js). Display only; the ledger is kept
+        // in kilograms.
+        virtual null as density_kgl    : Decimal(6,4),
+        virtual null as qty_l          : Decimal(15,2),
+        virtual null as opening_rob_l  : Decimal(15,2),
+        virtual null as uplift_l       : Decimal(15,2),
+        virtual null as burn_l         : Decimal(15,2),
+        virtual null as adjustment_l   : Decimal(15,2),
+        virtual null as closing_rob_l  : Decimal(15,2),
+        virtual null as max_capacity_l : Decimal(15,2),
+        virtual null as rate_usd_per_l : Decimal(15,4),
+        virtual null as map_usd_per_l  : Decimal(15,4)
     } actions {
         /**
          * Re-Calculate - replay THIS ROW'S AIRCRAFT and restate its ledger.

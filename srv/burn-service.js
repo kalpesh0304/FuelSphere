@@ -10,6 +10,7 @@
  */
 
 const cds = require('@sap/cds');
+const { applyLedgerLitres } = require('./lib/rob-litres');
 const { resolveTail } = require('./lib/tail-resolver');
 const { recalculateTail, lineOrderOf } = require('./lib/rob-recalculate');
 const { applyFlightSummary } = require('./lib/burn-summary');
@@ -48,6 +49,9 @@ async function burnLadder(absPct, asOfDate) {
 module.exports = class BurnService extends cds.ApplicationService {
     async init() {
         const { FuelBurns, ROBLedger, FuelBurnExceptions } = this.entities;
+
+        // The ledger in litres beside its kilograms - srv/lib/rob-litres.js.
+        this.after('READ', ROBLedger, async (data) => { await applyLedgerLitres(data); });
 
         // ====================================================================
         // THE FLIGHT-WISE SUMMARY COLUMNS

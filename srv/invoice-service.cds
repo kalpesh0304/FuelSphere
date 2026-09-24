@@ -137,7 +137,23 @@ service InvoiceService {
         virtual null as total_tkt_qty_kg   : Decimal(15,2),
         virtual null as total_tkt_amount   : Decimal(15,2),
         virtual null as variance_value     : Decimal(15,2),
-        virtual null as tolerance_v        : String(20)
+        virtual null as tolerance_v        : String(20),
+
+        // Three-Way Matching: quantity in LITRES, as asked. The value
+        // variance reuses variance_value above - one figure, not two.
+        virtual null as qty_variance_ltr   : Decimal(15,2),
+
+        // STATED AGAINST DERIVED. The entered figures are copied into
+        // read-only virtuals because one field cannot be an input in Amount
+        // Details and read-only here; the derived ones are the lines' sums.
+        virtual null as entered_net_v      : Decimal(15,2),
+        virtual null as entered_tax_v      : Decimal(15,2),
+        virtual null as entered_gross_v    : Decimal(15,2),
+        virtual null as derived_net        : Decimal(15,2),
+        virtual null as derived_tax        : Decimal(15,2),
+        virtual null as derived_gross      : Decimal(15,2),
+        virtual null as net_difference     : Decimal(15,2),
+        virtual null as gross_difference   : Decimal(15,2)
     } actions {
         /**
          * Check for duplicate invoice
@@ -274,6 +290,11 @@ service InvoiceService {
         virtual null as dep_airport           : String(3),
         virtual null as arr_airport           : String(3),
         virtual null as flight_status_v       : String(20),
+        // The header's currency, read-only on the line. Bound as the amounts'
+        // unit instead of invoice.currency_code: through the association Fiori
+        // renders an EDITABLE currency box on the line, and typing in it tries
+        // to write currency_code onto the invoice from the line (error).
+        virtual null as currency_v            : String(3),
         virtual null as vendor_invoice_number : String(30),
         virtual null as sap_invoice_number_v  : String(16),
         virtual null as invoice_status_v      : String(20),
@@ -447,6 +468,10 @@ service InvoiceService {
     entity IdrRuleStatus as projection on idr.IDR_RULE_STATUS {
         *,
         invoice      : redirected to Invoices,
+        // The check's display name as a READ-ONLY copy. Bound through the
+        // association, the rules table rendered it as an input in edit mode -
+        // and the registry itself stays editable, being configuration.
+        virtual null as check_name_v : String(100),
         invoice_item : redirected to InvoiceItems,
         rule         : redirected to InvoiceCheckRegistry,
         exception    : redirected to InvoiceExceptions,
@@ -561,6 +586,20 @@ service InvoiceService {
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
         uom : redirected to UnitsOfMeasure
+    };
+
+    // The cost centres a line can be posted to - station to cost centre, as
+    // S/4HANA holds it. Read-only: this is master data, maintained elsewhere.
+    @readonly
+    entity CostCenters as projection on db.COST_CENTER_MAPPING {
+        key ID,
+        airport_code,
+        company_code,
+        cost_center,
+        cost_center_name,
+        profit_center,
+        effective_from,
+        effective_to
     };
 
     @readonly

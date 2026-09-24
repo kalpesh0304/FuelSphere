@@ -1637,6 +1637,12 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         // beside the order's. The rate is per litre of uom_code.
         rate_per_litre      : Decimal(15,4);            // Typed from the supplier's paperwork
         total_amount        : Decimal(15,2);            // Derived: rate_per_litre x metered (or claimed) quantity
+        // The currency of rate_per_litre and total_amount. DEFAULTED FROM THE
+        // CONTRACT on the ticket's order (the order's own currency where the
+        // order has no contract) so it is the same currency the order was
+        // priced in, not a second one invented beside it. Editable: the
+        // supplier's paperwork governs where it says otherwise.
+        currency_code       : String(3);
 
         // Timing
         delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket
@@ -2577,7 +2583,7 @@ type ToleranceType : String(20) enum {
  */
 entity INVOICES : cuid, AuditTrail {
         invoice_number      : String(30) @mandatory;      // Supplier invoice number (unique per supplier)
-        internal_number     : String(25);                 // INV-{SUPPLIER}-{DATE}-{SEQ}
+        internal_number     : String(30);                 // INV-{SUPPLIER}-{DATE}-{SEQ} Widened from 25: INV- + an 8-char supplier code + date + seq is 26
 
         // Supplier
         supplier            : Association to MASTER_SUPPLIERS @mandatory;

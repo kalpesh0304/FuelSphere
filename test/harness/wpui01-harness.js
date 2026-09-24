@@ -19,7 +19,7 @@ const out = (s) => process.stdout.write('      ' + s + '\n');
 const ENTITIES = {
     'FuelOrderService.FuelOrders': ['uom_code', 'conversion_density', 'conversion_source', 'ordered_quantity_kg'],
     'FuelOrderService.FuelTickets': ['match_status', 'ticket_source', 'meter_start', 'meter_end',
-        'quantity_metered', 'uom_code', 'density_value', 'density_uom', 'density_basis',
+        'quantity_metered', 'uom_code', 'density_value', 'density_basis',   // density_uom: shown beside the value, always KGL (Sep 2026)
         'density_temp_c', 'quantity_flag', 'quantity_kg', 'batch_coa_ref'],
     'FuelOrderService.FuelDeliveries': ['aircraft_reg', 'uom_code', 'fob_at_arrival_kg', 'fob_before_kg',
         'fob_after_kg', 'fob_delta_kg', 'ground_burn_kg', 'fob_source', 'fob_rounding_kg',

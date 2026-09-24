@@ -81,8 +81,8 @@ function toleranceDisplay(tol, review) {
 }
 
 const LINE_BASE = ['invoice_ID', 'ticket_ID', 'quantity', 'uom_code', 'unit_price',
-                   'net_amount', 'flight_ID', 'ticket_quantity_kg', 'ticket_rate',
-                   'ticket_amount', 'review_status'];
+                   'net_amount', 'tax_amount', 'flight_ID', 'ticket_quantity_kg',
+                   'ticket_rate', 'ticket_amount', 'review_status'];
 
 /**
  * Compute every derived figure for a set of invoice lines.
@@ -94,7 +94,7 @@ const LINE_BASE = ['invoice_ID', 'ticket_ID', 'quantity', 'uom_code', 'unit_pric
  * @param {object[]} lines  rows carrying at least ID
  * @returns {Promise<Map<string, object>>} line ID -> computed figures
  */
-async function computeLines(lines) {
+async function computeLines(lines, opts = {}) {
     const out = new Map();
     const rows = lines.filter(r => r && r.ID);
     if (!rows.length) return out;
@@ -103,7 +103,7 @@ async function computeLines(lines) {
     const base = new Map(rows.map(r => [r.ID, Object.fromEntries(LINE_BASE.map(k => [k, r[k]]))]));
     const gaps = rows.filter(r => LINE_BASE.some(k => r[k] === undefined));
     if (gaps.length) {
-        const stored = await cds.db.run(SELECT.from(ITEMS).columns('ID', ...LINE_BASE)
+        const stored = await cds.db.run(SELECT.from(opts.source || ITEMS).columns('ID', ...LINE_BASE)
             .where({ ID: { in: gaps.map(r => r.ID) } }));
         for (const s of stored) {
             const b = base.get(s.ID);
@@ -212,6 +212,14 @@ async function computeLines(lines) {
         }
         const invRate = (invAmt !== null && invKg) ? invAmt / invKg : null;
 
+        // LITRES on both sides, for the header's Qty Variance (LTR). The
+        // kilogram figures above stay: they are what the line view compares.
+        // Litres need no density - the invoice and the ticket both metered a
+        // volume, and toLitres only normalises gallons and cubic metres - so
+        // this is the one comparison with no conversion in it to argue about.
+        const invL = invQty !== null ? toLitres(invQty, b.uom_code) : null;
+        const tktL = t ? toLitres(t.quantity_metered ?? t.quantity, t.uom_code) : null;
+
         // The three variances. Only where both sides exist - a line that
         // resolved to no ticket has no comparison, and zero would claim one.
         const totalVar = (invAmt !== null && tktAmt !== null) ? invAmt - tktAmt : null;
@@ -276,6 +284,7 @@ async function computeLines(lines) {
             tolerance_v: toleranceDisplay(tol, b.review_status || 'NONE'),
             // raw, for the header rollup
             _invKg: invKg, _invAmt: invAmt, _tktKg: tktKg, _tktAmt: tktAmt,
+            _invL: invL, _tktL: tktL, _tax: num(b.tax_amount),
             _flightId: f ? f.ID : null
         });
     }
@@ -288,13 +297,20 @@ async function computeLines(lines) {
 const STORED_FILL = ['ticket_quantity_kg', 'ticket_rate', 'ticket_amount', 'tolerance_status'];
 
 /** After-READ for InvoiceItems (active and draft). */
-async function applyLineSummary(data) {
+async function applyLineSummary(data, opts = {}) {
     const rows = (Array.isArray(data) ? data : [data]).filter(r => r && r.ID);
     if (!rows.length) return;
-    const computed = await computeLines(rows);
+    const computed = await computeLines(rows, opts);
+    // The header's currency on each line (currency_v) - from the draft header
+    // where the line is a draft, since a new invoice exists only as a draft.
+    const invIds = [...new Set([...computed.values()].map(c => c.invoice_ID).filter(Boolean))];
+    const heads = invIds.length ? await cds.db.run(SELECT.from(opts.headSource || INVS)
+        .columns('ID', 'currency_code').where({ ID: { in: invIds } })) : [];
+    const curById = new Map(heads.map(h => [h.ID, h.currency_code]));
     for (const row of rows) {
         const c = computed.get(row.ID);
         if (!c) continue;
+        row.currency_v = curById.get(c.invoice_ID) || null;
         for (const [k, v] of Object.entries(c)) {
             if (k.startsWith('_') || k === 'invoice_ID' || k === 'resolved') continue;
             if (STORED_FILL.includes(k)) {
@@ -306,14 +322,38 @@ async function applyLineSummary(data) {
     }
 }
 
-/** After-READ for Invoices (active and draft): the header is the sum of its lines. */
-async function applyHeaderSummary(data) {
+/**
+ * After-READ for Invoices (active and draft): the header is the sum of its lines.
+ *
+ * DRAFT-AWARE, and that is the point of the opts. An invoice being created
+ * exists only as a draft, and so do the lines being added to it - reading the
+ * active tables alone left every total blank until the invoice was saved, so
+ * nothing on the page moved as the clerk worked. A draft invoice's lines are
+ * read from the draft table, the same fallback that fixed the order screens.
+ *
+ * @param {object|object[]} data
+ * @param {{draftItems?: object, draftInvoices?: object}} opts  the service's
+ *        .drafts entities; without them drafts read as active (tests, lists)
+ */
+async function applyHeaderSummary(data, opts = {}) {
     const rows = (Array.isArray(data) ? data : [data]).filter(r => r && r.ID);
     if (!rows.length) return;
 
-    // Every line of every invoice on the page, in one read.
-    const lines = await cds.db.run(SELECT.from(ITEMS)
-        .columns('ID', ...LINE_BASE).where({ invoice_ID: { in: rows.map(r => r.ID) } }));
+    // opts.draft from the handler: after-READ rows do not carry IsActiveEntity
+    // yet, so without it every draft read as active and found no lines.
+    const isDraft = (r) => opts.draft === true || r.IsActiveEntity === false;
+    const activeIds = rows.filter(r => !isDraft(r)).map(r => r.ID);
+    const draftIds  = rows.filter(isDraft).map(r => r.ID);
+
+    // Every line of every invoice on the page, from the table it actually lives in.
+    const lines = [];
+    if (activeIds.length) lines.push(...await cds.db.run(SELECT.from(ITEMS)
+        .columns('ID', ...LINE_BASE).where({ invoice_ID: { in: activeIds } })));
+    if (draftIds.length) {
+        const src = opts.draftItems || ITEMS;
+        lines.push(...await cds.db.run(SELECT.from(src)
+            .columns('ID', ...LINE_BASE).where({ invoice_ID: { in: draftIds } })));
+    }
     const computed = await computeLines(lines);
 
     const byInv = new Map();
@@ -322,15 +362,20 @@ async function applyHeaderSummary(data) {
         byInv.get(c.invoice_ID).push(c);
     }
 
-    // The header's own status and dates. Re-read, same $select reason.
-    const heads = await cds.db.run(SELECT.from(INVS)
-        .columns('ID', 'status', 'received_date', 'created_at')
-        .where({ ID: { in: rows.map(r => r.ID) } }));
+    // The header's own figures - re-read for the same $select reason, and
+    // from the draft table where the invoice is a draft.
+    const HEAD = ['ID', 'status', 'received_date', 'created_at',
+                  'net_amount', 'tax_amount', 'gross_amount'];
+    const heads = [];
+    if (activeIds.length) heads.push(...await cds.db.run(SELECT.from(INVS)
+        .columns(...HEAD).where({ ID: { in: activeIds } })));
+    if (draftIds.length && opts.draftInvoices) heads.push(...await cds.db.run(SELECT.from(opts.draftInvoices)
+        .columns(...HEAD).where({ ID: { in: draftIds } })));
     const headById = new Map(heads.map(h => [h.ID, h]));
 
     for (const row of rows) {
         const ls = byInv.get(row.ID) || [];
-        const h = headById.get(row.ID) || {};
+        const h = headById.get(row.ID) || row;
 
         row.total_lines = ls.length;
         row.reconciled_lines = ls.filter(l => l.resolved).length;
@@ -346,9 +391,6 @@ async function applyHeaderSummary(data) {
         row.total_tkt_qty_kg = kg(tktKg);
         row.total_tkt_amount = money(tktAmt);
 
-        // Weighted by the lines that carry BOTH halves of their own ratio -
-        // a line with an amount and no mass would drag the average toward
-        // zero without being a price at all.
         const wi = ls.filter(l => l._invKg && l._invAmt !== null);
         const wiKg = total(wi, l => l._invKg);
         row.wavg_inv_rate = wiKg ? r4(total(wi, l => l._invAmt) / wiKg) : null;
@@ -356,9 +398,35 @@ async function applyHeaderSummary(data) {
         const wtKg = total(wt, l => l._tktKg);
         row.wavg_tkt_rate = wtKg ? r4(total(wt, l => l._tktAmt) / wtKg) : null;
 
-        // Additive with the two totals shown beside it: an unreconciled line's
-        // whole amount IS variance, and the unreconciled count says why.
+        // VALUE VARIANCE: the lines' total price against the tickets' total
+        // price. Additive with the two totals shown beside it.
         row.variance_value = (invAmt !== null && tktAmt !== null) ? money(invAmt - tktAmt) : null;
+
+        // QTY VARIANCE, IN LITRES as asked - invoiced litres less metered
+        // litres. Over the lines that carry BOTH, so an unresolved line does
+        // not report its whole volume as a shortfall.
+        const both = ls.filter(l => l._invL !== null && l._tktL !== null);
+        row.qty_variance_ltr = both.length
+            ? kg(total(both, l => l._invL) - total(both, l => l._tktL)) : null;
+
+        // ---- STATED AGAINST DERIVED ----------------------------------------
+        // Entered = what the clerk typed in Amount Details, off the supplier's
+        // invoice. Derived = what the lines add up to. Shown side by side and
+        // read-only; the difference is the finding. The entered figures are
+        // COPIED into read-only virtuals, because the same field cannot be an
+        // input in one section and read-only in another.
+        const eNet = num(h.net_amount), eTax = num(h.tax_amount), eGross = num(h.gross_amount);
+        const dNet = total(ls, l => l._invAmt);
+        const dTax = total(ls, l => l._tax);
+        const dGross = (dNet !== null || dTax !== null) ? (dNet || 0) + (dTax || 0) : null;
+        row.entered_net_v   = money(eNet);
+        row.entered_tax_v   = money(eTax);
+        row.entered_gross_v = money(eGross);
+        row.derived_net     = money(dNet);
+        row.derived_tax     = money(dTax);
+        row.derived_gross   = money(dGross);
+        row.net_difference   = (eNet !== null && dNet !== null) ? money(eNet - dNet) : null;
+        row.gross_difference = (eGross !== null && dGross !== null) ? money(eGross - dGross) : null;
 
         // One flight if every line agrees, blank otherwise - decision Q1.
         const flightIds = new Set(ls.map(l => l._flightId));
@@ -369,14 +437,19 @@ async function applyHeaderSummary(data) {
         row.arr_airport     = one ? one.arr_airport : null;
         row.flight_status_v = one ? one.flight_status_v : null;
 
-        // EXCEEDED if any line is; WITHIN only if every line was assessed and
-        // held. An unassessed line means the invoice is not fully checked,
-        // and claiming WITHIN over it would be a pass nobody earned.
         const anyOver = ls.some(l => l.tolerance_status === 'EXCEEDED');
         const allIn = ls.length > 0 && ls.every(l => l.tolerance_status === 'WITHIN');
         const tol = anyOver ? 'EXCEEDED' : (allIn ? 'WITHIN' : null);
         if ('tolerance_status' in row && row.tolerance_status == null) row.tolerance_status = tol;
         row.tolerance_v = tol === 'EXCEEDED' ? 'Exceeded' : (tol === 'WITHIN' ? 'Within' : null);
+
+        // MATCH STATUS IS NOT OVERRIDDEN HERE, deliberately. Its colour
+        // (matchingCriticality) is computed in SQL from the STORED value, so
+        // showing a derived status on read painted one status's text in
+        // another's colour - caught by fim-reconcile EXIT-3. It is calculated
+        // and STORED when the invoice is saved or validated instead, which is
+        // also when it becomes knowable: it depends on each line resolving to
+        // its ticket, and resolution happens in those checks.
 
         row.invoice_status_v = statusDisplay(h.status);
         row.received_date_v = h.received_date ||

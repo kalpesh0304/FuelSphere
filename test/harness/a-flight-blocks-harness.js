@@ -163,6 +163,9 @@ describe('A — the flight schedule', () => {
       // measuring this block: nine fields, and the exact form finds eight.
       const bound = [...fg[0].matchAll(/Path="([^"]*)"/g)]
         .map(x => x[1]).filter(x => x.split('/').includes(f));
+      // Sep 2026: MLW was asked for on this block and is now seeded from the
+      // published type figure (tail-performance EXIT-3), so it IS bound.
+      if (f === 'mlw_kg') { assert.ok(bound.length > 0, 'MLW was asked for on the flight\x27s aircraft block'); continue; }
       assert.deepStrictEqual(bound, [],
         `the flight's aircraft block binds ${f}. It is NULL on every tail, so it would render as a `
       + `permanently blank row on an operational page — the exact failure this criterion was written `
@@ -172,13 +175,14 @@ describe('A — the flight schedule', () => {
       `${M}/AircraftRegistrations?$select=registration,mlw_kg,mzfw_kg,engine_burn_rate_kgph&$top=60`);
     assert.ok(nulls.value.length > 0, 'instrument check: no tails read back at all');
     const populated = nulls.value.filter(
-      r => r.mlw_kg != null || r.mzfw_kg != null || r.engine_burn_rate_kgph != null);
+      r => r.mzfw_kg != null || r.engine_burn_rate_kgph != null);
+    assert.ok(nulls.value.some(r => r.mlw_kg != null), 'MLW is seeded and must read back');
     assert.strictEqual(populated.length, 0,
       `${populated.length} tail(s) now carry MLW/MZFW/engine burn — the aircraft block SHOULD gain them `
     + `and this criterion should change to assert they render.`);
     out(`C-FDMO: MTOW ${t.aircraft_type.mtow_kg} (via type), DOW ${t.dry_operating_weight_kg}, `
-      + `cap ${t.fuel_capacity_kg}, APU ${t.apu_burn_rate_kg_hr}; MLW/MZFW/engine burn now EXIST `
-      + `on the tail master, are null on all ${nulls.value.length} tails, and are not bound here`);
+      + `cap ${t.fuel_capacity_kg}, APU ${t.apu_burn_rate_kg_hr}; MLW bound and seeded; MZFW/engine burn `
+      + `null on all ${nulls.value.length} tails and not bound here`);
   });
 
   it('EXIT-7  nothing is COPIED onto the flight', async () => {

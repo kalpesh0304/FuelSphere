@@ -327,7 +327,15 @@ service PlanningService {
                      || ' without a designation of its own'
             else 'No default supplier is designated at ' || origin_airport
                  || ' — orders on this flight are created with an empty supplier for a person to fill in'
-        end as station_designation_note : String(160)
+        end as station_designation_note : String(160),
+
+        // The scheduled times as DATE AND TIME, local standard time. The stored
+        // scheduled_departure / scheduled_arrival are times of day only; the date
+        // is the flight date, and the arrival rolls to the next day when its
+        // time is earlier than the departure's (an overnight sector). Filled
+        // on read by planning-service.js; display only.
+        virtual null as scheduled_departure_lt : String(20),
+        virtual null as scheduled_arrival_lt   : String(20)
     } excluding { fuel_order }
     actions {
         /**

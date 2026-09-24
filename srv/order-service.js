@@ -343,7 +343,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     stored = await SELECT.one.from(req.target)
                         .columns('quantity', 'uom_code', 'quantity_metered',
                                  'density_value', 'density_uom', 'meter_start', 'meter_end',
-                                 'rate_per_litre')
+                                 'rate_per_litre', 'order_ID', 'currency_code')
                         .where({ ID: id }) || {};
                 }
             }
