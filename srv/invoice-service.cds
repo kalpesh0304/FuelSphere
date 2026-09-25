@@ -132,9 +132,9 @@ service InvoiceService {
         virtual null as unreconciled_lines : Integer,
         virtual null as total_inv_amount   : Decimal(15,2),
         virtual null as wavg_inv_rate      : Decimal(15,4),
-        virtual null as total_inv_qty_kg   : Decimal(15,2),
+        virtual null as total_inv_qty_ltr  : Decimal(15,2),
         virtual null as wavg_tkt_rate      : Decimal(15,4),
-        virtual null as total_tkt_qty_kg   : Decimal(15,2),
+        virtual null as total_tkt_qty_ltr  : Decimal(15,2),
         virtual null as total_tkt_amount   : Decimal(15,2),
         virtual null as variance_value     : Decimal(15,2),
         virtual null as tolerance_v        : String(20),
@@ -303,10 +303,12 @@ service InvoiceService {
         virtual null as posting_date_v        : Date,
         virtual null as s4_payment_document_v : String(10),
         virtual null as payment_date_v        : Date,
-        virtual null as inv_qty_kg            : Decimal(15,2),
-        virtual null as inv_rate_kg           : Decimal(15,4),
+        virtual null as inv_qty_ltr           : Decimal(15,2),
+        virtual null as ticket_qty_ltr        : Decimal(15,2),
+        virtual null as ticket_rate_ltr       : Decimal(15,4),
+        virtual null as inv_rate_ltr          : Decimal(15,4),
         virtual null as total_variance        : Decimal(15,2),
-        virtual null as qty_variance_kg       : Decimal(15,2),
+        virtual null as qty_variance_ltr      : Decimal(15,2),
         virtual null as price_variance        : Decimal(15,2),
         virtual null as tolerance_breach      : String(10),
         virtual null as tolerance_v           : String(30)
@@ -586,20 +588,6 @@ service InvoiceService {
     entity Products as projection on db.MASTER_PRODUCTS {
         *,
         uom : redirected to UnitsOfMeasure
-    };
-
-    // The cost centres a line can be posted to - station to cost centre, as
-    // S/4HANA holds it. Read-only: this is master data, maintained elsewhere.
-    @readonly
-    entity CostCenters as projection on db.COST_CENTER_MAPPING {
-        key ID,
-        airport_code,
-        company_code,
-        cost_center,
-        cost_center_name,
-        profit_center,
-        effective_from,
-        effective_to
     };
 
     @readonly

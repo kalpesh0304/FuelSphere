@@ -74,7 +74,7 @@ module.exports = class DeliveryService extends cds.ApplicationService {
                 const id = d.ID || _id(req.params);
                 if (id) {
                     stored = await SELECT.one.from(req.target)
-                        .columns('fob_at_arrival_kg', 'fob_before_kg', 'fob_after_kg')
+                        .columns('fob_at_arrival_kg', 'fob_before_kg', 'fob_after_kg', 'status')
                         .where({ ID: id }) || {};
                 }
             }
@@ -106,6 +106,20 @@ module.exports = class DeliveryService extends cds.ApplicationService {
                 d.delivered_quantity = derived.fob_delta_kg;
                 d.uom_code = MASS_UOM;
             }
+
+            // PENDING UNTIL THE AIRCRAFT HAS BEEN READ, CONFIRMED ONCE IT HAS
+            // (Sep 2026). A delivery raised from a ticket carries the bowser's
+            // figures and nothing from the aircraft; it becomes confirmed when
+            // somebody enters the gauge pair. Only these two statuses are
+            // touched - a delivery a person has already Disputed or Posted
+            // keeps the status they gave it.
+            const both = at('fob_before_kg') !== null && at('fob_before_kg') !== undefined
+                      && at('fob_after_kg')  !== null && at('fob_after_kg')  !== undefined;
+            const current = d.status !== undefined ? d.status : stored.status;
+            if (current === undefined || current === null || current === 'Pending' || current === 'Confirmed') {
+                d.status = both ? 'Confirmed' : 'Pending';
+            }
+
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelDeliveries, FuelDeliveries.drafts], deriveGauge);
 

@@ -218,6 +218,8 @@ annotate TicketService.FuelTickets with @(
         // (order-fiori-annotations.cds) - identical create screen either way.
         FieldGroup #TicketDetails: {
             Data: [
+                { Value: delivery_ID, Label: 'Fuel Delivery' },
+                { Value: create_new_delivery, Label: 'Create new delivery for this ticket' },
                 { Value: ticket_number },
                 { Value: internal_number },
                 { Value: quantity },
@@ -426,3 +428,40 @@ annotate TicketService.FuelTickets with @(
 annotate TicketService.FuelTickets with @(
     Common.SemanticKey: [ ticket_number ]
 );
+
+// ============================================================================
+// WHICH DELIVERY THIS TICKET BELONGS TO (Sep 2026).
+//
+// The first ticket of a flight raises its own delivery and needs neither
+// field. A later one does: the operator either picks a delivery this flight
+// already has, or ticks the box for another. The dropdown is filtered to THIS
+// flight - a delivery on another flight is never the right answer, and an
+// unfiltered list of every delivery in the system invites exactly that error.
+//
+// The checkbox WINS over the dropdown, which srv/lib/ticket-delivery.js states
+// and the label says here, so the screen and the rule cannot disagree.
+// ============================================================================
+annotate TicketService.FuelTickets with {
+    delivery @(
+        Common: {
+            Label: 'Fuel Delivery',
+            Text: delivery.delivery_number,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Deliveries for this flight',
+                CollectionPath: 'FuelDeliveries',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: delivery_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterIn', LocalDataProperty: flight_ID, ValueListProperty: 'flight_ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_date' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_time' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivered_quantity' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'status' }
+                ]
+            }
+        }
+    );
+    create_new_delivery @title: 'Create new delivery for this ticket'
+                        @Common.QuickInfo: 'Ticked, a new delivery is raised for this ticket and whatever is in Fuel Delivery is ignored. Two suppliers fuelling one turnaround are one delivery with two tickets; a separate uplift is a separate delivery, and only the person capturing it can tell which this is.';
+};

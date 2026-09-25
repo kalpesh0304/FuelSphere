@@ -5,18 +5,19 @@
  * on the header view is an aggregate of the line figures below it, computed
  * once here so the two views cannot disagree about the same invoice.
  *
- * KILOGRAMS ON BOTH SIDES - decision Q3. Invoice quantity arrives in the
- * line's uom_code, usually litres; the ticket's comparable figure is mass.
- * The invoice volume is converted at THE TICKET'S OWN density (its mass over
- * its metered litres), because that is the density the fuel was actually
- * delivered at. A planning density would manufacture a variance out of the
- * difference between two densities rather than between two quantities.
+ * LITRES ON BOTH SIDES (Sep 2026, replacing decision Q3's kilograms). Both
+ * documents METER A VOLUME - the invoice in its line's uom_code, the ticket on
+ * the bowser - so litres are what the two actually have in common. Comparing
+ * in kilograms meant converting the invoice at the ticket's density, which put
+ * a density in the middle of every variance: a disagreement about density then
+ * read as a disagreement about quantity. Kilograms are still computed for the
+ * ROB ledger and the ticket's own record, and are not what the screens judge.
  *
  * THE THREE VARIANCES ADD UP, and are defined so that they must:
  *
  *   total   = invoice amount - ticket amount                    money
- *   qty     = invoice kg     - ticket kg                        kg
- *   price   = (invoice rate - ticket rate) x invoice kg         money
+ *   qty     = invoice litres - ticket litres                    litres
+ *   price   = (invoice rate - ticket rate) x invoice litres     money
  *
  *   price + qty x ticket rate = total, exactly.
  *
@@ -210,27 +211,27 @@ async function computeLines(lines, opts = {}) {
                 if (kgPerLitre !== null && iLitres !== null) invKg = iLitres * kgPerLitre;
             }
         }
-        const invRate = (invAmt !== null && invKg) ? invAmt / invKg : null;
-
-        // LITRES on both sides, for the header's Qty Variance (LTR). The
-        // kilogram figures above stay: they are what the line view compares.
-        // Litres need no density - the invoice and the ticket both metered a
-        // volume, and toLitres only normalises gallons and cubic metres - so
-        // this is the one comparison with no conversion in it to argue about.
+        // LITRES ON BOTH SIDES, AND THE COMPARISON IS MADE IN THEM (Sep 2026).
+        // The invoice and the ticket both metered a volume, and toLitres only
+        // normalises gallons and cubic metres, so this comparison carries no
+        // density to argue about. The kilogram figures above stay for the ROB
+        // ledger and the ticket's own record; nothing here is judged on them.
         const invL = invQty !== null ? toLitres(invQty, b.uom_code) : null;
         const tktL = t ? toLitres(t.quantity_metered ?? t.quantity, t.uom_code) : null;
+        const invRateL = (invAmt !== null && invL) ? invAmt / invL : null;
+        const tktRateL = (tktAmt !== null && tktL) ? tktAmt / tktL : null;
 
         // The three variances. Only where both sides exist - a line that
         // resolved to no ticket has no comparison, and zero would claim one.
         const totalVar = (invAmt !== null && tktAmt !== null) ? invAmt - tktAmt : null;
-        const qtyVarKg = (invKg !== null && tktKg !== null) ? invKg - tktKg : null;
-        const priceVar = (invRate !== null && tktRate !== null && invKg !== null)
-            ? (invRate - tktRate) * invKg : null;
+        const qtyVarL = (invL !== null && tktL !== null) ? invL - tktL : null;
+        const priceVar = (invRateL !== null && tktRateL !== null && invL !== null)
+            ? (invRateL - tktRateL) * invL : null;
 
         // Percentages for the tolerance bands - relative to the TICKET, the
         // reference the invoice is being checked against.
-        const qtyPct   = (qtyVarKg !== null && tktKg) ? (qtyVarKg / tktKg) * 100 : null;
-        const pricePct = (invRate !== null && tktRate) ? ((invRate - tktRate) / tktRate) * 100 : null;
+        const qtyPct   = (qtyVarL !== null && tktL) ? (qtyVarL / tktL) * 100 : null;
+        const pricePct = (invRateL !== null && tktRateL) ? ((invRateL - tktRateL) / tktRateL) * 100 : null;
 
         const asOf = String(inv.invoice_date || inv.created_at || '').slice(0, 10) || null;
         const qtyOk   = inBand(await tolerance('QUANTITY', asOf), qtyPct);
@@ -268,15 +269,19 @@ async function computeLines(lines, opts = {}) {
             posting_date_v: inv.posting_date || null,
             s4_payment_document_v: inv.s4_payment_document || null,
             payment_date_v: inv.payment_date || null,
-            // both sides, in the same units
-            inv_qty_kg: kg(invKg),
-            inv_rate_kg: r4(invRate),
+            // both sides, in litres - what the screen compares
+            inv_qty_ltr: kg(invL),
+            inv_rate_ltr: r4(invRateL),
+            ticket_qty_ltr: kg(tktL),
+            ticket_rate_ltr: r4(tktRateL),
+            ticket_amount: money(tktAmt),
+            // the matcher's kilogram snapshot, kept for the ledger and the
+            // ticket's own record rather than for this comparison
             ticket_quantity_kg: kg(tktKg),
             ticket_rate: r4(tktRate),
-            ticket_amount: money(tktAmt),
             // the three variances
             total_variance: money(totalVar),
-            qty_variance_kg: kg(qtyVarKg),
+            qty_variance_ltr: kg(qtyVarL),
             price_variance: money(priceVar),
             // the two axes, and their merge
             tolerance_status: tol,
@@ -381,22 +386,25 @@ async function applyHeaderSummary(data, opts = {}) {
         row.reconciled_lines = ls.filter(l => l.resolved).length;
         row.unreconciled_lines = ls.length - row.reconciled_lines;
 
-        const invKg  = total(ls, l => l._invKg);
+        // LITRES, like the lines beneath (Sep 2026). The kilogram totals came
+        // off this view with the kilogram comparison: two units on one screen
+        // is how a reader ends up comparing one against the other.
+        const invL   = total(ls, l => l._invL);
         const invAmt = total(ls, l => l._invAmt);
-        const tktKg  = total(ls, l => l._tktKg);
+        const tktL   = total(ls, l => l._tktL);
         const tktAmt = total(ls, l => l._tktAmt);
 
-        row.total_inv_qty_kg = kg(invKg);
+        row.total_inv_qty_ltr = kg(invL);
         row.total_inv_amount = money(invAmt);
-        row.total_tkt_qty_kg = kg(tktKg);
+        row.total_tkt_qty_ltr = kg(tktL);
         row.total_tkt_amount = money(tktAmt);
 
-        const wi = ls.filter(l => l._invKg && l._invAmt !== null);
-        const wiKg = total(wi, l => l._invKg);
-        row.wavg_inv_rate = wiKg ? r4(total(wi, l => l._invAmt) / wiKg) : null;
-        const wt = ls.filter(l => l._tktKg && l._tktAmt !== null);
-        const wtKg = total(wt, l => l._tktKg);
-        row.wavg_tkt_rate = wtKg ? r4(total(wt, l => l._tktAmt) / wtKg) : null;
+        const wi = ls.filter(l => l._invL && l._invAmt !== null);
+        const wiL = total(wi, l => l._invL);
+        row.wavg_inv_rate = wiL ? r4(total(wi, l => l._invAmt) / wiL) : null;
+        const wt = ls.filter(l => l._tktL && l._tktAmt !== null);
+        const wtL = total(wt, l => l._tktL);
+        row.wavg_tkt_rate = wtL ? r4(total(wt, l => l._tktAmt) / wtL) : null;
 
         // VALUE VARIANCE: the lines' total price against the tickets' total
         // price. Additive with the two totals shown beside it.

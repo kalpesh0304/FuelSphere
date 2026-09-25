@@ -15,6 +15,8 @@
  */
 
 using { fuelsphere as db } from '../db/schema';
+// Planned / Supplementary, and the order_category it fills - db/order-category.cds.
+using { fuelsphere as cat } from '../db/order-category';
 
 @path: '/odata/v4/orders'
 @impl: './order-service.js'
@@ -238,7 +240,6 @@ service FuelOrderService {
          * automatic triggers on ticket writes cannot be the only entry point.
          * This is also the re-run for an operator who has corrected a reading.
          */
-        action reconcile() returns ReconciliationResult;
 
 
         /**
@@ -476,6 +477,10 @@ service FuelOrderService {
 
     @readonly
     entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
+
+    // Planned or Supplementary - the picker behind FuelOrders.order_category.
+    @readonly
+    entity OrderCategories as projection on cat.ORDER_CATEGORY;
 
     // ========================================================================
     // SERVICE-LEVEL VIEWS

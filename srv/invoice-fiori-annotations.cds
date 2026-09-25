@@ -75,10 +75,10 @@ annotate InvoiceService.Invoices with @(
             { Value: reconciled_lines,    Label: 'Lines reconciled to tickets', ![@UI.Importance]: #Medium },
             { Value: unreconciled_lines,  Label: 'Unreconciled lines', ![@UI.Importance]: #Medium },
             { Value: total_inv_amount,    Label: 'Total amount (invoice)', ![@UI.Importance]: #High },
-            { Value: wavg_inv_rate,       Label: 'Wgt avg rate, invoice (per kg)', ![@UI.Importance]: #Medium },
-            { Value: total_inv_qty_kg,    Label: 'Total qty, invoice (kg)', ![@UI.Importance]: #Medium },
-            { Value: wavg_tkt_rate,       Label: 'Wgt avg rate, ticket (per kg)', ![@UI.Importance]: #Medium },
-            { Value: total_tkt_qty_kg,    Label: 'Total qty, ticket (kg)', ![@UI.Importance]: #Medium },
+            { Value: wavg_inv_rate,       Label: 'Wgt avg rate, invoice (per LTR)', ![@UI.Importance]: #Medium },
+            { Value: total_inv_qty_ltr,   Label: 'Total qty, invoice (LTR)', ![@UI.Importance]: #Medium },
+            { Value: wavg_tkt_rate,       Label: 'Wgt avg rate, ticket (per LTR)', ![@UI.Importance]: #Medium },
+            { Value: total_tkt_qty_ltr,   Label: 'Total qty, ticket (LTR)', ![@UI.Importance]: #Medium },
             { Value: total_tkt_amount,    Label: 'Total amount (ticket)', ![@UI.Importance]: #High },
             { Value: variance_value,      Label: 'Variance, value',    ![@UI.Importance]: #High },
             {
@@ -349,7 +349,6 @@ annotate InvoiceService.Invoices with @(
                 // Generated on create - INV-{supplier}-{date}-{seq}.
                 { Value: internal_number, Label: 'Internal Number' },
                 { Value: invoice_date, Label: 'Invoice Date' },
-                { Value: posting_date, Label: 'Posting Date' },
                 { Value: due_date, Label: 'Due Date' },
                 { Value: payment_terms, Label: 'Payment Terms' },
                 { Value: status, Label: 'Status' }
@@ -450,6 +449,10 @@ annotate InvoiceService.Invoices with @(
             Label: 'S/4HANA Integration',
             Data: [
                 { Value: s4_document_number, Label: 'Invoice Document' },
+                // Stamped by Post to S/4, not typed (Sep 2026): a posting date is
+                // what the posting returns, and a typed one would state a
+                // posting that never happened.
+                { Value: posting_date, Label: 'Posting Date' },
                 { Value: s4_fiscal_year, Label: 'Fiscal Year' },
                 { Value: s4_company_code, Label: 'Company Code' },
                 { Value: fi_posting_status, Label: 'Posting Status' }
@@ -485,7 +488,7 @@ annotate InvoiceService.Invoices with {
     invoice_number       @title: 'Supplier Invoice Number' @mandatory;
     internal_number      @title: 'Internal Number';
     invoice_date         @title: 'Invoice Date' @mandatory;
-    posting_date         @title: 'Posting Date';
+    posting_date         @title: 'Posting Date' @Common.FieldControl: #ReadOnly;
     due_date             @title: 'Due Date';
     baseline_date        @title: 'Baseline Date';
     net_amount           @title: 'Net Amount' @Measures.ISOCurrency: currency_code;
@@ -563,7 +566,7 @@ annotate InvoiceService.InvoiceItems with @(
             //
             // Spec columns FIRST, the existing columns after them. Quantity
             // and rate appear TWICE, deliberately, and are not duplicates:
-            //   - the spec pair (kg, per kg) sits beside the ticket pair so
+            //   - the spec pair (LTR, per LTR) sits beside the ticket pair so
             //     the two can be compared - both in kilograms, decision Q3
             //   - the as-billed pair (Quantity, Unit Price) keeps its own unit
             //     from uom_code, because that is what the supplier invoiced
@@ -598,13 +601,13 @@ annotate InvoiceService.InvoiceItems with @(
             { Value: s4_payment_document_v, Label: 'SAP payment document', ![@UI.Importance]: #Low },
             { Value: payment_date_v,        Label: 'Payment date',         ![@UI.Importance]: #Low },
             { Value: net_amount,            Label: 'Amount (invoice)',     ![@UI.Importance]: #High },
-            { Value: inv_rate_kg,           Label: 'Rate, invoice (per kg)', ![@UI.Importance]: #High },
-            { Value: inv_qty_kg,            Label: 'Qty, invoice (kg)',    ![@UI.Importance]: #High },
+            { Value: inv_rate_ltr,          Label: 'Rate, invoice (per LTR)', ![@UI.Importance]: #High },
+            { Value: inv_qty_ltr,           Label: 'Qty, invoice (LTR)',   ![@UI.Importance]: #High },
             { Value: ticket_amount,         Label: 'Amount (ticket)',      ![@UI.Importance]: #High },
-            { Value: ticket_rate,           Label: 'Rate, ticket (per kg)', ![@UI.Importance]: #High },
-            { Value: ticket_quantity_kg,    Label: 'Qty, ticket (kg)',     ![@UI.Importance]: #High },
+            { Value: ticket_rate_ltr,       Label: 'Rate, ticket (per LTR)', ![@UI.Importance]: #High },
+            { Value: ticket_qty_ltr,        Label: 'Qty, ticket (LTR)',    ![@UI.Importance]: #High },
             { Value: total_variance,        Label: 'Total variance',       ![@UI.Importance]: #High },
-            { Value: qty_variance_kg,       Label: 'Qty variance (kg)',    ![@UI.Importance]: #High },
+            { Value: qty_variance_ltr,      Label: 'Qty variance (LTR)',   ![@UI.Importance]: #High },
             { Value: price_variance,        Label: 'Price variance',       ![@UI.Importance]: #High },
             {
                 Value: tolerance_v,
@@ -676,7 +679,7 @@ annotate InvoiceService.InvoiceItems with @(
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'ItemComparison',
-                Label  : 'Invoice vs Ticket (kg)',
+                Label  : 'Invoice vs Ticket (LTR)',
                 Target : '@UI.FieldGroup#ItemComparison'
             },
             {
@@ -709,9 +712,7 @@ annotate InvoiceService.InvoiceItems with @(
                 { Value: unit_price, Label: 'Unit Price' },
                 { Value: net_amount, Label: 'Net Amount' },
                 { Value: tax_code, Label: 'Tax Code' },
-                { Value: tax_amount, Label: 'Tax Amount' },
-                { Value: cost_center, Label: 'Cost Center' },
-                { Value: gl_account, Label: 'G/L Account' }
+                { Value: tax_amount, Label: 'Tax Amount' }
             ]
         },
 
@@ -1726,21 +1727,19 @@ annotate InvoiceService.InvoiceItems with {
                   ];
     // WP-35. THE UNIT IS IN THE LABEL WHERE IT IS FIXED, AND ONLY THERE.
     //
-    // ticket_quantity_kg and ticket_rate are always kilograms - that is the
-    // whole point of holding them - so the basis goes in the label, in
-    // brackets, where a reader comparing two columns can see it without
-    // opening anything. This is the column that silently disagreed with
-    // FUEL_TICKETS.rate_per_litre; a label that says "per kg" is what stops
-    // the next person reading it as a litre rate.
+    // Sep 2026: THE COMPARISON IS IN LITRES, so these are the litre figures
+    // and the label says so. ticket_quantity_kg and ticket_rate survive as the
+    // matcher's kilogram snapshot and are no longer displayed - two units on
+    // one screen is how a reader ends up comparing one against the other.
     //
     // The CURRENCY is not in the label, deliberately. It varies by invoice,
     // so @Measures.ISOCurrency renders it beside the value where it is
     // actually true - a label reading (USD) would be a lie on a EUR invoice.
     // Same split the file already states above: the currency of an amount is
     // not ambiguous, the unit of a quantity is.
-    ticket_quantity_kg @title: 'Qty, ticket (kg)'
+    ticket_qty_ltr     @title: 'Qty, ticket (LTR)'
                        @Common.FieldControl: #ReadOnly;
-    ticket_rate        @title: 'Rate, ticket (per kg)'
+    ticket_rate_ltr    @title: 'Rate, ticket (per LTR)'
                        @Measures.ISOCurrency: currency_v
                        @Common.FieldControl: #ReadOnly;
     ticket_amount      @title: 'Amount, ticket'
@@ -1822,12 +1821,12 @@ annotate InvoiceService.Invoices with {
     unreconciled_lines @title: 'Unreconciled lines'     @Common.FieldControl: #ReadOnly;
     total_inv_amount   @title: 'Total amount (invoice)' @Common.FieldControl: #ReadOnly
                        @Measures.ISOCurrency: currency_code;
-    wavg_inv_rate      @title: 'Wgt avg rate, invoice (per kg)' @Common.FieldControl: #ReadOnly
+    wavg_inv_rate      @title: 'Wgt avg rate, invoice (per LTR)' @Common.FieldControl: #ReadOnly
                        @Measures.ISOCurrency: currency_code;
-    total_inv_qty_kg   @title: 'Total qty, invoice (kg)' @Common.FieldControl: #ReadOnly;
-    wavg_tkt_rate      @title: 'Wgt avg rate, ticket (per kg)' @Common.FieldControl: #ReadOnly
+    total_inv_qty_ltr  @title: 'Total qty, invoice (LTR)' @Common.FieldControl: #ReadOnly;
+    wavg_tkt_rate      @title: 'Wgt avg rate, ticket (per LTR)' @Common.FieldControl: #ReadOnly
                        @Measures.ISOCurrency: currency_code;
-    total_tkt_qty_kg   @title: 'Total qty, ticket (kg)' @Common.FieldControl: #ReadOnly;
+    total_tkt_qty_ltr  @title: 'Total qty, ticket (LTR)' @Common.FieldControl: #ReadOnly;
     total_tkt_amount   @title: 'Total amount (ticket)'  @Common.FieldControl: #ReadOnly
                        @Measures.ISOCurrency: currency_code;
     variance_value     @title: 'Variance, value'        @Common.FieldControl: #ReadOnly
@@ -1866,12 +1865,12 @@ annotate InvoiceService.InvoiceItems with {
     posting_date_v        @title: 'Invoice posting date'   @Common.FieldControl: #ReadOnly;
     s4_payment_document_v @title: 'SAP payment document'   @Common.FieldControl: #ReadOnly;
     payment_date_v        @title: 'Payment date'           @Common.FieldControl: #ReadOnly;
-    inv_qty_kg            @title: 'Qty, invoice (kg)'      @Common.FieldControl: #ReadOnly;
-    inv_rate_kg           @title: 'Rate, invoice (per kg)' @Common.FieldControl: #ReadOnly
+    inv_qty_ltr           @title: 'Qty, invoice (LTR)'     @Common.FieldControl: #ReadOnly;
+    inv_rate_ltr          @title: 'Rate, invoice (per LTR)' @Common.FieldControl: #ReadOnly
                           @Measures.ISOCurrency: currency_v;
     total_variance        @title: 'Total variance'         @Common.FieldControl: #ReadOnly
                           @Measures.ISOCurrency: currency_v;
-    qty_variance_kg       @title: 'Qty variance (kg)'      @Common.FieldControl: #ReadOnly;
+    qty_variance_ltr      @title: 'Qty variance (LTR)'     @Common.FieldControl: #ReadOnly;
     price_variance        @title: 'Price variance'         @Common.FieldControl: #ReadOnly
                           @Measures.ISOCurrency: currency_v;
     tolerance_breach      @title: 'Tolerance breached on'  @Common.FieldControl: #ReadOnly;
@@ -1946,11 +1945,11 @@ annotate InvoiceService.InvoiceItems with @(
     // the supplier's own unit - that is what a dispute will quote.
     UI.FieldGroup #ItemComparison: {
         Data: [
-            { Value: inv_rate_kg,        Label: 'Rate, invoice (per kg)' },
-            { Value: inv_qty_kg,         Label: 'Qty, invoice (kg)' },
+            { Value: inv_rate_ltr,       Label: 'Rate, invoice (per LTR)' },
+            { Value: inv_qty_ltr,        Label: 'Qty, invoice (LTR)' },
             { Value: ticket_amount,      Label: 'Amount (ticket)' },
-            { Value: ticket_rate,        Label: 'Rate, ticket (per kg)' },
-            { Value: ticket_quantity_kg, Label: 'Qty, ticket (kg)' }
+            { Value: ticket_rate_ltr,    Label: 'Rate, ticket (per LTR)' },
+            { Value: ticket_qty_ltr,     Label: 'Qty, ticket (LTR)' }
         ]
     },
 
@@ -1961,7 +1960,7 @@ annotate InvoiceService.InvoiceItems with @(
     UI.FieldGroup #ItemVariance: {
         Data: [
             { Value: total_variance,  Label: 'Total variance' },
-            { Value: qty_variance_kg, Label: 'Qty variance (kg)' },
+            { Value: qty_variance_ltr, Label: 'Qty variance (LTR)' },
             { Value: price_variance,  Label: 'Price variance' },
             {
                 Value: tolerance_v,
@@ -2056,7 +2055,7 @@ annotate InvoiceService.Invoices with @(
 // ============================================================================
 // THE LINE'S FLIGHT AND TICKET ARE PICKED, NOT TYPED (Sep 2026).
 //
-// Everything on the line page that compares - flight, invoice vs ticket (kg),
+// Everything on the line page that compares - flight, invoice vs ticket (LTR),
 // variance and tolerance - is computed from flight_ID and ticket_ID
 // (srv/lib/invoice-summary.js). Neither could be set on this page, so a new
 // line computed nothing. Both are now F4 pickers; picking a ticket also fills
@@ -2132,14 +2131,14 @@ annotate InvoiceService.InvoiceItems with @(
         TargetEntities   : [ticket, flight],
         TargetProperties : ['ticket_number', 'resolution_source', 'flight_ID',
                             'flight_number_v', 'flight_date_v', 'dep_airport', 'arr_airport', 'flight_status_v',
-                            'inv_rate_kg', 'inv_qty_kg', 'ticket_amount', 'ticket_rate', 'ticket_quantity_kg',
-                            'total_variance', 'qty_variance_kg', 'price_variance',
+                            'inv_rate_ltr', 'inv_qty_ltr', 'ticket_amount', 'ticket_rate_ltr', 'ticket_qty_ltr',
+                            'total_variance', 'qty_variance_ltr', 'price_variance',
                             'tolerance_v', 'tolerance_status', 'tolerance_breach']
     },
     // The line's own figures feed the same comparison.
     Common.SideEffects #LineFigures: {
         SourceProperties : [quantity, uom_code, unit_price, net_amount, tax_amount],
-        TargetProperties : ['inv_rate_kg', 'inv_qty_kg', 'total_variance', 'qty_variance_kg',
+        TargetProperties : ['inv_rate_ltr', 'inv_qty_ltr', 'total_variance', 'qty_variance_ltr',
                             'price_variance', 'tolerance_v', 'tolerance_status', 'tolerance_breach']
     }
 );
@@ -2172,24 +2171,3 @@ annotate InvoiceService.InvoiceItems with {
     );
 };
 
-// The cost centre a line is posted to, from the station mapping. The VALUE is
-// the cost centre code itself (not a key), so the picker writes cost_center
-// straight back - the line stores the code, exactly as S/4HANA expects it.
-annotate InvoiceService.InvoiceItems with {
-    cost_center @(
-        title: 'Cost Center',
-        Common: {
-            ValueList: {
-                Label: 'Cost Center',
-                CollectionPath: 'CostCenters',
-                Parameters: [
-                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: cost_center, ValueListProperty: 'cost_center' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'cost_center_name' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_code' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'company_code' },
-                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'profit_center' }
-                ]
-            }
-        }
-    );
-};

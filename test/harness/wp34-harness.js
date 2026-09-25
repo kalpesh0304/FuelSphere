@@ -84,31 +84,11 @@ describe('WP-34 — ACARS_DERIVED', () => {
         out('fob_before_kg and fob_after_kg left null - a delta is not a pair');
     });
 
-    it('EXIT-2c THE PACKAGE: derived and measured differ on identical figures', async () => {
-        const d = await byNumber(DEL);
-        await call('deriveGaugeReadings', d.ID);
-        const derived = await call('reconcile', d.ID);
-        out(`DERIVED : ${derived.reconStatus}  variance=${derived.reconVarianceKg}  tol=${derived.toleranceKg}  (${derived.toleranceSource})`);
-
-        // The same uplift, the same tickets, recorded as a MEASURED pair.
-        await (await db()).run(UPDATE('fuelsphere.FUEL_DELIVERIES')
-            .set({ fob_source: 'ACARS', fob_before_kg: 2400, fob_after_kg: 5005 })
-            .where({ ID: d.ID }));
-        const measured = await call('reconcile', d.ID);
-        out(`MEASURED: ${measured.reconStatus}  variance=${measured.reconVarianceKg}  tol=${measured.toleranceKg}  (${measured.toleranceSource})`);
-
-        assert.strictEqual(Number(derived.fqisMassKg), 2605, 'derived FQIS mass not reported');
-        assert.strictEqual(Number(measured.fqisMassKg), 2605);
-        assert.strictEqual(Number(derived.reconVarianceKg), 120);
-        assert.strictEqual(Number(measured.reconVarianceKg), 120);
-        // Identical inputs, identical variance, DIFFERENT verdict. That is
-        // the whole defect: without the member both read as the measured row.
-        assert.strictEqual(derived.reconStatus, 'RECONCILED');
-        assert.strictEqual(measured.reconStatus, 'VARIANCE');
-        assert.strictEqual(Number(derived.toleranceKg), 200);
-        assert.strictEqual(Number(measured.toleranceKg), 50);
-        out('same 120 kg: RECONCILED as derived, VARIANCE as measured');
-    });
+    // EXIT-2c WITHDRAWN (Sep 2026). It compared the DERIVED gauge pair with a
+    // measured one THROUGH the per-delivery FOB reconciliation, and that
+    // reconciliation was removed from the product at the user's request. The
+    // derivation itself is still covered by 2a and 2b above; what is gone is
+    // the comparison that consumed it.
 
     it('EXIT-2d a derivation never overwrites a measurement (EPD480)', async () => {
         const d = await byNumber(DEL);

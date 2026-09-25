@@ -33,8 +33,6 @@ const {
 } = require('./lib/fuel-uom');
 const {
     reconcile: reconcileFigures,
-    reconcileDelivery,
-
     resolveTolerance, resolveToleranceFromStore,
     toleranceKg
 } = require('./lib/fob-reconciliation');
@@ -43,6 +41,7 @@ const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-va
 const { createSignatureDocuments } = require('./lib/signature-documents');
 const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
 const { postTicketUplift } = require('./lib/rob-uplift');
+const { ensureDeliveryForTicket } = require('./lib/ticket-delivery');
 const {
     STACK_COMPONENTS,
     PLAN_ACTIVE, PLAN_SUPERSEDED,
@@ -156,7 +155,7 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 const id = d.ID || _id(req.params);
                 if (id) {
                     stored = await SELECT.one.from(req.target)
-                        .columns('fob_at_arrival_kg', 'fob_before_kg', 'fob_after_kg')
+                        .columns('fob_at_arrival_kg', 'fob_before_kg', 'fob_after_kg', 'status')
                         .where({ ID: id }) || {};
                 }
             }
@@ -177,6 +176,18 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 d.delivered_quantity = derived.fob_delta_kg;
                 d.uom_code = 'KG';
             }
+
+            // Same rule as the standalone delivery app: PENDING until the
+            // aircraft gauge pair is entered, CONFIRMED once it is, and a
+            // status a person set by hand is left alone (delivery-service.js).
+            const bothFob = at('fob_before_kg') !== null && at('fob_before_kg') !== undefined
+                         && at('fob_after_kg')  !== null && at('fob_after_kg')  !== undefined;
+            const currentStatus = d.status !== undefined ? d.status : stored.status;
+            if (currentStatus === undefined || currentStatus === null
+                || currentStatus === 'Pending' || currentStatus === 'Confirmed') {
+                d.status = bothFob ? 'Confirmed' : 'Pending';
+            }
+
         };
 
         // Registered on the draft entity as well as the active one, and this
@@ -327,6 +338,95 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         };
         this.before(['CREATE', 'UPDATE', 'PATCH'],
             [FuelTickets, FuelTickets.drafts], populateTicketFromOrder);
+
+        // ====================================================================
+        // THE ORDER FOLLOWS THE DISPATCH PLAN (Sep 2026).
+        //
+        // Pick a flight and the order finds that flight's ACTIVE plan, takes
+        // the uplift the dispatcher requires, and converts it at the density
+        // on the order:
+        //
+        //     required uplift (kg) = dispatch quantity - FOB at departure
+        //     ordered quantity (L) = ordered quantity (kg) / density
+        //
+        // The density is TYPED and starts at the 0.8 standard, so the volume
+        // follows whatever the orderer states rather than a hidden constant.
+        // Where the plan carries neither figure its own required_uplift_kg is
+        // used; where nothing is known the quantities are left ALONE rather
+        // than zeroed - an order for no fuel is not what "unknown" means.
+        // ====================================================================
+        const DEFAULT_DENSITY = 0.8;
+
+        const planUpliftKg = (plan) => {
+            if (!plan) return null;
+            const qty = plan.dispatch_qty_kg ?? plan.block_fuel_kg;
+            const rob = plan.rob_departure_kg;
+            if (qty !== null && qty !== undefined && rob !== null && rob !== undefined) {
+                return Number((Number(qty) - Number(rob)).toFixed(2));
+            }
+            return plan.required_uplift_kg !== null && plan.required_uplift_kg !== undefined
+                ? Number(plan.required_uplift_kg) : null;
+        };
+
+        const deriveOrderQuantities = async (req) => {
+            const d = req.data;
+            const touched = ['flight_ID', 'dispatch_plan_ID', 'conversion_density', 'ordered_quantity_kg'];
+            if (req.event !== 'CREATE' && !touched.some(k => k in d)) return;
+
+            const id = d.ID || _id(req.params);
+            let stored = {};
+            if (id) {
+                stored = await SELECT.one.from(req.target)
+                    .columns('flight_ID', 'dispatch_plan_ID', 'conversion_density',
+                             'conversion_source', 'ordered_quantity_kg', 'uom_code')
+                    .where({ ID: id }) || {};
+            }
+            const at = (f) => (d[f] !== undefined ? d[f] : stored[f]);
+
+            // The density the two quantities are converted at.
+            let density = at('conversion_density');
+            if (density === null || density === undefined || Number(density) <= 0) {
+                density = DEFAULT_DENSITY;
+                d.conversion_density = density;
+                if (!at('conversion_source')) d.conversion_source = 'STANDARD_0.8';
+            }
+
+            // THE FLIGHT'S ACTIVE PLAN, latest version. A superseded plan is
+            // not the plan the aircraft is flying (DSP453).
+            let planId = at('dispatch_plan_ID');
+            const flightId = at('flight_ID');
+            if (flightId && (!planId || 'flight_ID' in d)) {
+                const plan = await SELECT.one.from('fuelsphere.FLIGHT_DISPATCH')
+                    .columns('ID')
+                    .where({ flight_schedule_ID: flightId, plan_status: 'ACTIVE' })
+                    .orderBy('plan_version desc');
+                if (plan) { planId = plan.ID; d.dispatch_plan_ID = planId; }
+            }
+
+            if (planId) {
+                const plan = await SELECT.one.from('fuelsphere.FLIGHT_DISPATCH')
+                    .columns('dispatch_qty_kg', 'rob_departure_kg', 'block_fuel_kg', 'required_uplift_kg')
+                    .where({ ID: planId });
+                const kg = planUpliftKg(plan);
+                if (kg !== null) d.ordered_quantity_kg = kg;
+            }
+
+            // THE VOLUME FOLLOWS THE MASS, AND ONLY WHERE THERE IS ONE.
+            //
+            // A typed quantity is never overwritten: an order raised without a
+            // dispatch plan - a verbal top-up, a manual order - has a quantity
+            // somebody entered and no mass to derive it from. This clause once
+            // read "if kg is not null", and an order whose ordered_quantity_kg
+            // sat at 0 had its quantity silently rewritten to zero, which is
+            // what a submit then refused.
+            const kg = d.ordered_quantity_kg !== undefined ? d.ordered_quantity_kg : stored.ordered_quantity_kg;
+            const typedVolume = d.ordered_quantity !== undefined && d.ordered_quantity !== null;
+            if (!typedVolume && kg !== null && kg !== undefined && Number(kg) > 0) {
+                d.ordered_quantity = Number((Number(kg) / Number(density)).toFixed(2));
+                if (!at('uom_code')) d.uom_code = 'LTR';
+            }
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelOrders, FuelOrders.drafts], deriveOrderQuantities);
 
         // THE SAME DERIVATION THE TICKET APP RUNS, and it was missing here
         // entirely: a ticket added inline to an order landed with a null
@@ -508,13 +608,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
             if (!orderId) return;
             const tickets = await SELECT.from(FuelTickets).where({ order_ID: orderId });
             for (const t of tickets) {
-                // A reason WITH an ID means the uplift landed and only the
-                // inferred burn did not - see the same distinction in
-                // ticket-service.js.
-                const { ID, reason } = await postTicketUplift(t);
-                if (reason) req.info(200, ID
-                    ? `Ticket ${t.ticket_number}: uplift posted to the ROB ledger, but the previous leg's burn was not: ${reason}.`
-                    : `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
+                const { reason } = await postTicketUplift(t);
+                if (reason) req.info(200, `ROB ledger not updated for ticket ${t.ticket_number}: ${reason}.`);
+
+                // The same rule the ticket app follows: the first ticket of a
+                // flight raises its delivery (srv/lib/ticket-delivery.js).
+                const dlv = await ensureDeliveryForTicket(t);
+                if (dlv.created) {
+                    req.info(200, `Fuel delivery ${dlv.delivery_number || 'raised'} created for ticket ${t.ticket_number}.`);
+                } else if (dlv.reason) {
+                    req.info(200, `Ticket ${t.ticket_number}: no delivery attached - ${dlv.reason}.`);
+                }
             }
 
             // The flight variance, for the same reason the uplift is posted
@@ -549,7 +653,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         this.after(['UPDATE'], FuelDeliveries, async (data, req) => {
             const rows = Array.isArray(data) ? data : [data];
             for (const r of rows) if (r && r.ID) {
-                await reconcileDelivery(r.ID);
                 await reconcileFlightForDelivery(r.ID);
             }
         });
@@ -1290,59 +1393,6 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 arrivingFlight: result.arrivingFlight,
                 departingFlight: result.departingFlight,
                 apuCycles: result.apuCycles,
-                evidence: result.evidence
-            };
-        });
-
-        // ====================================================================
-        // FOB RECONCILIATION - WP-17, decisions B2, B5, C-1
-        // ====================================================================
-
-        this.on('reconcile', FuelDeliveries, async (req) => {
-            const delivery = await SELECT.one.from(FuelDeliveries).where({ ID: _id(req.params) });
-            if (!delivery) return req.error(404, 'Delivery not found');
-
-            const result = await reconcileDelivery(delivery.ID);
-            if (!result) return req.error(404, 'Delivery not found');
-
-            // Report the two measured sides and the threshold, not just the
-            // verdict. A status nobody can reproduce is not an audit trail,
-            // and EPD463's exception task needs the figures behind it.
-            const tickets = await SELECT.from(FuelTickets)
-                .columns('quantity_kg').where({ delivery_ID: delivery.ID });
-            const known = tickets.filter(t => t.quantity_kg !== null && t.quantity_kg !== undefined);
-            const meteredKg = known.length === tickets.length && tickets.length
-                ? Number(known.reduce((a, t) => a + Number(t.quantity_kg), 0).toFixed(2))
-                : null;
-            // WP-34. A DERIVED delivery has no gauge pair, so recomputing the
-            // FQIS mass from fob_after minus fob_before reports null for a
-            // figure the reconciliation has just used. The status and the
-            // variance were right and the number beside them was empty.
-            const fqisKg = delivery.fob_source === DERIVED_SOURCE
-                ? (delivery.fob_delta_kg === null || delivery.fob_delta_kg === undefined
-                    ? null : Number(delivery.fob_delta_kg))
-                : ((delivery.fob_before_kg !== null && delivery.fob_before_kg !== undefined
-                    && delivery.fob_after_kg !== null && delivery.fob_after_kg !== undefined)
-                    ? Number((Number(delivery.fob_after_kg) - Number(delivery.fob_before_kg)).toFixed(2))
-                    : null);
-
-            const rule = await resolveToleranceFromStore(delivery.fob_source, {}, delivery.delivery_date);
-            const tol = (rule && meteredKg !== null) ? toleranceKg(rule, meteredKg) : null;
-
-            // C-1: this reports. It does NOT gate anything. The supplier is
-            // paid on metered volume and the dispute runs on its own track;
-            // HOLD_PAYMENT_ON_DISCREPANCY is designed, unbuilt, and defaults
-            // off. No posting path reads recon_status.
-            return {
-                deliveryNumber: delivery.delivery_number,
-                meteredMassKg: meteredKg,
-                fqisMassKg: fqisKg,
-                reconVarianceKg: result.recon_variance_kg,
-                reconStatus: result.recon_status,
-                supplierCount: result.supplier_count,
-                toleranceKg: tol,
-                toleranceSource: rule ? rule.source : null,
-                fobSource: delivery.fob_source,
                 evidence: result.evidence
             };
         });

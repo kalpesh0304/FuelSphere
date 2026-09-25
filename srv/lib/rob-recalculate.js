@@ -188,7 +188,8 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
             //
             // Quantity and value are both SIGNED NEGATIVE, the rate is not:
             // the ledger reads "-2,295 kg at 1.1345 = -2,603.68", which is the
-            // form the signed-off specimen uses. rob-burn.js writes the same
+            // form the signed-off specimen uses. A FLIGHT row recorded from
+            // FUEL_BURNS carries the same
             // signs at posting time, so a replay restates a burn row rather
             // than inverting it.
             const atMap = map === null ? 0 : map;

@@ -340,35 +340,33 @@ it('EXIT-9 — the header total derives from lines, and the three readers still 
     assert.notStrictEqual(seedRow[hdr.indexOf('stated_net_amount')], '',
         'the STATED figure is an input and must be seeded');
 
-    // Blank the derived total, and require the run to put it back.
+    // THE HEADER IS TYPED AND KEPT (Sep 2026, replacing "derived, never
+    // keyed"). The amounts are the SUPPLIER'S statement of the document, so a
+    // validation run no longer overwrites them with the line sums: it reports
+    // the disagreement through INV454 and leaves both figures standing. A run
+    // that quietly rewrote the header made every such invoice agree with
+    // itself and left the check with nothing to find.
+    const typed = 12345.67;
     await (await db()).run(UPDATE('fuelsphere.INVOICES')
-        .set({ net_amount: null, gross_amount: null }).where({ ID: S1 }));
-    const blanked = await invoice(S1);
-    assert.strictEqual(blanked.net_amount, null, 'instrument check: the blanking did not take');
-    out(`  header net_amount blanked to null before the run`);
+        .set({ net_amount: typed, stated_net_amount: typed }).where({ ID: S1 }));
 
-    const before = await invoice(S1);
     const { data } = await validate(S1);
     const after = await invoice(S1);
     const lines = await (await db()).run(SELECT.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: S1 }));
     const sum = K.r2(lines.reduce((a,l)=>a+Number(l.net_amount),0));
-    out(`  ${lines.length} lines sum to ${sum}; header net_amount is now ${after.net_amount}, gross ${after.gross_amount}`);
-    assert.strictEqual(Number(after.net_amount), sum, 'derived, never keyed (INV454)');
-    assert.strictEqual(Number(after.gross_amount), K.r2(sum + Number(after.tax_amount)));
-    assert.strictEqual(Number(before.stated_net_amount), sum, 'this document happens to agree');
+    out(`  ${lines.length} lines sum to ${sum}; the header still states ${after.net_amount}`);
+    assert.notStrictEqual(sum, typed, 'instrument check: the two must differ for this to prove anything');
+    assert.strictEqual(Number(after.net_amount), typed,
+        'the run overwrote the header - the typed figure must survive it');
 
-    // and a document that DISAGREES is overridden, with the disagreement recorded
+    const e = data.exceptions.find(x => x.checkCode === 'INV454');
+    out(`  ${e ? e.checkCode + ' ' + e.severity + ' raised' : 'NO INV454'} on the disagreement`);
+    assert.ok(e, 'a header that disagrees with its lines must raise INV454');
+
+    // Put the document back as the seed had it.
     await (await db()).run(UPDATE('fuelsphere.INVOICES')
-        .set({ stated_net_amount: 99999.99 }).where({ ID: S1 }));
-    const dis = await validate(S1);
-    const row = await invoice(S1);
-    const e = dis.data.exceptions.find(x => x.checkCode === 'INV454');
-    out(`  stated 99999.99 vs derived ${row.net_amount}: ${e.checkCode} ${e.severity} raised, header holds ${row.net_amount}`);
-    assert.ok(e, 'INV454 is raised');
-    assert.strictEqual(Number(row.net_amount), sum, 'THE DERIVED FIGURE GOVERNS — the stated one is overridden');
-    assert.strictEqual(Number(row.stated_net_amount), 99999.99, 'and the stated one is retained as evidence');
-    await (await db()).run(UPDATE('fuelsphere.INVOICES')
-        .set({ stated_net_amount: sum }).where({ ID: S1 }));
+        .set({ net_amount: sum, stated_net_amount: sum }).where({ ID: S1 }));
+    await validate(S1);
 
     // the three readers. All in invoice-fiori-annotations.cds, all display-only.
     const fs = require('fs');

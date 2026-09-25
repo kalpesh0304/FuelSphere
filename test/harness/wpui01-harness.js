@@ -21,9 +21,8 @@ const ENTITIES = {
     'FuelOrderService.FuelTickets': ['match_status', 'ticket_source', 'meter_start', 'meter_end',
         'quantity_metered', 'uom_code', 'density_value', 'density_basis',   // density_uom: shown beside the value, always KGL (Sep 2026)
         'density_temp_c', 'quantity_flag', 'quantity_kg', 'batch_coa_ref'],
-    'FuelOrderService.FuelDeliveries': ['aircraft_reg', 'uom_code', 'fob_at_arrival_kg', 'fob_before_kg',
-        'fob_after_kg', 'fob_delta_kg', 'ground_burn_kg', 'fob_source', 'fob_rounding_kg',
-        'recon_variance_kg', 'recon_status', 'supplier_count', 'delivery_method'],
+    'FuelOrderService.FuelDeliveries': ['aircraft_reg', 'uom_code', 'fob_before_kg',
+        'fob_after_kg', 'fob_delta_kg', 'fob_source', 'delivery_method'],
     'MasterDataService.AircraftRegistrations': ['registration', 'aircraft_type_code', 'record_status',
         'dry_operating_weight_kg', 'fuel_capacity_kg', 'apu_burn_rate_kg_hr',
         'performance_factor_pct', 'provisional_expiry', 'on_own_aoc']
@@ -144,7 +143,8 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
             assert.ok(withCrit.length, `${entity}: ${field} has no Criticality anywhere`);
             return withCrit;
         };
-        check('FuelOrderService.FuelDeliveries', 'recon_status');
+        // recon_status is no longer rendered anywhere - the FOB
+        // reconciliation was removed - so its criticality is not asserted.
         check('FuelOrderService.FuelTickets', 'match_status');
         check('MasterDataService.AircraftRegistrations', 'record_status');
     });
@@ -154,7 +154,7 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
         // annotated and the screen rendering plain. Check the emitted EDMX.
         const r = await test.GET('/odata/v4/orders/$metadata');
         const edmx = r.data;
-        for (const [status, positive] of [['recon_status', 'RECONCILED'], ['match_status', 'MATCHED']]) {
+        for (const [status, positive] of [['match_status', 'MATCHED']]) {
             const i = edmx.indexOf(`<Path>${status}</Path>`);
             assert.ok(i > 0, `${status} appears in no dynamic expression in the metadata`);
             const window = edmx.slice(i - 400, i + 900);
@@ -184,12 +184,7 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
         const derived = [
             ['FuelOrderService.FuelTickets', 'quantity_kg'],
             ['FuelOrderService.FuelDeliveries', 'fob_delta_kg'],
-            ['FuelOrderService.FuelDeliveries', 'ground_burn_kg'],
-            ['FuelOrderService.FuelDeliveries', 'recon_variance_kg'],
-            ['FuelOrderService.FuelDeliveries', 'recon_status'],
-            ['FuelOrderService.FuelDeliveries', 'supplier_count'],
             ['FuelOrderService.FuelOrders', 'ordered_quantity_kg'],
-            ['FuelOrderService.FuelOrders', 'conversion_density'],
             ['FuelOrderService.FuelOrders', 'conversion_source']
         ];
         // @Common.FieldControl: #ReadOnly compiles to { '#': 'ReadOnly' },
@@ -206,22 +201,24 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
             'an entered field must stay editable, or read-only means nothing');
     });
 
-    it('a variance never appears without its verdict beside it', async () => {
-        const li = cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.LineItem'];
-        const names = li.map(r => (r.Value && r.Value['=']) || null);
-        const iVar = names.indexOf('recon_variance_kg');
-        const iSt  = names.indexOf('recon_status');
-        const iSrc = names.indexOf('fob_source');
-        out(`LineItem order: ... ${names.slice(Math.min(iSt, iVar) - 1, iSrc + 1).join(' | ')} ...`);
-        assert.ok(iVar >= 0 && iSt >= 0, 'both must be on the list');
-        assert.strictEqual(Math.abs(iVar - iSt), 1, 'status and variance must be adjacent columns');
-        assert.strictEqual(Math.abs(iSrc - iVar), 1, 'the source that set the threshold sits with them');
-
-        const g = cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.FieldGroup#Reconciliation.Data'];
-        assert.ok(g, 'FieldGroup#Reconciliation missing');
+    it('the gauge pair and the uplift derived from it stay together', async () => {
+        // REPLACES "a variance never appears without its verdict beside it"
+        // (Sep 2026). That criterion was about the FOB reconciliation triple -
+        // verdict, figure, threshold source - which the product no longer has.
+        // The reasoning survives for what is left: a derived figure must sit
+        // with the readings it was derived from, or a reader cannot check it.
+        const g = cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.FieldGroup#AircraftGauge.Data']
+            || (cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.FieldGroup#AircraftGauge'] || {}).Data;
+        assert.ok(g, 'FieldGroup#AircraftGauge missing');
         const gn = g.map(r => (r.Value && r.Value['=']) || null);
-        out(`FieldGroup#Reconciliation: ${gn.join(', ')}`);
-        assert.ok(gn.includes('recon_status') && gn.includes('recon_variance_kg') && gn.includes('fob_source'),
-            'the object page group must carry the verdict, the figure and the threshold source');
+        out('FieldGroup#AircraftGauge: ' + gn.join(', '));
+        for (const f of ['fob_source', 'fob_before_kg', 'fob_after_kg', 'fob_delta_kg']) {
+            assert.ok(gn.includes(f), f + ' is not on the gauge group');
+        }
+        for (const gone of ['fob_at_arrival_kg', 'ground_burn_kg', 'fob_rounding_kg']) {
+            assert.ok(!gn.includes(gone), gone + ' was asked to come off this section');
+        }
+        const iBefore = gn.indexOf('fob_before_kg'), iAfter = gn.indexOf('fob_after_kg');
+        assert.strictEqual(Math.abs(iAfter - iBefore), 1, 'the two readings are a PAIR and read as one');
     });
 });

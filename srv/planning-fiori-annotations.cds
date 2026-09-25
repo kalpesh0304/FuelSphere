@@ -238,7 +238,7 @@ annotate PlanningService.FlightDispatches with @(
             { Value: plan_status,        Label: 'Status',         ![@UI.Importance]: #High },
             { Value: block_fuel_kg,      Label: 'Block (kg)',     ![@UI.Importance]: #High },
             { Value: required_uplift_kg, Label: 'Uplift (kg)',    ![@UI.Importance]: #High },
-            { Value: rob_departure_kg,   Label: 'ROB Dep (kg)',   ![@UI.Importance]: #Medium },
+            { Value: rob_departure_kg,   Label: 'FOB Dep (kg)',   ![@UI.Importance]: #Medium },
             { Value: alternate_airport,  Label: 'Alternate',      ![@UI.Importance]: #Medium },
             { Value: tail_number,        Label: 'Tail',           ![@UI.Importance]: #Medium },
             { Value: dispatch_source,    Label: 'Source',         ![@UI.Importance]: #Low },
@@ -256,7 +256,7 @@ annotate PlanningService.FlightDispatches with {
     plan_status         @title: 'Status';
     block_fuel_kg       @title: 'Block Fuel (kg)';
     required_uplift_kg  @title: 'Required Uplift (kg)';
-    rob_departure_kg    @title: 'ROB at Departure (kg)';
+    rob_departure_kg    @title: 'FOB at Departure (kg)';
     alternate_airport   @title: 'Alternate';
     tail_number         @title: 'Tail';
     dispatch_source     @title: 'Source';
@@ -292,7 +292,6 @@ annotate PlanningService.FuelOrders with @(
             { Value: order_number,     Label: 'Order Number',  ![@UI.Importance]: #High },
             { Value: station_code,     Label: 'Station',       ![@UI.Importance]: #High },
             { Value: ordered_quantity, Label: 'Quantity',      ![@UI.Importance]: #High },
-            { Value: total_amount,     Label: 'Total',         ![@UI.Importance]: #Medium },
             { Value: currency_code,    Label: 'Currency',      ![@UI.Importance]: #Low },
             { Value: status,           Label: 'Status',        ![@UI.Importance]: #High },
             { Value: requested_date,   Label: 'Requested',     ![@UI.Importance]: #Medium },
@@ -1157,7 +1156,7 @@ annotate PlanningService.FlightDispatches with @(
         { Value: contingency_pct_of_trip, Label: '% of trip' },
         { Value: block_fuel_kg,       Label: 'Block (kg)' },
         { Value: dispatch_qty_kg,     Label: 'Dispatch (kg)' },
-        { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' },
+        { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' },
         // Row-level cross-app navigation: standard UI.LineItem pattern, not
         // an OVP-specific mechanism. Renders as a link within the row,
         // resolved via the shared ID (same underlying table row on
@@ -1687,7 +1686,7 @@ annotate PlanningService.FlightDispatches with @(
                 { Value: extra_fuel_kg,       Label: 'Extra — commander (kg)' },
                 { Value: block_fuel_kg,       Label: 'Block = sum of the seven (kg)' },
                 { Value: dispatch_qty_kg,     Label: 'Dispatch quantity, confirmed (kg)' },
-                { Value: rob_departure_kg,    Label: 'ROB at departure (kg)' }
+                { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' }
             ]
         },
         FieldGroup#DispatchWhere: {
@@ -1708,7 +1707,7 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryWhat',
               Target: '@UI.FieldGroup#DeliveryWhat',  Label: 'The delivery' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryGauge',
-              Target: '@UI.FieldGroup#AircraftGauge', Label: 'Aircraft gauge (FQIS)' },
+              Target: '@UI.FieldGroup#AircraftGauge', Label: 'Aircraft gauge (FOB)' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryRefuelWindow',
               Target: '@UI.FieldGroup#RefuelWindow',  Label: 'Refuelling window' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryRecon',
@@ -1891,7 +1890,7 @@ annotate PlanningService.FlightDispatches with {
     block_fuel_kg      @title: 'Block Fuel (kg)'
                        @Common.QuickInfo: 'The sum of the seven components. Derived, never keyed - DSP450. The dispatcher-confirmed dispatch quantity should equal it.';
     required_uplift_kg @title: 'Required Uplift (kg)';
-    rob_departure_kg   @title: 'ROB at Departure (kg)'
+    rob_departure_kg   @title: 'FOB at Departure (kg)'
                        @Common.QuickInfo: 'Documented as remaining on board at chocks-off, which is AFTER uplift. Four of eleven rows follow that and equal block fuel; the other seven carry a pre-uplift figure instead. Do not subtract it from block - D57.';
 
     // ---- THE SEVEN, EACH SAYING WHAT DISTINGUISHES IT -------------------

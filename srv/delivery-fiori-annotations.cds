@@ -113,8 +113,8 @@ annotate DeliveryService.FuelDeliveries with @(
     // The delivered quantity IS the gauge uplift, so typing either reading
     // has to re-read it - and the two derived gauge figures beside it.
     Common.SideEffects #GaugeReadings: {
-        SourceProperties : [fob_before_kg, fob_after_kg, fob_at_arrival_kg],
-        TargetProperties : ['delivered_quantity', 'uom_code', 'fob_delta_kg', 'ground_burn_kg']
+        SourceProperties : [fob_before_kg, fob_after_kg],
+        TargetProperties : ['delivered_quantity', 'uom_code', 'fob_delta_kg', 'status']
     }
 );
 
@@ -131,7 +131,6 @@ annotate DeliveryService.FuelDeliveries with @(
             aircraft_reg,
             order_ID,
             status,
-            recon_status,
             delivery_date
         ],
 
@@ -151,7 +150,6 @@ annotate DeliveryService.FuelDeliveries with @(
                     { $If: [ { $In: [{ $Path: 'status' }, ['Verified', 'Posted']] }, 3, 2 ] } ] } },
                 ![@UI.Importance]: #High
             },
-            { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #Medium },
             { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
             {
                 Value: flight_variance_status,
@@ -170,8 +168,7 @@ annotate DeliveryService.FuelDeliveries with @(
             { $Type: 'UI.ReferenceFacet', ID: 'AircraftOrder',       Target: '@UI.FieldGroup#AircraftOrder',       Label: 'Aircraft & Fuel Order' },
             { $Type: 'UI.ReferenceFacet', ID: 'DeliveryDetails',     Target: '@UI.FieldGroup#DeliveryDetails',     Label: 'Delivery Details' },
             { $Type: 'UI.ReferenceFacet', ID: 'QualityMeasurements', Target: '@UI.FieldGroup#QualityMeasurements', Label: 'Quality Measurements' },
-            { $Type: 'UI.ReferenceFacet', ID: 'AircraftGauge',       Target: '@UI.FieldGroup#AircraftGauge',       Label: 'Aircraft Gauge (FQIS)' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Reconciliation',      Target: '@UI.FieldGroup#Reconciliation',      Label: 'FOB Reconciliation' },
+            { $Type: 'UI.ReferenceFacet', ID: 'AircraftGauge',       Target: '@UI.FieldGroup#AircraftGauge',       Label: 'Aircraft Gauge (FOB)' },
             { $Type: 'UI.ReferenceFacet', ID: 'FlightVariance',      Target: '@UI.FieldGroup#FlightVariance',      Label: 'Variance' }
         ],
 
@@ -218,25 +215,16 @@ annotate DeliveryService.FuelDeliveries with @(
             ]
         },
 
+        // Sep 2026: the arrival reading, the ground burn and the rounding
+        // allowance came off this section with the FOB reconciliation that
+        // consumed them. What is left is the pair a person enters and the
+        // uplift derived from it.
         FieldGroup #AircraftGauge: {
             Data: [
                 { Value: fob_source },
-                { Value: fob_at_arrival_kg },
                 { Value: fob_before_kg },
-                { Value: ground_burn_kg },
                 { Value: fob_after_kg },
-                { Value: fob_delta_kg },
-                { Value: fob_rounding_kg }
-            ]
-        },
-
-        FieldGroup #Reconciliation: {
-            Data: [
-                { Value: recon_status },
-                { Value: recon_variance_kg },
-                { Value: fob_source },
-                { Value: fob_delta_kg },
-                { Value: supplier_count }
+                { Value: fob_delta_kg }
             ]
         },
 
@@ -308,11 +296,11 @@ annotate DeliveryService.FuelDeliveries with {
     temperature            @title: 'Temperature (C)';
     density                @title: 'Density (kg/L)';
     temperature_corrected_qty @title: 'Corrected Qty (kg)';
-    fob_source              @title: 'FQIS Reading Source';
+    fob_source              @title: 'FOB Reading Source';
     fob_at_arrival_kg       @title: 'FOB at Arrival (kg)';
     fob_before_kg           @title: 'FOB Before Uplift (kg)';
     fob_after_kg            @title: 'FOB After Uplift (kg)';
-    fob_delta_kg            @title: 'FQIS Uplift (kg)' @Common.FieldControl: #ReadOnly;
+    fob_delta_kg            @title: 'FOB Uplift (kg)' @Common.FieldControl: #ReadOnly;
     ground_burn_kg          @title: 'Ground Burn (kg)' @Common.FieldControl: #ReadOnly;
     fob_rounding_kg         @title: 'Reading Rounding (kg)';
     recon_status            @title: 'Reconciliation Status' @Common.FieldControl: #ReadOnly;

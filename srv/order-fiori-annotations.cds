@@ -201,6 +201,7 @@ annotate FuelOrderService.FuelOrders with @(
         FieldGroup#OrderDetails: {
             Label: 'Order Details',
             Data: [
+                { Value: order_category, Label: 'Order Type' },
                 { Value: order_number, Label: 'Order Number' },
                 { Value: requested_date, Label: 'Requested Date' },
                 { Value: requested_time, Label: 'Requested Time' },
@@ -236,7 +237,7 @@ annotate FuelOrderService.FuelOrders with @(
             Data: [
                 { Value: product.product_name, Label: 'Fuel Product' },
                 { Value: product.specification, Label: 'Specification' },
-                { Value: ordered_quantity, Label: 'Ordered Quantity' },
+                { Value: ordered_quantity, Label: 'Ordered Quantity (LTR)' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 // WP-11 / decision A2. Planning is in kilograms and the order
                 // is in volume, so the order carries the mass it was
@@ -244,7 +245,7 @@ annotate FuelOrderService.FuelOrders with @(
                 // row supplied it. Shown together because the three only mean
                 // anything as a set: they exist so the conversion can be
                 // reproduced from the order alone.
-                { Value: ordered_quantity_kg, Label: 'Planned Mass (kg)' },
+                { Value: ordered_quantity_kg, Label: 'Ordered Quantity (kg)' },
                 { Value: conversion_density, Label: 'Conversion Density' },
                 { Value: conversion_source, Label: 'Density Source' },
 
@@ -695,15 +696,6 @@ annotate FuelOrderService.FuelDeliveries with @(
             // fob_source belongs with them because it is what set the
             // threshold - the same variance is a pass on a crew reading and a
             // failure on an ACARS one.
-            {
-                Value: recon_status,
-                Label: 'Reconciliation',
-                Criticality: { $edmJson: { $If: [
-                    { $Eq: [{ $Path: 'recon_status' }, 'RECONCILED'] }, 3,
-                    { $If: [ { $Eq: [{ $Path: 'recon_status' }, 'VARIANCE'] }, 1, 2 ] } ] } },
-                ![@UI.Importance]: #High
-            },
-            { Value: recon_variance_kg, Label: 'Recon Variance (kg)', ![@UI.Importance]: #High },
             { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
             {
                 Value: flight_variance_status,
@@ -713,7 +705,7 @@ annotate FuelOrderService.FuelDeliveries with @(
                     { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } },
                 ![@UI.Importance]: #Medium
             },
-            { Value: fob_source, Label: 'FQIS Source', ![@UI.Importance]: #Medium },
+            { Value: fob_source, Label: 'FOB Source', ![@UI.Importance]: #Medium },
 
             { Value: aircraft_reg, Label: 'Aircraft Reg', ![@UI.Importance]: #High },
             { Value: s4_gr_number, Label: 'GR Number', ![@UI.Importance]: #Low },
@@ -754,12 +746,7 @@ annotate FuelOrderService.FuelDeliveries with @(
             {
                 $Type  : 'UI.ReferenceFacet',
                 Target : '@UI.FieldGroup#AircraftGauge',
-                Label  : 'Aircraft Gauge (FQIS)'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#Reconciliation',
-                Label  : 'FOB Reconciliation'
+                Label  : 'Aircraft Gauge (FOB)'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -826,44 +813,19 @@ annotate FuelOrderService.FuelDeliveries with @(
         // to the refuelling event: one pair per event however many bowsers
         // were used. Kilograms unconditionally - a gauge reports mass.
         FieldGroup#AircraftGauge: {
-            Label: 'Aircraft Gauge (FQIS)',
+            Label: 'Aircraft Gauge (FOB)',
             Data: [
                 { Value: fob_source, Label: 'Reading Source' },
                 // Two arrival readings, not one. Ground time sits between
                 // them, so they are shown together or the difference between
                 // them looks like an error rather than a measurement.
-                { Value: fob_at_arrival_kg, Label: 'FOB at Arrival (kg)' },
                 { Value: fob_before_kg, Label: 'FOB Before Uplift (kg)' },
-                { Value: ground_burn_kg, Label: 'Ground Burn (kg)' },
                 { Value: fob_after_kg, Label: 'FOB After Uplift (kg)' },
-                { Value: fob_delta_kg, Label: 'FQIS Uplift (kg)' },
-                { Value: fob_rounding_kg, Label: 'Reading Rounding (kg)' }
+                { Value: fob_delta_kg, Label: 'FOB Uplift (kg)' }
             ]
         },
 
-        // WP-17 / decisions B5 and C-1.
-        FieldGroup#Reconciliation: {
-            Label: 'FOB Reconciliation',
-            Data: [
-                {
-                    Value: recon_status,
-                    Label: 'Reconciliation Status',
-                    Criticality: { $edmJson: { $If: [
-                        { $Eq: [{ $Path: 'recon_status' }, 'RECONCILED'] }, 3,
-                        { $If: [ { $Eq: [{ $Path: 'recon_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
-                },
-                { Value: recon_variance_kg, Label: 'Variance (kg)' },
-                // The source is in this group because it is what set the
-                // threshold the variance was judged against.
-                { Value: fob_source, Label: 'Threshold Source (FQIS)' },
-                { Value: fob_delta_kg, Label: 'FQIS Uplift (kg)' },
-                // Attribution requires exactly one. Two suppliers on one gauge
-                // pair produce a figure belonging to neither.
-                { Value: supplier_count, Label: 'Suppliers on this Refuelling' }
-            ]
-        },
-
-        // VARIANCE - the flight-level comparison, in its own section.
+         // VARIANCE - the flight-level comparison, in its own section.
         // Identical to DeliveryService.FuelDeliveries' #FlightVariance, field
         // for field; the reasoning for keeping it out of #Reconciliation above
         // is written out there.
@@ -1107,12 +1069,6 @@ annotate FuelOrderService.FuelTickets with @(
             // the gauge. The order and aircraft drill-ins that used to sit
             // beside this were removed - redundant with the Fuel Order &
             // Flight facet above, which already shows both.
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'TicketDelivery',
-                Target : 'delivery/@UI.FieldGroup#Reconciliation',
-                Label  : 'Delivery Reconciliation'
-            }
         ],
 
         // Order, flight and aircraft together - all three read-only here,
@@ -1496,7 +1452,7 @@ annotate FuelOrderService.FlightDispatches with @(
             // rather than one level down.
             { Value: block_fuel_kg, Label: 'Block Fuel (kg)', ![@UI.Importance]: #High },
             { Value: required_uplift_kg, Label: 'Required Uplift (kg)', ![@UI.Importance]: #High },
-            { Value: rob_departure_kg, Label: 'ROB Departure (kg)', ![@UI.Importance]: #Medium },
+            { Value: rob_departure_kg, Label: 'FOB Departure (kg)', ![@UI.Importance]: #Medium },
             { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
             { Value: dispatch_source, Label: 'Source', ![@UI.Importance]: #Medium },
             { Value: dispatch_timestamp, Label: 'Dispatch Time', ![@UI.Importance]: #Low },
@@ -1535,7 +1491,7 @@ annotate FuelOrderService.FlightDispatches with @(
         FieldGroup #DispatchQuantities: {
             Data: [
                 { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)' },
-                { Value: rob_departure_kg, Label: 'ROB Departure (kg)' },
+                { Value: rob_departure_kg, Label: 'FOB Departure (kg)' },
                 { Value: payload_kg, Label: 'Payload (kg)' }
             ]
         },
@@ -1624,6 +1580,11 @@ annotate FuelOrderService.FlightDispatches with @(
 
         FieldGroup #RegulatedStack: {
             Data: [
+                // The two figures the required uplift is the difference of. On the
+                // fuel order page this section is the whole of the plan a
+                // person sees, and an uplift without them is an assertion.
+                { Value: dispatch_qty_kg,     Label: 'Dispatch Quantity (kg)', ![@UI.Importance]: #High },
+                { Value: rob_departure_kg,    Label: 'FOB at Departure (kg)',  ![@UI.Importance]: #High },
                 { Value: trip_fuel_kg,        Label: 'Trip Fuel (kg)',        ![@UI.Importance]: #High },
                 { Value: contingency_fuel_kg, Label: 'Contingency (kg)',      ![@UI.Importance]: #High },
                 { Value: alternate_fuel_kg,   Label: 'Alternate (kg)',        ![@UI.Importance]: #High },
@@ -1680,7 +1641,7 @@ annotate FuelOrderService.FlightDispatches with @(
         FieldGroup #DispatchQty: {
             Data: [
                 { Value: dispatch_qty_kg, Label: 'Dispatch Quantity (kg)' },
-                { Value: rob_departure_kg, Label: 'ROB at Departure (kg)' },
+                { Value: rob_departure_kg, Label: 'FOB at Departure (kg)' },
                 { Value: payload_kg, Label: 'Payload Weight (kg)' }
             ]
         },
@@ -1718,7 +1679,7 @@ annotate FuelOrderService.FlightDispatches with {
     ata                  @title: 'ATA (UTC)';
     dispatch_timestamp   @title: 'Dispatch Time';
     dispatch_qty_kg      @title: 'Dispatch Qty (kg)';
-    rob_departure_kg     @title: 'ROB Departure (kg)';
+    rob_departure_kg     @title: 'FOB Departure (kg)';
     payload_kg           @title: 'Payload (kg)';
     flight_level         @title: 'Flight Level';
     wind_component       @title: 'Wind Component';
@@ -1777,10 +1738,19 @@ annotate FuelOrderService.importFlightDispatchExcel with (
 // ============================================================================
 
 annotate FuelOrderService.FuelOrders with {
-    ordered_quantity     @Measures.Unit: uom_code;
+    // DERIVED WHERE THERE IS A PLAN TO DERIVE IT FROM, and editable because
+    // there is not always one: an order raised without a dispatch plan - a
+    // verbal top-up, a manual order - is typed. Marking it read-only made CAP
+    // DROP the typed value from the request, so such an order landed with no
+    // quantity at all and could not be submitted. order-service.js fills it
+    // from the plan's uplift over the density whenever the plan supplies one.
+    ordered_quantity     @Measures.Unit: uom_code @title: 'Ordered Quantity (LTR)';
     uom_code             @title: 'Unit of Measure';
     ordered_quantity_kg  @title: 'Ordered Quantity (kg)'   @Common.FieldControl: #ReadOnly;
-    conversion_density   @title: 'Conversion Density (kg/L)' @Common.FieldControl: #ReadOnly;
+    // TYPED, not derived (Sep 2026): the orderer states the density the
+    // supplier will convert at, starting from the 0.8 standard. The two
+    // quantities follow it - order-service.js.
+    conversion_density   @title: 'Conversion Density (kg/L)';
     conversion_source    @title: 'Density Source'          @Common.FieldControl: #ReadOnly;
 
     // Associations and audit fields. Not on the package list, but every one
@@ -2020,3 +1990,38 @@ annotate FuelOrderService.AircraftRegistrations with @(
         // the field group for the facets that still show one there.
     }
 );
+
+// ============================================================================
+// PLANNED OR SUPPLEMENTARY (Sep 2026).
+//
+// The flight's planned uplift, or fuel ordered on top of it. A picker rather
+// than a typed code: the two values are the whole of the choice.
+//
+// NOT order_type, which is beside it in the model and answers whether this
+// order is ORIGINAL or amends / increments / tankers against another - the
+// manual-creation action already writes that one.
+// ============================================================================
+annotate FuelOrderService.FuelOrders with {
+    order_category @(
+        title: 'Order Type',
+        Common: {
+            Text: order_category,
+            TextArrangement: #TextOnly,
+            ValueListWithFixedValues: true,
+            ValueList: {
+                Label: 'Order Type',
+                CollectionPath: 'OrderCategories',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: order_category, ValueListProperty: 'code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+                ]
+            }
+        }
+    );
+};
+
+// The ticket app's delivery choice, mirrored here so the embedded ticket
+// screen labels it the same way (ticket-fiori-annotations.cds holds the F4).
+annotate FuelOrderService.FuelTickets with {
+    create_new_delivery @title: 'Create new delivery for this ticket';
+};

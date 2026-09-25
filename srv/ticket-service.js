@@ -10,7 +10,7 @@ const { allocateTicketNumber, allocateTicketNumberByFlight, reportAllocationErro
 const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
 const { isMassUom } = require('./lib/fuel-uom');
 const { postTicketUplift } = require('./lib/rob-uplift');
-const { reconcileDelivery } = require('./lib/fob-reconciliation');
+const { ensureDeliveryForTicket } = require('./lib/ticket-delivery');
 const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-variance');
 const { resolveTail } = require('./lib/tail-resolver');
 
@@ -147,7 +147,6 @@ module.exports = class TicketService extends cds.ApplicationService {
             }
             if (req.data && req.data.delivery_ID) ids.add(req.data.delivery_ID);
             if (req.data && req.data.flight_ID) flights.add(req.data.flight_ID);
-            for (const id of ids) await reconcileDelivery(id);
             // The flight-level variance moves whenever a ticket does - it is
             // the ticket side of the comparison. Keyed on the FLIGHT, so a
             // ticket with no delivery still updates the leg it belongs to.
@@ -163,14 +162,17 @@ module.exports = class TicketService extends cds.ApplicationService {
         this.after('CREATE', FuelTickets, async (data, req) => {
             for (const row of (Array.isArray(data) ? data : [data])) {
                 if (!row) continue;
-                // A reason WITH an ID means the uplift landed and only the
-                // inferred burn did not - a different message, because
-                // "not updated" would be untrue and would send someone
-                // looking for a row that is already there.
-                const { ID, reason } = await postTicketUplift(row);
-                if (reason) req.info(200, ID
-                    ? `Uplift posted to the ROB ledger, but the previous leg's burn was not: ${reason}.`
-                    : `ROB ledger not updated: ${reason}.`);
+                const { reason } = await postTicketUplift(row);
+                if (reason) req.info(200, `ROB ledger not updated: ${reason}.`);
+
+                // The delivery this ticket belongs to - raised here for the
+                // first ticket of a flight (srv/lib/ticket-delivery.js).
+                const dlv = await ensureDeliveryForTicket(row);
+                if (dlv.created) {
+                    req.info(200, `Fuel delivery ${dlv.delivery_number || 'raised'} created for this ticket.`);
+                } else if (dlv.reason) {
+                    req.info(200, `No delivery attached: ${dlv.reason}.`);
+                }
             }
         });
 
@@ -460,11 +462,10 @@ module.exports = class TicketService extends cds.ApplicationService {
                 modified_by: req.user.id
             });
 
-            // WP-17: the delivery gains a ticket, and may have lost one.
-            await reconcileDelivery(deliveryId);
+            // The flight-level variance moves with the ticket. The per-delivery
+            // FOB reconciliation was withdrawn (Sep 2026).
             await reconcileFlightForDelivery(deliveryId);
             if (ticket.delivery_ID && ticket.delivery_ID !== deliveryId) {
-                await reconcileDelivery(ticket.delivery_ID);
                 await reconcileFlightForDelivery(ticket.delivery_ID);
             }
 
@@ -513,7 +514,6 @@ module.exports = class TicketService extends cds.ApplicationService {
             // that read NOT_ATTRIBUTABLE for an unresolved ticket may now
             // attribute — or may turn out to have two suppliers after all.
             if (ticket.delivery_ID) {
-                await reconcileDelivery(ticket.delivery_ID);
                 await reconcileFlightForDelivery(ticket.delivery_ID);
             }
 

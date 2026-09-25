@@ -19,7 +19,7 @@
  *   EXIT-2  applied to a REAL line row, the parameters name the ticket
  *   EXIT-3  the ticket opens at that key; the line's key still 404s
  *   EXIT-4  ticket_number is a filter field on the tickets app
- *   EXIT-5  the line view resolves the flight and both quantities in kg
+ *   EXIT-5  the line view resolves the flight and both quantities in litres
  *   EXIT-6  the three variances ADD UP on a priced line
  *   EXIT-7  the header view is the sum of its lines
  *   EXIT-8  every view column is PRESENT on the draft as well as the active
@@ -292,7 +292,7 @@ describe('Invoice views - header, lines, and the ticket link', () => {
     });
 
     // ------------------------------------------------------------ line view
-    it('EXIT-5 - the line resolves its flight and both quantities in kg', async () => {
+    it('EXIT-5 - the line resolves its flight and both quantities in litres', async () => {
         const r = (await test.GET(`${INV}/InvoiceItems(ID=${LINE_ID},IsActiveEntity=true)`)).data;
 
         // The ticket says AC412 on 2026-04-10; seed tickets carry no flight
@@ -301,13 +301,15 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         assert.strictEqual(String(r.flight_date_v).slice(0, 10), '2026-04-10', `flight date: ${r.flight_date_v}`);
         assert.ok(r.dep_airport && r.arr_airport, 'sector must resolve with the flight');
 
-        // Both sides in kilograms, the invoice converted at the TICKET's density.
-        assert.strictEqual(n(r.ticket_quantity_kg), 2305.76, 'ticket mass from the ticket');
-        const expectInvKg = Number((2881.25 * (2305.76 / 2884)).toFixed(2));
-        assert.strictEqual(n(r.inv_qty_kg), expectInvKg,
-            `invoice kg at the ticket density: expected ${expectInvKg}, got ${r.inv_qty_kg}`);
-        assert.strictEqual(n(r.qty_variance_kg), Number((expectInvKg - 2305.76).toFixed(2)),
-            'qty variance is invoice kg less ticket kg');
+        // BOTH SIDES IN LITRES (Sep 2026). No density stands between the two
+        // figures any more: the invoice metered 2,881.25 L and the ticket
+        // 2,884 L, and the variance is the difference between them. Under the
+        // old kilogram comparison both numbers passed through the ticket's
+        // density first, so a density dispute read as a quantity dispute.
+        assert.strictEqual(n(r.ticket_qty_ltr), 2884, 'ticket litres, as metered');
+        assert.strictEqual(n(r.inv_qty_ltr), 2881.25, 'invoice litres, as billed');
+        assert.strictEqual(n(r.qty_variance_ltr), Number((2881.25 - 2884).toFixed(2)),
+            'qty variance is invoice litres less ticket litres');
 
         // THE SEED TICKET WAS NEVER PRICED - no total_amount in the seed. So
         // the money side is blank, and the verdict must NOT read Within: only
@@ -317,7 +319,7 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         assert.notStrictEqual(r.tolerance_status, 'WITHIN',
             'price was never assessed, so the line must not read Within tolerance');
         out(`line: ${r.flight_number_v} ${String(r.flight_date_v).slice(0, 10)} ${r.dep_airport}-${r.arr_airport}; `
-            + `invoice ${r.inv_qty_kg} kg vs ticket ${r.ticket_quantity_kg} kg = ${r.qty_variance_kg} kg; `
+            + `invoice ${r.inv_qty_ltr} L vs ticket ${r.ticket_qty_ltr} L = ${r.qty_variance_ltr} L; `
             + `unpriced ticket -> money blank, verdict ${r.tolerance_v || 'not assessed'}`);
     });
 
@@ -327,19 +329,19 @@ describe('Invoice views - header, lines, and the ticket link', () => {
             .set({ total_amount: 2000.00 }).where({ ID: TICKET_ID }));
         const r = (await test.GET(`${INV}/InvoiceItems(ID=${LINE_ID},IsActiveEntity=true)`)).data;
 
-        const tktRate = n(r.ticket_rate);
-        assert.ok(tktRate > 0, 'the ticket rate must derive from amount over mass');
+        const tktRate = n(r.ticket_rate_ltr);
+        assert.ok(tktRate > 0, 'the ticket rate must derive from amount over litres');
         assert.strictEqual(n(r.total_variance), Number((2045.69 - 2000).toFixed(2)),
             'total variance is invoice amount less ticket amount');
 
         // price + qty x ticket rate = total, to the cent.
-        const recomposed = n(r.price_variance) + n(r.qty_variance_kg) * tktRate;
+        const recomposed = n(r.price_variance) + n(r.qty_variance_ltr) * tktRate;
         assert.ok(Math.abs(recomposed - n(r.total_variance)) < 0.05,
-            `variances do not add up: price ${r.price_variance} + qty ${r.qty_variance_kg} x ${tktRate} `
+            `variances do not add up: price ${r.price_variance} + qty ${r.qty_variance_ltr} x ${tktRate} `
             + `= ${recomposed.toFixed(2)}, total ${r.total_variance}`);
         assert.ok(['WITHIN', 'EXCEEDED'].includes(r.tolerance_status),
             'with both sides priced, the line must now reach a verdict');
-        out(`total ${r.total_variance} = price ${r.price_variance} + qty ${r.qty_variance_kg} kg x ${tktRate}; `
+        out(`total ${r.total_variance} = price ${r.price_variance} + qty ${r.qty_variance_ltr} L x ${tktRate}; `
             + `verdict ${r.tolerance_v}`);
     });
 
@@ -368,7 +370,7 @@ describe('Invoice views - header, lines, and the ticket link', () => {
     it('EXIT-8 - every view column is present on the draft as well as the active', async () => {
         const HDR = ['flight_number_v', 'invoice_status_v', 'total_lines', 'reconciled_lines',
                      'total_inv_amount', 'total_tkt_amount', 'variance_value', 'tolerance_v'];
-        const LN  = ['flight_number_v', 'inv_qty_kg', 'total_variance', 'qty_variance_kg',
+        const LN  = ['flight_number_v', 'inv_qty_ltr', 'total_variance', 'qty_variance_ltr',
                      'price_variance', 'tolerance_v', 'vendor_invoice_number'];
 
         await test.POST(`${INV}/Invoices(ID=${GATED_ID},IsActiveEntity=true)/InvoiceService.draftEdit`, {});
@@ -387,14 +389,14 @@ describe('Invoice views - header, lines, and the ticket link', () => {
     });
 
     it('EXIT-9 - a narrow $select still populates the line', async () => {
-        const sel = 'ID,line_number,flight_number_v,inv_qty_kg,ticket_quantity_kg,qty_variance_kg';
+        const sel = 'ID,line_number,flight_number_v,inv_qty_ltr,ticket_qty_ltr,qty_variance_ltr';
         const r = await test.GET(`${INV}/InvoiceItems?$select=${sel}&$filter=ID eq ${LINE_ID}`);
         const row = r.data.value[0];
         assert.strictEqual(row.flight_number_v, 'AC412',
             'flight blank under $select - the derivation read ticket_ID off a payload that lacked it');
-        assert.ok(row.inv_qty_kg !== null && row.qty_variance_kg !== null, 'quantities blank under $select');
+        assert.ok(row.inv_qty_ltr !== null && row.qty_variance_ltr !== null, 'quantities blank under $select');
         out(`$select of ${sel.split(',').length} columns, no ticket_ID: flight ${row.flight_number_v}, `
-            + `qty variance ${row.qty_variance_kg} kg`);
+            + `qty variance ${row.qty_variance_ltr} L`);
     });
 
     // ------------------------------------------------------------ posting
@@ -528,12 +530,12 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         for (const [k, v] of Object.entries(expect)) {
             assert.strictEqual(row[k], v, `object page shows ${k}=${row[k]}, expected ${v}`);
         }
-        for (const k of ['inv_qty_kg', 'ticket_quantity_kg', 'qty_variance_kg', 'invoice_status_v', 'received_date_v']) {
+        for (const k of ['inv_qty_ltr', 'ticket_qty_ltr', 'qty_variance_ltr', 'invoice_status_v', 'received_date_v']) {
             assert.ok(row[k] !== null && row[k] !== undefined, `object page field ${k} is empty`);
         }
         out(`single-row read of ${fields.length} object page fields: flight ${row.flight_number_v} `
-            + `${row.dep_airport}-${row.arr_airport}, invoice ${row.inv_qty_kg} kg vs ticket `
-            + `${row.ticket_quantity_kg} kg, status ${row.invoice_status_v}`);
+            + `${row.dep_airport}-${row.arr_airport}, invoice ${row.inv_qty_ltr} L vs ticket `
+            + `${row.ticket_qty_ltr} L, status ${row.invoice_status_v}`);
     });
 
     // ------------------------------------------------------------ matcher

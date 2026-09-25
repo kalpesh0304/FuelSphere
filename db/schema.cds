@@ -823,6 +823,9 @@ type OrderPriority : String(10) enum {
  */
 type DeliveryStatus : String(20) enum {
     Pending   = 'Pending';
+    // Sep 2026: a delivery is PENDING until the aircraft gauge readings are
+    // entered and CONFIRMED once they are - delivery-service.js.
+    Confirmed = 'Confirmed';
     Verified  = 'Verified';
     Posted    = 'Posted';
     Disputed  = 'Disputed';
@@ -1194,7 +1197,9 @@ entity FUEL_ORDERS : cuid, AuditTrail {
         // WP-11: evidence for the plan-mass to order-volume conversion.
         // Without all three the order records a converted number nobody can
         // reproduce.
-        conversion_density  : Decimal(8,4);   // kg/L used to convert plan mass to order volume
+        conversion_density  : Decimal(8,4); // kg/L, typed by the orderer; 0.8 is the Jet A-1 standard
+        // DEFAULTED, NOT ASSUMED SILENTLY: 0.8 kg/L is the standard figure an
+        // orderer starts from and overwrites where the supplier states another.
         conversion_source   : String(20);     // Which configuration row produced it
         ordered_quantity_kg : Decimal(12,2);  // The plan figure this order was converted from
 
@@ -1645,6 +1650,10 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         currency_code       : String(3);
 
         // Timing
+        // Sep 2026: the first ticket of a flight raises its own delivery. On a
+        // later ticket the operator picks an existing delivery, or ticks this
+        // to raise another one - srv/lib/ticket-delivery.js.
+        create_new_delivery : Boolean default false;
         delivery_timestamp  : DateTime @mandatory;      // Delivery date/time from ticket
 
         // Supplier Reference

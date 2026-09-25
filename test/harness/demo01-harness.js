@@ -41,71 +41,21 @@ const db = () => cds.connect.to('db');
 const byNum = async (n) => (await db()).run(
     SELECT.one.from('fuelsphere.FUEL_DELIVERIES').where({ delivery_number: n }));
 
-async function runReconcile(deliveryNumber) {
-    const d = await byNum(deliveryNumber);
-    assert.ok(d, `delivery ${deliveryNumber} not seeded`);
-    const r = await test.POST(
-        `${O}/FuelDeliveries(ID=${d.ID},IsActiveEntity=true)/FuelOrderService.reconcile`, {});
-    assert.strictEqual(r.status, 200);
-    return r.data;
-}
-
 describe('WP-DEMO-01 — three scenarios', function () {
 
-    for (const [name, e] of Object.entries(S)) {
-        it(`${name} — ${e.status} (${e.tickets} ticket${e.tickets > 1 ? 's' : ''})`, async () => {
-            const r = await runReconcile(e.delivery);
-            out(`${e.delivery}  ${e.reg}  ${e.flight}`);
-            out(`  metered=${r.meteredMassKg}  FQIS=${r.fqisMassKg}  variance=${r.reconVarianceKg}`);
-            out(`  tolerance=${r.toleranceKg} (${r.fobSource})  suppliers=${r.supplierCount}  -> ${r.reconStatus}`);
-            assert.strictEqual(Number(r.meteredMassKg), e.metered, 'metered mass');
-            assert.strictEqual(Number(r.fqisMassKg), e.delta, 'gauge delta');
-            assert.strictEqual(Number(r.reconVarianceKg), e.variance, 'variance');
-            assert.strictEqual(Number(r.toleranceKg), e.tolerance, 'tolerance');
-            assert.strictEqual(r.reconStatus, e.status, 'status');
-            assert.strictEqual(Number(r.supplierCount), 1, 'one supplier');
-
-            // The computed status must also be what the seed stored: a CSV
-            // that disagrees with the code is the defect this checks for.
-            const stored = await byNum(e.delivery);
-            assert.strictEqual(stored.recon_status, e.status, 'seeded status disagrees with computed');
-            assert.strictEqual(Number(stored.recon_variance_kg), e.variance, 'seeded variance disagrees');
-        });
-    }
-
-    it('the tolerance resolves from the metered mass, not from a constant', async () => {
-        // The check the package singles out. If S2 came back at 50.00 the
-        // percentage is not being applied and the demonstration collapses.
-        const [s1, s2] = [await runReconcile(S.S1.delivery), await runReconcile(S.S2.delivery)];
-        out(`S1 metered ${s1.meteredMassKg} -> tolerance ${s1.toleranceKg}  (floor governs)`);
-        out(`S2 metered ${s2.meteredMassKg} -> tolerance ${s2.toleranceKg}  (0.5% governs)`);
-        assert.notStrictEqual(Number(s2.toleranceKg), 50.00,
-            'S2 tolerance is the floor — the percentage is not resolving');
-        // NOT a literal. 309.90 was pinned here and moved the moment S2's
-        // quantity was corrected — the same failure as the fixture pins.
-        // The criterion is that the tolerance IS 0.5% of the metered mass,
-        // so assert that relationship rather than today's answer.
-        assert.strictEqual(Number(s2.toleranceKg),
-            Number((Number(s2.meteredMassKg) * 0.005).toFixed(2)),
-            'S2 tolerance must be 0.5% of its own metered mass');
-        // S1 is the other side of the same rule: 0.5% of its mass is below
-        // the floor, so the floor governs. Both derived, neither pinned.
-        assert.ok(Number(s1.meteredMassKg) * 0.005 < 50.00,
-            'S1 is only a floor case while 0.5% of its mass is under 50');
-        assert.strictEqual(Number(s1.toleranceKg), 50.00);
-    });
-
-    it('S2 passes on a variance larger than S3 fails on — the demonstration', async () => {
-        const s2 = await runReconcile(S.S2.delivery);
-        const s3 = await runReconcile(S.S3.delivery);
-        out(`S2  variance ${s2.reconVarianceKg} kg on ${s2.meteredMassKg} kg -> ${s2.reconStatus}`);
-        out(`S3  variance ${s3.reconVarianceKg} kg on ${s3.meteredMassKg} kg -> ${s3.reconStatus}`);
-        assert.ok(Math.abs(Number(s2.reconVarianceKg)) > Number(S.S3.tolerance),
-            "S2's variance must exceed S3's entire tolerance, or the point is lost");
-        assert.strictEqual(s2.reconStatus, 'RECONCILED');
-        assert.strictEqual(s3.reconStatus, 'VARIANCE');
-        out(`  ${s2.reconVarianceKg} kg > S3's whole tolerance of ${S.S3.tolerance} kg, and S2 still passes`);
-    });
+    // THE THREE RECONCILIATION SCENARIOS ARE WITHDRAWN (Sep 2026).
+    //
+    // S1, S2 and S3 demonstrated the PER-DELIVERY FOB reconciliation -
+    // metered mass against the gauge delta, judged on a tolerance that
+    // scaled with the uplift - and that reconciliation was removed from the
+    // product at the user's request, along with the reconcile action these
+    // called. What survives below is the part of the demonstration that is
+    // still true: the chain resolves in both directions, the order's volume
+    // conversion reproduces from its own evidence, and nothing in the three
+    // scenarios is left unmatched or provisional.
+    //
+    // The flight-level variance replaced it and has its own harness
+    // (flight-variance-harness.js).
 
     it('EXIT-4 — the chain resolves in both directions', async () => {
         const d = await db();
@@ -163,27 +113,4 @@ describe('WP-DEMO-01 — three scenarios', function () {
         }
     });
 
-    it('EXIT-6 — the three deliveries come back over OData with recon_status', async () => {
-        // Fetched, not assumed. An annotation that renders nothing and a field
-        // that is not served look identical from the annotation file.
-        const nums = Object.values(S).map(x => `'${x.delivery}'`).join(',');
-        const r = await test.GET(`${O}/FuelDeliveries?$filter=delivery_number in (${nums})`
-            + `&$select=delivery_number,recon_status,recon_variance_kg,fob_source,supplier_count,aircraft_reg`
-            + `&$orderby=delivery_number`);
-        assert.strictEqual(r.status, 200);
-        const rows = r.data.value;
-        rows.forEach(x => out(`${x.delivery_number}  ${x.aircraft_reg}  ${x.recon_status}  `
-            + `variance=${x.recon_variance_kg}  source=${x.fob_source}  suppliers=${x.supplier_count}`));
-        assert.strictEqual(rows.length, 3, 'all three must be served');
-        rows.forEach(x => {
-            assert.ok(x.recon_status, `${x.delivery_number}: recon_status not served`);
-            assert.notStrictEqual(x.recon_variance_kg, null, `${x.delivery_number}: variance not served`);
-        });
-        assert.deepStrictEqual(rows.map(x => x.recon_status), ['RECONCILED', 'RECONCILED', 'VARIANCE']);
-
-        // And the criticality that colours them is really in the metadata.
-        const meta = await test.GET(`${O}/$metadata`);
-        assert.match(meta.data, /<Path>recon_status<\/Path>/, 'no dynamic criticality on recon_status');
-        out('recon_status criticality present in $metadata');
-    });
 });

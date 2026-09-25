@@ -54,8 +54,8 @@ annotate BurnService.FuelBurns with @(
 
             // ---- captured quantities --------------------------------------
             { Value: dispatch_kg, Label: 'Dispatch kg', ![@UI.Importance]: #Medium },
-            { Value: fqis_out_kg, Label: 'FQIS out kg', ![@UI.Importance]: #Medium },
-            { Value: fqis_in_kg, Label: 'FQIS in kg', ![@UI.Importance]: #Medium },
+            { Value: fqis_out_kg, Label: 'FOB out kg', ![@UI.Importance]: #Medium },
+            { Value: fqis_in_kg, Label: 'FOB in kg', ![@UI.Importance]: #Medium },
             { Value: uplift_l, Label: 'Uplift L', ![@UI.Importance]: #Medium },
             { Value: specific_gravity, Label: 'Sp. gravity', ![@UI.Importance]: #Low },
             { Value: expected_delta_kg, Label: 'Expected delta kg', ![@UI.Importance]: #Low },
@@ -72,7 +72,7 @@ annotate BurnService.FuelBurns with @(
             { Value: engine_burn_split_kg, Label: 'Engine burn kg', ![@UI.Importance]: #Medium },
             { Value: engine_burn_value_usd, Label: 'Engine burn value USD', ![@UI.Importance]: #Low },
             { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #Medium },
-            { Value: arrival_rob_kg, Label: 'Arrival ROB kg', ![@UI.Importance]: #Medium },
+            { Value: arrival_rob_kg, Label: 'Arrival FOB kg', ![@UI.Importance]: #Medium },
 
             // ---- the burn record's own columns ----------------------------
             { Value: planned_burn_kg, Label: 'Planned Burn (kg)', ![@UI.Importance]: #Low },
@@ -270,8 +270,8 @@ annotate BurnService.FuelBurns with {
     flight_date_v                 @title: 'Flight date'            @Common.FieldControl: #ReadOnly;
     sector                        @title: 'Sector'                 @Common.FieldControl: #ReadOnly;
     dispatch_kg                   @title: 'Dispatch kg'            @Common.FieldControl: #ReadOnly;
-    fqis_out_kg                   @title: 'FQIS out kg'            @Common.FieldControl: #ReadOnly;
-    fqis_in_kg                    @title: 'FQIS in kg'             @Common.FieldControl: #ReadOnly;
+    fqis_out_kg                   @title: 'FOB out kg'            @Common.FieldControl: #ReadOnly;
+    fqis_in_kg                    @title: 'FOB in kg'             @Common.FieldControl: #ReadOnly;
     uplift_l                      @title: 'Uplift L'               @Common.FieldControl: #ReadOnly;
     specific_gravity              @title: 'Sp. gravity'            @Common.FieldControl: #ReadOnly;
     expected_delta_kg             @title: 'Expected delta kg'      @Common.FieldControl: #ReadOnly;
@@ -286,7 +286,7 @@ annotate BurnService.FuelBurns with {
     engine_burn_split_kg          @title: 'Engine burn kg'         @Common.FieldControl: #ReadOnly;
     engine_burn_value_usd         @title: 'Engine burn value USD'  @Common.FieldControl: #ReadOnly;
     map_usd_per_kg                @title: 'MAP USD/kg'             @Common.FieldControl: #ReadOnly;
-    arrival_rob_kg                @title: 'Arrival ROB kg'         @Common.FieldControl: #ReadOnly;
+    arrival_rob_kg                @title: 'Arrival FOB kg'         @Common.FieldControl: #ReadOnly;
 
     ID                            @UI.Hidden;
     tail_number                   @title: 'Aircraft Tail';
@@ -363,8 +363,8 @@ annotate BurnService.ROBLedger with @(
     UI: {
         // --- Header ---
         HeaderInfo: {
-            TypeName       : 'ROB Entry',
-            TypeNamePlural : 'ROB Ledger',
+            TypeName       : 'FOB Entry',
+            TypeNamePlural : 'FOB Ledger',
             Title          : { Value: tail_number },
             Description    : { Value: record_date }
         },
@@ -406,11 +406,11 @@ annotate BurnService.ROBLedger with @(
             { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #High },
             { Value: map_usd_per_l, Label: 'MAP USD/L', ![@UI.Importance]: #High },
             { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #Low },
-            { Value: rob_percentage, Label: 'ROB %', ![@UI.Importance]: #Low },
+            { Value: rob_percentage, Label: 'FOB %', ![@UI.Importance]: #Low },
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'BurnService.importROBInitialExcel',
-                Label  : 'Upload ROB Data',
+                Label  : 'Upload FOB Data',
                 Inline : false
             },
             // Placeholder - the handler returns the row untouched and says
@@ -451,7 +451,7 @@ annotate BurnService.ROBLedger with @(
         // --- Object Page Header ---
         HeaderFacets: [
             { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBEntryType', Label: 'Entry Type' },
-            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBSummary', Label: 'ROB Summary' }
+            { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBSummary', Label: 'FOB Summary' }
         ],
 
         FieldGroup #ROBEntryType: {
@@ -468,7 +468,7 @@ annotate BurnService.ROBLedger with @(
                 { Value: balance_value_usd, Label: 'Balance value USD' },
                 { Value: map_usd_per_kg, Label: 'MAP USD/kg' },
                 { Value: map_usd_per_l, Label: 'MAP USD/L' },
-                { Value: rob_percentage, Label: 'ROB %' },
+                { Value: rob_percentage, Label: 'FOB %' },
                 { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
                 { Value: max_capacity_l, Label: 'Max Capacity (L)' },
                 { Value: recalculated_by, Label: 'Last Recalculated By' },
@@ -502,7 +502,7 @@ annotate BurnService.ROBLedger with @(
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'ROBEntry',
-                Label  : 'ROB Entry',
+                Label  : 'FOB Entry',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#ROBIdentification', Label: 'Identification' }
                 ]
@@ -591,20 +591,20 @@ annotate BurnService.ROBLedger with @(
 
         FieldGroup #ROBQuantityDetails: {
             Data: [
-                { Value: opening_rob_kg, Label: 'Opening ROB (kg)' },
-                { Value: opening_rob_l, Label: 'Opening ROB (L)' },
+                { Value: opening_rob_kg, Label: 'Opening FOB (kg)' },
+                { Value: opening_rob_l, Label: 'Opening FOB (L)' },
                 { Value: uplift_kg, Label: 'Uplift (kg)' },
                 { Value: uplift_l, Label: 'Uplift (L)' },
                 { Value: burn_kg, Label: 'Burn (kg)' },
                 { Value: burn_l, Label: 'Burn (L)' },
                 { Value: adjustment_kg, Label: 'Adjustment (kg)' },
                 { Value: adjustment_l, Label: 'Adjustment (L)' },
-                { Value: closing_rob_kg, Label: 'Closing ROB (kg)' },
-                { Value: closing_rob_l, Label: 'Closing ROB (L)' },
+                { Value: closing_rob_kg, Label: 'Closing FOB (kg)' },
+                { Value: closing_rob_l, Label: 'Closing FOB (L)' },
                 { Value: density_kgl, Label: 'Density used for litres (kg/L)' },
                 { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
                 { Value: max_capacity_l, Label: 'Max Capacity (L)' },
-                { Value: rob_percentage, Label: 'ROB %' }
+                { Value: rob_percentage, Label: 'FOB %' }
             ]
         },
 
@@ -648,7 +648,7 @@ annotate BurnService.ROBLedger with {
     // the other ten for no reason a viewer could see.
     entry_type             @title: 'Entry Type'
                            @Common.QuickInfo: 'INITIAL seeds the chain: its closing balance is recorded fuel state, not a value derived from uplift and burn. Every other type is computed. A rebuild keeps an INITIAL balance as recorded and chains onward from it.';
-    opening_rob_kg         @title: 'Opening ROB (kg)'
+    opening_rob_kg         @title: 'Opening FOB (kg)'
                            @Common.QuickInfo: 'The previous entry''s closing balance - EXCEPT on the first entry of a tail, where it is the balance at the START OF THE DEMONSTRATION PERIOD, seeded rather than carried, because no prior leg is modelled in this dataset. No tail here has a predecessor flight, so every chain begins with a figure rather than with an arrival.';
     uplift_kg              @title: 'Uplift (kg)';
     burn_kg                @title: 'Burn (kg)';
@@ -671,7 +671,7 @@ annotate BurnService.ROBLedger with {
     recalculated_by        @title: 'Last Recalculated By'   @Common.FieldControl: #ReadOnly;
     recalculated_at        @title: 'Last Recalculated On'   @Common.FieldControl: #ReadOnly;
     max_capacity_kg        @title: 'Max Capacity (kg)';
-    rob_percentage         @title: 'ROB %' @Common.FieldControl: #ReadOnly;
+    rob_percentage         @title: 'FOB %' @Common.FieldControl: #ReadOnly;
     adjustment_reason      @title: 'Adjustment Reason' @UI.MultiLineText;
     adjustment_approved_by @title: 'Approved By' @Common.FieldControl: #ReadOnly;
     adjustment_approved_at @title: 'Approved At' @Common.FieldControl: #ReadOnly;
@@ -972,7 +972,7 @@ annotate BurnService.ROBLedger with @(
 annotate BurnService.ROBLedger with {
     density_kgl    @title: 'Density used for litres (kg/L)';
     qty_l          @title: 'Qty L';
-    opening_rob_l  @title: 'Opening ROB (L)';
+    opening_rob_l  @title: 'Opening FOB (L)';
     uplift_l       @title: 'Uplift (L)';
     burn_l         @title: 'Burn (L)';
     adjustment_l   @title: 'Adjustment (L)';

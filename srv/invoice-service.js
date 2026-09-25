@@ -197,10 +197,13 @@ module.exports = class InvoiceService extends cds.ApplicationService {
             const gate = (hard + soft) > 0 ? 'GATED' : 'CLEAR';
 
             await UPDATE('fuelsphere.INVOICES').set({
-                // INV454: derived from lines, never keyed from the document.
-                net_amount: result.derived.net_amount,
-                tax_amount: result.derived.tax_amount,
-                gross_amount: result.derived.gross_amount,
+                // THE HEADER KEEPS WHAT THE CLERK TYPED (Sep 2026). This used
+                // to overwrite the three amounts with the line sums, so a
+                // header that disagreed with its lines silently became one
+                // that agreed - and INV454, the check that exists to REPORT
+                // that disagreement, had nothing left to report. The amounts
+                // are the supplier's statement; the lines are what we hold
+                // against it; the exception is how the two are reconciled.
                 posting_gate: gate,
                 gate_evaluated_at: now,
                 open_hard_count: hard,

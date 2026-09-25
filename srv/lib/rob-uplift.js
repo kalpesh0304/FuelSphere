@@ -35,7 +35,6 @@
 const cds = require('@sap/cds');
 const { SELECT, INSERT } = cds.ql;
 const { toLitres } = require('./fuel-uom');
-const { postPrecedingBurn } = require('./rob-burn');
 const { LINE_ORDER } = require('./rob-recalculate');
 
 const LEDGER = 'fuelsphere.ROB_LEDGER';
@@ -80,12 +79,11 @@ async function postTicketUplift(ticket) {
         .columns('ID').where({ fuel_ticket_ID: ticket.ID, entry_type: 'UPLIFT' }));
     if (existing) return { ID: null, reason: null };
 
-    // THE BURN COMES FIRST, and must, for two reasons. The fuel was consumed
-    // before this uplift went on board, so the ledger reads in that order; and
-    // the `last` row read immediately below has to be the burn, not the stale
-    // position from the previous flight, or this uplift opens at a balance the
-    // aircraft no longer held.
-    const burn = await postPrecedingBurn(ticket, tail);
+    // A TICKET POSTS ONE ROW: THE UPLIFT. Inferring the previous leg's burn
+    // from the gap between two meter readings was withdrawn (Sep 2026) - the
+    // readings are a bowser totaliser, not the aircraft's gauge, and a burn
+    // derived from them is a number nobody measured. Burns reach the ledger
+    // from FUEL_BURNS, where a figure is recorded rather than inferred.
 
     // The previous row for this tail IS the opening balance. Ordered the way
     // the ledger is read - date, then time, then the within-day sequence.
@@ -184,11 +182,7 @@ async function postTicketUplift(ticket) {
         data_source: 'TICKET',
         is_estimated: false
     }));
-    // The uplift posted, so there is no reason to report about it. Any reason
-    // travelling back now belongs to the BURN - typically a missing Meter
-    // Start - and the caller says it, because an operator who sees an uplift
-    // appear and no burn would otherwise read the gap as a defect.
-    return { ID, reason: burn.reason, burnID: burn.ID, burnKg: burn.qty };
+    return { ID, reason: null };
 }
 
 module.exports = { postTicketUplift };
