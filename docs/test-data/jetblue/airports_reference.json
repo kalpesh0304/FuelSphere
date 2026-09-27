@@ -1,0 +1,876 @@
+{
+ "ABQ": {
+  "icao": "KABQ",
+  "name": "Albuquerque International Sunport Airport",
+  "city": "Albuquerque",
+  "country": "US",
+  "tz": "America/Denver",
+  "lat": 35.0401992798,
+  "lon": -106.6090011597
+ },
+ "ACK": {
+  "icao": "KACK",
+  "name": "Nantucket Memorial Airport",
+  "city": "Nantucket",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.25310135,
+  "lon": -70.06020355
+ },
+ "ALB": {
+  "icao": "KALB",
+  "name": "Albany International Airport",
+  "city": "Albany",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.748298645,
+  "lon": -73.8016967773
+ },
+ "AMS": {
+  "icao": "EHAM",
+  "name": "Amsterdam Airport Schiphol",
+  "city": "Amsterdam",
+  "country": "NL",
+  "tz": "Europe/Amsterdam",
+  "lat": 52.3086013794,
+  "lon": 4.7638897896
+ },
+ "ATL": {
+  "icao": "KATL",
+  "name": "Hartsfield Jackson Atlanta International Airport",
+  "city": "Atlanta",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 33.6366996765,
+  "lon": -84.4281005859
+ },
+ "AUS": {
+  "icao": "KAUS",
+  "name": "Austin Bergstrom International Airport",
+  "city": "Austin",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 30.1944999695,
+  "lon": -97.6698989868
+ },
+ "BCN": {
+  "icao": "LEBL",
+  "name": "Barcelona International Airport",
+  "city": "Barcelona",
+  "country": "ES",
+  "tz": "Europe/Madrid",
+  "lat": 41.2971000671,
+  "lon": 2.0784599781
+ },
+ "BDA": {
+  "icao": "TXKF",
+  "name": "L.F. Wade International International Airport",
+  "city": "Hamilton",
+  "country": "BM",
+  "tz": "Atlantic/Bermuda",
+  "lat": 32.3639984131,
+  "lon": -64.6787033081
+ },
+ "BDL": {
+  "icao": "KBDL",
+  "name": "Bradley International Airport",
+  "city": "Hartford",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.9388999939,
+  "lon": -72.6831970215
+ },
+ "BED": {
+  "icao": "KBED",
+  "name": "Laurence G Hanscom Field",
+  "city": "Bedford",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.47000122,
+  "lon": -71.28900146
+ },
+ "BHM": {
+  "icao": "KBHM",
+  "name": "Birmingham-Shuttlesworth International Airport",
+  "city": "Birmingham",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 33.56290054,
+  "lon": -86.75350189
+ },
+ "BKL": {
+  "icao": "KBKL",
+  "name": "Burke Lakefront Airport",
+  "city": "Cleveland",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.5175018311,
+  "lon": -81.6832962036
+ },
+ "BNA": {
+  "icao": "KBNA",
+  "name": "Nashville International Airport",
+  "city": "Nashville",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 36.1245002747,
+  "lon": -86.6781997681
+ },
+ "BOS": {
+  "icao": "KBOS",
+  "name": "General Edward Lawrence Logan International Airport",
+  "city": "Boston",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.36429977,
+  "lon": -71.00520325
+ },
+ "BUF": {
+  "icao": "KBUF",
+  "name": "Buffalo Niagara International Airport",
+  "city": "Buffalo",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.94049835,
+  "lon": -78.73220062
+ },
+ "BUR": {
+  "icao": "KBUR",
+  "name": "Bob Hope Airport",
+  "city": "Burbank",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 34.2006988525,
+  "lon": -118.3590011597
+ },
+ "BVY": {
+  "icao": "KBVY",
+  "name": "Beverly Regional Airport",
+  "city": "Beverly",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.5842018127,
+  "lon": -70.9164962769
+ },
+ "BWI": {
+  "icao": "KBWI",
+  "name": "Baltimore/Washington International Thurgood Marshal Airport",
+  "city": "Baltimore",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 39.17539978,
+  "lon": -76.66829681
+ },
+ "CDG": {
+  "icao": "LFPG",
+  "name": "Charles de Gaulle International Airport",
+  "city": "Paris",
+  "country": "FR",
+  "tz": "Europe/Paris",
+  "lat": 49.0127983093,
+  "lon": 2.5499999523
+ },
+ "CHS": {
+  "icao": "KCHS",
+  "name": "Charleston Air Force Base-International Airport",
+  "city": "Charleston",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 32.89860153,
+  "lon": -80.04049683
+ },
+ "CLE": {
+  "icao": "KCLE",
+  "name": "Cleveland Hopkins International Airport",
+  "city": "Cleveland",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.4117012024,
+  "lon": -81.8498001099
+ },
+ "CLT": {
+  "icao": "KCLT",
+  "name": "Charlotte Douglas International Airport",
+  "city": "Charlotte",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 35.2140007019,
+  "lon": -80.9430999756
+ },
+ "COU": {
+  "icao": "KCOU",
+  "name": "Columbia Regional Airport",
+  "city": "Columbia",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 38.8180999756,
+  "lon": -92.2195968628
+ },
+ "CPX": {
+  "icao": "TJCP",
+  "name": "Benjamin Rivera Noriega Airport",
+  "city": "Culebra Island",
+  "country": "PR",
+  "tz": "America/Puerto_Rico",
+  "lat": 18.313289,
+  "lon": -65.304324
+ },
+ "CUN": {
+  "icao": "MMUN",
+  "name": "Cancun International Airport",
+  "city": "Cancun",
+  "country": "MX",
+  "tz": "America/Cancun",
+  "lat": 21.0365009308,
+  "lon": -86.8770980835
+ },
+ "DCA": {
+  "icao": "KDCA",
+  "name": "Ronald Reagan Washington National Airport",
+  "city": "Washington",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 38.8521003723,
+  "lon": -77.0376968384
+ },
+ "DEN": {
+  "icao": "KDEN",
+  "name": "Denver International Airport",
+  "city": "Denver",
+  "country": "US",
+  "tz": "America/Denver",
+  "lat": 39.8616981506,
+  "lon": -104.672996521
+ },
+ "DFW": {
+  "icao": "KDFW",
+  "name": "Dallas Fort Worth International Airport",
+  "city": "Dallas-Fort Worth",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 32.8968009949,
+  "lon": -97.0380020142
+ },
+ "DTW": {
+  "icao": "KDTW",
+  "name": "Detroit Metropolitan Wayne County Airport",
+  "city": "Detroit",
+  "country": "US",
+  "tz": "America/Detroit",
+  "lat": 42.2123985291,
+  "lon": -83.3534011841
+ },
+ "DUB": {
+  "icao": "EIDW",
+  "name": "Dublin Airport",
+  "city": "Dublin",
+  "country": "IE",
+  "tz": "Europe/Dublin",
+  "lat": 53.4212989807,
+  "lon": -6.270070076
+ },
+ "EDI": {
+  "icao": "EGPH",
+  "name": "Edinburgh Airport",
+  "city": "Edinburgh",
+  "country": "GB",
+  "tz": "Europe/London",
+  "lat": 55.9500007629,
+  "lon": -3.3724999428
+ },
+ "EEN": {
+  "icao": "KEEN",
+  "name": "Dillant Hopkins Airport",
+  "city": "Keene",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.898399353,
+  "lon": -72.2707977295
+ },
+ "EWR": {
+  "icao": "KEWR",
+  "name": "Newark Liberty International Airport",
+  "city": "Newark",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 40.6925010681,
+  "lon": -74.1687011719
+ },
+ "FLL": {
+  "icao": "KFLL",
+  "name": "Fort Lauderdale Hollywood International Airport",
+  "city": "Fort Lauderdale",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 26.072599411,
+  "lon": -80.1527023315
+ },
+ "FXE": {
+  "icao": "KFXE",
+  "name": "Fort Lauderdale Executive Airport",
+  "city": "Fort Lauderdale",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 26.1972999573,
+  "lon": -80.1707000732
+ },
+ "GSO": {
+  "icao": "KGSO",
+  "name": "Piedmont Triad International Airport",
+  "city": "Greensboro",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 36.0978012085,
+  "lon": -79.9373016357
+ },
+ "GSP": {
+  "icao": "KGSP",
+  "name": "Greenville Spartanburg International Airport",
+  "city": "Greenville",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 34.8956985474,
+  "lon": -82.2189025879
+ },
+ "HPN": {
+  "icao": "KHPN",
+  "name": "Westchester County Airport",
+  "city": "White Plains",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.0670013428,
+  "lon": -73.7076034546
+ },
+ "IAD": {
+  "icao": "KIAD",
+  "name": "Washington Dulles International Airport",
+  "city": "Dulles",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 38.94449997,
+  "lon": -77.45580292
+ },
+ "IAH": {
+  "icao": "KIAH",
+  "name": "George Bush Intercontinental Houston Airport",
+  "city": "Houston",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 29.9843997955,
+  "lon": -95.3414001465
+ },
+ "ILM": {
+  "icao": "KILM",
+  "name": "Wilmington International Airport",
+  "city": "Wilmington",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 34.2705993652,
+  "lon": -77.9026031494
+ },
+ "ISP": {
+  "icao": "KISP",
+  "name": "Long Island Mac Arthur Airport",
+  "city": "Islip",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 40.79520035,
+  "lon": -73.10019684
+ },
+ "JAX": {
+  "icao": "KJAX",
+  "name": "Jacksonville International Airport",
+  "city": "Jacksonville",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 30.4941005707,
+  "lon": -81.6878967285
+ },
+ "JFK": {
+  "icao": "KJFK",
+  "name": "John F Kennedy International Airport",
+  "city": "New York",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 40.63980103,
+  "lon": -73.77890015
+ },
+ "JFN": {
+  "icao": "KHZY",
+  "name": "Northeast Ohio Regional Airport",
+  "city": "Ashtabula",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.7779998779,
+  "lon": -80.6955032349
+ },
+ "KIN": {
+  "icao": "MKJP",
+  "name": "Norman Manley International Airport",
+  "city": "Kingston",
+  "country": "JM",
+  "tz": "America/Jamaica",
+  "lat": 17.9356994629,
+  "lon": -76.7874984741
+ },
+ "LAN": {
+  "icao": "KLAN",
+  "name": "Capital Region International Airport",
+  "city": "Lansing",
+  "country": "US",
+  "tz": "America/Detroit",
+  "lat": 42.7787017822,
+  "lon": -84.5874023438
+ },
+ "LAS": {
+  "icao": "KLAS",
+  "name": "Harry Reid International Airport",
+  "city": "Las Vegas",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 36.08010101,
+  "lon": -115.1520004
+ },
+ "LAX": {
+  "icao": "KLAX",
+  "name": "Los Angeles International Airport",
+  "city": "Los Angeles",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 33.94250107,
+  "lon": -118.4079971
+ },
+ "LGA": {
+  "icao": "KLGA",
+  "name": "La Guardia Airport",
+  "city": "New York",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 40.77719879,
+  "lon": -73.87259674
+ },
+ "LHR": {
+  "icao": "EGLL",
+  "name": "London Heathrow Airport",
+  "city": "London",
+  "country": "GB",
+  "tz": "Europe/London",
+  "lat": 51.4706001282,
+  "lon": -0.4619410038
+ },
+ "LWM": {
+  "icao": "KLWM",
+  "name": "Lawrence Municipal Airport",
+  "city": "Lawrence",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.7172012329,
+  "lon": -71.1233978271
+ },
+ "MAD": {
+  "icao": "LEMD",
+  "name": "Madrid Barajas International Airport",
+  "city": "Madrid",
+  "country": "ES",
+  "tz": "Europe/Madrid",
+  "lat": 40.4936,
+  "lon": -3.56676
+ },
+ "MCO": {
+  "icao": "KMCO",
+  "name": "Orlando International Airport",
+  "city": "Orlando",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 28.4293994904,
+  "lon": -81.3089981079
+ },
+ "MDW": {
+  "icao": "KMDW",
+  "name": "Chicago Midway International Airport",
+  "city": "Chicago",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 41.7859992981,
+  "lon": -87.7524032593
+ },
+ "MEM": {
+  "icao": "KMEM",
+  "name": "Memphis International Airport",
+  "city": "Memphis",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 35.0424003601,
+  "lon": -89.9766998291
+ },
+ "MKE": {
+  "icao": "KMKE",
+  "name": "General Mitchell International Airport",
+  "city": "Milwaukee",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 42.9472007751,
+  "lon": -87.8965988159
+ },
+ "MSY": {
+  "icao": "KMSY",
+  "name": "Louis Armstrong New Orleans International Airport",
+  "city": "New Orleans",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 29.9934005737,
+  "lon": -90.2580032349
+ },
+ "MXP": {
+  "icao": "LIMC",
+  "name": "Malpensa International Airport",
+  "city": "Milan",
+  "country": "IT",
+  "tz": "Europe/Rome",
+  "lat": 45.6305999756,
+  "lon": 8.7281103134
+ },
+ "NIP": {
+  "icao": "KNIP",
+  "name": "Jacksonville Naval Air Station",
+  "city": "Jacksonville",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 30.23579979,
+  "lon": -81.68060303
+ },
+ "ONT": {
+  "icao": "KONT",
+  "name": "Ontario International Airport",
+  "city": "Ontario",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 34.0559997559,
+  "lon": -117.6009979248
+ },
+ "ORD": {
+  "icao": "KORD",
+  "name": "Chicago O'Hare International Airport",
+  "city": "Chicago",
+  "country": "US",
+  "tz": "America/Chicago",
+  "lat": 41.97859955,
+  "lon": -87.90480042
+ },
+ "ORF": {
+  "icao": "KORF",
+  "name": "Norfolk International Airport",
+  "city": "Norfolk",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 36.8945999146,
+  "lon": -76.2012023926
+ },
+ "ORH": {
+  "icao": "KORH",
+  "name": "Worcester Regional Airport",
+  "city": "Worcester",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.2672996521,
+  "lon": -71.8757019043
+ },
+ "OWD": {
+  "icao": "KOWD",
+  "name": "Norwood Memorial Airport",
+  "city": "Norwood",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 42.1904983521,
+  "lon": -71.1728973389
+ },
+ "PHF": {
+  "icao": "KPHF",
+  "name": "Newport News Williamsburg International Airport",
+  "city": "Newport News",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 37.13190079,
+  "lon": -76.49299622
+ },
+ "PHL": {
+  "icao": "KPHL",
+  "name": "Philadelphia International Airport",
+  "city": "Philadelphia",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 39.8718986511,
+  "lon": -75.2410964966
+ },
+ "PHX": {
+  "icao": "KPHX",
+  "name": "Phoenix Sky Harbor International Airport",
+  "city": "Phoenix",
+  "country": "US",
+  "tz": "America/Phoenix",
+  "lat": 33.434299469,
+  "lon": -112.0120010376
+ },
+ "PIT": {
+  "icao": "KPIT",
+  "name": "Pittsburgh International Airport",
+  "city": "Pittsburgh",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 40.49150085,
+  "lon": -80.23290253
+ },
+ "POS": {
+  "icao": "TTPP",
+  "name": "Piarco International Airport",
+  "city": "Port of Spain",
+  "country": "TT",
+  "tz": "America/Port_of_Spain",
+  "lat": 10.5953998566,
+  "lon": -61.3372001648
+ },
+ "PQI": {
+  "icao": "KPQI",
+  "name": "Presque Isle International Airport",
+  "city": "Presque Isle",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 46.68899918,
+  "lon": -68.0447998
+ },
+ "PVD": {
+  "icao": "KPVD",
+  "name": "Rhode Island TF Green International Airport",
+  "city": "Providence",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.7326011658,
+  "lon": -71.4204025269
+ },
+ "PWM": {
+  "icao": "KPWM",
+  "name": "Portland International Jetport Airport",
+  "city": "Portland",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 43.64619827,
+  "lon": -70.30930328
+ },
+ "RDU": {
+  "icao": "KRDU",
+  "name": "Raleigh Durham International Airport",
+  "city": "Raleigh/Durham",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 35.8776016235,
+  "lon": -78.7874984741
+ },
+ "RIC": {
+  "icao": "KRIC",
+  "name": "Richmond International Airport",
+  "city": "Richmond",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 37.5051994324,
+  "lon": -77.3197021484
+ },
+ "ROC": {
+  "icao": "KROC",
+  "name": "Greater Rochester International Airport",
+  "city": "Rochester",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 43.1189002991,
+  "lon": -77.6724014282
+ },
+ "RSW": {
+  "icao": "KRSW",
+  "name": "Southwest Florida International Airport",
+  "city": "Fort Myers",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 26.5361995697,
+  "lon": -81.7552032471
+ },
+ "SAN": {
+  "icao": "KSAN",
+  "name": "San Diego International Airport",
+  "city": "San Diego",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 32.7336006165,
+  "lon": -117.1900024414
+ },
+ "SAV": {
+  "icao": "KSAV",
+  "name": "Savannah Hilton Head International Airport",
+  "city": "Savannah",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 32.12760162,
+  "lon": -81.20210266
+ },
+ "SBY": {
+  "icao": "KSBY",
+  "name": "Salisbury Ocean City Wicomico Regional Airport",
+  "city": "Salisbury",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 38.3404998779,
+  "lon": -75.5102996826
+ },
+ "SDF": {
+  "icao": "KSDF",
+  "name": "Louisville Muhammad Ali International Airport",
+  "city": "Louisville",
+  "country": "US",
+  "tz": "America/Kentucky/Louisville",
+  "lat": 38.1744003296,
+  "lon": -85.736000061
+ },
+ "SEA": {
+  "icao": "KSEA",
+  "name": "Seattle Tacoma International Airport",
+  "city": "Seattle",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 47.4490013123,
+  "lon": -122.3089981079
+ },
+ "SFO": {
+  "icao": "KSFO",
+  "name": "San Francisco International Airport",
+  "city": "San Francisco",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 37.6189994812,
+  "lon": -122.375
+ },
+ "SJO": {
+  "icao": "MROC",
+  "name": "Juan Santamaria International Airport",
+  "city": "San Jose",
+  "country": "CR",
+  "tz": "America/Costa_Rica",
+  "lat": 9.9938602448,
+  "lon": -84.2088012695
+ },
+ "SJU": {
+  "icao": "TJSJ",
+  "name": "Luis Munoz Marin International Airport",
+  "city": "San Juan",
+  "country": "PR",
+  "tz": "America/Puerto_Rico",
+  "lat": 18.4393997192,
+  "lon": -66.0018005371
+ },
+ "SLC": {
+  "icao": "KSLC",
+  "name": "Salt Lake City International Airport",
+  "city": "Salt Lake City",
+  "country": "US",
+  "tz": "America/Denver",
+  "lat": 40.7883987427,
+  "lon": -111.9779968262
+ },
+ "SMF": {
+  "icao": "KSMF",
+  "name": "Sacramento International Airport",
+  "city": "Sacramento",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 38.695400238,
+  "lon": -121.591003418
+ },
+ "SRQ": {
+  "icao": "KSRQ",
+  "name": "Sarasota Bradenton International Airport",
+  "city": "Sarasota/Bradenton",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 27.3953990936,
+  "lon": -82.554397583
+ },
+ "SWF": {
+  "icao": "KSWF",
+  "name": "Stewart International Airport",
+  "city": "Newburgh",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 41.5041007996,
+  "lon": -74.1047973633
+ },
+ "SYR": {
+  "icao": "KSYR",
+  "name": "Syracuse Hancock International Airport",
+  "city": "Syracuse",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 43.1111984253,
+  "lon": -76.106300354
+ },
+ "TPA": {
+  "icao": "KTPA",
+  "name": "Tampa International Airport",
+  "city": "Tampa",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 27.9755001068,
+  "lon": -82.533203125
+ },
+ "TVC": {
+  "icao": "KTVC",
+  "name": "Cherry Capital Airport",
+  "city": "Traverse City",
+  "country": "US",
+  "tz": "America/Detroit",
+  "lat": 44.7414016724,
+  "lon": -85.5821990967
+ },
+ "VQQ": {
+  "icao": "KVQQ",
+  "name": "Cecil Field",
+  "city": "Jacksonville",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 30.2187004089,
+  "lon": -81.876701355
+ },
+ "VRB": {
+  "icao": "KVRB",
+  "name": "Vero Beach Municipal Airport",
+  "city": "Vero Beach",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 27.6555995941,
+  "lon": -80.4179000854
+ },
+ "WRB": {
+  "icao": "KWRB",
+  "name": "Robins Air Force Base",
+  "city": "Warner Robins",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 32.6400985718,
+  "lon": -83.5919036865
+ },
+ "YVR": {
+  "icao": "CYVR",
+  "name": "Vancouver International Airport",
+  "city": "Vancouver",
+  "country": "CA",
+  "tz": "America/Vancouver",
+  "lat": 49.193901062,
+  "lon": -123.1839981079
+ },
+ "PBI": {
+  "icao": "KDJT",
+  "name": "President Donald J. Trump International Airport (formerly: Palm Beach International Airport)",
+  "city": "West Palm Beach",
+  "country": "US",
+  "tz": "America/New_York",
+  "lat": 26.6832008362,
+  "lon": -80.0955963135
+ },
+ "_source": "github.com/mwgg/Airports airports.json, fetched 2026-09-27"
+}
