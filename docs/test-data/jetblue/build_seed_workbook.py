@@ -76,6 +76,27 @@ def gc_km(a, b):
     return 6371 * 2 * math.asin(math.sqrt(x))
 
 
+def wall(t, tz):
+    """Wall-clock time in tz WITHOUT an offset. HANA's SECONDDATE stores no zone, and an
+    offset in a CSV value is a load risk there that SQLite never reports."""
+    return t.astimezone(tz).strftime('%Y-%m-%dT%H:%M:%S') if t else None
+
+
+def bearing(a, b):
+    la1, lo1, la2, lo2 = map(math.radians, (a['lat'], a['lon'], b['lat'], b['lon']))
+    y = math.sin(lo2 - lo1) * math.cos(la2)
+    x = math.cos(la1) * math.sin(la2) - math.sin(la1) * math.cos(la2) * math.cos(lo2 - lo1)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+
+def flight_level(km, eastbound, ceiling, key):
+    """Target by sector length, then the FAA semicircular rule: eastbound odd, westbound even."""
+    target = 240 if km < 300 else 300 if km < 600 else 340 if km < 1200 else 360 if km < 2500 else 380
+    target += 10 * (int(h(key, 'flv') * 3) - 1)
+    levels = [l for l in range(230, ceiling + 1, 10) if ((l // 10) % 2 == 1) == eastbound]
+    return min(levels, key=lambda l: (abs(l - target), l))
+
+
 def r2(x):
     return None if x is None else round(x, 2)
 
@@ -309,37 +330,102 @@ perf = {t: round(98.5 + h(t, 'perf') * 4.5, 3) for t in {f['tail'] for f in kept
 stations = sorted({f['o'] for f in kept} | {f['d'] for f in kept})
 
 
+# ---- Fuel policy: JetBlue is a US carrier, so the plan follows 14 CFR Part 121 ----
+# 121.639 DOMESTIC (48 contiguous states): trip + alternate + 45 min at normal cruise.
+#   No contingency is required; the 45 minutes goes in final_reserve_kg.
+# 121.645 FLAG (any leg touching a non-US-state point, incl. Puerto Rico and
+#   Bermuda for B6 purposes): trip + 10% of the trip TIME as contingency +
+#   alternate + 30 min holding at 1,500 ft.
+# 121.645(c) ISLAND: a destination with no alternate within reach carries
+#   2 hours at normal cruise instead of alternate + holding.
+CLIMB_ALLOWANCE = {'A223': 350, 'A320': 500, 'A321': 600, 'A21N': 500}   # kg above cruise rate for climb/descent
+HOLD_FACTOR = 0.80            # holding burn as a fraction of cruise burn
+ISLAND_MAX_ALT_KM = 700       # beyond this no alternate is planned
+
+
+def is_domestic(o, d):
+    return (AIRPORTS[o]['country'] == 'US' and AIRPORTS[d]['country'] == 'US'
+            and not AIRPORTS[o]['tz'].startswith(('Pacific/', 'America/Anchorage'))
+            and not AIRPORTS[d]['tz'].startswith(('Pacific/', 'America/Anchorage')))
+
+
+# Where the usual alternate is not a station in the extract. Alternate-only: these
+# go in the plan's alternate_airport string and are NOT added to MASTER_AIRPORTS.
+ALT_OVERRIDE = {'SEA': 'PDX', 'SJU': 'BQN', 'SJO': 'LIR', 'KIN': 'MBJ', 'POS': 'BGI'}
+
+
 def alternate_for(dest):
-    cands = [(gc_km(AIRPORTS[dest], AIRPORTS[s]), s) for s in stations
-             if s != dest and s not in NON_COMMERCIAL and AIRPORTS[s]['country'] == AIRPORTS[dest]['country']]
-    cands = [c for c in cands if c[0] >= 60] or [(gc_km(AIRPORTS[dest], AIRPORTS[s]), s) for s in stations if s != dest]
-    return min(cands)
+    """Nearest other commercial station 100 km or more away; None where the nearest is out of reach (island)."""
+    if dest in ALT_OVERRIDE:
+        return gc_km(AIRPORTS[dest], AIRPORTS[ALT_OVERRIDE[dest]]), ALT_OVERRIDE[dest]
+    cands = sorted((gc_km(AIRPORTS[dest], AIRPORTS[s]), s) for s in stations
+                   if s != dest and s not in NON_COMMERCIAL and gc_km(AIRPORTS[dest], AIRPORTS[s]) >= 100)
+    same = [c for c in cands if AIRPORTS[c[1]]['country'] == AIRPORTS[dest]['country']]
+    best = (same or cands)[0]
+    return best if best[0] <= ISLAND_MAX_ALT_KM else (None, None)
+
+
+def fuel_stack(f, planned_air_min, payload_delta=0.0):
+    """The seven terms for one plan version. payload_delta scales trip for a heavier/lighter estimate."""
+    t, key = f['type'], f['key']
+    burn = cruise_burn(t)
+    trip = (CLIMB_ALLOWANCE[t] + burn * max(planned_air_min - 20, 10) / 60) * (1 + payload_delta)
+    alt_km, alt = ALT[f['d']]
+    domestic = is_domestic(f['o'], f['d'])
+    if alt is None:                                           # island reserve, no alternate
+        alt_fuel, final_res = 0.0, 0.0
+        additional = 120 / 60 * burn
+        basis = 'FAR 121.645(c) island reserve 2 h, no alternate'
+    else:
+        alt_fuel = CLIMB_ALLOWANCE[t] * 0.5 + (alt_km / 650 * 60 + 8) / 60 * burn * 0.95
+        if domestic:
+            final_res, basis = 45 / 60 * burn, 'FAR 121.639 domestic: alternate + 45 min cruise'
+        else:
+            final_res, basis = 30 / 60 * burn * HOLD_FACTOR, 'FAR 121.645 flag: 10% contingency + alternate + 30 min hold'
+        additional = 0.0
+        if f['d'] in BUSY and h(key, 'add') < 0.25:           # dispatcher adds holding for forecast arrival delay
+            additional = (10 + 5 * int(h(key, 'adm') * 3)) / 60 * burn * HOLD_FACTOR
+    contingency = 0.0 if domestic else 0.10 * planned_air_min / 60 * burn
+    taxi = f['taxi_out'] * TAXI_KG_MIN[t]
+    # Commander's discretion: most legs none; some carry 300-900 kg; tankering from cheap-fuel hubs
+    r = h(key, 'ext')
+    extra = 0.0 if r < 0.72 else 100 * (3 + int(h(key, 'exa') * 7))
+    return dict(trip=round(trip), cont=round(contingency), alt=round(alt_fuel), fres=round(final_res),
+                add=round(additional), taxi=round(taxi), extra=round(extra)), alt, basis
 
 
 ALT = {s: alternate_for(s) for s in stations}
+# Plan revisions. Real dispatch re-issues a plan when payload firms up, weather or
+# ATC changes, or the release is re-cut; the feed then sends only the latest.
+#   ~70% of legs: one plan.  ~22%: v1 then v2.  ~6%: v1, v2, v3.
+#   ~2%: FEED source where v2 never arrived (v1 then v3) - exercises DSP456.
+REVISION_REASONS = ['Payload firmed up at close-out', 'Revised winds aloft', 'ATC reroute filed',
+                    'Destination weather deteriorated: holding added', 'Alternate changed', 'MEL item: fuel penalty']
 seq = 0
 for f in sorted(kept, key=lambda x: x['atot']):
     seq += 1
-    key, t = f['key'], f['type']
-    burn = cruise_burn(t)
-    f['burn'] = burn
+    key = f['key']
+    f['burn'] = cruise_burn(f['type'])
     planned_air = f['planned_block'] - f['taxi_out'] - f['taxi_in']
-    trip = planned_air / 60 * burn * 1.05                      # 5% for climb
-    alt_km, alt = ALT[f['d']]
-    f['alt'] = alt
-    alt_fuel = (alt_km / 600 * 60 + 10) / 60 * burn            # 600 km/h low-level, +10 min approach
-    final_res = 30 / 60 * burn * 0.85                         # 30 min holding at 85% of cruise burn
-    long_or_water = f['km'] > 2500 or AIRPORTS[f['d']]['country'] != 'US' or AIRPORTS[f['o']]['country'] != 'US'
-    additional = 0.0
-    if long_or_water and h(key, 'add') < 0.5:
-        additional = 15 / 60 * burn * 0.85                    # EDTO / isolated-aerodrome margin
-    elif f['d'] in BUSY and h(key, 'add') < 0.15:
-        additional = 10 / 60 * burn * 0.85                    # anticipated arrival delay
-    taxi = f['taxi_out'] * TAXI_KG_MIN[t]
-    extra = 0.0 if h(key, 'ext') < 0.7 else 100 * (2 + int(h(key, 'exa') * 7))
-    f['stack'] = dict(trip=round(trip), cont=round(trip * 0.05), alt=round(alt_fuel), fres=round(final_res),
-                      add=round(additional), taxi=round(taxi), extra=round(extra))
+    f['stack'], f['alt'], f['basis'] = fuel_stack(f, planned_air)
     f['dispatch_order_id'] = f'FO-B6-2026-{seq:05d}'
+    r = h(key, 'rev')
+    if r < 0.70:
+        f['versions'], f['vsource'] = [1], 'ASSIGNED'
+    elif r < 0.92:
+        f['versions'], f['vsource'] = [1, 2], 'ASSIGNED'
+    elif r < 0.98:
+        f['versions'], f['vsource'] = [1, 2, 3], 'FEED'
+    else:
+        f['versions'], f['vsource'] = [1, 3], 'FEED'
+    f['earlier'] = []          # superseded plans, oldest first
+    for i, v in enumerate(f['versions'][:-1]):
+        delta = -0.02 - h(key, f'pd{v}') * 0.04                   # earlier payload estimates ran light
+        st, alt, _ = fuel_stack(f, planned_air + int(h(key, f'pa{v}') * 10) - 5, delta)
+        if h(key, f'rs{v}') < 0.5:
+            st['extra'] = max(0, st['extra'] - 300)
+        f['earlier'].append(dict(version=v, stack=st, alt=alt,
+                                 reason=pick(key, f'rr{v}', REVISION_REASONS)))
 
 for legs in by_tail.values():
     legs.sort(key=lambda x: x['atot'])
@@ -349,7 +435,7 @@ for legs in by_tail.values():
             rob = f['prev']['fob_in']
             f['rob_src'] = 'carried from previous leg FOB at IN'
         else:
-            rob = s['alt'] + s['fres'] + 400 + int(h(f['key'], 'rob') * 800)
+            rob = s['alt'] + s['fres'] + s['add'] + 400 + int(h(f['key'], 'rob') * 800)
             f['rob_src'] = 'SEEDED: no previous leg in the extract (D59 shape)'
             f['flags'].append('opening ROB seeded, not carried: first leg of this tail in the extract')
         block = sum(s.values())
@@ -372,7 +458,7 @@ for legs in by_tail.values():
         pf = perf[f['tail']] / 100
         f['fob_out'] = block
         f['fob_off'] = block - f['taxi_out'] * TAXI_KG_MIN[t]
-        f['fob_on'] = f['fob_off'] - f['air_min'] / 60 * f['burn'] * 1.05 * pf * (0.98 + h(f['key'], 'wx') * 0.04)
+        f['fob_on'] = f['fob_off'] - (CLIMB_ALLOWANCE[t] + f['burn'] * max(f['air_min'] - 20, 10) / 60) * pf * (0.98 + h(f['key'], 'wx') * 0.04)
         f['fob_in'] = f['fob_on'] - f['taxi_in'] * TAXI_KG_MIN[t]
         if f['fob_in'] < s['fres']:
             f['flags'].append('FOB at IN below final reserve: check plan')
@@ -453,36 +539,63 @@ for f in sorted(kept, key=lambda x: x['atot']):
         actual_destination_ID=airport_id(f['d']), actual_destination_airport=f['d'],
         created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
 
-    s = f['stack']
     o, d = AIRPORTS[f['o']], AIRPORTS[f['d']]
-    westbound = d['lon'] < o['lon']
-    wind = round((15 + h(key, 'wnd') * 45) if westbound else -(20 + h(key, 'wnd') * 60), 1)
-    air = f['air_min']
-    fl = 280 if air < 60 else 340 if air < 120 else 360 if air < 240 else 380
-    fl = min(fl + (10 if h(key, 'fl') < 0.5 and not westbound else 0), MAX_FL[t])
-    payload = boarded * 100 + cargo
-    payload_plan = booked * 100 + cargo
-    fd_rows.append(dict(
-        ID=uid('FD', f['leg_id'], 1), dispatch_order_id=f['dispatch_order_id'],
-        flight_number=f['flight_number'], flight_date=str(f['flight_date']), flight_schedule_ID=f['id'],
-        fuel_order_ID=None, tail_number=f['tail'], tail_registration=f['tail'], captain_id=cap_id,
-        dispatcher_id=pick(f['o'] + str(f['flight_date']), 'dsp', [f'DSP-B6{n:03d}' for n in range(1, 41)]),
-        atd=iso(f['aobt']), ata=iso(f['aibt']),
-        atd_local=iso_off(f['aobt'], f['o_tz']), ata_local=iso_off(f['aibt'], f['d_tz']),
-        std_gst=iso_off(f['sobt'], GST), sta_gst=iso_off(f['sibt'], GST),
-        atd_gst=iso_off(f['aobt'], GST), ata_gst=iso_off(f['aibt'], GST),
-        dispatch_timestamp=iso(f['sobt'] - dt.timedelta(minutes=75 + int(h(key, 'dts') * 30))),
-        dispatch_qty_kg=r2(f['block']), trip_fuel_kg=r2(s['trip']), contingency_fuel_kg=r2(s['cont']),
-        alternate_fuel_kg=r2(s['alt']), final_reserve_kg=r2(s['fres']), additional_fuel_kg=r2(s['add']),
-        taxi_fuel_kg=r2(s['taxi']), extra_fuel_kg=r2(s['extra']), block_fuel_kg=r2(f['block']),
-        required_uplift_kg=r2(f['uplift']), plan_group_id=f['leg_id'], plan_version=1,
-        plan_version_source='ASSIGNED', plan_status='ACTIVE', superseded_by_ID=None, version_gap_flag='false',
-        versions_skipped=0, rob_departure_kg=r2(f['rob']), payload_kg=r2(payload), payload_plan_kg=r2(payload_plan),
-        arrival_rob_plan_kg=r2(s['cont'] + s['alt'] + s['fres'] + s['add'] + s['extra']),
-        flight_level=fl, wind_component=wind, alternate_airport=f['alt'], dispatch_source='MANUAL',
-        ofplan_reference=f'OFP-{f["flight_number"]}-{f["flight_date"]:%Y%m%d}',
-        remarks=f'SYNTHETIC plan from ADS-B airborne time - ROB {f["rob_src"]}'[:200],
-        created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+    brg = bearing(o, d)
+    eastbound = brg < 180
+    # FAA AC 120-27F standard weights: 190 lb adult with carry-on + 0.6 checked bags at 28.5 lb = ~94 kg
+    payload = boarded * 94 + cargo
+    payload_plan = booked * 94 + cargo
+    n_versions = len(f['earlier']) + 1
+    # Release times: v1 early, each revision closer to departure, the active plan 35-110 min out
+    lead = [150 + int(h(key, 'l1') * 90), 60 + int(h(key, 'l2') * 40), 35 + int(h(key, 'l3') * 20)]
+    lead = lead[-n_versions:] if n_versions > 1 else [60 + int(h(key, 'l0') * 50)]
+    plans = f['earlier'] + [dict(version=f['versions'][-1], stack=f['stack'], alt=f['alt'], reason=None)]
+    ids = [uid('FD', f['leg_id'], p_['version']) for p_ in plans]
+    for i, p_ in enumerate(plans):
+        active = i == len(plans) - 1
+        st = dict(p_['stack'])
+        block = f['block'] if active else sum(st.values())
+        if active:
+            st = f['stack']
+        elif block < f['rob']:
+            st['extra'] += round(f['rob'] - block); block = sum(st.values())
+        if not active and block > tail_cap(f['tail'], t):
+            st['extra'] = max(0, st['extra'] - round(block - tail_cap(f['tail'], t))); block = sum(st.values())
+        fl = flight_level(f['km'], eastbound, MAX_FL[t], key + str(p_['version']))
+        jet = (35 + h(key, f'jet{p_["version"]}') * 50) * min(1.0, fl / 350)
+        wind = round(-jet * math.sin(math.radians(brg)) + (h(key, f'wn{p_["version"]}') - 0.5) * 16, 1)
+        skipped = f['versions'][i] - f['versions'][i - 1] - 1 if i else 0
+        remark = ' - '.join(x for x in (
+            'SYNTHETIC plan', f['basis'],
+            None if active else f'superseded: {p_["reason"]}',
+            f'ROB {f["rob_src"]}') if x)
+        fd_rows.append(dict(
+            ID=ids[i], dispatch_order_id=f['dispatch_order_id'],
+            flight_number=f['flight_number'], flight_date=str(f['flight_date']), flight_schedule_ID=f['id'],
+            fuel_order_ID=None, tail_number=f['tail'], tail_registration=f['tail'], captain_id=cap_id,
+            dispatcher_id=pick(f['o'] + str(f['flight_date']), 'dsp', [f'DSP-B6{n:03d}' for n in range(1, 41)]),
+            atd=iso(f['aobt']) if active else None, ata=iso(f['aibt']) if active else None,
+            atd_local=wall(f['aobt'], f['o_tz']) if active else None,
+            ata_local=wall(f['aibt'], f['d_tz']) if active else None,
+            std_gst=wall(f['sobt'], GST), sta_gst=wall(f['sibt'], GST),
+            atd_gst=wall(f['aobt'], GST) if active else None, ata_gst=wall(f['aibt'], GST) if active else None,
+            dispatch_timestamp=iso(f['sobt'] - dt.timedelta(minutes=lead[i])),
+            dispatch_qty_kg=r2(block), trip_fuel_kg=r2(st['trip']), contingency_fuel_kg=r2(st['cont']),
+            alternate_fuel_kg=r2(st['alt']), final_reserve_kg=r2(st['fres']), additional_fuel_kg=r2(st['add']),
+            taxi_fuel_kg=r2(st['taxi']), extra_fuel_kg=r2(st['extra']), block_fuel_kg=r2(block),
+            required_uplift_kg=r2(block - f['rob']), plan_group_id=f['leg_id'], plan_version=p_['version'],
+            plan_version_source=f['vsource'], plan_status='ACTIVE' if active else 'SUPERSEDED',
+            superseded_by_ID=None if active else ids[i + 1],
+            version_gap_flag='true' if skipped else 'false', versions_skipped=skipped,
+            rob_departure_kg=r2(f['rob']),
+            payload_kg=r2(payload if active else payload_plan * (0.96 + h(key, f'pp{i}') * 0.03)),
+            payload_plan_kg=r2(payload_plan if active else payload_plan * (0.96 + h(key, f'pp{i}') * 0.03)),
+            arrival_rob_plan_kg=r2(st['cont'] + st['alt'] + st['fres'] + st['add'] + st['extra']),
+            flight_level=fl, wind_component=wind, alternate_airport=p_['alt'],
+            dispatch_source='MANUAL',
+            ofplan_reference=f'OFP-{f["flight_number"]}-{f["flight_date"]:%Y%m%d}' + (f'-V{p_["version"]}' if n_versions > 1 else ''),
+            remarks=remark[:200],
+            created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
 
 type_counts = Counter()
 tails = {}
@@ -555,38 +668,40 @@ GAP_FS = [
     ('created_at/by, modified_at/by', 'AuditTrail', '', '-', D, 'SEED_B6_ADSB so every seeded row is identifiable'),
 ]
 GAP_FD = [
-    ('ID', 'UUID', 'key', '-', D, 'UUIDv5 of plan_group_id + version'),
-    ('dispatch_order_id', 'String(20)', 'mandatory', '-', Y, 'FO-B6-2026-nnnnn in wheels-off order'),
+    ('ID', 'UUID', 'key', '-', D, 'UUIDv5 of plan_group_id + plan_version'),
+    ('dispatch_order_id', 'String(20)', 'mandatory', '-', Y, 'FO-B6-2026-nnnnn in wheels-off order. Same on every version of a plan: no order was confirmed to a supplier, so no commercial boundary was crossed (A7)'),
     ('flight_number / flight_date', '', 'mandatory', 'Flight No', D, 'Same as FLIGHT_SCHEDULE'),
     ('flight_schedule_ID', 'FK', '', '-', D, 'Links directly, so the DSP458 number+date ambiguity cannot bite in the CSV seed'),
-    ('fuel_order_ID', 'FK', '', '-', B, 'No FUEL_ORDERS rows are seeded. Filled when an order is raised (or by the dispatch Excel import)'),
+    ('fuel_order_ID', 'FK', '', '-', B, 'No FUEL_ORDERS rows are seeded. Filled when an order is raised'),
     ('tail_number / tail_registration', '', 'import-required', 'Tail Number', S, ''),
     ('captain_id / dispatcher_id', 'String(20)', 'import-required', '-', Y, 'CAP-B6nnnn per tail per day; DSP-B6nnn per station per day'),
-    ('atd / ata', 'DateTime', 'ATD import-required', '-', D, 'AOBT / AIBT'),
-    ('atd_local / ata_local', 'DateTime', '', '-', D, 'AOBT / AIBT at origin / destination timezone offset'),
-    ('std_gst / sta_gst / atd_gst / ata_gst', 'DateTime', '', '-', D, 'Same instants on a UTC+04:00 clock, as the existing seed does. The GST clock is an inherited template field and means nothing for B6'),
-    ('dispatch_timestamp', 'DateTime', 'import-required', '-', Y, 'SOBT less 75-105 min'),
-    ('trip_fuel_kg', 'Decimal', '', '-', D, 'Planned airborne min (planned block - taxi) / 60 x AIRCRAFT_MASTER.cruise_burn_kgph x 1.05'),
-    ('contingency_fuel_kg', 'Decimal', '', '-', D, '5% of trip'),
-    ('alternate_fuel_kg', 'Decimal', '', '-', D, '(great-circle km to alternate / 600 km/h + 10 min) x cruise burn'),
-    ('final_reserve_kg', 'Decimal', '', '-', D, '30 min holding at 85% of cruise burn'),
-    ('additional_fuel_kg', 'Decimal', '', '-', Y, '15 min on half the long/over-water/international legs; 10 min on 15% of legs into congested hubs; else 0'),
+    ('atd / ata', 'DateTime', 'ATD import-required', '-', D, 'AOBT / AIBT on the ACTIVE plan. Blank on superseded plans: a plan replaced before departure never flew'),
+    ('atd_local / ata_local', 'DateTime', '', '-', D, 'AOBT / AIBT as origin / destination wall-clock time, WITHOUT an offset (HANA stores none, and an offset is a load risk there)'),
+    ('std_gst / sta_gst / atd_gst / ata_gst', 'DateTime', '', '-', D, 'Same instants on a UTC+4 wall clock, no offset. The GST clock is an inherited template field and means nothing for B6'),
+    ('dispatch_timestamp', 'DateTime', 'import-required', '-', Y, 'Single plan: 60-110 min before STD. Revised: v1 150-240 min, v2 60-100 min, v3 35-55 min before STD'),
+    ('trip_fuel_kg', 'Decimal', '', '-', D, 'Climb/descent allowance by type (A223 350, A320 500, A321 600, A21N 500 kg) + cruise burn x (planned airborne min - 20)'),
+    ('contingency_fuel_kg', 'Decimal', '', '-', D, '14 CFR 121.645 flag legs: 10% of trip TIME at cruise burn. Domestic (121.639): 0, none required'),
+    ('alternate_fuel_kg', 'Decimal', '', '-', D, 'Half the climb allowance + (km to alternate / 650 km/h + 8 min approach) x 95% cruise burn. 0 on an island-reserve plan'),
+    ('final_reserve_kg', 'Decimal', '', '-', D, 'Domestic: 45 min at cruise burn (121.639). Flag: 30 min holding at 80% of cruise burn (121.645). 0 on an island-reserve plan'),
+    ('additional_fuel_kg', 'Decimal', '', '-', Y, 'Island reserve (121.645(c), BDA): 2 h at cruise burn. Otherwise 10-20 min holding on 25% of legs into congested hubs; else 0'),
     ('taxi_fuel_kg', 'Decimal', '', '-', D, 'Taxi-out minutes x type taxi burn (A223 9, A320 11, A321 13, A21N 11 kg/min)'),
-    ('extra_fuel_kg', 'Decimal', '', '-', Y, "Commander's discretion: 0 on 70% of legs, 200-800 kg otherwise; absorbs any tankered surplus so uplift is never negative"),
-    ('block_fuel_kg / dispatch_qty_kg', 'Decimal', 'DISPATCH_QTY_KG import-required', '-', D, 'DSP450: sum of the seven terms. dispatch_qty_kg equals it. Capped at type fuel capacity'),
+    ('extra_fuel_kg', 'Decimal', '', '-', Y, "Commander's discretion: 0 on 72% of legs, 300-900 kg otherwise; absorbs any tankered surplus so uplift is never negative"),
+    ('block_fuel_kg / dispatch_qty_kg', 'Decimal', 'DISPATCH_QTY_KG import-required', '-', D, 'DSP450: sum of the seven terms; dispatch_qty_kg equals it. Capped at the tail\'s fuel capacity'),
     ('required_uplift_kg', 'Decimal', '', '-', D, 'DSP451: block - rob_departure_kg, exactly as deriveStack() computes it'),
-    ('plan_group_id / plan_version / plan_version_source / plan_status', '', '', '-', D, 'flight_leg_id / 1 / ASSIGNED / ACTIVE'),
-    ('superseded_by_ID', 'FK', '', '-', B, 'Only set on a superseded version; every seeded plan is v1 ACTIVE'),
-    ('version_gap_flag / versions_skipped', '', '', '-', D, 'false / 0'),
-    ('rob_departure_kg', 'Decimal', 'import-required', '-', D, 'PRE-uplift fuel on board, as deriveStack() uses it: previous leg FOB at IN on the same tail; seeded on each tail\'s first leg (flagged)'),
-    ('payload_kg / payload_plan_kg', 'Decimal', 'PAYLOAD_KG import-required', '-', D, 'boarded (planned: booked) x 100 kg + cargo. No MZFW cap: mzfw_kg is null on every tail'),
+    ('plan_group_id', 'String(40)', 'DSP452', '-', D, 'flight_leg_id. Exactly one ACTIVE row per group'),
+    ('plan_version / plan_status', '', 'DSP453', '-', Y, '70% one plan; 22% v1+v2; 6% v1+v2+v3; 2% v1+v3 (v2 never arrived). Latest ACTIVE, earlier SUPERSEDED'),
+    ('plan_version_source', 'PlanVersionSource', '', '-', Y, 'ASSIGNED for one- and two-version plans, FEED where the source numbered the versions (the three-version and gapped families)'),
+    ('superseded_by_ID', 'FK', '', '-', D, 'On a SUPERSEDED row, the next version of the same plan. Blank on the ACTIVE row'),
+    ('version_gap_flag / versions_skipped', '', 'DSP456', '-', D, 'Stamped on the row that arrived after a gap (v3 following v1: true / 1). false / 0 everywhere else'),
+    ('rob_departure_kg', 'Decimal', 'import-required', '-', D, "PRE-uplift fuel on board, as deriveStack() uses it: previous leg FOB at IN on the same tail; seeded on each tail's first leg (flagged)"),
+    ('payload_kg / payload_plan_kg', 'Decimal', 'PAYLOAD_KG import-required', '-', D, 'FAA AC 120-27F standard weights: 94 kg per passenger incl. bags, boarded (plan: booked) + cargo. Superseded plans carry a 1-4% lighter estimate'),
     ('arrival_rob_plan_kg', 'Decimal', '', '-', D, 'contingency + alternate + final reserve + additional + extra'),
-    ('flight_level', 'Integer', '', '-', Y, 'By sector length, +10 eastbound on half the legs, capped at type ceiling'),
-    ('wind_component', 'Decimal', '', '-', Y, 'Westbound +15..+60 kt headwind, eastbound -20..-80 kt tailwind'),
-    ('alternate_airport', 'String(3)', '', '-', D, 'Nearest other station in the extract, same country, >= 60 km'),
+    ('flight_level', 'Integer', '', '-', D, 'Target by sector length (FL240 short hop to FL380 long haul), then the FAA semicircular rule: eastbound odd, westbound even; capped at type ceiling'),
+    ('wind_component', 'Decimal', '', '-', Y, 'Westerly jet of 35-85 kt (weaker below FL350) resolved onto the route bearing: westbound headwind (+), eastbound tailwind (-), north-south near zero'),
+    ('alternate_airport', 'String(3)', '', '-', D, 'Nearest commercial station 100 km+ away, same country first. PDX, BQN, LIR, MBJ, BGI used where the usual alternate is outside the extract. Blank = island reserve (BDA)'),
     ('dispatch_source', 'String(15)', 'import-required', '-', D, 'MANUAL (not TRIPRECORD: no real flight plan exists)'),
-    ('ofplan_reference', 'String(30)', '', '-', Y, 'OFP-<flight>-<yyyymmdd>'),
-    ('remarks', 'String(200)', '', '-', D, 'States the row is synthetic and where its ROB came from'),
+    ('ofplan_reference', 'String(30)', '', '-', Y, 'OFP-<flight>-<yyyymmdd>, with -V<n> where the plan was revised'),
+    ('remarks', 'String(200)', '', '-', D, 'SYNTHETIC, the fuel rule applied, why a version was superseded, and where the ROB came from'),
 ]
 
 # ---------------------------------------------------------------------------
@@ -642,7 +757,7 @@ lines = [
     (f'  3. AIRCRAFT_MASTER_add     -> append to db/data/fuelsphere-AIRCRAFT_MASTER.csv     ({len(am_rows)} row: A21N)', False),
     (f'  4. AIRCRAFT_REGISTRATIONS_add -> append to db/data/fuelsphere-AIRCRAFT_REGISTRATIONS.csv ({len(reg_rows)} rows)', False),
     (f'  5. FLIGHT_SCHEDULE         -> append to db/data/fuelsphere-FLIGHT_SCHEDULE.csv     ({len(fs_rows)} rows)', False),
-    (f'  6. FLIGHT_DISPATCH         -> append to db/data/fuelsphere-FLIGHT_DISPATCH.csv     ({len(fd_rows)} rows)', False),
+    (f'  6. FLIGHT_DISPATCH         -> append to db/data/fuelsphere-FLIGHT_DISPATCH.csv     ({len(fd_rows)} rows: every version of every plan)', False),
     ('Save each sheet as a semicolon-delimited CSV. Headers are the CDS element names. Columns in the sheet that the existing CSV lacks must be added to that CSV header too (or kept in a separate CSV per entity: CAP loads one file per entity, so merge rather than add a second file).', False),
     ('', False),
     ('COLOUR KEY on Field_Gap_Analysis', True),
@@ -653,6 +768,10 @@ lines = [
     ('  BLANK BY DESIGN  must stay empty: filling it would claim a record (order, document, cancellation) that does not exist', False),
     ('', False),
     ('DECISIONS YOU MAY WANT TO CHANGE', True),
+    ('  - Dispatch Plans (FLIGHT_DISPATCH, shown as "Dispatch Plans" on the flight page) follow 14 CFR Part 121: domestic legs carry alternate + 45 min and no contingency, flag legs 10% contingency + alternate + 30 min hold, Bermuda a 2 h island reserve.', False),
+    (f'  - {sum(1 for f in kept if len(f["versions"]) > 1)} of {kept_n} flights have revised plans (2-3 versions, earlier ones SUPERSEDED), {len(fd_rows)} dispatch rows in all; '
+     f'{sum(r["version_gap_flag"] == "true" for r in fd_rows)} plans arrive after a missing version to exercise DSP456.', False),
+    ('  - atd_local, ata_local and the four *_gst columns are wall-clock times with no time-zone offset, so they load on HANA as well as SQLite.', False),
     ('  - fob_source = ACARS. The four FOB figures are computed, not downlinked. Change to CREW_REPORTED if the claim matters for your test.', False),
     ('  - DJT in the extract is normalised to PBI. The airport was renamed; the reference dataset keeps IATA PBI (ICAO now KDJT). Confirm which code your S/4 plant uses.', False),
     ('  - A21N is a new AIRCRAFT_MASTER row with order-of-magnitude figures (26,000 kg fuel, 97,000 kg MTOW, 2,200 kg/h). Replace with fleet figures if you have them.', False),

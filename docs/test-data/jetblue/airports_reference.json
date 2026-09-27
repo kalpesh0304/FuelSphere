@@ -872,5 +872,50 @@
   "lat": 26.6832008362,
   "lon": -80.0955963135
  },
- "_source": "github.com/mwgg/Airports airports.json, fetched 2026-09-27"
+ "_source": "github.com/mwgg/Airports airports.json, fetched 2026-09-27",
+ "PDX": {
+  "icao": "KPDX",
+  "name": "Portland International Airport",
+  "city": "Portland",
+  "country": "US",
+  "tz": "America/Los_Angeles",
+  "lat": 45.58869934,
+  "lon": -122.5979996
+ },
+ "BQN": {
+  "icao": "TJBQ",
+  "name": "Rafael Hernandez Airport",
+  "city": "Aguadilla",
+  "country": "PR",
+  "tz": "America/Puerto_Rico",
+  "lat": 18.4948997498,
+  "lon": -67.1294021606
+ },
+ "LIR": {
+  "icao": "MRLB",
+  "name": "Daniel Oduber Quiros International Airport",
+  "city": "Liberia",
+  "country": "CR",
+  "tz": "America/Costa_Rica",
+  "lat": 10.5932998657,
+  "lon": -85.5444030762
+ },
+ "MBJ": {
+  "icao": "MKJS",
+  "name": "Sangster International Airport",
+  "city": "Montego Bay",
+  "country": "JM",
+  "tz": "America/Jamaica",
+  "lat": 18.5037002563,
+  "lon": -77.9133987427
+ },
+ "BGI": {
+  "icao": "TBPB",
+  "name": "Sir Grantley Adams International Airport",
+  "city": "Bridgetown",
+  "country": "BB",
+  "tz": "America/Barbados",
+  "lat": 13.0746002197,
+  "lon": -59.4925003052
+ }
 }
