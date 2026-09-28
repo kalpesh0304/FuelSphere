@@ -836,7 +836,7 @@ for f in sorted(kept, key=lambda x: x['atot']):
         temperature_corrected_qty=r2(dl * round(1 - ALPHA * (f['temp'] - 15), 6)),
         vehicle_id=veh, driver_name=f'Fueler {100 + int(h(veh, "drv") * 800)} (synthetic)', pilot_name=f['captain_name'],
         ground_crew_name=f'Ramp agent {100 + int(h(f["key"], "gc") * 800)} (synthetic)',
-        s4_gr_number=f['gr_number'], s4_gr_year='2026', s4_gr_item='0001', status='Posted',
+        s4_gr_number=f['gr_number'], s4_gr_year='2026', s4_gr_item='0001', status='Verified',
         quantity_variance=qv, variance_percentage=qpct, variance_flag='true' if flagged else 'false',
         variance_reason=('Arrived with more fuel than planned, so the uplift was reduced to reach block fuel.' if flagged and qv < 0
                          else 'Uplift above order.' if flagged else None),
@@ -1030,14 +1030,18 @@ unbilled_ids = {f['id'] for f in unbilled}
 inv_keys = sorted(groups, key=lambda k: (k[1], k[0]))
 special = {}
 ranked = sorted(inv_keys, key=lambda k: h('|'.join(k), 'inv'))
-# posted invoice A (WFS) holds the ticket that is billed again on unposted WFS invoice B
+# WFS invoice A holds a ticket that is billed again on WFS invoice B (INV455 flags both)
 wfs = [k for k in ranked if k[0] == 'WFSUS01' and len(groups[k]) >= 3]
 special['A'], special['B'] = wfs[0], wfs[1]
 rest = [k for k in ranked if k not in (special['A'], special['B']) and len(groups[k]) >= 2]
 special['C'], special['D'], special['R'] = rest[0], rest[1], rest[2]      # C: 2 unknown tickets, D: 1, R: rate
 others = [k for k in ranked if k not in special.values()]
-posted = set(others[:17]) | {special['A']}
+posted = set()                      # nothing is posted: every invoice is awaiting posting
+EXC = {special['A'], special['B'], special['C'], special['D'], special['R']}
+AUTO = 'SYSTEM (auto-approved: three-way matched within tolerance)'
+GATE_AT = '2026-09-27T16:00:00Z'
 
+dup_ticket_flight = [f for f in groups[special['A']] if f['id'] not in unbilled_ids][0]['id']
 invoice_rows, item_rows = [], []
 existing_tickets = {f['ticket_number'] for f in billable}
 seq_inv = Counter()
@@ -1046,11 +1050,9 @@ for n, key in enumerate(inv_keys, start=1):
     pref = SUPPLIER_DEFS[sup][2]
     seq_inv[pref] += 1
     inv_id = uid('INV', sup, code)
-    is_posted = key in posted
     lines = [dict(kind='TICKET', f=f) for f in groups[key] if f['id'] not in unbilled_ids]
     if key == special['B']:
-        a0 = [f for f in groups[special['A']] if f['id'] not in unbilled_ids][0]
-        lines.append(dict(kind='DUP', f=a0))
+        lines.append(dict(kind='DUP', f=next(f for f in billable if f['id'] == dup_ticket_flight)))
     if key in (special['C'], special['D']):
         for j in range(2 if key == special['C'] else 1):
             base = 900000 + int(h(code + str(j), 'ghost') * 90000)
@@ -1059,7 +1061,8 @@ for n, key in enumerate(inv_keys, start=1):
             lines.append(dict(kind='GHOST', number=ghost, qty=4000 + int(h(ghost, 'gq') * 9000),
                               day=['2026-09-24', '2026-09-25', '2026-09-26'][j % 3]))
     us = AIRPORTS[code]['country'] == 'US' and code != 'SJU'
-    net_total = tax_total = 0.0
+    net_total = tax_total = price_var_total = 0.0
+    counts = Counter()
     for i, ln in enumerate(lines):
         item = dict(ID=uid('II', inv_id, i), invoice_ID=inv_id, line_number=(i + 1) * 10, tax_code='U1' if us else 'V0',
                     uom_code='LTR', cost_center=f'FUEL{code}', gl_account='400000', review_status='NONE')
@@ -1086,43 +1089,57 @@ for n, key in enumerate(inv_keys, start=1):
             item.update(po_number=po, resolved_po_number=po)
         net = money(qty * price)
         tax = money(qty * FET_PER_L) if us else 0.0
+        # The verdict validateForPosting reaches on this line (confirmed by running it)
+        sev, lstat, pvp = None, 'MATCHED', 0.0
+        if ln['kind'] == 'GHOST':
+            sev, lstat = 'HARD', 'EXCEPTION'                                  # INV462
+        elif ln['kind'] == 'DUP' or (key == special['A'] and ln['f']['id'] == dup_ticket_flight):
+            sev, lstat = 'HARD', 'EXCEPTION'                                  # INV455, both lines
+        elif key == special['R']:
+            pvp = round((price - ln['f']['price_l']) / ln['f']['price_l'] * 100, 2)
+            sev = 'HARD' if pvp >= 3 else 'SOFT' if pvp >= 1 else 'WARN' if pvp >= 0.25 else None
+            lstat = 'PRICE_VARIANCE' if sev else 'MATCHED'                   # INV452 ladder
+            price_var_total += money(qty * (price - ln['f']['price_l']))
+        counts[sev] += 1
         net_total += net; tax_total += tax
         item.update(quantity=f'{qty:.3f}', unit_price=f'{price:.4f}', net_amount=f'{net:.2f}', tax_amount=f'{tax:.2f}',
-                    line_match_status='MATCHED' if is_posted else 'UNMATCHED',
-                    price_variance_pct='0.00' if is_posted else None, qty_variance_pct='0.00' if is_posted else None,
-                    tolerance_status='WITHIN' if is_posted else None, sap_line_number=f'{(i + 1):06d}' if is_posted else None)
+                    line_match_status=lstat, price_variance_pct=f'{pvp:.2f}', qty_variance_pct='0.00' if ln['kind'] != 'GHOST' else None,
+                    tolerance_status='EXCEEDED' if sev in ('HARD', 'SOFT') else 'WITHIN', sap_line_number=None)
         item_rows.append(item)
     net_total, tax_total = money(net_total), money(tax_total)
-    tag = ('duplicate-billing line: a ticket already on posted invoice ' + f'{SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]}' if key == special['B']
+    tag = ('re-bills a ticket already invoiced on ' + f'{SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]}' if key == special['B']
+           else 'holds the original line of a ticket re-billed on ' + f'{SUPPLIER_DEFS[special["B"][0]][2]}-{special["B"][1]}' if key == special['A']
            else '2 lines cite tickets that do not exist' if key == special['C']
            else '1 line cites a ticket that does not exist' if key == special['D']
            else 'unit rate 1-5 c/L above the order price on every line' if key == special['R'] else None)
+    clean = key not in EXC
+    gated = counts['HARD'] + counts['SOFT'] > 0
+    assert clean != gated, key
     invoice_rows.append(dict(
         ID=inv_id, invoice_number=f'{pref}-{code}-260927-{seq_inv[pref]:02d}',
         internal_number=f'INV-{pref}-20260927-{seq_inv[pref]:03d}', supplier_ID=supplier_id(sup),
-        invoice_date=INVOICE_DATE, posting_date=POSTED_ON if is_posted else None, due_date='2026-10-27',
+        invoice_date=INVOICE_DATE, posting_date=None, due_date='2026-10-27',
         baseline_date=INVOICE_DATE, currency_code='USD', net_amount=f'{net_total:.2f}', tax_amount=f'{tax_total:.2f}',
         gross_amount=f'{money(net_total + tax_total):.2f}', stated_net_amount=f'{net_total:.2f}',
         stated_gross_amount=f'{money(net_total + tax_total):.2f}', stated_line_count=len(lines),
         payment_terms='NET30', discount_percent=None, discount_date=None,
-        match_status='MATCHED' if is_posted else 'UNMATCHED', price_variance='0.00' if is_posted else None,
-        quantity_variance='0.00' if is_posted else None, variance_percentage='0.00' if is_posted else None,
-        approval_status='APPROVED' if is_posted else 'PENDING', requires_dual_approval='false',
-        first_approver='ap.clerk@airline.com' if is_posted else None,
-        first_approved_at='2026-09-28T09:00:00Z' if is_posted else None,
-        final_approver='finance.controller@airline.com' if is_posted else None,
-        final_approved_at='2026-09-28T10:00:00Z' if is_posted else None,
-        s4_document_number=f'{5100300000 + n}' if is_posted else None, s4_fiscal_year='2026' if is_posted else None,
-        s4_company_code='JB01', received_date=RECEIVED if is_posted else INVOICE_DATE,
-        sap_invoice_number=f'51{5100300000 + n}2026' if is_posted else None, s4_payment_document=None,
-        payment_date=None, tolerance_status='WITHIN' if is_posted else None,
-        fi_posting_status='SUCCESS' if is_posted else None, status='POSTED' if is_posted else 'SUBMITTED',
-        notes=(f'SYNTHETIC B6 test invoice, {code}, 24-26 Sep 2026.' + (f' Seeded exception: {tag}.' if tag else ''))[:1000],
+        match_status='MATCHED' if clean else 'PRICE_VARIANCE' if key == special['R'] else 'EXCEPTION',
+        price_variance=f'{money(price_var_total):.2f}', quantity_variance='0.00',
+        variance_percentage=f'{(price_var_total / net_total * 100) if net_total else 0:.2f}',
+        approval_status='APPROVED' if clean else 'PENDING', requires_dual_approval='false',
+        first_approver=AUTO if clean else None, first_approved_at=GATE_AT if clean else None,
+        final_approver=AUTO if clean else None, final_approved_at=GATE_AT if clean else None,
+        s4_document_number=None, s4_fiscal_year=None, s4_company_code='JB01', received_date=INVOICE_DATE,
+        sap_invoice_number=None, s4_payment_document=None, payment_date=None,
+        tolerance_status='WITHIN' if clean else 'EXCEEDED', fi_posting_status=None,
+        status='VERIFIED' if clean else 'SUBMITTED',
+        notes=(f'SYNTHETIC B6 test invoice, {code}, 24-26 Sep 2026. '
+               + ('Three-way matched within tolerance and auto-approved. Not yet posted.' if clean
+                  else f'Seeded exception: {tag}. Not approved, not posted.'))[:1000],
         rejection_reason=None, is_duplicate='false', duplicate_of_ID=None,
-        posting_gate='CLEAR' if is_posted else 'NOT_CHECKED', gate_evaluated_at='2026-09-28T08:30:00Z' if is_posted else None,
-        open_hard_count=0, open_soft_count=0, warning_count=0,
-        created_at='2026-09-27T15:00:00Z', created_by=SEED_USER, modified_at='2026-09-28T10:00:00Z' if is_posted else '2026-09-27T15:00:00Z',
-        modified_by=SEED_USER))
+        posting_gate='GATED' if gated else 'CLEAR', gate_evaluated_at=GATE_AT,
+        open_hard_count=counts['HARD'], open_soft_count=counts['SOFT'], warning_count=counts['WARN'],
+        created_at='2026-09-27T15:00:00Z', created_by=SEED_USER, modified_at=GATE_AT, modified_by=SEED_USER))
 
 type_counts = Counter()
 tails = {}
@@ -1250,7 +1267,7 @@ GAP_TXN = [
     ('FUEL_TICKETS', 'density / quantity_kg', D, 'EPD453: metered x density, density KGL measured at the delivery temperature'),
     ('FUEL_TICKETS', 'rate_per_litre / total_amount', D, 'The order unit price; total = metered x rate'),
     ('FUEL_TICKETS', 'ticket_number', Y, '<supplier prefix>-<station>-<6-digit running number>, unique'),
-    ('INVOICES', 'one per supplier per station', D, f'{len(invoice_rows) if "invoice_rows" in dir() else ""} invoices dated 27 Sep 2026, USD, NET30. 18 POSTED (checked, approved, FI document), the rest SUBMITTED and NOT_CHECKED: press Validate in the app to run the IDR checks'),
+    ('INVOICES', 'one per supplier per station', D, f'{len(invoice_rows)} invoices dated 27 Sep 2026, USD, NET30. NONE POSTED. Three-way matched ones: VERIFIED, MATCHED, APPROVED (auto, no manual approval needed), posting gate CLEAR - ready to post. The 6 with exceptions: SUBMITTED, PENDING, GATED'),
     ('INVOICES', 'net / tax / gross / stated_*', D, 'Derived from the lines (INV454); stated figures equal them. Tax = US federal excise 4.4 c/gal on US-station lines, 0 elsewhere'),
     ('INVOICE_ITEMS', 'quantity / unit_price / net_amount', D, 'Ticket litres exactly; ticket rate; net = qty x price (INV469). One invoice carries +1 to 5 c/L on every line'),
     ('INVOICE_ITEMS', 'ticket_number / ticket_ID / resolution', D, 'Resolved as the app writes it (TICKET_NUMBER), so the unbilled-ticket report reads correctly at once. 3 lines cite tickets that do not exist (UNRESOLVED)'),
@@ -1345,9 +1362,11 @@ lines = [
     (f'  - {len(delivery_rows)} deliveries and {len(ticket_rows)} tickets (one each). {sum(1 for r in delivery_rows if r["recon_status"] == "RECONCILED")} gauge reconciliations within 25 kg / 0.1%; 10 with a deliberate variance (5 about 500 kg, 5 about 1%), status VARIANCE.', False),
     (f'  - {len(invoice_rows)} invoices, exactly one per supplier per station, all USD; {len(item_rows)} lines. {len(unbilled)} tickets deliberately NOT invoiced (unbilled report): ' + ', '.join(u['ticket_number'] for u in unbilled) + '.', False),
     (f'  - Seeded invoice exceptions: {SUPPLIER_DEFS[special["C"][0]][2]}-{special["C"][1]} has 2 lines and {SUPPLIER_DEFS[special["D"][0]][2]}-{special["D"][1]} 1 line citing tickets that do not exist (INV462); '
-     f'{SUPPLIER_DEFS[special["B"][0]][2]}-{special["B"][1]} re-bills a ticket already on POSTED invoice {SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]} (INV455); '
+     f'{SUPPLIER_DEFS[special["B"][0]][2]}-{special["B"][1]} re-bills a ticket already invoiced on {SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]} (INV455, which flags BOTH invoices); '
      f'{SUPPLIER_DEFS[special["R"][0]][2]}-{special["R"][1]} bills every line 1-5 c/L above the order price (INV452). Every other line matches exactly one ticket at the ticket quantity and rate.', False),
-    ('  - 18 invoices are POSTED (checked, approved, FI document). The rest are SUBMITTED and NOT_CHECKED: press Validate on an invoice in the app to run the checks and see the exceptions.', False),
+    (f'  - NOTHING IS POSTED. {sum(r["status"] == "VERIFIED" for r in invoice_rows)} invoices are three-way matched within tolerance: VERIFIED, MATCHED, auto-APPROVED (no manual approval needed), posting gate CLEAR, so Post to S/4 works on them. '
+     f'{sum(r["status"] == "SUBMITTED" for r in invoice_rows)} carry the seeded exceptions: SUBMITTED, approval PENDING, posting gate GATED. Press Validate on any invoice to see the rule-by-rule detail; it reproduces these verdicts.', False),
+    ('  - Deliveries keep their goods-receipt numbers (a three-way match needs the GR) with status Verified; orders keep their PO numbers.', False),
     ('', False),
     ('PRICES (USD). Jet fuel spot for 23-27 Sep 2026 from web search results; the primary pages (EIA, FRED, IATA, Argus) are blocked from the build environment:', True),
     ('  - US Gulf Coast: September 2026 average $4.341/gal; $4.418 on 11 Sep; about $4.55 in mid-September (Bloomberg, 18 Sep). Seeded $4.40-4.52 rising through the week.', False),
