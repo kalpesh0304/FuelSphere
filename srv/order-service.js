@@ -359,13 +359,23 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
 
         const planUpliftKg = (plan) => {
             if (!plan) return null;
+            const stated = plan.required_uplift_kg !== null && plan.required_uplift_kg !== undefined
+                ? Number(plan.required_uplift_kg) : null;
             const qty = plan.dispatch_qty_kg ?? plan.block_fuel_kg;
             const rob = plan.rob_departure_kg;
             if (qty !== null && qty !== undefined && rob !== null && rob !== undefined) {
-                return Number((Number(qty) - Number(rob)).toFixed(2));
+                const computed = Number((Number(qty) - Number(rob)).toFixed(2));
+                // THE DIFFERENCE, EXCEPT WHEN IT IS NOT A DIFFERENCE. Four
+                // seeded plans carry rob_departure_kg EQUAL to the dispatch
+                // quantity - that column is the departure figure AFTER uplift
+                // on those rows - so the subtraction yields zero while the
+                // plan states a real uplift beside it. An order for no fuel is
+                // never the right reading of a plan that asks for 2,305 kg, so
+                // the plan's own figure wins where the subtraction collapses.
+                if (computed > 0 || stated === null) return computed;
+                return stated;
             }
-            return plan.required_uplift_kg !== null && plan.required_uplift_kg !== undefined
-                ? Number(plan.required_uplift_kg) : null;
+            return stated;
         };
 
         const deriveOrderQuantities = async (req) => {
@@ -400,7 +410,17 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                     .columns('ID')
                     .where({ flight_schedule_ID: flightId, plan_status: 'ACTIVE' })
                     .orderBy('plan_version desc');
-                if (plan) { planId = plan.ID; d.dispatch_plan_ID = planId; }
+                if (plan) {
+                    planId = plan.ID;
+                    d.dispatch_plan_ID = planId;
+                } else if ('flight_ID' in d) {
+                    // SAY SO RATHER THAN LEAVE THE SECTION BLANK. Not every
+                    // flight has been planned, and an empty Dispatch Plan
+                    // section reads as a broken screen when it is really an
+                    // absent plan - the quantities then have to be typed.
+                    req.info(200, 'This flight has no active dispatch plan, so the uplift '
+                        + 'could not be taken from one - enter the quantity on the order.');
+                }
             }
 
             if (planId) {

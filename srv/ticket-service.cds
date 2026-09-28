@@ -106,6 +106,10 @@ service TicketService {
     @readonly
     entity UnitsOfMeasure as projection on db.UNIT_OF_MEASURE;
 
+    // The currency behind the rate's F4.
+    @readonly
+    entity Currencies as projection on db.CURRENCY_MASTER;
+
     // ========================================================================
     // SERVICE-LEVEL FUNCTIONS
     // ========================================================================

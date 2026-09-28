@@ -465,3 +465,23 @@ annotate TicketService.FuelTickets with {
     create_new_delivery @title: 'Create new delivery for this ticket'
                         @Common.QuickInfo: 'Ticked, a new delivery is raised for this ticket and whatever is in Fuel Delivery is ignored. Two suppliers fuelling one turnaround are one delivery with two tickets; a separate uplift is a separate delivery, and only the person capturing it can tell which this is.';
 };
+
+// The rate's currency: defaulted from the contract on the order (USD where
+// there is none) and picked from the currency master when it differs.
+annotate TicketService.FuelTickets with {
+    currency_code @(
+        Common: {
+            Label: 'Currency',
+            ValueListWithFixedValues: true,
+            ValueList: {
+                Label: 'Currency',
+                CollectionPath: 'Currencies',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: currency_code, ValueListProperty: 'currency_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'currency_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'symbol' }
+                ]
+            }
+        }
+    );
+};

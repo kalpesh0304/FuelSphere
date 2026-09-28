@@ -630,7 +630,23 @@ annotate FuelOrderService.FuelOrders @(
     // naming `flight` re-reads the whole target and the displayed date with it.
     Common.SideEffects #FlightPicked : {
         SourceProperties : [ flight_ID ],
-        TargetEntities   : [ flight ]
+        // THE DISPATCH PLAN AND EVERYTHING IT DRIVES (Sep 2026). Picking a
+        // flight resolves that flight's ACTIVE plan and takes the uplift from
+        // it (order-service.js). Without these targets the server had the
+        // figures and the SCREEN did not: the Dispatch Plan section stayed
+        // empty and both quantities stayed blank until the page was reloaded.
+        // dispatch_plan is named as an ENTITY because the section reads
+        // THROUGH the association - naming the association re-reads the whole
+        // plan and the fields shown from it.
+        TargetEntities   : [ flight, dispatch_plan ],
+        TargetProperties : [ 'dispatch_plan_ID', 'ordered_quantity_kg', 'ordered_quantity',
+                             'uom_code', 'conversion_density', 'conversion_source', 'total_amount' ]
+    },
+
+    // The density is typed, and both quantities follow it.
+    Common.SideEffects #DensityChanged : {
+        SourceProperties : [ conversion_density ],
+        TargetProperties : [ 'ordered_quantity', 'total_amount' ]
     },
 
     Common.SideEffects #updTotAmt : {
@@ -1098,6 +1114,12 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: quantity, Label: 'Claimed Quantity' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_timestamp, Label: 'Delivery Time' },
+                // WHICH DELIVERY THIS TICKET BELONGS TO. The first ticket of a
+                // flight raises its own and needs neither field; a later one
+                // picks a delivery of the same flight or ticks for another,
+                // and the checkbox wins over the dropdown.
+                { Value: delivery_ID, Label: 'Fuel Delivery' },
+                { Value: create_new_delivery, Label: 'Create new delivery for this ticket' },
                 { Value: supplier_ticket_ref, Label: 'Supplier Reference' },
                 { Value: ticket_source, Label: 'Ticket Source (IATA-04)' },
             // UI-B-03. Beside ticket_source, never replacing it - that field
@@ -1832,7 +1854,9 @@ annotate FuelOrderService.FuelTickets with {
             TextArrangement: #TextOnly
         }
     );
-    delivery         @title: 'Delivery';
+    // 'Fuel Delivery' everywhere: the F4 block below names it that, and two
+    // labels on one field is a field that reads differently on two screens.
+    delivery         @title: 'Fuel Delivery';
     created_at       @title: 'Created At';
     created_by       @title: 'Created By';
     modified_at      @title: 'Changed At';
@@ -2024,4 +2048,49 @@ annotate FuelOrderService.FuelOrders with {
 // screen labels it the same way (ticket-fiori-annotations.cds holds the F4).
 annotate FuelOrderService.FuelTickets with {
     create_new_delivery @title: 'Create new delivery for this ticket';
+};
+
+// ============================================================================
+// THE TICKET'S DELIVERY AND ITS CURRENCY, on the ticket page reached from a
+// fuel order. Both mirror TicketService.FuelTickets: the same two screens
+// capture the same ticket, and a field on one and not the other is how an
+// operator learns the apps disagree.
+// ============================================================================
+annotate FuelOrderService.FuelTickets with {
+    delivery @(
+        Common: {
+            Label: 'Fuel Delivery',
+            Text: delivery.delivery_number,
+            TextArrangement: #TextOnly,
+            ValueList: {
+                Label: 'Deliveries for this flight',
+                CollectionPath: 'FuelDeliveries',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: delivery_ID, ValueListProperty: 'ID' },
+                    { $Type: 'Common.ValueListParameterIn', LocalDataProperty: flight_ID, ValueListProperty: 'flight_ID' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_number' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_date' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivery_time' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'delivered_quantity' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'status' }
+                ]
+            }
+        }
+    );
+    create_new_delivery @Common.QuickInfo: 'Ticked, a new delivery is raised for this ticket and whatever is in Fuel Delivery is ignored. Two suppliers fuelling one turnaround are one delivery with two tickets; a separate uplift is a separate delivery, and only the person capturing it can tell which this is.';
+    currency_code @(
+        Common: {
+            Label: 'Currency',
+            ValueListWithFixedValues: true,
+            ValueList: {
+                Label: 'Currency',
+                CollectionPath: 'Currencies',
+                Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: currency_code, ValueListProperty: 'currency_code' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'currency_name' },
+                    { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'symbol' }
+                ]
+            }
+        }
+    );
 };

@@ -23,11 +23,25 @@ describe('Manual order creation', () => {
 
   let withPlan, noPlan, sup, contract, edmx;
   before(async () => {
-    const { SELECT } = cds.ql;
+    const { SELECT, UPDATE } = cds.ql;
     const plans = await cds.db.run(SELECT.from('fuelsphere.FLIGHT_DISPATCH')
       .columns('ID','flight_schedule_ID','flight_number','required_uplift_kg'));
     withPlan = plans.find(p => p.required_uplift_kg != null);
     noPlan   = plans.find(p => p.required_uplift_kg == null);
+
+    // THE THIRD STATE IS NOW MADE, NOT FOUND (Sep 2026). Every seeded plan
+    // carries a required uplift since the fuel order started taking its
+    // quantity from one, so "a plan that states no figure" no longer occurs
+    // in the seed - and it is still a state the creation rules must handle.
+    // Blanking one here keeps the criterion about the RULE rather than about
+    // which rows the demo pack happens to hold.
+    if (!noPlan) {
+      const spare = plans.find(p => p.ID !== withPlan.ID);
+      await cds.db.run(UPDATE('fuelsphere.FLIGHT_DISPATCH')
+        .set({ required_uplift_kg: null }).where({ ID: spare.ID }));
+      noPlan = Object.assign({}, spare, { required_uplift_kg: null });
+      out(`no plan in the seed states no uplift - blanked ${spare.flight_number} for the third state`);
+    }
     assert.ok(withPlan && noPlan,
       'the seed no longer holds BOTH a plan with a required uplift and one without, so the three '
     + 'states cannot all be exercised');

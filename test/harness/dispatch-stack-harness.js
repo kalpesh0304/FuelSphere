@@ -100,28 +100,38 @@ describe('The regulated fuel stack', () => {
     out(`${paths.length} figures on the stack group, the sum rule stated, contingency ratio present`);
   });
 
-  it('EXIT-5  required_uplift_kg is DELIBERATELY ABSENT from the screen', () => {
-    // It is null on 7 of 11 rows, and on the 4 that carry it the figure
-    // disagrees with block - rob_departure (which is 0 there). A blank beside
-    // two populated inputs invites the viewer to subtract and wonder why the
-    // system did not.
+  it('EXIT-5  required_uplift_kg is COMPUTED, and equals what derives it', () => {
+    // REPLACES "deliberately absent" (Sep 2026), exactly as that criterion
+    // asked to be replaced: the fuel order now takes its quantity from this
+    // figure, so a blank here is an order nobody can raise. Seven of the
+    // eleven plans were blank and are filled from the rule the user stated -
+    // dispatch quantity less the FOB at departure.
     //
-    // SELF-INVALIDATING: the day something computes it, this fails and asks
-    // for it back.
-    const nulls = rows.filter(r => num(r.required_uplift_kg) === null).length;
-    assert.ok(nulls > 0,
-      `required_uplift_kg is now populated on all ${rows.length} rows. Put it back on the object `
-    + `page and replace this criterion with one asserting it equals what derives it.`);
-    for (const q of ['DispatchQty','DispatchCard']) {
-      const blk = edmx.match(new RegExp(`Qualifier="${q}">[\\s\\S]*?</Annotation>`));
-      assert.ok(blk, `${q} is gone`);
-      const bound = [...blk[0].matchAll(/Path="([^"]*)"/g)].map(m=>m[1])
-        .filter(x => x.split('/').includes('required_uplift_kg'));
-      assert.deepStrictEqual(bound, [],
-        `${q} binds required_uplift_kg. It is null on ${nulls} of ${rows.length} rows and would `
-      + `render blank beside block and ROB, which invites the subtraction the system is not doing.`);
+    // THE OTHER FOUR ARE NOT BLANK AND DO NOT OBEY THAT RULE, and this says so
+    // rather than averaging over it: on those rows rob_departure_kg EQUALS the
+    // dispatch quantity - it is the figure AFTER uplift there - so the
+    // subtraction gives zero while the plan states a real uplift. They keep
+    // their stated figure, and order-service.js prefers it over a zero.
+    const withAll = rows.filter(r => num(r.dispatch_qty_kg) !== null && num(r.rob_departure_kg) !== null);
+    assert.ok(withAll.length > 0, 'instrument check: no plan carries both figures');
+
+    const blanks = rows.filter(r => num(r.required_uplift_kg) === null);
+    assert.deepStrictEqual(blanks.map(r => r.flight_number), [],
+      'a blank required uplift is an order that cannot be raised from the plan');
+
+    const differs = [];
+    for (const r of withAll) {
+      const computed = Number((num(r.dispatch_qty_kg) - num(r.rob_departure_kg)).toFixed(2));
+      const stated = num(r.required_uplift_kg);
+      if (computed > 0 && Math.abs(computed - stated) > 0.01) differs.push(`${r.flight_number}: ${stated} vs ${computed}`);
+      if (computed <= 0) assert.ok(stated > 0,
+        `${r.flight_number}: the subtraction collapses to ${computed} and the plan states nothing usable`);
     }
-    out(`required_uplift_kg null on ${nulls}/${rows.length} rows, bound on neither the card nor the page`);
+    assert.deepStrictEqual(differs, [],
+      'where the subtraction is meaningful, the stated uplift must equal it');
+    const collapsed = withAll.filter(r => num(r.dispatch_qty_kg) - num(r.rob_departure_kg) <= 0).length;
+    out(`${withAll.length} plans carry both figures; ${withAll.length - collapsed} match dispatch qty less FOB at departure, `
+      + `${collapsed} carry a departure figure taken AFTER uplift and keep their stated uplift`);
   });
 
   it('EXIT-6  THE TEMPLATE IS RECORDED — evidence that outlives the correction', () => {

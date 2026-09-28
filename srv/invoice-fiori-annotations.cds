@@ -2171,3 +2171,43 @@ annotate InvoiceService.InvoiceItems with {
     );
 };
 
+
+// ============================================================================
+// THE HEADER FOLLOWS ITS LINES (Sep 2026).
+//
+// Adding, editing or deleting a line moves the match status, both variances
+// and the whole of Stated against derived. Without SourceEntities the page
+// re-read none of them, so Three-Way Matching kept stating the verdict it
+// reached on the FIRST line while the lines beneath it changed.
+// ============================================================================
+annotate InvoiceService.Invoices with @(
+    Common.SideEffects #LinesChanged: {
+        SourceEntities   : [ items ],
+        TargetProperties : [ 'match_status', 'variance_value', 'qty_variance_ltr',
+                             'variance_percentage', 'total_lines', 'reconciled_lines',
+                             'unreconciled_lines', 'total_inv_qty_ltr', 'total_inv_amount',
+                             'total_tkt_qty_ltr', 'total_tkt_amount', 'wavg_inv_rate',
+                             'wavg_tkt_rate', 'derived_net', 'derived_tax', 'derived_gross',
+                             'net_difference', 'gross_difference' ]
+    },
+    // Gross is net plus tax, computed on the server (invoice-service.js).
+    Common.SideEffects #AmountsTyped: {
+        SourceProperties : [ net_amount, tax_amount ],
+        TargetProperties : [ 'gross_amount', 'entered_net_v', 'entered_tax_v', 'entered_gross_v',
+                             'net_difference', 'gross_difference' ]
+    }
+);
+
+// The line's own arithmetic, on the screen: quantity x unit price is the
+// amount, and the unit and currency come with it.
+annotate InvoiceService.InvoiceItems with @(
+    Common.SideEffects #LineFigured: {
+        SourceProperties : [ quantity, unit_price ],
+        TargetProperties : [ 'net_amount', 'currency_v', 'uom_code' ]
+    }
+);
+
+// Gross is arithmetic, not a statement: shown, never typed.
+annotate InvoiceService.Invoices with {
+    gross_amount @Common.FieldControl: #ReadOnly;
+};

@@ -432,6 +432,32 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         // against a ticket it no longer names. The flight follows the ticket
         // unless the same request sets one.
         // ================================================================
+        // THE LINE'S OWN ARITHMETIC (Sep 2026).
+        //
+        // Litres unless the supplier billed in something else - fuel is
+        // invoiced by volume and every comparison on this page is in litres.
+        // The amount is quantity x unit price, computed rather than typed: a
+        // line whose amount disagrees with its own two figures is INV469, and
+        // the way to have fewer of those is not to make them by hand. A net
+        // amount sent in the SAME request still wins - an invoice that states
+        // a rounded line total is the supplier's statement, not an error.
+        this.before(['NEW', 'CREATE', 'PATCH', 'UPDATE'], InvoiceItems.drafts, async (req) => {
+            const d = req.data;
+            if (req.event === 'NEW' || req.event === 'CREATE') {
+                if (!d.uom_code) d.uom_code = 'LTR';
+            }
+            if (!('quantity' in d || 'unit_price' in d) || 'net_amount' in d) return;
+
+            const id = d.ID || _id(req.params);
+            const stored = id ? (await SELECT.one.from(InvoiceItems.drafts)
+                .columns('quantity', 'unit_price').where({ ID: id })) || {} : {};
+            const qty = 'quantity' in d ? d.quantity : stored.quantity;
+            const price = 'unit_price' in d ? d.unit_price : stored.unit_price;
+            if (qty !== null && qty !== undefined && price !== null && price !== undefined) {
+                d.net_amount = Number((Number(qty) * Number(price)).toFixed(2));
+            }
+        });
+
         this.before(['CREATE', 'PATCH', 'UPDATE'], InvoiceItems.drafts, async (req) => {
             const d = req.data;
             if (!('ticket_ID' in d)) return;
@@ -476,19 +502,67 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         // and three-way-match buttons - because that resolution is what the
         // status is calculated from.
         // ================================================================
-        const refreshMatchStatus = async (invoiceId) => {
-            const lines = await SELECT.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: invoiceId });
-            const computed = await computeLines(lines);
+        const refreshMatchStatus = async (invoiceId, draft = false) => {
+            const items = draft ? InvoiceItems.drafts : 'fuelsphere.INVOICE_ITEMS';
+            const lines = await SELECT.from(items).where({ invoice_ID: invoiceId });
+            const computed = await computeLines(lines, draft ? { source: InvoiceItems.drafts } : {});
             const status = deriveMatchStatus([...computed.values()]);
-            await UPDATE('fuelsphere.INVOICES').set({ match_status: status }).where({ ID: invoiceId });
+            await UPDATE(draft ? Invoices.drafts : 'fuelsphere.INVOICES')
+                .set({ match_status: status }).where({ ID: invoiceId });
             return status;
         };
+
+        // EVERY LINE MOVES IT, NOT JUST THE FIRST. match_status is STORED -
+        // its colour is computed in SQL from the stored value, so a read-time
+        // override paints one status in another's colour - and it was written
+        // only at save and at Validate. A second line therefore left the
+        // Three-Way Matching section stating a verdict reached on the first.
+        // Recomputed here on every line change, against the draft's own lines
+        // while the invoice is being worked on.
+        this.after(['CREATE', 'UPDATE', 'DELETE'], [InvoiceItems, InvoiceItems.drafts], async (data, req) => {
+            const draft = isDraftTarget(req);
+            const rows = (Array.isArray(data) ? data : [data]).filter(Boolean);
+            const ids = new Set(rows.map(r => r.invoice_ID).filter(Boolean));
+            if (!ids.size) {
+                const id = _id(req.params);
+                if (id) {
+                    const own = await SELECT.one.from(draft ? InvoiceItems.drafts : 'fuelsphere.INVOICE_ITEMS')
+                        .columns('invoice_ID').where({ ID: id });
+                    if (own && own.invoice_ID) ids.add(own.invoice_ID);
+                }
+            }
+            for (const id of ids) {
+                try { await refreshMatchStatus(id, draft); } catch (e) { /* never block capture */ }
+            }
+        });
 
         // PATCH and UPDATE both: under lean draft a draft edit arrives as UPDATE
         // on the .drafts entity - a PATCH-only hook never fires (the order
         // screens hook both for the same reason).
+        // A NEW INVOICE PRICES IN USD until told otherwise. Every seeded
+        // contract does, and the line amounts read their currency from here -
+        // a header with none left the whole document's money unlabelled.
+        this.before(['NEW', 'CREATE'], Invoices.drafts, (req) => {
+            if (!req.data.currency_code) req.data.currency_code = 'USD';
+        });
+
         this.before(['PATCH', 'UPDATE'], Invoices.drafts, async (req) => {
             const d = req.data;
+
+            // GROSS IS NET PLUS TAX, always. It is the one header figure that
+            // is arithmetic rather than a statement, so it is not typed: the
+            // other two are what the supplier's invoice says.
+            if ('net_amount' in d || 'tax_amount' in d) {
+                const id0 = _id(req.params);
+                const amounts = id0 ? (await SELECT.one.from(Invoices.drafts)
+                    .columns('net_amount', 'tax_amount').where({ ID: id0 })) || {} : {};
+                const net = 'net_amount' in d ? d.net_amount : amounts.net_amount;
+                const tax = 'tax_amount' in d ? d.tax_amount : amounts.tax_amount;
+                if (net !== null && net !== undefined) {
+                    d.gross_amount = Number((Number(net) + Number(tax || 0)).toFixed(2));
+                }
+            }
+
             if (!['supplier_ID', 'invoice_date', 'payment_terms'].some(k => k in d)) return;
             const id = _id(req.params);
             const stored = id ? (await SELECT.one.from(Invoices.drafts)

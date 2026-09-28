@@ -87,10 +87,12 @@ async function deriveTicketMeasurement(at) {
     values.density_uom = 'KGL';
 
     // Rate currency from the contract, only while the ticket has none - a
-    // currency the operator set is never overwritten.
-    if (!at('currency_code') && at('order_ID')) {
-        const cur = await defaultTicketCurrency(at('order_ID'));
-        if (cur) values.currency_code = cur;
+    // currency the operator set is never overwritten. USD where there is no
+    // contract to take one from: a rate with no currency beside it is a number
+    // nobody can add up, and USD is what every seeded contract prices in.
+    if (!at('currency_code')) {
+        const cur = at('order_ID') ? await defaultTicketCurrency(at('order_ID')) : null;
+        values.currency_code = cur || 'USD';
     }
 
     // quantity_kg - EPD453. Null where an input is missing; a derived value

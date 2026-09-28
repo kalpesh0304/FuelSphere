@@ -53,7 +53,14 @@ const raise = (svc, flightId, body) => call(() => test.POST(
         ? `${P}/FlightSchedule(${flightId})/PlanningService.createFuelOrder`
         : `${O}/FlightSchedule(${flightId})/FuelOrderService.createFuelOrder`, body));
 
-const QTY = { orderedQuantity: 1000, uomCode: 'KG', orderType: 'ORIGINAL' };
+// 1,000 kg is an ARBITRARY quantity - these criteria compare the two services
+// against each other, not the order against its plan - and since every dispatch
+// plan now carries a required uplift (the fuel order takes its quantity from
+// one), an arbitrary quantity differs from the plan and the variance rule
+// refuses it. The reason travels with it so that rule fires where it is the
+// subject, which is EXIT-4 below, and nowhere else.
+const QTY = { orderedQuantity: 1000, uomCode: 'KG', orderType: 'ORIGINAL',
+              quantityVarianceReason: 'Harness control quantity, not taken from the plan.' };
 
 describe('Raise a fuel order from the planning flight page', function () {
     this.timeout(120000);
