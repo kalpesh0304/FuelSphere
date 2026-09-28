@@ -246,7 +246,9 @@ annotate TicketService.FuelTickets with @(
                 { Value: quantity_kg },
                 { Value: batch_coa_ref },
                 { Value: vehicle_id },
-                { Value: meter_serial }
+                { Value: meter_serial },
+                { Value: meter_calibration_cert },
+                { Value: meter_calibration_valid_to }
             ]
         },
 
@@ -321,6 +323,10 @@ annotate TicketService.FuelTickets with {
     batch_coa_ref         @title: 'Batch Certificate';
     vehicle_id             @title: 'Vehicle';
     meter_serial           @title: 'Meter Serial';
+    meter_calibration_cert     @title: 'Calibration Certificate No'
+                               @Common.QuickInfo: 'The meter calibration certificate this uplift was metered under, as printed on it. A meter reading is evidence only while the meter is certified.';
+    meter_calibration_valid_to @title: 'Calibration Valid Until'
+                               @Common.QuickInfo: 'The last day the certificate covers. Captured on the ticket, not the vehicle: recertifying a bowser later does not make an earlier reading certified.';
     supplier_ticket_ref  @title: 'Supplier Reference';
     ticket_source          @title: 'Ticket Source';
     ticket_capture_source  @title: 'Capture Source';

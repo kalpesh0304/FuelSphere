@@ -439,11 +439,14 @@ annotate BurnService.ROBLedger with @(
         // posting order instead showed new rows immediately but displayed the
         // balances out of the sequence they were calculated in.
         PresentationVariant: {
+            // The ledger reads in the order the day happened: sequence is
+            // handed out in that order, and sorting by line_order first put
+            // every uplift of a multi-leg day above every burn of it.
             SortOrder: [
                 { Property: tail_number, Descending: false },
                 { Property: record_date, Descending: false },
-                { Property: line_order, Descending: false },
-                { Property: record_time, Descending: false }
+                { Property: sequence, Descending: false },
+                { Property: line_order, Descending: false }
             ],
             Visualizations: ['@UI.LineItem']
         },

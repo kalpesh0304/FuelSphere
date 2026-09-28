@@ -22,3 +22,76 @@ a1b2c3d4-1111-4000-8000-000000000027;CDG;LFPG;Paris Charles de Gaulle Airport;Pa
 a1b2c3d4-1111-4000-8000-000000000028;FLL;KFLL;Fort Lauderdale-Hollywood International Airport;Fort Lauderdale;US;America/New_York;FLL1;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
 a1b2c3d4-1111-4000-8000-00000000A001;YHZ;CYHZ;Halifax Stanfield International Airport;Halifax;CA;America/Halifax;YHZ1;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
 a1b2c3d4-1111-4000-8000-00000000A002;YWG;CYWG;Winnipeg James Richardson International Airport;Winnipeg;CA;America/Winnipeg;YWG1;true;2024-01-01T00:00:00Z;SYSTEM;2024-01-01T00:00:00Z;SYSTEM
+bdb477a3-0cbf-5020-91bc-0065a97db168;ABQ;KABQ;Albuquerque International Sunport Airport;Albuquerque;US;America/Denver;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+4d9c523c-5030-5249-8cf6-ababbac7424e;ACK;KACK;Nantucket Memorial Airport;Nantucket;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+37455dc8-4a2f-534b-8f6d-5bcd1cb1aec0;ALB;KALB;Albany International Airport;Albany;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+1d2116cc-e55d-52fe-aefc-6e2577b047c1;AMS;EHAM;Amsterdam Airport Schiphol;Amsterdam;NL;Europe/Amsterdam;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+6fe19b4a-c3bc-517b-b41e-fe50e5d83e18;ATL;KATL;Hartsfield Jackson Atlanta International Airport;Atlanta;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+79c8c487-e34b-5f68-ac7e-80825f4754b4;AUS;KAUS;Austin Bergstrom International Airport;Austin;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+b9408a9a-a8aa-5863-b8c9-5e005a42427f;BCN;LEBL;Barcelona International Airport;Barcelona;ES;Europe/Madrid;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+49b0d2e1-6898-57ea-ac51-364d3f73b033;BDA;TXKF;L.F. Wade International International Airport;Hamilton;BM;Atlantic/Bermuda;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+1862f2d6-38a3-538c-a6e3-667253551080;BDL;KBDL;Bradley International Airport;Hartford;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+7b015983-6b11-511a-938c-f59a1d1bf0d8;BHM;KBHM;Birmingham-Shuttlesworth International Airport;Birmingham;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+3bb33fcb-3500-56aa-b438-17d31b62c742;BNA;KBNA;Nashville International Airport;Nashville;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+82df6eb7-3f9b-5f8d-b641-aa6af146f82f;BOS;KBOS;General Edward Lawrence Logan International Airport;Boston;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+2912bdf2-6404-5c72-949a-a594d24843b3;BUF;KBUF;Buffalo Niagara International Airport;Buffalo;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+fc1fd3f7-20fa-55e2-968c-e1ce3f08c206;BUR;KBUR;Bob Hope Airport;Burbank;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+9dcb16c3-f9f3-56dd-9a66-7f924515f983;BWI;KBWI;Baltimore/Washington International Thurgood Marshal Airport;Baltimore;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+f6c9cbad-6d75-5127-b16d-28a767b67a1d;CHS;KCHS;Charleston Air Force Base-International Airport;Charleston;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+b6b196ae-800b-5f5c-a353-25a5754f0880;CLE;KCLE;Cleveland Hopkins International Airport;Cleveland;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+5ee46b47-cbf9-5e9a-9f88-85593a688976;CLT;KCLT;Charlotte Douglas International Airport;Charlotte;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+8896df81-f4e4-5326-966a-1fb995ee7b60;CUN;MMUN;Cancun International Airport;Cancun;MX;America/Cancun;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+ea667239-8641-5a36-a8b0-722d480a1f81;DCA;KDCA;Ronald Reagan Washington National Airport;Washington;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+d9bfeb4f-f234-55d9-965e-bf89b689253c;DEN;KDEN;Denver International Airport;Denver;US;America/Denver;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+10a54946-0eca-56d7-ac2b-7132441e8ce8;DFW;KDFW;Dallas Fort Worth International Airport;Dallas-Fort Worth;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+f1a6d3fc-9755-51f7-a640-dc37c140f7d0;DTW;KDTW;Detroit Metropolitan Wayne County Airport;Detroit;US;America/Detroit;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+9841aecd-6bed-5594-bce2-e2c5a028cf5e;DUB;EIDW;Dublin Airport;Dublin;IE;Europe/Dublin;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+16423ba8-e3d4-5fb7-ad35-8dbfc8ed5e7e;EDI;EGPH;Edinburgh Airport;Edinburgh;GB;Europe/London;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+7fd7b657-3986-5d79-9097-bca99cfc8a35;EWR;KEWR;Newark Liberty International Airport;Newark;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+5441cbea-1394-5bcc-b807-141aa5cf627a;GSO;KGSO;Piedmont Triad International Airport;Greensboro;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+b89abd90-0f5a-5c41-9e37-68b6e252ef77;GSP;KGSP;Greenville Spartanburg International Airport;Greenville;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+383d553b-c26c-5bca-ae69-a39b7a3ccaf5;HPN;KHPN;Westchester County Airport;White Plains;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+6a8e6793-e2e8-549e-8b30-85f9df7c2370;IAD;KIAD;Washington Dulles International Airport;Dulles;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+30b81c90-e21e-5a1a-8868-67df3a946b07;IAH;KIAH;George Bush Intercontinental Houston Airport;Houston;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+7d4ced6e-bbf7-5d0c-9cc3-a99042f9a085;ILM;KILM;Wilmington International Airport;Wilmington;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+d0210c19-81a8-5ac7-8d54-e31e723e34c9;ISP;KISP;Long Island Mac Arthur Airport;Islip;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+668bfa32-86ad-563b-a2d4-88b33ce93b1a;JAX;KJAX;Jacksonville International Airport;Jacksonville;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+cee706fa-bd55-5699-bb00-e0f071e69e6d;JFK;KJFK;John F Kennedy International Airport;New York;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+d06fcabf-a0f8-55df-9e8e-be67e9c7c0ef;KIN;MKJP;Norman Manley International Airport;Kingston;JM;America/Jamaica;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+e6cb911f-d6ba-53d4-986d-812fa70cab8e;LAS;KLAS;Harry Reid International Airport;Las Vegas;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+9ffdfd27-9191-5f0b-860e-6138f2c631a4;LGA;KLGA;La Guardia Airport;New York;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+888dc7d6-2afa-53e1-862c-70097de82cb6;MAD;LEMD;Madrid Barajas International Airport;Madrid;ES;Europe/Madrid;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+4df64edd-8f7e-590a-9d17-d44ba6dcf613;MCO;KMCO;Orlando International Airport;Orlando;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+1214961a-152f-50df-a757-a3e2515a0daa;MDW;KMDW;Chicago Midway International Airport;Chicago;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+33681b5c-7e2b-5e1d-a670-9d9a0cb9fc56;MEM;KMEM;Memphis International Airport;Memphis;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+366374a2-33db-5eb2-9555-7d894fa82ccf;MKE;KMKE;General Mitchell International Airport;Milwaukee;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+0692f4ef-f428-5890-aa39-b4ef7ecdb09f;MSY;KMSY;Louis Armstrong New Orleans International Airport;New Orleans;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+7370e3f8-27d3-50c2-a573-146a9f33b3f3;MXP;LIMC;Malpensa International Airport;Milan;IT;Europe/Rome;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+52a8c8c4-036a-5c73-a002-c5a044874aa7;ONT;KONT;Ontario International Airport;Ontario;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+143ca9d9-a537-5fb4-a0ec-d1bc1ba042cd;ORD;KORD;Chicago O'Hare International Airport;Chicago;US;America/Chicago;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+8c8748fc-02cf-54b1-9ed3-fc2a997d57f8;ORF;KORF;Norfolk International Airport;Norfolk;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+c92f74a0-ff69-502d-91f6-fb0a8b90a727;ORH;KORH;Worcester Regional Airport;Worcester;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+d663e982-9e63-53ed-96a0-fc001e7b4491;PBI;KDJT;President Donald J. Trump International Airport (formerly: Palm Beach International Airport);West Palm Beach;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+60f9e741-8452-5f65-aa80-12fd3effdf46;PHL;KPHL;Philadelphia International Airport;Philadelphia;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+6fb460b4-4b6f-55b0-8c9d-cde4bcb827e0;PHX;KPHX;Phoenix Sky Harbor International Airport;Phoenix;US;America/Phoenix;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+6675af83-1091-5d90-9b8d-6912bf0c5a3e;PIT;KPIT;Pittsburgh International Airport;Pittsburgh;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+a60406fb-b888-5fb4-9147-d5bef14c5c90;POS;TTPP;Piarco International Airport;Port of Spain;TT;America/Port_of_Spain;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+63b16805-b084-51dc-b16a-9bc51a727226;PVD;KPVD;Rhode Island TF Green International Airport;Providence;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+2c0ec88e-cef2-5dd4-92cb-004f9805539e;PWM;KPWM;Portland International Jetport Airport;Portland;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+89b758cd-cea3-5011-9721-2cc141df7952;RDU;KRDU;Raleigh Durham International Airport;Raleigh/Durham;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+2a08efed-4f5a-51d0-8610-cd8ccfdc649a;RIC;KRIC;Richmond International Airport;Richmond;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+ffce22b3-da59-5695-bc4e-ec5d9ee3400f;ROC;KROC;Greater Rochester International Airport;Rochester;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+abe7ee97-e601-5fae-8996-bdc272705d58;RSW;KRSW;Southwest Florida International Airport;Fort Myers;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+5438cad4-3719-5aee-bde4-d57a2c078466;SAN;KSAN;San Diego International Airport;San Diego;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+b3ddc994-d476-53b0-85e6-a7828df8e1be;SAV;KSAV;Savannah Hilton Head International Airport;Savannah;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+d4b0d0e4-fe02-5389-a822-444e54bcbdd6;SDF;KSDF;Louisville Muhammad Ali International Airport;Louisville;US;America/Kentucky/Louisville;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+7b9b3ec5-e942-5e59-981d-460c76404836;SEA;KSEA;Seattle Tacoma International Airport;Seattle;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+4ace6211-9380-5e70-8e40-27136a54e6c4;SFO;KSFO;San Francisco International Airport;San Francisco;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+a614a22e-5e71-56c4-98e2-0c9d3a939abf;SJO;MROC;Juan Santamaria International Airport;San Jose;CR;America/Costa_Rica;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+db43ecef-1a2f-56cb-9ee9-ed4958b49d46;SJU;TJSJ;Luis Munoz Marin International Airport;San Juan;PR;America/Puerto_Rico;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+20b10fcb-d7fa-5d14-8a36-5df05b5b351a;SLC;KSLC;Salt Lake City International Airport;Salt Lake City;US;America/Denver;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+ef74a7ef-a7af-5a3a-a3ee-d24078db5049;SMF;KSMF;Sacramento International Airport;Sacramento;US;America/Los_Angeles;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+88d2b991-8920-554a-8b07-6d7d0db627ce;SRQ;KSRQ;Sarasota Bradenton International Airport;Sarasota/Bradenton;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+3ed9e0ea-8d53-5708-b9aa-aa3bcec5208f;SWF;KSWF;Stewart International Airport;Newburgh;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+b39e72a3-e01f-55c7-ae93-262772cef347;SYR;KSYR;Syracuse Hancock International Airport;Syracuse;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+0d715146-0dd6-5ebf-8dc7-3a4efbe42124;TPA;KTPA;Tampa International Airport;Tampa;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB

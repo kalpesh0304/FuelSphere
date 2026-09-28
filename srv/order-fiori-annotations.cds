@@ -1151,7 +1151,9 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: batch_coa_ref, Label: 'Certificate of Analysis' },
                 // WP-33
                 { Value: vehicle_id, Label: 'Vehicle' },
-                { Value: meter_serial, Label: 'Meter Serial' }
+                { Value: meter_serial, Label: 'Meter Serial' },
+                { Value: meter_calibration_cert, Label: 'Calibration Certificate No' },
+                { Value: meter_calibration_valid_to, Label: 'Calibration Valid Until' }
             ]
         },
 

@@ -146,15 +146,22 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
         return { tail: tailNumber, rows: 0, flagged: 0, closingQty: 0, closingValue: 0, map: null, unpriced: 0 };
     }
 
-    // Flight date first, then uplift before burn before adjustment. Sorted
-    // here rather than in SQL because line_order is being (re)assigned now -
-    // older rows predate the column.
+    // FLIGHT DATE, THEN THE ORDER THE DAY HAPPENED IN.
+    //
+    // sequence is what carries that order: both the posting handlers and the
+    // seed generator hand it out in the order events occur, so it survives a
+    // day with four legs on it. Sorting by line_order first - uplift before
+    // burn before adjustment - reads correctly only when a tail flies ONCE a
+    // day: on a four-leg day it groups all four uplifts ahead of all four
+    // burns, and the running balance then swings between figures the aircraft
+    // never held. line_order still breaks a tie where two rows share a
+    // sequence, which is how a same-instant uplift and burn stay in order.
     rows.forEach(r => { r._order = lineOrderOf(r.entry_type); });
     rows.sort((a, b) =>
         String(a.record_date).localeCompare(String(b.record_date)) ||
+        (a.sequence || 0) - (b.sequence || 0) ||
         a._order - b._order ||
-        String(a.record_time || '').localeCompare(String(b.record_time || '')) ||
-        (a.sequence || 0) - (b.sequence || 0));
+        String(a.record_time || '').localeCompare(String(b.record_time || '')));
 
     const stamp = new Date().toISOString();
     const openRate = await openingRate(tailNumber, tx);

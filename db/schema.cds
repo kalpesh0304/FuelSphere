@@ -1673,6 +1673,16 @@ entity FUEL_TICKETS : cuid, AuditTrail {
         vehicle_id          : String(20);               // Delivery vehicle
         meter_serial        : String(30);               // Meter that produced the readings
 
+        // THE METER'S CALIBRATION CERTIFICATE, and when it expires.
+        //
+        // A meter reading is evidence only while the meter is certified: an
+        // uplift metered on a lapsed certificate is the first thing a dispute
+        // or an audit asks about. Both are captured on the ticket rather than
+        // on the vehicle, because it is THIS uplift's evidence - a bowser
+        // recertified next week does not make last week's reading certified.
+        meter_calibration_cert     : String(50);        // Certificate number as printed
+        meter_calibration_valid_to : Date;              // Last day the certificate covers
+
 }
 
 // ============================================================================
