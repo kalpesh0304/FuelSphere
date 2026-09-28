@@ -339,6 +339,7 @@ stations = sorted({f['o'] for f in kept} | {f['d'] for f in kept})
 # 121.645(c) ISLAND: a destination with no alternate within reach carries
 #   2 hours at normal cruise instead of alternate + holding.
 CLIMB_ALLOWANCE = {'A223': 350, 'A320': 500, 'A321': 600, 'A21N': 500}   # kg above cruise rate for climb/descent
+PLAN_MARGIN = float(os.environ.get('PLAN_MARGIN', '0.02'))   # flight plans run ~2% conservative on trip burn
 HOLD_FACTOR = 0.80            # holding burn as a fraction of cruise burn
 ISLAND_MAX_ALT_KM = 700       # beyond this no alternate is planned
 
@@ -369,7 +370,7 @@ def fuel_stack(f, planned_air_min, payload_delta=0.0):
     """The seven terms for one plan version. payload_delta scales trip for a heavier/lighter estimate."""
     t, key = f['type'], f['key']
     burn = cruise_burn(t)
-    trip = (CLIMB_ALLOWANCE[t] + burn * max(planned_air_min - 20, 10) / 60) * (1 + payload_delta)
+    trip = (CLIMB_ALLOWANCE[t] + burn * max(planned_air_min - 20, 10) / 60) * (1 + payload_delta) * (1 + PLAN_MARGIN)
     alt_km, alt = ALT[f['d']]
     domestic = is_domestic(f['o'], f['d'])
     if alt is None:                                           # island reserve, no alternate
@@ -427,41 +428,446 @@ for f in sorted(kept, key=lambda x: x['atot']):
         f['earlier'].append(dict(version=v, stack=st, alt=alt,
                                  reason=pick(key, f'rr{v}', REVISION_REASONS)))
 
+# ---- Ground operations -------------------------------------------------------
+HYDRANT = BUSY | {'FLL', 'MCO', 'LAS', 'SJU', 'DEN', 'IAH', 'DFW', 'SEA', 'MIA', 'TPA', 'BWI', 'IAD', 'SAN'}
+FLOW_L_MIN = {'HYD': 900, 'REF': 600}
+ALPHA = 0.00099          # ASTM D1250 volumetric coefficient, as order-service.js uses it
+CONV_DENSITY = 0.8000    # the order-conversion density (UOM_MASTER), as the existing seed uses it
+MIN_UPLIFT_KG = 500      # below this a flight is topped up to 500 kg rather than skipped
+PRICE_REGION = {}        # filled in section 7b
+
+# Five flights take no fuel because the previous sector tankered for them: a cheap
+# Florida station feeding an expensive New York Harbor-priced one, both short legs.
+NYH = {'JFK', 'LGA', 'EWR', 'HPN', 'ISP', 'SWF', 'ALB', 'BOS', 'PVD', 'BDL', 'ORH', 'PWM', 'ACK', 'SYR',
+       'ROC', 'BUF', 'PHL', 'BWI', 'DCA', 'IAD', 'RIC', 'ORF', 'PIT'}
+FLORIDA = {'FLL', 'MCO', 'TPA', 'PBI', 'RSW', 'JAX', 'SRQ'}
+cands = sorted((f for f in kept if f['prev'] and f['prev']['o'] in FLORIDA and f['o'] in NYH
+                and f['type'] != 'A223' and f['prev']['type'] != 'A223' and f['air_min'] < 150),
+               key=lambda f: h(f['key'], 'tank'))
+tankered, used = [], set()
+for f in cands:
+    pv = f['prev']
+    if len(tankered) == 5:
+        break
+    if pv['id'] in used or f['id'] in used or (pv['prev'] and pv['prev']['id'] in used) or (f['next'] and f['next']['id'] in used):
+        continue
+    ps = pv['stack']
+    prev_arr_plan = ps['cont'] + ps['alt'] + ps['fres'] + ps['add'] + ps['extra']
+    need_est = sum(f['stack'].values()) - prev_arr_plan
+    extra = need_est + 1200
+    if sum(ps.values()) + extra > tail_cap(pv['tail'], pv['type']):
+        continue
+    f['no_uplift'] = True
+    f['orig_order_kg'] = round(need_est, 2)
+    pv['tanker_for'] = f
+    ps['extra'] += round(extra)
+    pv['basis'] += f' - tankering {round(extra)} kg for {f["flight_number"]} ex {f["o"]}'
+    tankered.append(f)
+    used |= {pv['id'], f['id']}
+assert len(tankered) == 5, f'only {len(tankered)} tankering pairs found'
+
+# Ten deliveries carry a gauge variance well outside tolerance; everything else sits
+# within 25 kg / 0.1%. Five are ~500 kg absolute, five ~1% of the uplift.
+var_pool = sorted((f for f in kept if not f.get('no_uplift')), key=lambda f: h(f['key'], 'var'))
+for f in var_pool:
+    f['var_kind'] = None
+abs_n = pct_n = 0
+for f in var_pool:
+    if f['air_min'] < 150:             # long sectors only: a 500 kg or 1% gauge error on a large uplift
+        continue
+    if abs_n < 5:
+        f['var_kind'], abs_n = 'ABS', abs_n + 1
+    elif pct_n < 5:
+        f['var_kind'], pct_n = 'PCT', pct_n + 1
+    if abs_n == 5 and pct_n == 5:
+        break
+
+
+def apu_minutes(t0, t1, arrival_t, aobt):
+    """APU running minutes inside [t0, t1]. On a turn of 90 min or less it runs throughout;
+    on a longer one (overnight included) only for 20 min after on-blocks and the last 60 min
+    before off-blocks - the aircraft is otherwise on ground power or shut down."""
+    if t1 <= t0:
+        return 0.0
+    if (aobt - arrival_t).total_seconds() <= 90 * 60:
+        windows = [(arrival_t, aobt)]
+    else:
+        windows = [(arrival_t, arrival_t + dt.timedelta(minutes=20)), (aobt - dt.timedelta(minutes=60), aobt)]
+    return sum(max(0.0, (min(t1, b) - max(t0, a)).total_seconds() / 60) for a, b in windows)
+
+
+def station_temp(code, key):
+    lat = abs(AIRPORTS[code]['lat'])
+    return round(28 - 0.45 * max(0.0, lat - 18) + (h(key, 'tmp') - 0.5) * 6, 1)
+
+
 for legs in by_tail.values():
     legs.sort(key=lambda x: x['atot'])
     for f in legs:
-        s, t = f['stack'], f['type']
-        if f['prev']:
-            rob = f['prev']['fob_in']
-            f['rob_src'] = 'carried from previous leg FOB at IN'
+        s, t, key = f['stack'], f['type'], f['key']
+        pv = f['prev']
+        if pv:
+            rob = pv['fob_in']                    # ACTUAL fuel at on-blocks of the arriving leg
+            rob_plan = pv['arr_plan_rob']         # what the planner knew: that leg's PLANNED on-block ROB
+            f['rob_src'] = f'planned on-block ROB of inbound {pv["flight_number"]}'
+            arrival_t = pv['aibt']
         else:
-            rob = s['alt'] + s['fres'] + s['add'] + 400 + int(h(f['key'], 'rob') * 800)
+            rob = s['alt'] + s['fres'] + s['add'] + 400 + int(h(key, 'rob') * 800)
+            rob_plan = rob
             f['rob_src'] = 'SEEDED: no previous leg in the extract (D59 shape)'
             f['flags'].append('opening ROB seeded, not carried: first leg of this tail in the extract')
+            arrival_t = f['aobt'] - dt.timedelta(minutes=70 + int(h(key, 'arr') * 50))
         block = sum(s.values())
-        if rob > block:                                       # tankered: commander carries the surplus
-            s['extra'] += round(rob - block)
-            block = sum(s.values())
+        if f.get('no_uplift'):
+            if rob < block - s['extra']:
+                f['flags'].append('TANKERING SHORT: arrival fuel below the minimum required block')
+            if rob_plan > block:
+                s['extra'] += round(rob_plan - block); block = sum(s.values())
+        else:
+            if rob_plan > block - MIN_UPLIFT_KG:              # tankered in: commander carries the surplus
+                s['extra'] += round(rob_plan - block + MIN_UPLIFT_KG); block = sum(s.values())
         cap = tail_cap(f['tail'], t)
         if block > cap:
             f['flags'].append(f'block {block:.0f} kg exceeds {t} capacity {cap:.0f} kg; extra and additional trimmed')
-            over = min(block - cap, max(0, block - rob))       # never trim below the fuel already on board
+            over = min(block - cap, max(0, block - rob_plan))
             for k in ('extra', 'add'):
                 cut = min(over, s[k]); s[k] -= cut; over -= cut
             block = sum(s.values())
             if block > cap:
                 f['flags'].append('STILL over capacity after trimming: check the type assumption for this tail')
         f['block'] = block
-        f['rob'] = round(rob, 2)
-        f['uplift'] = round(block - rob, 2)
-        # Actuals: what the aircraft really burned, from real airborne time and the tail's performance factor
+        f['rob'] = round(rob_plan, 2)           # the dispatch plan's fuel on board (DSP451 input)
+        f['rob_actual'] = round(rob, 2)
+        f['uplift'] = round(block - rob_plan, 2)
+        apu = APU[t]
+        f['arrival_t'] = arrival_t
+        # Planned ROB at ON-BLOCKS: landing fuel less the planned taxi-in burn
+        f['arr_plan_rob'] = s['cont'] + s['alt'] + s['fres'] + s['add'] + s['extra'] - f['taxi_in'] * TAXI_KG_MIN[t]
+        # Order: dispatch quantity less the ARRIVING flight's planned ROB (first leg of a
+        # tail: no arriving plan in the extract, so the seeded arrival figure stands in)
+        f['order_kg'] = f['uplift'] if not f.get('no_uplift') else f['orig_order_kg']
+        f['ordered_l'] = round(f['order_kg'] / CONV_DENSITY, 2)
+        if f.get('no_uplift'):
+            f['delivered_l'] = 0
+            f['fob_out'] = round(rob - apu * apu_minutes(arrival_t, f['aobt'], arrival_t, f['aobt']) / 60, 2)
+        else:
+            method = 'HYD' if f['o'] in HYDRANT else 'REF'
+            start = f['aobt'] - dt.timedelta(minutes=30 + int(h(key, 'rfs') * 20))
+            if pv:
+                start = max(start, pv['aibt'] + dt.timedelta(minutes=6))
+            temp = station_temp(f['o'], key)
+            rho15 = round(0.7980 + h(f['o'] + str(f['flight_date']), 'rho') * 0.0150, 4)
+            rho = round(rho15 * (1 - ALPHA * (temp - 15)), 4)
+            ground = apu * apu_minutes(arrival_t, start, arrival_t, f['aobt']) / 60
+            before = rob - ground
+            need_kg = block - before
+            est_l = need_kg / rho
+            dur = int(est_l / FLOW_L_MIN[method]) + 4
+            end = start + dt.timedelta(minutes=dur)
+            apu_after = apu * apu_minutes(end, f['aobt'], arrival_t, f['aobt']) / 60
+            need_kg += apu_after
+            want_l = max(round(need_kg / rho), round(MIN_UPLIFT_KG / rho))   # never a sixth no-uplift flight
+            limit_l = math.floor(f['ordered_l'])
+            delivered_l = max(0, min(want_l, limit_l))
+            if (want_l - limit_l) * rho > 300:
+                f['flags'].append(f'uplift held to the ordered {limit_l} L; the aircraft needed {want_l} L '
+                                  f'because it arrived below the planned ROB')
+            ticket_kg = round(delivered_l * rho, 2)
+            if f.get('var_kind') == 'ABS':
+                var = (1 if h(key, 'vs') < 0.5 else -1) * (480 + int(h(key, 'vm') * 60))
+            elif f.get('var_kind') == 'PCT':
+                var = (1 if h(key, 'vs') < 0.5 else -1) * ticket_kg * (0.010 + h(key, 'vm') * 0.003)
+            else:
+                lim = min(25.0, max(10.0, ticket_kg * 0.001))
+                var = (h(key, 'vn') - 0.5) * 2 * lim
+            var = round(var, 2)
+            delta = round(ticket_kg - var, 2)
+            after = round(before + delta, 2)
+            f.update(method=method, refuel_start=start, refuel_end=end, temp=temp, rho15=rho15, rho=rho,
+                     ground_kg=round(ground, 2), fob_before=round(before, 2), fob_after=after,
+                     fob_delta=delta, ticket_kg=ticket_kg, recon_var=var, delivered_l=delivered_l)
+            f['fob_out'] = round(after - apu_after, 2)
+            if delivered_l < MIN_UPLIFT_KG / rho * 0.5:
+                f['flags'].append(f'very small uplift ({delivered_l} L)')
         pf = perf[f['tail']] / 100
-        f['fob_out'] = block
-        f['fob_off'] = block - f['taxi_out'] * TAXI_KG_MIN[t]
-        f['fob_on'] = f['fob_off'] - (CLIMB_ALLOWANCE[t] + f['burn'] * max(f['air_min'] - 20, 10) / 60) * pf * (0.98 + h(f['key'], 'wx') * 0.04)
+        f['fob_off'] = f['fob_out'] - f['taxi_out'] * TAXI_KG_MIN[t]
+        f['fob_on'] = f['fob_off'] - (CLIMB_ALLOWANCE[t] + f['burn'] * max(f['air_min'] - 20, 10) / 60) * pf * (0.98 + h(key, 'wx') * 0.04)
         f['fob_in'] = f['fob_on'] - f['taxi_in'] * TAXI_KG_MIN[t]
         if f['fob_in'] < s['fres']:
             f['flags'].append('FOB at IN below final reserve: check plan')
+
+# ---------------------------------------------------------------------------
+# 7b. Suppliers, contracts, prices; orders, deliveries and tickets
+# ---------------------------------------------------------------------------
+from decimal import Decimal, ROUND_HALF_UP
+
+GAL_L = 3.785411784
+
+
+def money(x):
+    """Number(x.toFixed(2)) exactly, as invoice-checks.js r2() computes it: round the EXACT
+    binary value of the float half-up. Decimal(str(x)) rounds the shortest decimal text
+    instead, and disagrees on products like 4650 x 1.3387 = 6224.95499... (INV469)."""
+    return float(Decimal(float(x)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+
+# Spot jet fuel, USD per US gallon, by pricing region and flight date. Sourced from
+# web search results only (EIA / FRED / IATA / Argus pages are egress-blocked here):
+#   USGC  Sep-2026 monthly 4.341, 11-Sep 4.418, mid-Sep ~4.55 (Bloomberg, 18-Sep)
+#   NYH   mid-Sep ~4.75 (Bloomberg, 18-Sep)
+#   global average 194.90 USD/bbl = 4.64 USD/gal, week to 25-Sep (IATA monitor, +7.4% w/w)
+# CHI, ROCKY, WC and CARIB are USGC plus a stated regional basis - ASSUMED, not sourced.
+USGC = {'2026-09-23': 4.40, '2026-09-24': 4.43, '2026-09-25': 4.47, '2026-09-26': 4.50, '2026-09-27': 4.52}
+NYHP = {'2026-09-23': 4.70, '2026-09-24': 4.73, '2026-09-25': 4.77, '2026-09-26': 4.80, '2026-09-27': 4.82}
+EURP = {'2026-09-23': 4.56, '2026-09-24': 4.59, '2026-09-25': 4.63, '2026-09-26': 4.66, '2026-09-27': 4.68}
+BASIS = {'CHI': 0.06, 'ROCKY': 0.12, 'WC': 0.30, 'CARIB': 0.20, 'CANW': 0.35}
+REGION = {}
+for code in ('JFK LGA EWR HPN ISP SWF ALB BOS PVD BDL ORH PWM ACK SYR ROC BUF PHL BWI DCA IAD RIC ORF PIT').split():
+    REGION[code] = 'NYH'
+for code in ('FLL MCO TPA PBI RSW JAX SRQ SAV CHS CLT RDU GSO GSP ILM ATL BHM BNA MSY IAH AUS DFW MEM SDF').split():
+    REGION[code] = 'USGC'
+for code in 'ORD MDW DTW CLE MKE'.split():
+    REGION[code] = 'CHI'
+for code in 'DEN SLC ABQ'.split():
+    REGION[code] = 'ROCKY'
+for code in 'LAX SFO SAN SEA SMF BUR ONT LAS PHX'.split():
+    REGION[code] = 'WC'
+for code in 'SJU BDA KIN POS CUN SJO'.split():
+    REGION[code] = 'CARIB'
+for code in 'LHR CDG AMS DUB EDI MAD BCN MXP'.split():
+    REGION[code] = 'EUR'
+REGION['YVR'] = 'CANW'
+missing_region = sorted({f['o'] for f in kept} - set(REGION))
+assert not missing_region, f'no pricing region for {missing_region}'
+
+
+def spot(code, day):
+    r = REGION[code]
+    if r == 'NYH':
+        return NYHP[day]
+    if r == 'EUR':
+        return EURP[day]
+    return USGC[day] + BASIS.get(r, 0.0)
+
+
+# name, country, invoice prefix. Three already exist in the seed and are reused.
+SUPPLIER_DEFS = {
+    'WFSUS01':   ('World Fuel Services Inc', 'US', 'WFS'),
+    'SHELLUS01': ('Shell Aviation LLC', 'US', 'SHL'),
+    'BPUS01':    ('BP Air US', 'US', 'BPA'),
+    'CHEVUS01':  ('Chevron Global Aviation', 'US', 'CGA'),
+    'AVFUEL01':  ('Avfuel Corporation', 'US', 'AVF'),
+    'PUMAPR01':  ('Puma Energy Caribe', 'PR', 'PMA'),
+    'SOLCAR01':  ('Sol Aviation Services', 'JM', 'SOL'),
+    'ASAMX01':   ('ASA Combustibles', 'MX', 'ASA'),
+    'REPSOL01':  ('Repsol Aviacion', 'ES', 'REP'),
+    'ENIAV01':   ('Eni Aviation', 'IT', 'ENI'),
+    'SHELLNL01': ('Shell Aviation Netherlands', 'NL', 'SNL'),
+    'BPUK001':   ('BP Aviation United Kingdom', 'GB', 'BPK'),   # existing
+    'ATINT01':   ('Air Total International', 'FR', 'ATI'),       # existing
+    'WFS001':    ('World Fuel Services Canada', 'CA', 'WFC'),    # existing
+}
+existing_suppliers = {r['supplier_code']: r for r in read_csv('MASTER_SUPPLIERS')}
+# Station -> (primary, secondary). Secondary suppliers take ~40% of flight numbers.
+STATION_SUPPLIERS = {}
+for code in 'LGA HPN ISP SWF ALB PVD BDL ORH PWM ACK SYR ROC BUF'.split():
+    STATION_SUPPLIERS[code] = ('WFSUS01', None)
+for code in 'PHL BWI DCA IAD RIC ORF PIT'.split():
+    STATION_SUPPLIERS[code] = ('BPUS01', None)
+STATION_SUPPLIERS.update({'JFK': ('WFSUS01', 'SHELLUS01'), 'BOS': ('WFSUS01', 'SHELLUS01'),
+                          'EWR': ('WFSUS01', 'BPUS01'), 'FLL': ('SHELLUS01', 'WFSUS01'),
+                          'MCO': ('BPUS01', 'SHELLUS01'), 'LAX': ('CHEVUS01', 'WFSUS01'),
+                          'TPA': ('BPUS01', None), 'PBI': ('SHELLUS01', None)})
+for code in 'RSW JAX SRQ SAV CHS GSO GSP ILM BHM MEM SDF'.split():
+    STATION_SUPPLIERS[code] = ('AVFUEL01', None)
+for code in 'ATL CLT RDU BNA'.split():
+    STATION_SUPPLIERS[code] = ('WFSUS01', None)
+for code in 'MSY IAH AUS DFW DEN SLC ABQ SFO SAN SEA SMF BUR ONT LAS PHX'.split():
+    STATION_SUPPLIERS[code] = ('CHEVUS01', None)
+for code in 'ORD MDW DTW CLE MKE'.split():
+    STATION_SUPPLIERS[code] = ('BPUS01', None)
+STATION_SUPPLIERS.update({'SJU': ('PUMAPR01', None), 'BDA': ('SOLCAR01', None), 'KIN': ('SOLCAR01', None),
+                          'POS': ('SOLCAR01', None), 'CUN': ('ASAMX01', None), 'SJO': ('SOLCAR01', None),
+                          'LHR': ('BPUK001', None), 'EDI': ('BPUK001', None), 'DUB': ('BPUK001', None),
+                          'CDG': ('ATINT01', None), 'AMS': ('SHELLNL01', None), 'MAD': ('REPSOL01', None),
+                          'BCN': ('REPSOL01', None), 'MXP': ('ENIAV01', None), 'YVR': ('WFS001', None)})
+missing_sup = sorted({f['o'] for f in kept} - set(STATION_SUPPLIERS))
+assert not missing_sup, f'no supplier for {missing_sup}'
+
+
+def supplier_for(f):
+    prim, sec = STATION_SUPPLIERS[f['o']]
+    return sec if sec and h(f['o'] + f['flight_number'], 'sup') < 0.4 else prim
+
+
+def supplier_id(code):
+    return existing_suppliers[code]['ID'] if code in existing_suppliers else uid('SUP', code)
+
+
+used_suppliers = sorted({supplier_for(f) for f in kept})
+supplier_rows = []
+for i, code in enumerate(used_suppliers):
+    if code in existing_suppliers:
+        continue
+    name, cc, _ = SUPPLIER_DEFS[code]
+    supplier_rows.append(dict(ID=supplier_id(code), supplier_code=code, supplier_name=name, supplier_type='EXTERNAL',
+                              country_code=cc, iata_code=None, icao_code=None, parent_supplier_ID=None,
+                              payment_terms='NET30', s4_vendor_no=f'{300100 + i:010d}', is_active='true',
+                              created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+contract_rows = []
+CONTRACT = {}
+for i, code in enumerate(used_suppliers):
+    cid = uid('CON', code)
+    CONTRACT[code] = cid
+    contract_rows.append(dict(ID=cid, contract_number=f'B6-{SUPPLIER_DEFS[code][2]}-2026-001',
+                              contract_name=f'JetBlue {SUPPLIER_DEFS[code][0]} into-plane supply 2026',
+                              supplier_ID=supplier_id(code), valid_from='2026-01-01', valid_to='2026-12-31',
+                              contract_type='TERM', price_type='CPE', currency_code='USD', payment_terms='NET30',
+                              incoterms='DAP', min_volume_kg='1000000.00', max_volume_kg='250000000.00',
+                              s4_contract_number=f'{4600300001 + i}', is_active='true', created_at=SEED_TS,
+                              created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+JETA_ID = uid('PROD', 'JETA')
+JETA1_ID = read_csv('MASTER_PRODUCTS')[0]['ID']          # the seeded Jet A-1 row
+product_rows = [dict(ID=JETA_ID, product_code='JETA-ASTM-001', product_name='Jet A Aviation Turbine Fuel',
+                     product_type='JET_FUEL', specification='ASTM D1655 Jet A', uom_code='KG',
+                     s4_material_number='10000004', is_active='true', created_at=SEED_TS, created_by=SEED_USER,
+                     modified_at=SEED_TS, modified_by=SEED_USER)]
+
+
+def product_for(code):
+    return JETA_ID if AIRPORTS[code]['country'] == 'US' and code != 'SJU' else JETA1_ID
+
+
+# Designated suppliers: a station default per station, plus a flight-level row for
+# every flight number the SECONDARY supplier serves at a two-supplier station.
+desig_rows = []
+for code, (prim, sec) in sorted(STATION_SUPPLIERS.items()):
+    if code not in {f['o'] for f in kept}:
+        continue
+    desig_rows.append(dict(ID=uid('DES', code), flight_number=None, station_code=code, carrier_code='B6',
+                           supplier_ID=supplier_id(prim), supplier_contract_ID=CONTRACT[prim],
+                           supplier_performs_uplift='true', designation_type='PRIMARY', valid_from='2026-01-01',
+                           valid_to=None, priority=100, is_active='true',
+                           notes='Station default for B6. The supplier fuels its own product, so no into-plane agent.',
+                           created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+for code, fno in sorted({(f['o'], f['flight_number']) for f in kept}):
+    prim, sec = STATION_SUPPLIERS[code]
+    if sec and h(code + fno, 'sup') < 0.4:
+        desig_rows.append(dict(ID=uid('DES', code, fno), flight_number=fno, station_code=code, carrier_code='B6',
+                               supplier_ID=supplier_id(sec), supplier_contract_ID=CONTRACT[sec],
+                               supplier_performs_uplift='true', designation_type='PRIMARY', valid_from='2026-01-01',
+                               valid_to=None, priority=100, is_active='true',
+                               notes=f'Flight-level: {fno} at {code} is fuelled by the second supplier.',
+                               created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+
+order_rows, delivery_rows, ticket_rows = [], [], []
+seq_o, seq_d, seq_t = Counter(), Counter(), Counter()
+po_n = gr_n = 0
+tkt_run = {}
+for f in sorted(kept, key=lambda x: x['atot']):
+    code, day = f['o'], str(f['flight_date'])
+    sup = supplier_for(f)
+    f['supplier'] = sup
+    price_l = round((spot(code, day if day in USGC else '2026-09-24')
+                     + (0.16 + h(code, 'dif') * 0.10 if code in HYDRANT else
+                        0.45 + h(code, 'dif') * 0.20 if REGION[code] == 'CARIB' else
+                        0.20 + h(code, 'dif') * 0.12 if REGION[code] == 'EUR' else
+                        0.26 + h(code, 'dif') * 0.16)
+                     + (h(code + sup, 'sdf') - 0.5) * 0.06) / GAL_L, 4)
+    f['price_l'] = price_l
+    seq_o[(code, day)] += 1
+    ymd = day.replace('-', '')
+    f['order_id'] = uid('FO', f['leg_id'])
+    f['order_number'] = f'FO-{code}-{ymd}-{seq_o[(code, day)]:03d}'
+    no_up = f.get('no_uplift')
+    if not no_up:
+        po_n += 1
+    sobt_local = f['sobt'].astimezone(f['o_tz'])
+    active_ts = f['sobt'] - dt.timedelta(minutes=35 + int(h(f['key'], 'l0') * 50))
+    cap_name = f'Capt. {pick(f["tail"] + str(f["flight_date"]), "cap", [f"CAP-B6{n:04d}" for n in range(101, 401)])[4:]} (synthetic)'
+    f['captain_name'] = cap_name
+    pv = f['prev']
+    order_rows.append(dict(
+        ID=f['order_id'], order_number=f['order_number'], flight_ID=f['id'], airport_ID=None, station_code=code,
+        supplier_ID=supplier_id(sup), contract_ID=CONTRACT[sup], product_ID=product_for(code), uom_code='LTR',
+        conversion_density=f'{CONV_DENSITY:.4f}', conversion_source='UOM_MASTER',
+        ordered_quantity_kg=r2(f['order_kg']), ordered_quantity=r2(f['ordered_l']),
+        unit_price=price_l, total_amount=money(f['ordered_l'] * price_l), currency_code='USD',
+        requested_date=day, requested_time=(sobt_local - dt.timedelta(minutes=40)).strftime('%H:%M:%S'),
+        priority='Normal', status='Cancelled' if no_up else 'Completed',
+        s4_po_number=None if no_up else f'{4500300000 + po_n}', s4_po_item=None if no_up else '00010',
+        dispatch_fuel_order_id=f['dispatch_order_id'], dispatch_plan_ID=uid('FD', f['leg_id'], f['versions'][-1]),
+        crew_review_status='CONFIRMED', crew_reviewed_by=cap_name,
+        crew_reviewed_at=iso(f['sobt'] - dt.timedelta(minutes=50)),
+        notes=f'Fuel order for {f["flight_number"]} {code}-{f["d"]}: dispatch {f["block"]:.0f} kg less planned ROB '
+              f'{f["rob"]:.0f} kg ({f["rob_src"]}).'[:1000],
+        cancelled_reason=(f'No uplift required: fuel tankered on {pv["flight_number"]} ex {pv["o"]}.' if no_up else None),
+        cancelled_by=('dispatch@airline.com' if no_up else None),
+        cancelled_at=(iso(f['sobt'] - dt.timedelta(minutes=70)) if no_up else None),
+        communicated_at=iso(active_ts + dt.timedelta(minutes=5)), communication_status='ACKNOWLEDGED',
+        communication_reference=f'MSG-{sup[:3]}-{ymd}-{seq_o[(code, day)]:03d}',
+        order_relationship='ORIGINAL', is_tankering='true' if f.get('tanker_for') else 'false',
+        tankering_sectors=2 if f.get('tanker_for') else None,
+        order_type='TANKERING' if f.get('tanker_for') else 'ORIGINAL',
+        planned_quantity_kg=r2(f['order_kg']), quantity_variance_reason=None,
+        into_plane_agent_ID=None, into_plane_contract_ID=None,
+        created_at=iso(active_ts + dt.timedelta(minutes=3)), created_by=SEED_USER,
+        modified_at=iso(f['aibt']), modified_by=SEED_USER))
+    if no_up:
+        continue
+    gr_n += 1
+    seq_d[(code, day)] += 1
+    seq_t[(code, day)] += 1
+    ordered_l = f['ordered_l']
+    dl = f['delivered_l']
+    qv = round(dl - ordered_l, 2)
+    qpct = round(qv / ordered_l * 100, 2)
+    flagged = abs(qpct) > 5
+    band = round(max(abs(f['ticket_kg']) * 0.005, 50.0), 2)
+    recon = 'RECONCILED' if abs(f['recon_var']) <= band else 'VARIANCE'
+    veh = f"{'HD' if f['method'] == 'HYD' else 'RF'}-{code}-{1 + int(h(f['key'], 'veh') * 24):02d}"
+    f['delivery_id'] = uid('DL', f['leg_id'])
+    f['gr_number'] = f'{5000300000 + gr_n}'
+    delivery_rows.append(dict(
+        ID=f['delivery_id'], order_ID=f['order_id'], flight_ID=f['id'], aircraft_reg=f['tail'],
+        tail_registration=f['tail'], delivery_number=f'EPD-{code}-{ymd}-{seq_d[(code, day)]:04d}',
+        delivery_date=f['refuel_start'].strftime('%Y-%m-%d'), delivery_time=f['refuel_start'].strftime('%H:%M:%S'),
+        delivered_quantity=f'{dl:.2f}', uom_code='LTR', temperature=f'{f["temp"]:.2f}', density=f'{f["rho"]:.4f}',
+        temperature_corrected_qty=r2(dl * round(1 - ALPHA * (f['temp'] - 15), 6)),
+        vehicle_id=veh, driver_name=f'Fueler {100 + int(h(veh, "drv") * 800)} (synthetic)', pilot_name=f['captain_name'],
+        ground_crew_name=f'Ramp agent {100 + int(h(f["key"], "gc") * 800)} (synthetic)',
+        s4_gr_number=f['gr_number'], s4_gr_year='2026', s4_gr_item='0001', status='Posted',
+        quantity_variance=qv, variance_percentage=qpct, variance_flag='true' if flagged else 'false',
+        variance_reason=('Arrived with more fuel than planned, so the uplift was reduced to reach block fuel.' if flagged and qv < 0
+                         else 'Uplift above order.' if flagged else None),
+        fob_at_arrival_kg=r2(f['rob_actual']), fob_before_kg=r2(f['fob_before']), fob_after_kg=r2(f['fob_after']),
+        fob_delta_kg=r2(f['fob_delta']), ground_burn_kg=r2(f['ground_kg']), fob_source='ACARS', fob_rounding_kg=0,
+        recon_variance_kg=r2(f['recon_var']), recon_status=recon, supplier_count=1, delivery_method=f['method'],
+        flight_variance_kg=r2(-f['recon_var']), flight_variance_status=recon, flight_metered_kg=r2(f['ticket_kg']),
+        flight_delivered_kg=r2(f['fob_delta']), flight_tolerance_kg=band,
+        refuel_start_utc=iso(f['refuel_start']), refuel_end_utc=iso(f['refuel_end']), refuel_complete='true',
+        created_at=iso(f['refuel_start']), created_by=SEED_USER, modified_at=iso(f['refuel_end']), modified_by=SEED_USER))
+    pref = SUPPLIER_DEFS[sup][2]
+    base = tkt_run.setdefault((sup, code), 100000 + int(h(sup + code, 'run') * 700000))
+    tkt_run[(sup, code)] = base + 1 + int(h(f['key'], 'gap') * 3)
+    f['ticket_number'] = f'{pref}-{code}-{base:06d}'
+    f['ticket_id'] = uid('FT', f['leg_id'])
+    meter0 = round(100000 + h(veh + day, 'mtr') * 800000, 2)
+    electronic = f['method'] == 'HYD' or REGION[code] == 'EUR'
+    ticket_rows.append(dict(
+        ID=f['ticket_id'], order_ID=f['order_id'], match_status='MATCHED', ticket_source='E' if electronic else 'M',
+        ticket_capture_source='ELECTRONIC' if electronic else 'MANUAL', delivery_ID=f['delivery_id'],
+        ticket_number=f['ticket_number'], internal_number=f'FT-{code}-{ymd}-{seq_t[(code, day)]:04d}',
+        aircraft_reg=f['tail'], tail_registration=f['tail'], flight_ID=f['id'], flight_number=f['flight_number'],
+        quantity=f'{dl:.2f}', uom_code='LTR', meter_start=f'{meter0:.2f}', meter_end=f'{meter0 + dl:.2f}',
+        quantity_metered=f'{dl:.2f}', density_value=f'{f["rho"]:.4f}', density_uom='KGL', density_basis='MEA',
+        density_temp_c=f'{f["temp"]:.2f}', quantity_flag='GR', quantity_kg=r2(f['ticket_kg']),
+        batch_coa_ref=f'COA-{code}-{ymd}-{1 + int(h(code + day, "coa") * 3)}', rate_per_litre=f'{price_l:.4f}',
+        total_amount=money(dl * price_l), delivery_timestamp=iso(f['refuel_start']),
+        supplier_ticket_ref=f'{pref}-DN-{base:06d}', status='Verified', verified_by='fuel.ops@airline.com',
+        verified_at=iso(f['refuel_end'] + dt.timedelta(hours=2)), vehicle_id=veh, meter_serial=f'MTR-{veh}',
+        created_at=iso(f['refuel_end']), created_by=SEED_USER, modified_at=iso(f['refuel_end']), modified_by=SEED_USER))
+    f['ticket_amount'] = money(dl * price_l)
 
 # ---------------------------------------------------------------------------
 # 8. Rows
@@ -521,7 +927,7 @@ for f in sorted(kept, key=lambda x: x['atot']):
         aircraft_reg=f['tail'], tail_registration=f['tail'], flight_leg_id=f['leg_id'],
         origin_airport=f['o'], destination_airport=f['d'],
         scheduled_departure=f['sobt'].strftime('%H:%M:%S'), scheduled_arrival=f['sibt'].strftime('%H:%M:%S'),
-        status='ARRIVED', fuel_order_number=None, airline_code='B6', flight_suffix=None, service_type='J',
+        status='ARRIVED', fuel_order_number=f['order_number'], airline_code='B6', flight_suffix=None, service_type='J',
         departure_terminal=dep_t, arrival_terminal=arr_t, gate_number=gate, stand_number=stand,
         sobt=iso(f['sobt']), sibt=iso(f['sibt']), eobt=iso(f['aobt']), eibt=iso(f['aibt']),
         aobt=iso(f['aobt']), aibt=iso(f['aibt']), atot=iso(f['atot']), aldt=iso(f['aldt']),
@@ -572,7 +978,7 @@ for f in sorted(kept, key=lambda x: x['atot']):
         fd_rows.append(dict(
             ID=ids[i], dispatch_order_id=f['dispatch_order_id'],
             flight_number=f['flight_number'], flight_date=str(f['flight_date']), flight_schedule_ID=f['id'],
-            fuel_order_ID=None, tail_number=f['tail'], tail_registration=f['tail'], captain_id=cap_id,
+            fuel_order_ID=f['order_id'] if active else None, tail_number=f['tail'], tail_registration=f['tail'], captain_id=cap_id,
             dispatcher_id=pick(f['o'] + str(f['flight_date']), 'dsp', [f'DSP-B6{n:03d}' for n in range(1, 41)]),
             atd=iso(f['aobt']) if active else None, ata=iso(f['aibt']) if active else None,
             atd_local=wall(f['aobt'], f['o_tz']) if active else None,
@@ -590,12 +996,133 @@ for f in sorted(kept, key=lambda x: x['atot']):
             rob_departure_kg=r2(f['rob']),
             payload_kg=r2(payload if active else payload_plan * (0.96 + h(key, f'pp{i}') * 0.03)),
             payload_plan_kg=r2(payload_plan if active else payload_plan * (0.96 + h(key, f'pp{i}') * 0.03)),
-            arrival_rob_plan_kg=r2(st['cont'] + st['alt'] + st['fres'] + st['add'] + st['extra']),
+            arrival_rob_plan_kg=r2(st['cont'] + st['alt'] + st['fres'] + st['add'] + st['extra'] - f['taxi_in'] * TAXI_KG_MIN[t]),
             flight_level=fl, wind_component=wind, alternate_airport=p_['alt'],
             dispatch_source='MANUAL',
             ofplan_reference=f'OFP-{f["flight_number"]}-{f["flight_date"]:%Y%m%d}' + (f'-V{p_["version"]}' if n_versions > 1 else ''),
             remarks=remark[:200],
             created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+
+for r in order_rows:
+    r['airport_ID'] = airport_id(r['station_code'])
+
+# ---------------------------------------------------------------------------
+# 8b. Invoices: exactly one per supplier per station, USD
+# ---------------------------------------------------------------------------
+FET_PER_L = round(0.044 / GAL_L, 6)        # US federal excise tax on commercial jet fuel, 4.4 c/gal
+INVOICE_DATE, RECEIVED, POSTED_ON = '2026-09-27', '2026-09-28', '2026-09-28'
+billable = [f for f in sorted(kept, key=lambda x: x['atot']) if not f.get('no_uplift')]
+groups = defaultdict(list)
+for f in billable:
+    groups[(f['supplier'], f['o'])].append(f)
+
+# 6 tickets left uninvoiced (the unbilled-ticket exception report), at 6 different
+# stations that still have other lines, and none of the gauge-variance deliveries.
+unbilled = []
+for f in sorted(billable, key=lambda f: h(f['key'], 'unb')):
+    if len(unbilled) == 6:
+        break
+    if f.get('var_kind') or len(groups[(f['supplier'], f['o'])]) < 4 or any(u['o'] == f['o'] for u in unbilled):
+        continue
+    unbilled.append(f)
+unbilled_ids = {f['id'] for f in unbilled}
+
+inv_keys = sorted(groups, key=lambda k: (k[1], k[0]))
+special = {}
+ranked = sorted(inv_keys, key=lambda k: h('|'.join(k), 'inv'))
+# posted invoice A (WFS) holds the ticket that is billed again on unposted WFS invoice B
+wfs = [k for k in ranked if k[0] == 'WFSUS01' and len(groups[k]) >= 3]
+special['A'], special['B'] = wfs[0], wfs[1]
+rest = [k for k in ranked if k not in (special['A'], special['B']) and len(groups[k]) >= 2]
+special['C'], special['D'], special['R'] = rest[0], rest[1], rest[2]      # C: 2 unknown tickets, D: 1, R: rate
+others = [k for k in ranked if k not in special.values()]
+posted = set(others[:17]) | {special['A']}
+
+invoice_rows, item_rows = [], []
+existing_tickets = {f['ticket_number'] for f in billable}
+seq_inv = Counter()
+for n, key in enumerate(inv_keys, start=1):
+    sup, code = key
+    pref = SUPPLIER_DEFS[sup][2]
+    seq_inv[pref] += 1
+    inv_id = uid('INV', sup, code)
+    is_posted = key in posted
+    lines = [dict(kind='TICKET', f=f) for f in groups[key] if f['id'] not in unbilled_ids]
+    if key == special['B']:
+        a0 = [f for f in groups[special['A']] if f['id'] not in unbilled_ids][0]
+        lines.append(dict(kind='DUP', f=a0))
+    if key in (special['C'], special['D']):
+        for j in range(2 if key == special['C'] else 1):
+            base = 900000 + int(h(code + str(j), 'ghost') * 90000)
+            ghost = f'{pref}-{code}-{base:06d}'
+            assert ghost not in existing_tickets
+            lines.append(dict(kind='GHOST', number=ghost, qty=4000 + int(h(ghost, 'gq') * 9000),
+                              day=['2026-09-24', '2026-09-25', '2026-09-26'][j % 3]))
+    us = AIRPORTS[code]['country'] == 'US' and code != 'SJU'
+    net_total = tax_total = 0.0
+    for i, ln in enumerate(lines):
+        item = dict(ID=uid('II', inv_id, i), invoice_ID=inv_id, line_number=(i + 1) * 10, tax_code='U1' if us else 'V0',
+                    uom_code='LTR', cost_center=f'FUEL{code}', gl_account='400000', review_status='NONE')
+        if ln['kind'] == 'GHOST':
+            qty, price = float(ln['qty']), round((spot(code, ln['day']) + 0.30) / GAL_L, 4)
+            item.update(product_ID=product_for(code), description=f'Jet A into-plane {code} ticket {ln["number"]}',
+                        po_number=None, po_item=None, ticket_number=ln['number'], ticket_ID=None, delivery_ID=None,
+                        fuel_order_ID=None, flight_ID=None, resolved_po_number=None, resolved_gr_number=None,
+                        resolution_source='UNRESOLVED', ticket_quantity_kg=None, ticket_rate=None, ticket_amount=None)
+        else:
+            f = ln['f']
+            qty = float(f['delivered_l'])
+            price = f['price_l']
+            if key == special['R']:
+                price = round(price + (1 + int(h(f['key'], 'rm') * 5)) / 100, 4)   # +1..5 cents per litre
+            item.update(product_ID=product_for(f['o']),
+                        description=f'Jet A into-plane {f["o"]} {f["flight_number"]} {f["flight_date"]:%d%b} {f["tail"]}',
+                        po_item='00010',
+                        ticket_number=f['ticket_number'], ticket_ID=f['ticket_id'], delivery_ID=f['delivery_id'],
+                        fuel_order_ID=f['order_id'], flight_ID=f['id'], resolution_source='TICKET_NUMBER',
+                        resolved_gr_number=f['gr_number'], ticket_quantity_kg=r2(f['ticket_kg']),
+                        ticket_rate=round(f['ticket_amount'] / f['ticket_kg'], 4), ticket_amount=f['ticket_amount'])
+            po = next(o['s4_po_number'] for o in order_rows if o['ID'] == f['order_id'])
+            item.update(po_number=po, resolved_po_number=po)
+        net = money(qty * price)
+        tax = money(qty * FET_PER_L) if us else 0.0
+        net_total += net; tax_total += tax
+        item.update(quantity=f'{qty:.3f}', unit_price=f'{price:.4f}', net_amount=f'{net:.2f}', tax_amount=f'{tax:.2f}',
+                    line_match_status='MATCHED' if is_posted else 'UNMATCHED',
+                    price_variance_pct='0.00' if is_posted else None, qty_variance_pct='0.00' if is_posted else None,
+                    tolerance_status='WITHIN' if is_posted else None, sap_line_number=f'{(i + 1):06d}' if is_posted else None)
+        item_rows.append(item)
+    net_total, tax_total = money(net_total), money(tax_total)
+    tag = ('duplicate-billing line: a ticket already on posted invoice ' + f'{SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]}' if key == special['B']
+           else '2 lines cite tickets that do not exist' if key == special['C']
+           else '1 line cites a ticket that does not exist' if key == special['D']
+           else 'unit rate 1-5 c/L above the order price on every line' if key == special['R'] else None)
+    invoice_rows.append(dict(
+        ID=inv_id, invoice_number=f'{pref}-{code}-260927-{seq_inv[pref]:02d}',
+        internal_number=f'INV-{pref}-20260927-{seq_inv[pref]:03d}', supplier_ID=supplier_id(sup),
+        invoice_date=INVOICE_DATE, posting_date=POSTED_ON if is_posted else None, due_date='2026-10-27',
+        baseline_date=INVOICE_DATE, currency_code='USD', net_amount=f'{net_total:.2f}', tax_amount=f'{tax_total:.2f}',
+        gross_amount=f'{money(net_total + tax_total):.2f}', stated_net_amount=f'{net_total:.2f}',
+        stated_gross_amount=f'{money(net_total + tax_total):.2f}', stated_line_count=len(lines),
+        payment_terms='NET30', discount_percent=None, discount_date=None,
+        match_status='MATCHED' if is_posted else 'UNMATCHED', price_variance='0.00' if is_posted else None,
+        quantity_variance='0.00' if is_posted else None, variance_percentage='0.00' if is_posted else None,
+        approval_status='APPROVED' if is_posted else 'PENDING', requires_dual_approval='false',
+        first_approver='ap.clerk@airline.com' if is_posted else None,
+        first_approved_at='2026-09-28T09:00:00Z' if is_posted else None,
+        final_approver='finance.controller@airline.com' if is_posted else None,
+        final_approved_at='2026-09-28T10:00:00Z' if is_posted else None,
+        s4_document_number=f'{5100300000 + n}' if is_posted else None, s4_fiscal_year='2026' if is_posted else None,
+        s4_company_code='JB01', received_date=RECEIVED if is_posted else INVOICE_DATE,
+        sap_invoice_number=f'51{5100300000 + n}2026' if is_posted else None, s4_payment_document=None,
+        payment_date=None, tolerance_status='WITHIN' if is_posted else None,
+        fi_posting_status='SUCCESS' if is_posted else None, status='POSTED' if is_posted else 'SUBMITTED',
+        notes=(f'SYNTHETIC B6 test invoice, {code}, 24-26 Sep 2026.' + (f' Seeded exception: {tag}.' if tag else ''))[:1000],
+        rejection_reason=None, is_duplicate='false', duplicate_of_ID=None,
+        posting_gate='CLEAR' if is_posted else 'NOT_CHECKED', gate_evaluated_at='2026-09-28T08:30:00Z' if is_posted else None,
+        open_hard_count=0, open_soft_count=0, warning_count=0,
+        created_at='2026-09-27T15:00:00Z', created_by=SEED_USER, modified_at='2026-09-28T10:00:00Z' if is_posted else '2026-09-27T15:00:00Z',
+        modified_by=SEED_USER))
 
 type_counts = Counter()
 tails = {}
@@ -637,7 +1164,7 @@ GAP_FS = [
     ('destination_airport', 'String(3)', 'mandatory, FK MASTER_AIRPORTS', 'Destination', S + '/' + I, 'Blank destinations recovered from the next leg on the same tail'),
     ('scheduled_departure / scheduled_arrival', 'Time', '', '-', D, 'UTC clock time of sobt / sibt (backward-compatible fields)'),
     ('status', 'FlightStatus', '@assert.range', 'Status', D, 'Complete / Landing inferred -> ARRIVED. Signal lost and Airborne at end of data are excluded (no touchdown)'),
-    ('fuel_order_number', 'String(25)', '', '-', B, 'Written when a fuel order is created for the flight. Seeding it would claim an order that does not exist'),
+    ('fuel_order_number', 'String(25)', '', '-', D, 'The flight\'s FUEL_ORDERS.order_number (denormalised, as the order-creation path writes it)'),
     ('airline_code', 'String(3)', '', 'Flight No prefix', S, 'B6'),
     ('flight_suffix', 'String(2)', '', '-', B, 'Operational suffix is used only for re-timed/duplicated legs; none in the extract'),
     ('service_type', 'String(1)', '', '-', D, 'J (scheduled passenger)'),
@@ -672,7 +1199,7 @@ GAP_FD = [
     ('dispatch_order_id', 'String(20)', 'mandatory', '-', Y, 'FO-B6-2026-nnnnn in wheels-off order. Same on every version of a plan: no order was confirmed to a supplier, so no commercial boundary was crossed (A7)'),
     ('flight_number / flight_date', '', 'mandatory', 'Flight No', D, 'Same as FLIGHT_SCHEDULE'),
     ('flight_schedule_ID', 'FK', '', '-', D, 'Links directly, so the DSP458 number+date ambiguity cannot bite in the CSV seed'),
-    ('fuel_order_ID', 'FK', '', '-', B, 'No FUEL_ORDERS rows are seeded. Filled when an order is raised'),
+    ('fuel_order_ID', 'FK', '', '-', D, 'The flight\'s order on the ACTIVE plan (the order claims the active plan, D44). Blank on superseded versions'),
     ('tail_number / tail_registration', '', 'import-required', 'Tail Number', S, ''),
     ('captain_id / dispatcher_id', 'String(20)', 'import-required', '-', Y, 'CAP-B6nnnn per tail per day; DSP-B6nnn per station per day'),
     ('atd / ata', 'DateTime', 'ATD import-required', '-', D, 'AOBT / AIBT on the ACTIVE plan. Blank on superseded plans: a plan replaced before departure never flew'),
@@ -693,9 +1220,9 @@ GAP_FD = [
     ('plan_version_source', 'PlanVersionSource', '', '-', Y, 'ASSIGNED for one- and two-version plans, FEED where the source numbered the versions (the three-version and gapped families)'),
     ('superseded_by_ID', 'FK', '', '-', D, 'On a SUPERSEDED row, the next version of the same plan. Blank on the ACTIVE row'),
     ('version_gap_flag / versions_skipped', '', 'DSP456', '-', D, 'Stamped on the row that arrived after a gap (v3 following v1: true / 1). false / 0 everywhere else'),
-    ('rob_departure_kg', 'Decimal', 'import-required', '-', D, "PRE-uplift fuel on board, as deriveStack() uses it: previous leg FOB at IN on the same tail; seeded on each tail's first leg (flagged)"),
+    ('rob_departure_kg', 'Decimal', 'import-required', '-', D, "Fuel on board as the PLANNER knows it: the inbound leg's planned on-block ROB (its arrival_rob_plan_kg). Seeded on each tail's first leg (flagged). So required_uplift_kg = dispatch qty - planned arrival ROB, the fuel order quantity"),
     ('payload_kg / payload_plan_kg', 'Decimal', 'PAYLOAD_KG import-required', '-', D, 'FAA AC 120-27F standard weights: 94 kg per passenger incl. bags, boarded (plan: booked) + cargo. Superseded plans carry a 1-4% lighter estimate'),
-    ('arrival_rob_plan_kg', 'Decimal', '', '-', D, 'contingency + alternate + final reserve + additional + extra'),
+    ('arrival_rob_plan_kg', 'Decimal', '', '-', D, 'Planned ROB at ON-BLOCKS: contingency + alternate + final reserve + additional + extra, less planned taxi-in fuel. The NEXT leg orders against this'),
     ('flight_level', 'Integer', '', '-', D, 'Target by sector length (FL240 short hop to FL380 long haul), then the FAA semicircular rule: eastbound odd, westbound even; capped at type ceiling'),
     ('wind_component', 'Decimal', '', '-', Y, 'Westerly jet of 35-85 kt (weaker below FL350) resolved onto the route bearing: westbound headwind (+), eastbound tailwind (-), north-south near zero'),
     ('alternate_airport', 'String(3)', '', '-', D, 'Nearest commercial station 100 km+ away, same country first. PDX, BQN, LIR, MBJ, BGI used where the usual alternate is outside the extract. Blank = island reserve (BDA)'),
@@ -704,6 +1231,31 @@ GAP_FD = [
     ('remarks', 'String(200)', '', '-', D, 'SYNTHETIC, the fuel rule applied, why a version was superseded, and where the ROB came from'),
 ]
 
+GAP_TXN = [
+    ('FUEL_ORDERS', 'ordered_quantity_kg / planned_quantity_kg', D, 'Active plan dispatch_qty_kg - rob_departure_kg (the inbound leg\'s PLANNED on-block ROB) = the plan\'s required_uplift_kg, so no variance reason is needed'),
+    ('FUEL_ORDERS', 'ordered_quantity / uom_code / conversion_density', D, 'kg / 0.8000 (UOM_MASTER, as the seed\'s S1 order uses it), in LTR'),
+    ('FUEL_ORDERS', 'unit_price / total_amount / currency_code', D, 'Station into-plane price on the flight date in USD/L (see Prices below); total = ordered litres x price'),
+    ('FUEL_ORDERS', 'status', D, 'Completed, except 5 Cancelled: flights that needed no fuel because the previous sector tankered (that order is TANKERING, 2 sectors)'),
+    ('FUEL_ORDERS', 'supplier / contract / product', D, 'Station supplier (6 stations have two, split by flight number), its 2026 USD contract, Jet A (US) or Jet A-1'),
+    ('FUEL_ORDERS', 's4_po_number / s4_po_item', Y, '4500300001.. on every delivered order; none on cancelled ones'),
+    ('FUEL_ORDERS', 'crew review, communication, dispatch_fuel_order_id, dispatch_plan', D, 'CONFIRMED by the flight\'s captain; ACKNOWLEDGED to the supplier; linked to the active dispatch plan'),
+    ('FUEL_DELIVERIES', 'delivered_quantity (LTR)', D, 'Litres needed to reach block fuel at off-blocks (after APU burn), never above the ordered litres, and at least 500 kg'),
+    ('FUEL_DELIVERIES', 'temperature / density / temperature_corrected_qty', Y, 'Late-September station temperature by latitude; Jet A 0.798-0.813 kg/L at 15 C corrected for temperature; ASTM D1250 alpha 0.00099'),
+    ('FUEL_DELIVERIES', 'fob_at_arrival / before / after / delta / ground_burn', D, 'Arrival = inbound leg FOB at IN; before = arrival - APU burn to refuel start; after = before + delta; delta = ticket kg - gauge variance'),
+    ('FUEL_DELIVERIES', 'recon_variance_kg / recon_status', D, 'EPD461: ticket kg - fob_delta. Within 25 kg or 0.1% on all but 10 deliveries (5 ~500 kg, 5 ~1%), which exceed TOL-FOB-ACARS (0.5% / 50 kg) and read VARIANCE'),
+    ('FUEL_DELIVERIES', 'flight_variance_*', D, 'Delivered kg (gauge delta) - ticket kg, band max(0.5%, 50 kg): the figures flight-variance.js intends. It would recompute from delivered_quantity, which is LTR here - see README'),
+    ('FUEL_DELIVERIES', 'refuel window, vehicle, method, GR', Y, 'Start 30-50 min before off-blocks (not before arrival + 6 min), 900 L/min hydrant or 600 L/min refueller; GR 5000300001..; status Posted'),
+    ('FUEL_DELIVERIES', 'gauge / signature documents', B, 'No SOURCE_DOCUMENTS rows exist for these deliveries (D51)'),
+    ('FUEL_TICKETS', 'quantity / meter_start / meter_end / quantity_metered', D, 'Metered litres = delivered litres; meter span equals the quantity (EPD411 clean)'),
+    ('FUEL_TICKETS', 'density / quantity_kg', D, 'EPD453: metered x density, density KGL measured at the delivery temperature'),
+    ('FUEL_TICKETS', 'rate_per_litre / total_amount', D, 'The order unit price; total = metered x rate'),
+    ('FUEL_TICKETS', 'ticket_number', Y, '<supplier prefix>-<station>-<6-digit running number>, unique'),
+    ('INVOICES', 'one per supplier per station', D, f'{len(invoice_rows) if "invoice_rows" in dir() else ""} invoices dated 27 Sep 2026, USD, NET30. 18 POSTED (checked, approved, FI document), the rest SUBMITTED and NOT_CHECKED: press Validate in the app to run the IDR checks'),
+    ('INVOICES', 'net / tax / gross / stated_*', D, 'Derived from the lines (INV454); stated figures equal them. Tax = US federal excise 4.4 c/gal on US-station lines, 0 elsewhere'),
+    ('INVOICE_ITEMS', 'quantity / unit_price / net_amount', D, 'Ticket litres exactly; ticket rate; net = qty x price (INV469). One invoice carries +1 to 5 c/L on every line'),
+    ('INVOICE_ITEMS', 'ticket_number / ticket_ID / resolution', D, 'Resolved as the app writes it (TICKET_NUMBER), so the unbilled-ticket report reads correctly at once. 3 lines cite tickets that do not exist (UNRESOLVED)'),
+    ('INVOICE_ITEMS', 'po_number / resolved PO and GR', D, 'The order PO and delivery GR, so INV464-466 resolve'),
+]
 # ---------------------------------------------------------------------------
 # 10. Write the workbook
 # ---------------------------------------------------------------------------
@@ -758,6 +1310,15 @@ lines = [
     (f'  4. AIRCRAFT_REGISTRATIONS_add -> append to db/data/fuelsphere-AIRCRAFT_REGISTRATIONS.csv ({len(reg_rows)} rows)', False),
     (f'  5. FLIGHT_SCHEDULE         -> append to db/data/fuelsphere-FLIGHT_SCHEDULE.csv     ({len(fs_rows)} rows)', False),
     (f'  6. FLIGHT_DISPATCH         -> append to db/data/fuelsphere-FLIGHT_DISPATCH.csv     ({len(fd_rows)} rows: every version of every plan)', False),
+    (f'  7. MASTER_SUPPLIERS_add    -> fuelsphere-MASTER_SUPPLIERS.csv     ({len(supplier_rows)} rows; BPUK001, ATINT01, WFS001 are reused from the seed)', False),
+    (f'  8. MASTER_CONTRACTS_add    -> fuelsphere-MASTER_CONTRACTS.csv     ({len(contract_rows)} rows, one USD 2026 contract per supplier)', False),
+    (f'  9. MASTER_PRODUCTS_add     -> fuelsphere-MASTER_PRODUCTS.csv      ({len(product_rows)} row: Jet A for US stations)', False),
+    (f' 10. DESIGNATED_SUPPLIERS_add -> fuelsphere-DESIGNATED_SUPPLIERS.csv ({len(desig_rows)} rows)', False),
+    (f' 11. FUEL_ORDERS             -> fuelsphere-FUEL_ORDERS.csv          ({len(order_rows)} rows)', False),
+    (f' 12. FUEL_DELIVERIES         -> fuelsphere-FUEL_DELIVERIES.csv      ({len(delivery_rows)} rows)', False),
+    (f' 13. FUEL_TICKETS            -> fuelsphere-FUEL_TICKETS.csv         ({len(ticket_rows)} rows)', False),
+    (f' 14. INVOICES                -> fuelsphere-INVOICES.csv             ({len(invoice_rows)} rows)', False),
+    (f' 15. INVOICE_ITEMS           -> fuelsphere-INVOICE_ITEMS.csv        ({len(item_rows)} rows)', False),
     ('Save each sheet as a semicolon-delimited CSV. Headers are the CDS element names. Columns in the sheet that the existing CSV lacks must be added to that CSV header too (or kept in a separate CSV per entity: CAP loads one file per entity, so merge rather than add a second file).', False),
     ('', False),
     ('COLOUR KEY on Field_Gap_Analysis', True),
@@ -778,7 +1339,25 @@ lines = [
     ('  - N4xxxJ tails (B6 A321LR, the transatlantic fleet) carry a registration-level fuel_capacity_kg of 29,000 kg for the additional centre tank. Without it the BOS-MXP/BCN legs do not fit in the tanks.', False),
     ('  - mtow_kg / mlw_kg / mzfw_kg / engine_burn_rate_kgph on AIRCRAFT_REGISTRATIONS are left NULL: no source exists, and the tail-performance harness fails the day one carries an unsourced value.', False),
     ('  - s4_plant_code is blank on the new airports. Fuel orders at a station need a T001W plant; that is fuel-order seeding, not schedule or dispatch.', False),
-    ('  - Not seeded, and needed before orders can flow at these stations: suppliers, contracts, designated suppliers, fuel orders. Out of scope here.', False),
+    ('', False),
+    ('ORDERS, DELIVERIES, TICKETS AND INVOICES', True),
+    (f'  - {len(order_rows)} fuel orders, one per flight: quantity = dispatch qty less the inbound flight\'s planned on-block ROB. 5 Cancelled: no uplift needed, the previous sector tankered.', False),
+    (f'  - {len(delivery_rows)} deliveries and {len(ticket_rows)} tickets (one each). {sum(1 for r in delivery_rows if r["recon_status"] == "RECONCILED")} gauge reconciliations within 25 kg / 0.1%; 10 with a deliberate variance (5 about 500 kg, 5 about 1%), status VARIANCE.', False),
+    (f'  - {len(invoice_rows)} invoices, exactly one per supplier per station, all USD; {len(item_rows)} lines. {len(unbilled)} tickets deliberately NOT invoiced (unbilled report): ' + ', '.join(u['ticket_number'] for u in unbilled) + '.', False),
+    (f'  - Seeded invoice exceptions: {SUPPLIER_DEFS[special["C"][0]][2]}-{special["C"][1]} has 2 lines and {SUPPLIER_DEFS[special["D"][0]][2]}-{special["D"][1]} 1 line citing tickets that do not exist (INV462); '
+     f'{SUPPLIER_DEFS[special["B"][0]][2]}-{special["B"][1]} re-bills a ticket already on POSTED invoice {SUPPLIER_DEFS[special["A"][0]][2]}-{special["A"][1]} (INV455); '
+     f'{SUPPLIER_DEFS[special["R"][0]][2]}-{special["R"][1]} bills every line 1-5 c/L above the order price (INV452). Every other line matches exactly one ticket at the ticket quantity and rate.', False),
+    ('  - 18 invoices are POSTED (checked, approved, FI document). The rest are SUBMITTED and NOT_CHECKED: press Validate on an invoice in the app to run the checks and see the exceptions.', False),
+    ('', False),
+    ('PRICES (USD). Jet fuel spot for 23-27 Sep 2026 from web search results; the primary pages (EIA, FRED, IATA, Argus) are blocked from the build environment:', True),
+    ('  - US Gulf Coast: September 2026 average $4.341/gal; $4.418 on 11 Sep; about $4.55 in mid-September (Bloomberg, 18 Sep). Seeded $4.40-4.52 rising through the week.', False),
+    ('  - New York Harbor: about $4.75 in mid-September (Bloomberg, 18 Sep). Seeded $4.70-4.82.', False),
+    ('  - Europe: IATA global average $194.90/bbl ($4.64/gal) for the week to 25 Sep, up 7.4%. Seeded $4.56-4.68.', False),
+    ('  - ASSUMED, not sourced: Chicago +6 c, Rockies +12 c, West Coast +30 c, Caribbean +20 c over Gulf Coast; into-plane differential 16-26 c/gal at hydrant hubs, 26-42 c elsewhere, 45-65 c Caribbean. Replace with contract prices if you have them.', False),
+    ('', False),
+    ('UNIT OF MEASURE - A DECISION TO REVIEW', True),
+    ('  - Orders, deliveries, tickets and invoices are in LITRES, as your per-litre rates and the seed\'s own demo delivery (AC410) are. The gauge figures are in the kg fields.', False),
+    ('  - The delivery screens convert delivered_quantity to KG whenever gauge figures are present (order-service.js), and flight-variance.js assumes KG. An edit to one of these deliveries in the app would switch it to KG, and the invoice check would then report a unit mismatch (INV468) on its line. This is a code inconsistency, not a data one, and it affects the existing seed the same way.', False),
 ]
 for text, bold in lines:
     readme.append([text])
@@ -793,6 +1372,9 @@ for ent, rows in (('FLIGHT_SCHEDULE', GAP_FS), ('FLIGHT_DISPATCH', GAP_FD)):
     for fld, typ, con, srccol, kind, rule in rows:
         g.append([ent, fld, typ, con, srccol, kind, rule])
         g.cell(g.max_row, 6).fill = PatternFill('solid', fgColor=KIND_FILL[kind.split('/')[-1]])
+for ent, fld, kind, rule in GAP_TXN:
+    g.append([ent, fld, '', '', '-', kind, rule])
+    g.cell(g.max_row, 6).fill = PatternFill('solid', fgColor=KIND_FILL[kind])
 for col, wdt in zip('ABCDEFG', (18, 40, 18, 28, 18, 18, 120)):
     g.column_dimensions[col].width = wdt
 for row in g.iter_rows(min_row=2):
@@ -810,6 +1392,26 @@ sheet('AIRCRAFT_MASTER_add', ['type_code', 'aircraft_model', 'manufacturer_code'
                               'created_by', 'modified_at', 'modified_by'], am_rows)
 sheet('AIRCRAFT_REGISTRATIONS_add', list(reg_rows[0].keys()), reg_rows)
 
+
+def cols_for(entity, rows):
+    """The existing seed CSV's column order, then any column the rows add."""
+    hdr = open(os.path.join(REPO, 'db', 'data', f'fuelsphere-{entity}.csv'), encoding='utf-8').readline().strip().split(';')
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    return [c for c in hdr if c in keys] + [k for k in keys if k not in hdr]
+
+
+TXN_SHEETS = [('MASTER_SUPPLIERS_add', 'MASTER_SUPPLIERS', supplier_rows),
+              ('MASTER_CONTRACTS_add', 'MASTER_CONTRACTS', contract_rows),
+              ('MASTER_PRODUCTS_add', 'MASTER_PRODUCTS', product_rows),
+              ('DESIGNATED_SUPPLIERS_add', 'DESIGNATED_SUPPLIERS', desig_rows),
+              ('FUEL_ORDERS', 'FUEL_ORDERS', order_rows),
+              ('FUEL_DELIVERIES', 'FUEL_DELIVERIES', delivery_rows),
+              ('FUEL_TICKETS', 'FUEL_TICKETS', ticket_rows),
+              ('INVOICES', 'INVOICES', invoice_rows),
+              ('INVOICE_ITEMS', 'INVOICE_ITEMS', item_rows)]
+for title, entity, rows in TXN_SHEETS:
+    sheet(title, cols_for(entity, rows), rows)
+
 q_rows = []
 for f in src:
     q_rows.append(dict(source_row=f['row'], flight_no=f['fno'], date_utc=str(f['date_utc']), tail=f['tail'],
@@ -823,8 +1425,8 @@ qs.auto_filter.ref = qs.dimensions
 
 # The seed CSVs are semicolon-delimited: a semicolon inside any value shifts every
 # column after it (CLAUDE.md section 12). Refuse to write one.
-for name, rs in (('FLIGHT_SCHEDULE', fs_rows), ('FLIGHT_DISPATCH', fd_rows), ('MASTER_AIRPORTS', list(new_airports.values())),
-                 ('AIRCRAFT_REGISTRATIONS', reg_rows), ('AIRCRAFT_MASTER', am_rows), ('T005_COUNTRY', t005_rows)):
+for name, rs in [(e, r) for _, e, r in TXN_SHEETS] + [('FLIGHT_SCHEDULE', fs_rows), ('FLIGHT_DISPATCH', fd_rows), ('MASTER_AIRPORTS', list(new_airports.values())),
+                 ('AIRCRAFT_REGISTRATIONS', reg_rows), ('AIRCRAFT_MASTER', am_rows), ('T005_COUNTRY', t005_rows)]:
     bad = [(r.get('ID') or r.get('registration') or r.get('land1') or r.get('type_code'), k)
            for r in rs for k, v in r.items() if isinstance(v, str) and ';' in v]
     assert not bad, f'{name}: semicolon inside a value {bad[:3]}'
