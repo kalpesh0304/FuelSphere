@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1080" viewBox="0 0 1700 1080" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1D2D3E"/></marker></defs>
+<rect width="1700" height="1080" fill="#FFFFFF"/>
+<text x="1680" y="30" text-anchor="end" font-size="20" font-weight="bold" fill="#1D2D3E">FuelSphere — Solution Integration Architecture (Level 2)</text>
+<text x="1680" y="54" text-anchor="end" font-size="13" fill="#475E75">Diligent Tech India Pvt Ltd · BTP-EXT-S/4PUB · Cert ID 26150 · draft 29 Sep 2026</text>
+<rect x="20" y="150" width="220" height="380" rx="10" fill="#F5F6F7" stroke="#475E75" stroke-width="2"/>
+<text x="34" y="176" font-size="16" font-weight="bold" fill="#475E75">Users</text>
+<rect x="40" y="195" width="180" height="90" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="52" y="217" font-size="14" font-weight="bold" fill="#1D2D3E">Airline users</text>
+<text x="52" y="237" font-size="12.5" fill="#475E75">Fuel planner, station, ops,</text>
+<text x="52" y="254" font-size="12.5" fill="#475E75">finance, crew</text>
+<text x="52" y="271" font-size="12.5" fill="#475E75">(desktop / tablet browser)</text>
+<rect x="40" y="300" width="180" height="90" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="52" y="322" font-size="14" font-weight="bold" fill="#1D2D3E">Supplier users</text>
+<text x="52" y="342" font-size="12.5" fill="#475E75">Fuel supplier,</text>
+<text x="52" y="359" font-size="12.5" fill="#475E75">into-plane agent</text>
+<text x="52" y="376" font-size="12.5" fill="#475E75">(browser)</text>
+<rect x="40" y="405" width="180" height="100" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="52" y="427" font-size="14" font-weight="bold" fill="#1D2D3E">Administrators</text>
+<text x="52" y="447" font-size="12.5" fill="#475E75">BTP cockpit,</text>
+<text x="52" y="464" font-size="12.5" fill="#475E75">role collections,</text>
+<text x="52" y="481" font-size="12.5" fill="#475E75">S/4 sync trigger</text>
+<rect x="660" y="30" width="440" height="80" rx="6" fill="#EBF8FF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="672" y="52" font-size="14" font-weight="bold" fill="#1D2D3E">SAP Cloud Identity Services</text>
+<text x="672" y="72" font-size="12.5" fill="#475E75">Identity Authentication (IdP / proxy to corporate IdP)</text>
+<rect x="270" y="140" width="900" height="910" rx="10" fill="#EBF8FF" stroke="#0070F2" stroke-width="2"/>
+<text x="284" y="166" font-size="16" font-weight="bold" fill="#0070F2">SAP BTP — Subaccount (Cloud Foundry environment)</text>
+<rect x="295" y="185" width="520" height="455" rx="10" fill="#FFFFFF" stroke="#0070F2" stroke-width="2"/>
+<text x="309" y="211" font-size="16" font-weight="bold" fill="#0070F2">Cloud Foundry Runtime — MTA fuelsphere 1.0.0</text>
+<rect x="320" y="230" width="470" height="85" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="332" y="252" font-size="14" font-weight="bold" fill="#1D2D3E">SAP Fiori UIs (SAPUI5 / Fiori elements)</text>
+<text x="332" y="272" font-size="12.5" fill="#475E75">Fuel Orders · Fuel Tickets · Flight Dispatch · Flight Schedule</text>
+<text x="332" y="289" font-size="12.5" fill="#475E75">+ web apps: Admin, Planning, Operations, Fulfillment, Invoicing</text>
+<rect x="320" y="335" width="470" height="70" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="332" y="357" font-size="14" font-weight="bold" fill="#1D2D3E">Application Router — fuelsphere-approuter</text>
+<text x="332" y="377" font-size="12.5" fill="#475E75">@sap/approuter · XSUAA login · CSRF protection · routes</text>
+<rect x="320" y="425" width="470" height="110" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="332" y="447" font-size="14" font-weight="bold" fill="#1D2D3E">FuelSphere Service — fuelsphere-srv</text>
+<text x="332" y="467" font-size="12.5" fill="#475E75">SAP CAP (Node.js 22) · OData V4 · 17 services</text>
+<text x="332" y="484" font-size="12.5" fill="#475E75">Planning · Orders &amp; ePOD · Tickets · Burn &amp; ROB · Pricing</text>
+<text x="332" y="501" font-size="12.5" fill="#475E75">Invoice readiness checks · Master data sync</text>
+<rect x="320" y="555" width="470" height="65" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="332" y="577" font-size="14" font-weight="bold" fill="#1D2D3E">DB deployer — fuelsphere-db-deployer</text>
+<text x="332" y="597" font-size="12.5" fill="#475E75">HDI artefacts from CDS model</text>
+<rect x="840" y="185" width="310" height="455" rx="10" fill="#FFFFFF" stroke="#0070F2" stroke-width="2"/>
+<text x="854" y="211" font-size="16" font-weight="bold" fill="#0070F2">SAP BTP services</text>
+<rect x="860" y="225" width="270" height="65" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="872" y="247" font-size="14" font-weight="bold" fill="#1D2D3E">SAP HANA Cloud</text>
+<text x="872" y="267" font-size="12.5" fill="#475E75">HDI container (hdi-shared)</text>
+<rect x="860" y="305" width="270" height="65" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="872" y="327" font-size="14" font-weight="bold" fill="#1D2D3E">Authorization &amp; Trust Mgmt</text>
+<text x="872" y="347" font-size="12.5" fill="#475E75">XSUAA (application) · 17 scopes</text>
+<rect x="860" y="385" width="270" height="65" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="872" y="407" font-size="14" font-weight="bold" fill="#1D2D3E">Destination service (lite)</text>
+<text x="872" y="427" font-size="12.5" fill="#475E75">S/4HANA Cloud destination</text>
+<rect x="860" y="465" width="270" height="65" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="872" y="487" font-size="14" font-weight="bold" fill="#1D2D3E">Connectivity service (lite)</text>
+<rect x="860" y="545" width="270" height="75" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="872" y="567" font-size="14" font-weight="bold" fill="#1D2D3E">SAP Application Logging</text>
+<text x="872" y="587" font-size="12.5" fill="#475E75">application-logs (lite)</text>
+<rect x="295" y="665" width="855" height="215" rx="10" fill="#DAFDF5" stroke="#07838F" stroke-width="2" stroke-dasharray="7,5"/>
+<text x="309" y="691" font-size="16" font-weight="bold" fill="#07838F">SAP Integration Suite — Cloud Integration</text>
+<rect x="320" y="710" width="250" height="145" rx="6" fill="#FFFFFF" stroke="#07838F" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="332" y="732" font-size="14" font-weight="bold" fill="#1D2D3E">iFlows: FuelSphere ↔ S/4HANA</text>
+<text x="332" y="752" font-size="12.5" fill="#475E75">Purchase order create</text>
+<text x="332" y="769" font-size="12.5" fill="#475E75">Goods receipt post</text>
+<text x="332" y="786" font-size="12.5" fill="#475E75">Journal entry post</text>
+<text x="332" y="803" font-size="12.5" fill="#475E75">Supplier invoice data</text>
+<rect x="590" y="710" width="270" height="145" rx="6" fill="#FFFFFF" stroke="#07838F" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="602" y="732" font-size="14" font-weight="bold" fill="#1D2D3E">iFlows: third-party inbound</text>
+<text x="602" y="752" font-size="12.5" fill="#475E75">Flight schedule (SSIM)</text>
+<text x="602" y="769" font-size="12.5" fill="#475E75">Dispatch / flight plan</text>
+<text x="602" y="786" font-size="12.5" fill="#475E75">ACARS / EFB burn &amp; FOB</text>
+<text x="602" y="803" font-size="12.5" fill="#475E75">Market price indices</text>
+<rect x="880" y="710" width="250" height="145" rx="6" fill="#FFFFFF" stroke="#07838F" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="892" y="732" font-size="14" font-weight="bold" fill="#1D2D3E">iFlows: supplier exchange</text>
+<text x="892" y="752" font-size="12.5" fill="#475E75">Fuel orders / releases out</text>
+<text x="892" y="769" font-size="12.5" fill="#475E75">Delivery tickets in</text>
+<text x="892" y="786" font-size="12.5" fill="#475E75">Supplier invoices in</text>
+<rect x="295" y="905" width="420" height="120" rx="6" fill="#FFF0FA" stroke="#CC00DC" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="307" y="927" font-size="14" font-weight="bold" fill="#1D2D3E">SAP Analytics Cloud</text>
+<text x="307" y="947" font-size="12.5" fill="#475E75">Fuel cost &amp; burn stories (optimized story)</text>
+<text x="307" y="964" font-size="12.5" fill="#475E75">Live connection to HANA Cloud / OData</text>
+<rect x="740" y="905" width="410" height="120" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="752" y="927" font-size="14" font-weight="bold" fill="#1D2D3E">Legend</text>
+<text x="752" y="947" font-size="12.5" fill="#475E75">Solid border / arrow — implemented in code today</text>
+<text x="752" y="964" font-size="12.5" fill="#475E75">Dashed border / arrow — in certification scope,</text>
+<text x="752" y="981" font-size="12.5" fill="#475E75">not yet in the FuelSphere repository</text>
+<text x="752" y="998" font-size="12.5" fill="#475E75">Numbers ①–⑩ — see data-flow table</text>
+<rect x="1200" y="140" width="480" height="440" rx="10" fill="#EBF8FF" stroke="#0070F2" stroke-width="2"/>
+<text x="1214" y="166" font-size="16" font-weight="bold" fill="#0070F2">SAP S/4HANA Cloud Public Edition</text>
+<rect x="1225" y="185" width="430" height="60" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="1237" y="207" font-size="14" font-weight="bold" fill="#1D2D3E">Communication system + arrangements</text>
+<text x="1237" y="227" font-size="12.5" fill="#475E75">Communication user (OAuth 2.0 client credentials)</text>
+<rect x="1225" y="260" width="430" height="140" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5"/>
+<text x="1237" y="282" font-size="14" font-weight="bold" fill="#1D2D3E">Released OData APIs — read (implemented)</text>
+<text x="1237" y="302" font-size="12.5" fill="#475E75">API_BUSINESS_PARTNER (A_BusinessPartner)</text>
+<text x="1237" y="319" font-size="12.5" fill="#475E75">API_PURCHASECONTRACT_PROCESS_SRV</text>
+<text x="1237" y="336" font-size="12.5" fill="#475E75">API_COUNTRY_SRV</text>
+<text x="1237" y="353" font-size="12.5" fill="#475E75">Plant API (release status to be verified)</text>
+<rect x="1225" y="415" width="430" height="140" rx="6" fill="#FFFFFF" stroke="#0070F2" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="1237" y="437" font-size="14" font-weight="bold" fill="#1D2D3E">Released APIs — post (planned)</text>
+<text x="1237" y="457" font-size="12.5" fill="#475E75">API_PURCHASEORDER_PROCESS_SRV</text>
+<text x="1237" y="474" font-size="12.5" fill="#475E75">API_MATERIAL_DOCUMENT_SRV (goods receipt)</text>
+<text x="1237" y="491" font-size="12.5" fill="#475E75">Journal entry API</text>
+<text x="1237" y="508" font-size="12.5" fill="#475E75">Supplier invoice API</text>
+<rect x="1200" y="610" width="480" height="440" rx="10" fill="#F5F6F7" stroke="#475E75" stroke-width="2"/>
+<text x="1214" y="636" font-size="16" font-weight="bold" fill="#475E75">Third-party systems</text>
+<rect x="1225" y="655" width="430" height="55" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="1237" y="677" font-size="14" font-weight="bold" fill="#1D2D3E">Flight scheduling system</text>
+<text x="1237" y="697" font-size="12.5" fill="#475E75">Schedules, tails, OOOI times</text>
+<rect x="1225" y="720" width="430" height="55" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="1237" y="742" font-size="14" font-weight="bold" fill="#1D2D3E">Flight dispatch — Jeppesen JetPlan (Boeing)</text>
+<text x="1237" y="762" font-size="12.5" fill="#475E75">Fuel plan: trip, reserves, block fuel</text>
+<rect x="1225" y="785" width="430" height="55" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="1237" y="807" font-size="14" font-weight="bold" fill="#1D2D3E">Aircraft data — ACARS / EFB</text>
+<text x="1237" y="827" font-size="12.5" fill="#475E75">Fuel on board, burn, APU</text>
+<rect x="1225" y="850" width="430" height="55" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="1237" y="872" font-size="14" font-weight="bold" fill="#1D2D3E">Fuel supplier / into-plane agent systems</text>
+<text x="1237" y="892" font-size="12.5" fill="#475E75">Orders, delivery tickets, invoices</text>
+<rect x="1225" y="915" width="430" height="110" rx="6" fill="#FFFFFF" stroke="#475E75" stroke-width="1.5"/>
+<text x="1237" y="937" font-size="14" font-weight="bold" fill="#1D2D3E">Price data providers</text>
+<text x="1237" y="957" font-size="12.5" fill="#475E75">Platts · Argus · SAP CPE · Jefferson System</text>
+<text x="1237" y="974" font-size="12.5" fill="#475E75">(market indices for contract price formulas)</text>
+<line x1="240" y1="250" x2="320" y2="272" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="280.0" cy="261.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="280.0" y="266.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">①</text>
+<line x1="1060" y1="110" x2="1060" y2="305" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="1060.0" cy="207.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="1060.0" y="212.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">②</text>
+<line x1="555" y1="315" x2="555" y2="335" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<line x1="555" y1="405" x2="555" y2="425" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="555.0" cy="415.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="555.0" y="420.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">③</text>
+<line x1="790" y1="450" x2="860" y2="257" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="825.0" cy="353.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="825.0" y="358.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">④</text>
+<line x1="790" y1="370" x2="860" y2="337" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="825.0" cy="353.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="825.0" y="358.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">②</text>
+<line x1="790" y1="480" x2="860" y2="417" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="825.0" cy="448.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="825.0" y="453.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑤</text>
+<line x1="790" y1="520" x2="860" y2="582" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="825.0" cy="551.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="825.0" y="556.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑩</text>
+<line x1="1130" y1="417" x2="1225" y2="330" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)"/>
+<circle cx="1177.5" cy="373.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="1177.5" y="378.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑤</text>
+<line x1="720" y1="640" x2="720" y2="665" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<line x1="1150" y1="690" x2="1225" y2="485" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<circle cx="1187.5" cy="587.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="1187.5" y="592.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑥</text>
+<line x1="1225" y1="745" x2="1150" y2="745" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<circle cx="1187.5" cy="745.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="1187.5" y="750.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑦</text>
+<line x1="1225" y1="877" x2="1130" y2="845" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<circle cx="1177.5" cy="861.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="1177.5" y="866.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑧</text>
+<line x1="505" y1="880" x2="505" y2="905" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<circle cx="505.0" cy="892.5" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="505.0" y="897.5" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑨</text>
+<line x1="720" y1="652" x2="720" y2="652" stroke="#1D2D3E" stroke-width="1.8" marker-end="url(#ah)" stroke-dasharray="7,5"/>
+<circle cx="720.0" cy="652.0" r="11" fill="#FFFFFF" stroke="#1D2D3E"/><text x="720.0" y="657.0" text-anchor="middle" font-size="13" font-weight="bold" fill="#1D2D3E">⑥</text>
+</svg>
