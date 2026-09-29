@@ -98,14 +98,12 @@ function fillVariances(rows) {
     }
 }
 
+// The FOB flags and the status itself are columns of the view now, computed
+// in SQL so a chart slice can filter on them. Only the sector is left here:
+// it is a label, nothing filters on it.
 function fillCompleteness(rows) {
     for (const r of rows) {
         r.sector = sectorOf(r.station, r.destination);
-        r.has_fob_out = r.fob_out_kg !== null && r.fob_out_kg !== undefined;
-        r.has_fob_in = r.fob_in_kg !== null && r.fob_in_kg !== undefined;
-
-        const all = r.has_dispatch && r.has_uplift && r.has_fob_out && r.has_fob_in && r.has_apu;
-        r.completeness_status = all ? 'Complete' : 'Incomplete';
     }
 }
 

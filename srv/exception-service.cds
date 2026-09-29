@@ -18,6 +18,7 @@ service ExceptionService {
 
     // Value helps for the filter bar. Small lists, read straight from master
     // data, so the four filters offer what exists rather than free text.
+    @readonly entity Flights   as projection on exc.EXC_FLIGHT_NUMBERS;
     @readonly entity Stations  as projection on db.MASTER_AIRPORTS  { key ID, iata_code, airport_name, city };
     @readonly entity Suppliers as projection on db.MASTER_SUPPLIERS { key ID, supplier_code, supplier_name };
 

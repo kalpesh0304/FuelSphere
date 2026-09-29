@@ -201,8 +201,37 @@ entity EXC_FLIGHT_COMPLETENESS as select from db.FLIGHT_SCHEDULE as f {
         case when exists f.tickets     then true else false end as has_uplift   : Boolean,
         case when exists f.apu_cycles  then true else false end as has_apu      : Boolean,
 
-        virtual null as sector      : String(12),
-        virtual null as has_fob_out : Boolean,
-        virtual null as has_fob_in  : Boolean,
-        virtual null as completeness_status : String(12)
+        // THE FOB FLAGS AND THE VERDICT ARE COMPUTED HERE, IN SQL, not on
+        // read. A chart slice is a filter - press "Complete" and the table
+        // must ask the database for the complete legs - and $filter runs in
+        // the database, which cannot see a column a handler fills afterwards.
+        // The variance verdict moved here for the same reason.
+        case when f.fob_at_out_kg is not null then true else false end as has_fob_out : Boolean,
+        case when f.fob_at_in_kg  is not null then true else false end as has_fob_in  : Boolean,
+
+        case when exists f.dispatches
+              and exists f.tickets
+              and exists f.apu_cycles
+              and f.fob_at_out_kg is not null
+              and f.fob_at_in_kg  is not null
+             then 'Complete'
+             else 'Incomplete'
+        end                                                     as completeness_status : String(12),
+
+        virtual null as sector      : String(12)
 };
+
+/**
+ * EXC_FLIGHT_NUMBERS - the flight numbers a reader can filter by.
+ *
+ * A value help, not a report: the filter bar offers the numbers that have
+ * actually been flown rather than an empty box to type into. DISTINCT, because
+ * a number is flown every day and a list with a thousand B62725s in it helps
+ * nobody.
+ */
+define view EXC_FLIGHT_NUMBERS as
+    select from db.FLIGHT_SCHEDULE {
+        key flight_number
+    }
+    where flight_number is not null
+    group by flight_number;

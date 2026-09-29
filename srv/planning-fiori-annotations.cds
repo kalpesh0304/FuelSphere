@@ -634,18 +634,6 @@ annotate PlanningService.FlightSchedule with @(
                 Target : 'tail/@UI.FieldGroup#AircraftForFlight'
             },
 
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FlightDeliveries',
-                Target : 'deliveries/@UI.LineItem',
-                Label  : 'Deliveries'
-            },
-            {
-                $Type  : 'UI.ReferenceFacet',
-                ID     : 'FlightTickets',
-                Target : 'tickets/@UI.LineItem',
-                Label  : 'Fuel Tickets'
-            },
             // THE BUTTON GOES ON THE DISPATCH SECTION, AND THIS FACET BECAME
             // A COLLECTION TO CARRY IT. A ReferenceFacet targets one thing; a
             // CollectionFacet holds the action above the rows it acts from.
@@ -681,6 +669,18 @@ annotate PlanningService.FlightSchedule with @(
                     // arbitrary row is gone.
                     { $Type: 'UI.ReferenceFacet', Target: 'orders/@UI.LineItem', Label: 'All Orders for this Flight' }
                 ]
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightTickets',
+                Target : 'tickets/@UI.LineItem',
+                Label  : 'Fuel Tickets'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'FlightDeliveries',
+                Target : 'deliveries/@UI.LineItem',
+                Label  : 'Deliveries'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
