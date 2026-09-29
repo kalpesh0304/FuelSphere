@@ -663,6 +663,9 @@ SUPPLIER_DEFS = {
     'REPSOL01':  ('Repsol Aviacion', 'ES', 'REP'),
     'ENIAV01':   ('Eni Aviation', 'IT', 'ENI'),
     'SHELLNL01': ('Shell Aviation Netherlands', 'NL', 'SNL'),
+    # CDG is Air BP France, NOT the seed's Air Total: ATINT01's unrecorded contact roles are the
+    # seed's only NONE_RECORDED case, which c-supplier-contacts EXIT-2 needs to exist.
+    'AIRBPFR01': ('Air BP France', 'FR', 'ABF'),
     'BPUK001':   ('BP Aviation United Kingdom', 'GB', 'BPK'),   # existing
     'ATINT01':   ('Air Total International', 'FR', 'ATI'),       # existing
     'WFS001':    ('World Fuel Services Canada', 'CA', 'WFC'),    # existing
@@ -689,7 +692,7 @@ for code in 'ORD MDW DTW CLE MKE'.split():
 STATION_SUPPLIERS.update({'SJU': ('PUMAPR01', None), 'BDA': ('SOLCAR01', None), 'KIN': ('SOLCAR01', None),
                           'POS': ('SOLCAR01', None), 'CUN': ('ASAMX01', None), 'SJO': ('SOLCAR01', None),
                           'LHR': ('BPUK001', None), 'EDI': ('BPUK001', None), 'DUB': ('BPUK001', None),
-                          'CDG': ('ATINT01', None), 'AMS': ('SHELLNL01', None), 'MAD': ('REPSOL01', None),
+                          'CDG': ('AIRBPFR01', None), 'AMS': ('SHELLNL01', None), 'MAD': ('REPSOL01', None),
                           'BCN': ('REPSOL01', None), 'MXP': ('ENIAV01', None), 'YVR': ('WFS001', None)})
 missing_sup = sorted({f['o'] for f in kept} - set(STATION_SUPPLIERS))
 assert not missing_sup, f'no supplier for {missing_sup}'
@@ -759,6 +762,111 @@ for code, fno in sorted({(f['o'], f['flight_number']) for f in kept}):
                                valid_to=None, priority=100, is_active='true',
                                notes=f'Flight-level: {fno} at {code} is fuelled by the second supplier.',
                                created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS, modified_by=SEED_USER))
+
+# ---- Supplier contacts (data only: SUPPLIER_CONTACTS has no station or country column) ----
+# The flight strip shows ONE primary per supplier per role. So per-station and per-country
+# contacts are carried as NON-primary rows ("+N more" on the strip, listed on the supplier),
+# and the primary is the network desk where a supplier serves several stations - a station
+# number as primary would show that station's desk on every other station's flights.
+# Numbers are fictional: NANP 555-0100..0199 with the station's real area code; UK in Ofcom's
+# drama ranges (020 7946 0xxx London, 0131 496 0xxx Edinburgh); elsewhere 555 01xx in the
+# national format. Emails use .example domains.
+AREA = {'JFK': '718', 'LGA': '718', 'EWR': '973', 'HPN': '914', 'ISP': '631', 'SWF': '845', 'ALB': '518',
+        'BOS': '617', 'PVD': '401', 'BDL': '860', 'ORH': '508', 'PWM': '207', 'ACK': '508', 'SYR': '315',
+        'ROC': '585', 'BUF': '716', 'PHL': '215', 'BWI': '410', 'DCA': '703', 'IAD': '703', 'RIC': '804',
+        'ORF': '757', 'PIT': '412', 'FLL': '954', 'MCO': '407', 'TPA': '813', 'PBI': '561', 'RSW': '239',
+        'JAX': '904', 'SRQ': '941', 'SAV': '912', 'CHS': '843', 'CLT': '704', 'RDU': '919', 'GSO': '336',
+        'GSP': '864', 'ILM': '910', 'ATL': '404', 'BHM': '205', 'BNA': '615', 'MSY': '504', 'IAH': '281',
+        'AUS': '512', 'DFW': '972', 'MEM': '901', 'SDF': '502', 'ORD': '773', 'MDW': '773', 'DTW': '734',
+        'CLE': '216', 'MKE': '414', 'DEN': '303', 'SLC': '801', 'ABQ': '505', 'LAX': '310', 'SFO': '650',
+        'SAN': '619', 'SEA': '206', 'SMF': '916', 'BUR': '818', 'ONT': '909', 'LAS': '702', 'PHX': '602',
+        'SJU': '787', 'BDA': '441', 'KIN': '876', 'POS': '868', 'YVR': '604'}
+# Non-NANP stations: (country code, trunk-less area, line pattern)
+INTL = {'LHR': ('44', '20 7946 0{n:03d}'), 'EDI': ('44', '131 496 0{n:03d}'), 'DUB': ('353', '1 555 0{n:03d}'),
+        'CDG': ('33', '1 55 50 0{a} {b:02d}'), 'AMS': ('31', '20 555 0{n:03d}'), 'MAD': ('34', '91 555 0{n:03d}'),
+        'BCN': ('34', '93 555 0{n:03d}'), 'MXP': ('39', '02 5550 {n:04d}'), 'CUN': ('52', '998 555 0{n:03d}')}
+used_lines = defaultdict(set)
+
+
+def local_phone(code, key):
+    """A fictional local number at station/city `code`, unique per numbering area."""
+    area = AREA.get(code) or INTL[code][1].split(' ')[0]
+    n = 100 + int(h(key, 'ph') * 100)
+    while n in used_lines[area]:
+        n = 100 + (n - 99) % 100
+    used_lines[area].add(n)
+    if code in AREA:
+        return f'+1 {AREA[code]} 555 {n:04d}'
+    cc, pat = INTL[code]
+    return f'+{cc} ' + pat.format(n=n, a=n // 100, b=n % 100)
+
+
+# Supplier head-office city per country, for invoicing / disputes / network desks:
+# (city code for the dialling plan, timezone, email domain)
+HQ = {('WFSUS01', 'US'): ('MIA', 'America/New_York'), ('SHELLUS01', 'US'): ('HOU', 'America/Chicago'),
+      ('BPUS01', 'US'): ('ORD', 'America/Chicago'), ('CHEVUS01', 'US'): ('HOU', 'America/Chicago'),
+      ('AVFUEL01', 'US'): ('DTW', 'America/Detroit'), ('PUMAPR01', 'PR'): ('SJU', 'America/Puerto_Rico'),
+      ('SOLCAR01', 'JM'): ('KIN', 'America/Jamaica'), ('SOLCAR01', 'BM'): ('BDA', 'Atlantic/Bermuda'),
+      ('SOLCAR01', 'TT'): ('POS', 'America/Port_of_Spain'), ('ASAMX01', 'MX'): ('MEX', 'America/Mexico_City'),
+      ('REPSOL01', 'ES'): ('MAD', 'Europe/Madrid'), ('ENIAV01', 'IT'): ('MXP', 'Europe/Rome'),
+      ('SHELLNL01', 'NL'): ('AMS', 'Europe/Amsterdam'), ('BPUK001', 'GB'): ('LHR', 'Europe/London'),
+      ('BPUK001', 'IE'): ('DUB', 'Europe/Dublin'), ('ATINT01', 'FR'): ('CDG', 'Europe/Paris'), ('AIRBPFR01', 'FR'): ('CDG', 'Europe/Paris'),
+      ('WFS001', 'CA'): ('YVR', 'America/Vancouver')}
+AREA.update({'MIA': '305', 'HOU': '713'})
+INTL['MEX'] = ('52', '55 5550 {n:04d}')
+DOMAIN = {'WFSUS01': 'wfscorp.example', 'SHELLUS01': 'shellaviation.example', 'BPUS01': 'bpair.example',
+          'CHEVUS01': 'chevronaviation.example', 'AVFUEL01': 'avfuel.example', 'PUMAPR01': 'pumaenergy.example',
+          'SOLCAR01': 'solaviation.example', 'ASAMX01': 'asa-combustibles.example', 'REPSOL01': 'repsolaviacion.example',
+          'ENIAV01': 'eniaviation.example', 'SHELLNL01': 'shellaviation-nl.example', 'BPUK001': 'bpav.example',
+          'ATINT01': 'airtotal.example', 'AIRBPFR01': 'airbp-fr.example', 'WFS001': 'wfscorp.example'}
+existing_contacts = defaultdict(set)          # (supplier_ID, role) already seeded
+for r in read_csv('SUPPLIER_CONTACTS'):
+    if r['is_primary'] == 'true':
+        existing_contacts[(r['supplier_ID'], r['role_code'])].add(r['ID'])
+contact_rows = []
+flight_stations = {f['o'] for f in kept}
+
+
+def add_contact(sup, role, name, position, phone, email, hours, tz, primary, mobile=None, note_key=''):
+    sid = supplier_id(sup)
+    if primary and existing_contacts.get((sid, role)):
+        if role in ('INVOICING', 'DISPUTES'):
+            return                              # the seed already covers this supplier's home country
+        primary = False                         # keep the seed's primary; this station is an extra
+    contact_rows.append(dict(ID=uid('CT', sup, role, name), supplier_ID=sid, role_code=role, contact_name=name,
+                             position=position, phone=phone, mobile=mobile, email=email, hours=hours, timezone=tz,
+                             is_primary='true' if primary else 'false', valid_from='2026-01-01', valid_to=None,
+                             is_active='true', created_at=SEED_TS, created_by=SEED_USER, modified_at=SEED_TS,
+                             modified_by=SEED_USER))
+
+
+short = {c: SUPPLIER_DEFS[c][0].replace(' Inc', '').replace(' LLC', '').replace(' Corporation', '') for c in SUPPLIER_DEFS}
+for sup in used_suppliers:
+    stns = sorted(c for c, (p1, p2) in STATION_SUPPLIERS.items() if c in flight_stations and sup in (p1, p2))
+    dom, nm = DOMAIN[sup], short[sup]
+    countries = Counter(AIRPORTS[c]['country'] for c in stns)
+    home = countries.most_common(1)[0][0]
+    multi = len(stns) > 1
+    if multi:                                   # network desks carry the primary for the station roles
+        hq, tz = HQ[(sup, home)]
+        add_contact(sup, 'UPLIFT', f'{nm} Into-plane Network Desk', '24h fuelling coordination, all stations',
+                    local_phone(hq, sup + 'upnet'), f'fueldesk@{dom}', '24h', tz, True)
+        add_contact(sup, 'OPERATIONS', f'{nm} Operations Control Centre', '24h duty manager',
+                    local_phone(hq, sup + 'opnet'), f'occ@{dom}', '24h', tz, True, mobile=local_phone(hq, sup + 'opnetm'))
+    for c in stns:
+        tz = AIRPORTS[c]['tz']
+        add_contact(sup, 'UPLIFT', f'Into-plane Desk {c}', f'Fuelling dispatch, {AIRPORTS[c]["city"]}',
+                    local_phone(c, sup + c + 'up'), f'fuel.{c.lower()}@{dom}', '24h', tz, not multi)
+        add_contact(sup, 'OPERATIONS', f'Station Fuel Manager {c}', f'Station operations, {AIRPORTS[c]["city"]}',
+                    local_phone(c, sup + c + 'op'), f'ops.{c.lower()}@{dom}', '24h', tz, not multi,
+                    mobile=local_phone(c, sup + c + 'opm'))
+    for cc in sorted(countries, key=lambda x: (x != home, x)):
+        hq, tz = HQ[(sup, cc)]
+        tag = f'({cc})'
+        add_contact(sup, 'INVOICING', f'{nm} Accounts Receivable {tag}', 'Invoice queries and corrections',
+                    local_phone(hq, sup + cc + 'inv'), f'ar.{cc.lower()}@{dom}', '0800-1700 Mon-Fri', tz, cc == home)
+        add_contact(sup, 'DISPUTES', f'{nm} Claims and Disputes {tag}', 'Quantity, quality and price claims',
+                    local_phone(hq, sup + cc + 'dsp'), f'claims.{cc.lower()}@{dom}', '0900-1700 Mon-Fri', tz, cc == home)
 
 order_rows, delivery_rows, ticket_rows = [], [], []
 seq_o, seq_d, seq_t = Counter(), Counter(), Counter()
@@ -1331,6 +1439,7 @@ lines = [
     (f'  8. MASTER_CONTRACTS_add    -> fuelsphere-MASTER_CONTRACTS.csv     ({len(contract_rows)} rows, one USD 2026 contract per supplier)', False),
     (f'  9. MASTER_PRODUCTS_add     -> fuelsphere-MASTER_PRODUCTS.csv      ({len(product_rows)} row: Jet A for US stations)', False),
     (f' 10. DESIGNATED_SUPPLIERS_add -> fuelsphere-DESIGNATED_SUPPLIERS.csv ({len(desig_rows)} rows)', False),
+    (f' 10b. SUPPLIER_CONTACTS_add  -> fuelsphere-SUPPLIER_CONTACTS.csv    ({len(contact_rows)} rows: uplift and operations per station, invoicing and disputes per country)', False),
     (f' 11. FUEL_ORDERS             -> fuelsphere-FUEL_ORDERS.csv          ({len(order_rows)} rows)', False),
     (f' 12. FUEL_DELIVERIES         -> fuelsphere-FUEL_DELIVERIES.csv      ({len(delivery_rows)} rows)', False),
     (f' 13. FUEL_TICKETS            -> fuelsphere-FUEL_TICKETS.csv         ({len(ticket_rows)} rows)', False),
@@ -1423,6 +1532,7 @@ TXN_SHEETS = [('MASTER_SUPPLIERS_add', 'MASTER_SUPPLIERS', supplier_rows),
               ('MASTER_CONTRACTS_add', 'MASTER_CONTRACTS', contract_rows),
               ('MASTER_PRODUCTS_add', 'MASTER_PRODUCTS', product_rows),
               ('DESIGNATED_SUPPLIERS_add', 'DESIGNATED_SUPPLIERS', desig_rows),
+              ('SUPPLIER_CONTACTS_add', 'SUPPLIER_CONTACTS', contact_rows),
               ('FUEL_ORDERS', 'FUEL_ORDERS', order_rows),
               ('FUEL_DELIVERIES', 'FUEL_DELIVERIES', delivery_rows),
               ('FUEL_TICKETS', 'FUEL_TICKETS', ticket_rows),
