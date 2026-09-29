@@ -126,10 +126,16 @@ group by delivery.ID;
 // readings appear - without them there is nothing to compare, and those rows
 // are report 2's subject, not this one's.
 //
-// THE +/-0.50% BAND IS FLAT, by decision, and stated in one place:
-// srv/lib/exception-reports.js. The configured FOB tolerance rules (0.5% on
-// an ACARS reading, 1.5% on a crew-reported one) are deliberately NOT used
-// here - one number on the report is what was asked for.
+// THE +/-0.50% BAND IS FLAT, by decision, and stated in one place: the CASE
+// expression below. The configured FOB tolerance rules (0.5% on an ACARS
+// reading, 1.5% on a crew-reported one) are deliberately NOT used here - one
+// number on the report is what was asked for.
+//
+// THE VERDICT IS COMPUTED HERE RATHER THAN IN JAVASCRIPT, and that is not a
+// style choice: $filter runs in the database, so a verdict derived after the
+// read cannot be filtered on. The chart counts the rows outside the band and
+// the table has to show exactly those rows - with the verdict computed in the
+// handler, the chart said 22 and the table listed 264.
 entity EXC_DELIVERY_VARIANCES as select from db.FUEL_DELIVERIES as d
     left join EXC_DELIVERY_METERED as m on m.delivery_ID = d.ID
 {
@@ -146,15 +152,24 @@ entity EXC_DELIVERY_VARIANCES as select from db.FUEL_DELIVERIES as d
         m.metered_kg                          as expected_kg     : Decimal(15,2),
         m.ticket_count                        as ticket_count    : Integer,
         d.fob_delta_kg                        as actual_kg       : Decimal(15,2),
+
+        // What the gauge moved, less what the bowser metered.
+        d.fob_delta_kg - m.metered_kg         as variance_kg     : Decimal(15,2),
+        case when m.metered_kg is null or m.metered_kg = 0 or d.fob_delta_kg is null then null
+             else (d.fob_delta_kg - m.metered_kg) / m.metered_kg * 100
+        end                                   as variance_pct    : Decimal(9,2),
+        case when m.metered_kg is null or m.metered_kg = 0 or d.fob_delta_kg is null then 'Not comparable'
+             when (d.fob_delta_kg - m.metered_kg) / m.metered_kg * 100 >  0.5 then 'Outside tolerance'
+             when (d.fob_delta_kg - m.metered_kg) / m.metered_kg * 100 < -0.5 then 'Outside tolerance'
+             else 'Within tolerance'
+        end                                   as verdict         : String(20),
+
         d.fob_before_kg                       as fob_before_kg   : Decimal(15,2),
         d.fob_after_kg                        as fob_after_kg    : Decimal(15,2),
         d.fob_source                          as fob_source      : String(20),
         d.delivery_date                       as delivery_date   : Date,
 
-        virtual null as sector       : String(12),
-        virtual null as variance_kg  : Decimal(15,2),
-        virtual null as variance_pct : Decimal(9,2),
-        virtual null as verdict      : String(20)
+        virtual null as sector       : String(12)
 }
 where d.fob_before_kg is not null and d.fob_after_kg is not null;
 

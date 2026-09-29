@@ -16,7 +16,7 @@
  *   planned burn     the active dispatch plan's trip fuel, where there is one
  *   ledger UPLIFT    one per ticket: the mass it delivered, valued at the
  *                    ticket's own amount
- *   ledger FLIGHT    one per burn, consumed at the prevailing moving average
+ *   ledger BURN      one per burn, consumed at the prevailing moving average
  *                    price, which it therefore does not move
  *   ledger INITIAL   one per tail, for the fuel already on board before the
  *                    first leg we hold. Valued at the first uplift's rate -
@@ -71,6 +71,9 @@ const money = (v) => (v === null ? null : Number(v.toFixed(2)));
 const rate = (v) => (v === null ? null : Number(v.toFixed(4)));
 
 const STAMP = '2026-09-28T00:00:00Z';
+
+/** When the leg actually left, or when it was due to - never blank. */
+const stampFor = (f) => f.aobt || (f.scheduled_departure ? f.flight_date + 'T' + f.scheduled_departure + 'Z' : '');
 const BY = 'SEED_BURNS_LEDGER';
 
 // --- the data we build from ------------------------------------------------
@@ -83,6 +86,8 @@ const ledgerCsv = readCsv('ROB_LEDGER');
 const regsCsv = readCsv('AIRCRAFT_REGISTRATIONS');
 
 const capacityByTail = new Map(regsCsv.rows.map(r => [r.registration, num(r.fuel_capacity_kg)]));
+const airportsCsv = readCsv('MASTER_AIRPORTS');
+const airportByIata = new Map(airportsCsv.rows.map(a => [a.iata_code, a]));
 const planByFlight = new Map();
 for (const p of dispatchCsv.rows) {
     if (p.plan_status !== 'ACTIVE') continue;
@@ -96,9 +101,14 @@ for (const t of ticketsCsv.rows) {
 }
 
 // Flights we can derive a burn for: both gauge readings and a tail.
+// THE LEGS ARE ORDERED BY THE EXACT STAMP THE ROW WILL CARRY. Ordering by
+// the flight date plus the AOBT's time of day diverges from it whenever a leg
+// actually left on a different date from its flight date - the ledger was then
+// written in one order and replayed in another, and the balances disagreed.
+const legOrder = (f) => stampFor(f) || (f.flight_date + 'T00:00:00Z');
 const flights = flightsCsv.rows
     .filter(f => f.tail_registration && num(f.fob_at_out_kg) !== null && num(f.fob_at_in_kg) !== null)
-    .sort((a, b) => (a.flight_date + (a.scheduled_departure || '')).localeCompare(b.flight_date + (b.scheduled_departure || '')));
+    .sort((a, b) => legOrder(a).localeCompare(legOrder(b)));
 
 // ===========================================================================
 // 1. THE BURNS
@@ -150,7 +160,7 @@ for (const f of flights) {
 //
 // Per tail, in the order the aircraft flew: an opening balance, then for each
 // leg the uplift that went on and the burn that came off.
-const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, FLIGHT: 2 };
+const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2 };
 const byTail = new Map();
 for (const f of flights) {
     if (!byTail.has(f.tail_registration)) byTail.set(f.tail_registration, []);
@@ -189,6 +199,9 @@ for (const [tail, legs] of byTail) {
                 record_date: f.flight_date, record_time: '00:00:00', sequence: nextSequence(f.flight_date),
                 line_order: LINE_ORDER.INITIAL, entry_type: 'INITIAL',
                 flight_ID: '', sector: '',
+                airport_code: f.origin_airport || '',
+                airport_ID: (airportByIata.get(f.origin_airport) || {}).ID || '',
+                flight_aobt: stampFor(f),
                 opening_rob_kg: 0, uplift_kg: 0, burn_kg: 0, adjustment_kg: 0,
                 closing_rob_kg: opening, qty_kg: opening,
                 rate_usd_per_kg: openingRate || '', value_usd: openingValue,
@@ -204,7 +217,9 @@ for (const [tail, legs] of byTail) {
         if (upliftKg) {
             const opening = balanceQty;
             const closing = kg(opening + upliftKg);
-            balanceValue = money((balanceValue || 0) + (upliftValue || 0));
+            const upliftRate = rate(upliftValue / upliftKg);
+            const upliftValueAtRate = money(upliftKg * upliftRate);
+            balanceValue = money((balanceValue || 0) + upliftValueAtRate);
             balanceQty = closing;
             map = closing > 0 ? rate(balanceValue / closing) : map;
             const t = tickets[0];
@@ -214,13 +229,16 @@ for (const [tail, legs] of byTail) {
                 record_date: f.flight_date, record_time: (t && t.delivery_timestamp ? String(t.delivery_timestamp).slice(11, 19) : '00:00:00'),
                 sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.UPLIFT, entry_type: 'UPLIFT',
                 flight_ID: f.ID, sector,
+                airport_code: f.origin_airport || '',
+                airport_ID: (airportByIata.get(f.origin_airport) || {}).ID || '',
+                flight_aobt: stampFor(f),
                 fuel_ticket_ID: t ? t.ID : '', fuel_order_ID: t ? (t.order_ID || '') : '',
                 fuel_delivery_ID: t ? (t.delivery_ID || '') : '',
                 opening_rob_kg: opening, uplift_kg: upliftKg, burn_kg: 0, adjustment_kg: 0,
                 closing_rob_kg: closing, qty_kg: upliftKg,
                 volume_l: tickets.reduce((a, x) => a + (x.uom_code === 'LTR' ? (num(x.quantity_metered) ?? num(x.quantity) ?? 0) : 0), 0) || '',
-                rate_usd_per_kg: upliftKg ? rate(upliftValue / upliftKg) : '',
-                value_usd: upliftValue, balance_value_usd: balanceValue, map_usd_per_kg: map,
+                rate_usd_per_kg: upliftRate,
+                value_usd: upliftValueAtRate, balance_value_usd: balanceValue, map_usd_per_kg: map,
                 max_capacity_kg: capacity ?? '', rob_percentage: pct(closing),
                 data_source: 'EPOD', is_estimated: 'false',
                 created_at: STAMP, created_by: BY, modified_at: STAMP, modified_by: BY
@@ -238,11 +256,14 @@ for (const [tail, legs] of byTail) {
             balanceValue = money((balanceValue || 0) - value);
             balanceQty = closing;
             generatedLedger.push({
-                ID: uuid5('ROB_LEDGER:FLIGHT:' + f.ID),
+                ID: uuid5('ROB_LEDGER:BURN:' + f.ID),
                 aircraft_type_code: f.aircraft_type || '', tail_number: tail, tail_registration: tail,
                 record_date: f.flight_date, record_time: f.scheduled_departure || '00:00:00',
-                sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.FLIGHT, entry_type: 'FLIGHT',
+                sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.BURN, entry_type: 'BURN',
                 flight_ID: f.ID, sector,
+                airport_code: f.origin_airport || '',
+                airport_ID: (airportByIata.get(f.origin_airport) || {}).ID || '',
+                flight_aobt: stampFor(f),
                 fuel_burn_ID: uuid5('FUEL_BURNS:' + f.ID),
                 opening_rob_kg: opening, uplift_kg: 0, burn_kg: burnKg, adjustment_kg: 0,
                 closing_rob_kg: closing, qty_kg: -burnKg,
@@ -259,8 +280,9 @@ for (const [tail, legs] of byTail) {
 // ===========================================================================
 // 3. WRITE, KEEPING WHAT WAS ALREADY THERE
 // ===========================================================================
-const burnHeader = [...new Set([...burnsCsv.header, ...Object.keys(generatedBurns[0] || {})])];
-const ledgerHeader = [...new Set([...ledgerCsv.header, ...Object.keys(generatedLedger[0] || {})])];
+const keysOf = (rows) => rows.reduce((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set; }, new Set());
+const burnHeader = [...new Set([...burnsCsv.header, ...keysOf(generatedBurns)])];
+const ledgerHeader = [...new Set([...ledgerCsv.header, ...keysOf(generatedLedger)])];
 
 // Rows this script wrote before are replaced, not duplicated.
 const mineBurn = new Set(generatedBurns.map(r => r.ID));

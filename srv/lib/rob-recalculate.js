@@ -36,7 +36,7 @@ const TICKETS = 'fuelsphere.FUEL_TICKETS';
 const ORDERS  = 'fuelsphere.FUEL_ORDERS';
 
 /** Movement order within one flight date. */
-const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, FLIGHT: 2, TRANSFER: 2, ADJUSTMENT: 3 };
+const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, TRANSFER: 2, ADJUSTMENT: 3 };
 const lineOrderOf = (entryType) => (LINE_ORDER[entryType] !== undefined ? LINE_ORDER[entryType] : 3);
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -157,8 +157,12 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
     // never held. line_order still breaks a tie where two rows share a
     // sequence, which is how a same-instant uplift and burn stay in order.
     rows.forEach(r => { r._order = lineOrderOf(r.entry_type); });
+    // THE OFF-BLOCK TIME FIRST where the rows carry one: it is the only field
+    // that states when the leg actually happened. The per-day sequence is the
+    // fallback for rows that predate it, and line_order breaks a tie.
     rows.sort((a, b) =>
         String(a.record_date).localeCompare(String(b.record_date)) ||
+        String(a.flight_aobt || '').localeCompare(String(b.flight_aobt || '')) ||
         (a.sequence || 0) - (b.sequence || 0) ||
         a._order - b._order ||
         String(a.record_time || '').localeCompare(String(b.record_time || '')));

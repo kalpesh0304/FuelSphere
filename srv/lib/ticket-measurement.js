@@ -95,10 +95,22 @@ async function deriveTicketMeasurement(at) {
         values.currency_code = cur || 'USD';
     }
 
+    // THE QUANTITY THE TICKET IS PRICED AND WEIGHED ON. The METERED figure
+    // where there is one - that is what the bowser delivered - and the
+    // ticket's own quantity where there is not: plenty of tickets arrive as
+    // a total with no meter readings behind it, and the amount has always
+    // fallen back this way. The mass now falls back with it, because the two
+    // must describe the same fuel: taken apart, a ticket typed without meter
+    // readings was priced but weightless, and a weightless ticket reaches
+    // NEITHER the ROB ledger NOR the reconciliation - the uplift simply
+    // never appeared.
+    const billable = (meteredNow !== null && meteredNow !== undefined)
+        ? meteredNow : at('quantity');
+
     // quantity_kg - EPD453. Null where an input is missing; a derived value
     // with a missing input is null, never zero.
     const mass = await deriveTicketMassKg({
-        quantity_metered: meteredNow,
+        quantity_metered: billable,
         uom_code: at('uom_code'),
         density_value: values.density_value !== undefined ? values.density_value : at('density_value'),
         density_uom: 'KGL'
@@ -111,7 +123,6 @@ async function deriveTicketMeasurement(at) {
     // already says so where they disagree. Null, never zero, where an input
     // is missing: a zero would claim the fuel was free.
     const rate = at('rate_per_litre');
-    const billable = (meteredNow !== null && meteredNow !== undefined) ? meteredNow : at('quantity');
     values.total_amount =
         (rate !== null && rate !== undefined && billable !== null && billable !== undefined)
             ? Number((Number(rate) * Number(billable)).toFixed(2))

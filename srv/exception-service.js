@@ -57,8 +57,7 @@ module.exports = class ExceptionService extends cds.ApplicationService {
         });
         this.after('READ', DeliveryVariances, async (data) => {
             const rows = asArray(data);
-            await withBaseColumns(DeliveryVariances, rows,
-                ['station', 'destination', 'expected_kg', 'actual_kg']);
+            await withBaseColumns(DeliveryVariances, rows, ['station', 'destination', 'variance_kg', 'variance_pct']);
             R.fillVariances(rows);
         });
         this.after('READ', FlightCompleteness, async (data) => {

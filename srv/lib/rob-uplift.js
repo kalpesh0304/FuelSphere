@@ -111,16 +111,48 @@ async function postTicketUplift(ticket) {
     // still posts - the fuel is on the aircraft either way - it just has
     // neither to show.
     let flightDate = null, sector = null, flightId = ticket.flight_ID || null;
+    let station = null, stationId = null, flightAobt = null;
     if (flightId) {
         const flight = await cds.db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
-            .columns('flight_date', 'origin_airport', 'destination_airport')
+            .columns('flight_date', 'origin_airport', 'destination_airport',
+                     'aobt', 'scheduled_departure')
             .where({ ID: flightId }));
         if (flight) {
             flightDate = flight.flight_date;
             if (flight.origin_airport && flight.destination_airport) {
                 sector = `${flight.origin_airport} - ${flight.destination_airport}`;
             }
+            // THE STATION IS WHERE THE FUEL WENT ON: the flight's ORIGIN.
+            // The uplift happens before the leg departs, so the departure
+            // airport is the one that fuelled it - the seeded rows carry the
+            // same rule (tools/seed-burns-and-ledger.js).
+            station = flight.origin_airport || null;
+            if (station) {
+                const airport = await cds.db.run(SELECT.one.from('fuelsphere.MASTER_AIRPORTS')
+                    .columns('ID').where({ iata_code: station }));
+                stationId = airport ? airport.ID : null;
+            }
+            // THE ROW'S PLACE IN THE DAY. The ledger sorts on the flight's
+            // off-block time, so a tail that flies four legs in a day reads
+            // in the order it flew them. Actual off-block where it is known,
+            // the schedule where it is not - and the same fallback the
+            // seeded rows used, so old and new rows sort against each other.
+            flightAobt = flight.aobt
+                || (flight.scheduled_departure
+                    ? `${flight.flight_date}T${flight.scheduled_departure}Z` : null);
         }
+    }
+
+    // THE ORDER THE FUEL WAS BOUGHT ON. Read back rather than taken from the
+    // row in hand: an after-CREATE payload carries what the request sent,
+    // and a ticket whose order was defaulted by a before-handler would
+    // otherwise reach the ledger with the link missing and the Fuel Order
+    // column empty.
+    let orderId = ticket.order_ID || null;
+    if (!orderId) {
+        const stored = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('order_ID').where({ ID: ticket.ID }));
+        orderId = (stored && stored.order_ID) || null;
     }
 
     const stamp = ticket.delivery_timestamp ? new Date(ticket.delivery_timestamp) : new Date();
@@ -159,7 +191,12 @@ async function postTicketUplift(ticket) {
         fuel_ticket_ID: ticket.ID,
         // Null where the ticket had no order - A1 permits an order-less
         // ticket, and the uplift still belongs in the ledger.
-        fuel_order_ID: ticket.order_ID || null,
+        fuel_order_ID: orderId,
+        // The station that fuelled the leg, and the off-block time the
+        // ledger sorts on - both derived above from the flight.
+        airport_ID: stationId,
+        airport_code: station,
+        flight_aobt: flightAobt,
         entry_type: 'UPLIFT',
         sector,
         // The metered figure as delivered. Null on a mass ticket rather

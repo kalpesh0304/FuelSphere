@@ -1315,7 +1315,7 @@ module.exports = class BurnService extends cds.ApplicationService {
 
                 // Determine entry type
                 let entryType = 'INITIAL';
-                if (burn > 0) entryType = 'FLIGHT';
+                if (burn > 0) entryType = 'BURN';
                 else if (uplift > 0) entryType = 'UPLIFT';
                 else if (adj !== 0) entryType = 'ADJUSTMENT';
 
@@ -1567,9 +1567,27 @@ module.exports = class BurnService extends cds.ApplicationService {
             };
         }
 
-        // Destination airport
-        const destAirport = burn.destination_airport_ID
-            ? await SELECT.one.from(MASTER_AIRPORTS).where({ ID: burn.destination_airport_ID })
+        // THE STATION, AND THE LEG'S OFF-BLOCK TIME.
+        //
+        // The station is the leg's ORIGIN, not its destination - the ledger
+        // reads one airport per row and it is the one the leg departed from,
+        // the same rule the uplift rows and the seeded history follow. The
+        // destination stays the fallback for a burn that names no origin.
+        //
+        // flight_aobt is what the ledger sorts on, so a burn written here
+        // lands in the same place a replay would put it (rob-recalculate.js).
+        const stationId = burn.origin_airport_ID || burn.destination_airport_ID || null;
+        const station = stationId
+            ? await SELECT.one.from(MASTER_AIRPORTS).where({ ID: stationId })
+            : null;
+        const leg = burn.flight_ID
+            ? await SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('flight_date', 'aobt', 'scheduled_departure')
+                .where({ ID: burn.flight_ID })
+            : null;
+        const flightAobt = leg
+            ? (leg.aobt || (leg.scheduled_departure
+                ? `${leg.flight_date}T${leg.scheduled_departure}Z` : null))
             : null;
 
         await INSERT.into(ROBLedger).entries({
@@ -1580,11 +1598,13 @@ module.exports = class BurnService extends cds.ApplicationService {
             record_date: burn.burn_date,
             record_time: burn.burn_time || '00:00:00',
             sequence: nextSeq,
-            airport_ID: burn.destination_airport_ID,
-            airport_code: destAirport ? destAirport.iata_code : '',
+            airport_ID: stationId,
+            airport_code: station ? station.iata_code : '',
             flight_ID: burn.flight_ID,
+            flight_aobt: flightAobt,
             fuel_burn_ID: burn.ID,
-            entry_type: 'FLIGHT',
+            entry_type: 'BURN',
+            line_order: lineOrderOf('BURN'),
             opening_rob_kg: openingROB,
             uplift_kg: upliftKg,
             burn_kg: burnKg,

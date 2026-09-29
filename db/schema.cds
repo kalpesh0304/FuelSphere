@@ -3517,7 +3517,10 @@ type FuelBurnStatus : String(20) enum {
  * ROB Ledger Entry Type
  */
 type ROBEntryType : String(20) enum {
-    Flight      = 'FLIGHT';      // Post-flight ROB update
+    // BURN, not FLIGHT (Sep 2026): the line records fuel LEAVING the tanks.
+    // "Flight" named the event it happened on, which read as though the row
+    // were the flight rather than what the flight consumed.
+    Burn        = 'BURN';        // Fuel consumed on the leg
     Uplift      = 'UPLIFT';      // Fuel uplift from ePOD
     Adjustment  = 'ADJUSTMENT';  // Manual adjustment
     Initial     = 'INITIAL';     // Initial load/setup
@@ -3691,6 +3694,14 @@ entity ROB_LEDGER : cuid, AuditTrail {
 
         // Fuel Capacity Reference
         max_capacity_kg     : Decimal(12,2);              // Aircraft max fuel capacity
+
+        // THE LEG'S ACTUAL OFF-BLOCK TIME, stamped on the row.
+        //
+        // The ledger is read, sorted and REPLAYED in the order the day
+        // happened, and until now the only thing carrying that order was a
+        // per-day sequence number. A timestamp says it outright, survives a
+        // re-import, and is what a recalculation should sort on.
+        flight_aobt         : Timestamp;
 
         // Validation
         rob_percentage      : Decimal(5,2);               // ROB as % of capacity

@@ -250,8 +250,8 @@ annotate service.Aircraft with @(
 annotate service.Aircraft with @(
     UI: {
         HeaderInfo: {
-            TypeName       : 'Aircraft',
-            TypeNamePlural : 'Aircraft',
+            TypeName       : 'Aircraft Type',
+            TypeNamePlural : 'Aircraft Types',
             Title          : { Value: aircraft_model },
             Description    : { Value: type_code },
             ImageUrl       : 'sap-icon://flight'

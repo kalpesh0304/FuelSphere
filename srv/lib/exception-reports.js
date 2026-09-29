@@ -13,9 +13,10 @@
  *   sectorOf()          "AEP - MDZ", the way every screen writes a sector
  */
 
-// The flat band the delivery variance report uses, by decision. The configured
-// FOB tolerance rules (0.5% ACARS, 1.5% crew-reported) are not used here: the
-// report states ONE number, and this is it.
+// The flat band the delivery variance report uses, by decision. THE RULE ITSELF
+// LIVES IN THE VIEW (db/exception-reports.cds) so that it can be filtered on -
+// $filter runs in the database, and a verdict computed here could not be. This
+// constant is the same number, for the sentence the summary puts on the chart.
 const VARIANCE_BAND_PCT = 0.5;
 
 /** Whole days between two dates, never negative. */
@@ -81,24 +82,19 @@ function fillAwaitingReadings(rows, asOf) {
 }
 
 function fillVariances(rows) {
+    // The variance, the percentage and the verdict are computed in the view so
+    // the table can filter on them. Only the sector is left to do here.
     for (const r of rows) {
         r.sector = sectorOf(r.station, r.destination);
-
-        const expected = num(r.expected_kg);
-        const actual = num(r.actual_kg);
-        if (expected === null || actual === null) {
-            // Nothing to compare. Left null rather than zeroed: a zero variance
-            // is a measurement, and this is the absence of one.
-            r.variance_kg = null;
-            r.variance_pct = null;
-            r.verdict = 'Not comparable';
-            continue;
+        // Rounded here rather than in the view: subtracting two decimals in SQL
+        // leaves the odd -6.63999999999999, which reads as precision nobody
+        // measured to.
+        if (r.variance_kg !== null && r.variance_kg !== undefined) {
+            r.variance_kg = round2(Number(r.variance_kg));
         }
-        r.variance_kg = round2(actual - expected);
-        r.variance_pct = expected ? round2(((actual - expected) / expected) * 100) : null;
-        r.verdict = r.variance_pct === null ? 'Not comparable'
-            : Math.abs(r.variance_pct) > VARIANCE_BAND_PCT ? 'Outside tolerance'
-            : 'Within tolerance';
+        if (r.variance_pct !== null && r.variance_pct !== undefined) {
+            r.variance_pct = round2(Number(r.variance_pct));
+        }
     }
 }
 

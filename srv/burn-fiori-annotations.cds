@@ -363,8 +363,8 @@ annotate BurnService.ROBLedger with @(
     UI: {
         // --- Header ---
         HeaderInfo: {
-            TypeName       : 'FOB Entry',
-            TypeNamePlural : 'FOB Ledger',
+            TypeName       : 'Fuel on board entry',
+            TypeNamePlural : 'Fuel on board ledger',
             Title          : { Value: tail_number },
             Description    : { Value: record_date }
         },
@@ -392,9 +392,9 @@ annotate BurnService.ROBLedger with @(
             { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
             { Value: sector, Label: 'Sector', ![@UI.Importance]: #High },
             { Value: entry_type, Label: 'Line type', ![@UI.Importance]: #High },
+            { Value: flight_aobt, Label: 'Flight AOBT (UTC)', ![@UI.Importance]: #High },
             { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket', ![@UI.Importance]: #High },
             { Value: fuel_order.order_number, Label: 'Fuel Order', ![@UI.Importance]: #High },
-            { Value: volume_l, Label: 'Volume (L)', ![@UI.Importance]: #High },
             { Value: qty_kg, Label: 'Qty kg', ![@UI.Importance]: #High },
             { Value: qty_l, Label: 'Qty L', ![@UI.Importance]: #High },
             { Value: rate_usd_per_kg, Label: 'Rate USD/kg', ![@UI.Importance]: #High },
@@ -442,11 +442,13 @@ annotate BurnService.ROBLedger with @(
             // The ledger reads in the order the day happened: sequence is
             // handed out in that order, and sorting by line_order first put
             // every uplift of a multi-leg day above every burn of it.
+            // The order the day happened: the leg's off-block time, with the
+            // per-day sequence for rows that carry no timestamp.
             SortOrder: [
                 { Property: tail_number, Descending: false },
                 { Property: record_date, Descending: false },
-                { Property: sequence, Descending: false },
-                { Property: line_order, Descending: false }
+                { Property: flight_aobt, Descending: false },
+                { Property: sequence, Descending: false }
             ],
             Visualizations: ['@UI.LineItem']
         },
@@ -485,7 +487,6 @@ annotate BurnService.ROBLedger with @(
                 { Value: sector, Label: 'Sector' },
                 { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket' },
                 { Value: fuel_order.order_number, Label: 'Fuel Order' },
-                { Value: volume_l, Label: 'Volume (L)' },
                 { Value: qty_kg, Label: 'Qty kg' },
                 { Value: qty_l, Label: 'Qty L' },
                 { Value: rate_usd_per_kg, Label: 'Rate USD/kg' },
@@ -667,6 +668,8 @@ annotate BurnService.ROBLedger with {
     balance_value_usd      @title: 'Balance value USD' @Common.FieldControl: #ReadOnly;
     map_usd_per_kg         @title: 'MAP USD/kg'        @Common.FieldControl: #ReadOnly;
     volume_l               @title: 'Volume (L)'        @Common.FieldControl: #ReadOnly;
+    flight_aobt            @title: 'Flight AOBT (UTC)' @Common.FieldControl: #ReadOnly
+                           @Common.QuickInfo: 'Actual off-block time of the leg this line belongs to. The ledger reads, sorts and replays in this order.';
     fuel_ticket            @title: 'Fuel Ticket';
     fuel_order             @title: 'Fuel Order';
     line_order             @title: 'Line Order'             @UI.Hidden;
