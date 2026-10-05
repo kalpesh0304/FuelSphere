@@ -3520,7 +3520,16 @@ type ROBEntryType : String(20) enum {
     // BURN, not FLIGHT (Sep 2026): the line records fuel LEAVING the tanks.
     // "Flight" named the event it happened on, which read as though the row
     // were the flight rather than what the flight consumed.
-    Burn        = 'BURN';        // Fuel consumed on the leg
+    // BURN is the BLOCK burn: FOB at departure minus FOB at arrival, the
+    // fuel the leg consumed between the chocks.
+    Burn        = 'BURN';        // Block burn - fuel consumed on the leg
+    // APU_BURN is the GROUND APU burn, and it is ADDITIONAL to the block
+    // burn rather than part of it (confirmed 2 Oct 2026). The APU runs on
+    // stand, outside the block period, so its fuel never appears in a block
+    // delta - which is why the ledger drifted below the aircraft's own gauge
+    // before this line existed. It deducts quantity and value like a burn and,
+    // like every burn, leaves the moving average price alone.
+    ApuBurn     = 'APU_BURN';    // Ground APU burn, after the block burn
     Uplift      = 'UPLIFT';      // Fuel uplift from ePOD
     Adjustment  = 'ADJUSTMENT';  // Manual adjustment
     Initial     = 'INITIAL';     // Initial load/setup
@@ -3768,7 +3777,29 @@ entity ROB_LEDGER : cuid, AuditTrail {
         // The stamp is the whole audit trail by decision: who recalculated
         // and when, no history of superseded values.
         // ====================================================================
-        line_order          : Integer;                    // 0 opening, 1 uplift, 2 burn, 3 adjustment
+        line_order          : Integer;                    // 0 opening, 1 uplift, 2 block burn, 3 APU burn, 4 adjustment
+
+        // THE DENSITY OF WHAT IS IN THE TANKS, and of what was just put in.
+        //
+        // specific_gravity is the uplift's own, from the fuel ticket, and is
+        // set on uplift lines only - nothing else changes the density of the
+        // fuel in the wing.
+        //
+        // wt_avg_specific_gravity is the blend after that uplift, carried
+        // forward unchanged across burns. It is computed as TOTAL MASS OVER
+        // TOTAL VOLUME (decision 2 Oct 2026), not as the average of the two
+        // densities: mass stays mass, volume stays volume, and density is the
+        // ratio. The two differ by about 0.06% on a 0.78/0.82 blend, always in
+        // the same direction, and this figure converts every burn to litres.
+        specific_gravity        : Decimal(6,4);
+        wt_avg_specific_gravity : Decimal(6,4);
+
+        // WHAT THE LEDGER CANNOT ACCOUNT FOR, on a block burn line: the
+        // balance this ledger has calculated minus the arrival gauge reading.
+        // Ground APU burn, metering tolerance and rounding all land here. A
+        // small negative is expected - roughly half the previous flight's APU
+        // burn - and a large one means fuel left the tanks unrecorded.
+        unallocated_fuel_kg     : Decimal(12,2);
         recalculated_by     : String(100);                // Last recalculation, user
         recalculated_at     : Timestamp;                  // Last recalculation, when
         // Set where the replay could not stand behind the figure - a balance

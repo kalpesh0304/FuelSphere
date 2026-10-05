@@ -24,7 +24,10 @@ const perLitre = (perKg, d) => (perKg === null ? null : Number((perKg * d).toFix
 
 const BASE = ['ID', 'tail_number', 'record_date', 'record_time', 'sequence', 'line_order',
               'entry_type', 'volume_l', 'qty_kg', 'opening_rob_kg', 'uplift_kg', 'burn_kg',
-              'adjustment_kg', 'closing_rob_kg', 'max_capacity_kg', 'rate_usd_per_kg', 'map_usd_per_kg'];
+              'adjustment_kg', 'closing_rob_kg', 'max_capacity_kg', 'rate_usd_per_kg', 'map_usd_per_kg',
+              // THE STORED BLEND, which is now what every litre figure is
+              // converted at. See the note on densityFor below.
+              'specific_gravity', 'wt_avg_specific_gravity'];
 
 /** The uplift's own density, or null where it has no volume. */
 function upliftDensity(r) {
@@ -40,6 +43,16 @@ const order = (a, b) =>
     || String(a.record_time || '').localeCompare(String(b.record_time || ''))
     || (num(a.sequence) || 0) - (num(b.sequence) || 0);
 
+/** The stored code, in the words the ledger shows. */
+const LINE_TYPE_TEXT = {
+    INITIAL: 'Opening',
+    UPLIFT: 'Uplift',
+    BURN: 'Block burn',
+    APU_BURN: 'APU burn',
+    TRANSFER: 'Transfer',
+    ADJUSTMENT: 'Adjustment'
+};
+
 async function applyLedgerLitres(data) {
     const rows = (Array.isArray(data) ? data : [data]).filter(r => r && r.ID);
     if (!rows.length) return;
@@ -52,16 +65,42 @@ async function applyLedgerLitres(data) {
     const all = tails.length ? await cds.db.run(SELECT.from(LEDGER).columns(...BASE)
         .where({ tail_number: { in: tails } })) : [];
 
+    // THE WEIGHTED AVERAGE THE LEDGER ALREADY HOLDS comes first, from 2 Oct
+    // 2026. It is computed once, on recalculation, as total mass over total
+    // volume, so every litre figure on the screen is converted at the density
+    // of what was actually in the tank rather than at the density of the last
+    // uplift - which is what this file inferred before the column existed.
+    //
+    // The inference is kept as the fallback, for rows written before the
+    // column was added and for a tail whose ledger has never been recalculated.
     const computed = new Map();
     for (const tail of tails) {
         let density = null;
         for (const r of all.filter(x => x.tail_number === tail).sort(order)) {
-            density = upliftDensity(r) || density;
+            const stored = num(r.wt_avg_specific_gravity);
+            density = (stored && stored > 0.5 && stored < 1.2)
+                ? stored
+                : (upliftDensity(r) || density);
             computed.set(r.ID, { r, d: density || STANDARD_DENSITY_KGL });
         }
     }
 
+    // THE STORED CODE, FROM THE RE-READ AND NOT FROM THE PAYLOAD.
+    //
+    // An after-READ handler only sees the columns the client $select'd, and
+    // the ledger table shows line_type_v WITHOUT entry_type beside it - so
+    // Fiori never asks for entry_type and `row.entry_type` is undefined. The
+    // lookup then missed on every row and the Line type column went blank
+    // across the whole table. Reported 5 Oct 2026, noticed after APU_BURN
+    // arrived because that is when the column was added.
+    //
+    // `all` is already re-read for the whole tail and BASE carries
+    // entry_type, so the code is in hand and costs no extra query.
+    const typeById = new Map(all.map(r => [r.ID, r.entry_type]));
+
     for (const row of rows) {
+        const entryType = typeById.has(row.ID) ? typeById.get(row.ID) : row.entry_type;
+        row.line_type_v = LINE_TYPE_TEXT[entryType] || entryType || null;
         const c = computed.get(row.ID);
         if (!c) continue;
         const { r, d } = c;

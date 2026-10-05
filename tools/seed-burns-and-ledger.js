@@ -71,6 +71,22 @@ const money = (v) => (v === null ? null : Number(v.toFixed(2)));
 const rate = (v) => (v === null ? null : Number(v.toFixed(4)));
 
 const STAMP = '2026-09-28T00:00:00Z';
+const sg4 = (v) => (v === null || v === undefined ? null : Number(Number(v).toFixed(4)));
+
+/**
+ * The density of the tank after an uplift: TOTAL MASS OVER TOTAL VOLUME.
+ * The same rule srv/lib/rob-recalculate.js replays with, so a seeded ledger
+ * and a recalculated one agree to the fourth decimal.
+ */
+function blendGravity(massBefore, sgBefore, massUplift, sgUplift) {
+    const mb = Number(massBefore) || 0, mu = Number(massUplift) || 0;
+    const sb = sgBefore ? Number(sgBefore) : null, su = sgUplift ? Number(sgUplift) : null;
+    if (!su || su <= 0) return sb;
+    if (mb <= 0 || !sb || sb <= 0) return sg4(su);
+    if (mu <= 0) return sg4(sb);
+    const volume = (mb / sb) + (mu / su);
+    return volume > 0 ? sg4((mb + mu) / volume) : sg4(sb);
+}
 
 /** When the leg actually left, or when it was due to - never blank. */
 const stampFor = (f) => f.aobt || (f.scheduled_departure ? f.flight_date + 'T' + f.scheduled_departure + 'Z' : '');
@@ -78,6 +94,7 @@ const BY = 'SEED_BURNS_LEDGER';
 
 // --- the data we build from ------------------------------------------------
 const flightsCsv = readCsv('FLIGHT_SCHEDULE');
+const apuCsv = readCsv('APU_USAGE');
 const dispatchCsv = readCsv('FLIGHT_DISPATCH');
 const ticketsCsv = readCsv('FUEL_TICKETS');
 const deliveriesCsv = readCsv('FUEL_DELIVERIES');
@@ -160,7 +177,21 @@ for (const f of flights) {
 //
 // Per tail, in the order the aircraft flew: an opening balance, then for each
 // leg the uplift that went on and the burn that came off.
-const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2 };
+// APU_BURN AFTER BURN: the block burn is what the leg consumed between the
+// chocks, the ground APU burn happens on stand after it.
+const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, APU_BURN: 3 };
+
+// The APU cycles apportioned to each flight, and what they burnt.
+const apuByFlight = new Map();
+for (const a of apuCsv.rows) {
+    const key = a.allocated_flight_ID || a.flight_ID;
+    if (!key) continue;
+    const got = apuByFlight.get(key) || { kg: 0, minutes: 0, rate: null };
+    got.kg += num(a.apu_burn_kg) || 0;
+    got.minutes += num(a.running_minutes) || 0;
+    got.rate = got.rate || num(a.burn_rate_kg_hr);
+    apuByFlight.set(key, got);
+}
 const byTail = new Map();
 for (const f of flights) {
     if (!byTail.has(f.tail_registration)) byTail.set(f.tail_registration, []);
@@ -171,6 +202,8 @@ const generatedLedger = [];
 for (const [tail, legs] of byTail) {
     const capacity = capacityByTail.get(tail) ?? null;
     let balanceQty = null, balanceValue = null, map = null;
+    // The density of what is in the tank, carried across this tail's legs.
+    let wtAvgSg = null;
     const sequenceByDate = new Map();
     const nextSequence = (date) => {
         const n = (sequenceByDate.get(date) || 0) + 1;
@@ -223,8 +256,14 @@ for (const [tail, legs] of byTail) {
             balanceQty = closing;
             map = closing > 0 ? rate(balanceValue / closing) : map;
             const t = tickets[0];
+            // The uplift's own density, measured on the ticket, and the blend
+            // it produces with what was already in the tank.
+            const upliftSg = t ? sg4(num(t.density_value)) : null;
+            wtAvgSg = blendGravity(opening, wtAvgSg, upliftKg, upliftSg);
             generatedLedger.push({
                 ID: uuid5('ROB_LEDGER:UPLIFT:' + f.ID),
+                specific_gravity: upliftSg === null ? '' : upliftSg,
+                wt_avg_specific_gravity: wtAvgSg === null ? '' : wtAvgSg,
                 aircraft_type_code: f.aircraft_type || '', tail_number: tail, tail_registration: tail,
                 record_date: f.flight_date, record_time: (t && t.delivery_timestamp ? String(t.delivery_timestamp).slice(11, 19) : '00:00:00'),
                 sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.UPLIFT, entry_type: 'UPLIFT',
@@ -255,8 +294,14 @@ for (const [tail, legs] of byTail) {
             const value = money(burnKg * (map || 0));
             balanceValue = money((balanceValue || 0) - value);
             balanceQty = closing;
+            // What the ledger cannot account for: the balance it has arrived
+            // at, minus the aircraft's own arrival gauge. Ground APU burn,
+            // metering tolerance and rounding all land here.
+            const unallocated = inn === null || inn === undefined ? '' : money(closing - inn);
             generatedLedger.push({
                 ID: uuid5('ROB_LEDGER:BURN:' + f.ID),
+                wt_avg_specific_gravity: wtAvgSg === null ? '' : wtAvgSg,
+                unallocated_fuel_kg: unallocated,
                 aircraft_type_code: f.aircraft_type || '', tail_number: tail, tail_registration: tail,
                 record_date: f.flight_date, record_time: f.scheduled_departure || '00:00:00',
                 sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.BURN, entry_type: 'BURN',
@@ -271,6 +316,41 @@ for (const [tail, legs] of byTail) {
                 balance_value_usd: balanceValue, map_usd_per_kg: map || '',
                 max_capacity_kg: capacity ?? '', rob_percentage: pct(closing),
                 data_source: 'ACARS', is_estimated: 'true',
+                created_at: STAMP, created_by: BY, modified_at: STAMP, modified_by: BY
+            });
+        }
+
+        // --- the ground APU burn, after the block burn --------------------
+        //
+        // ADDITIONAL to the block burn, not part of it: the APU runs on stand,
+        // outside the block period, so its fuel never appears in a FOB delta.
+        // It deducts quantity and value like any burn and, like any burn,
+        // leaves the moving average price alone.
+        const apu = apuByFlight.get(f.ID);
+        const apuKg = apu ? kg(apu.kg) : 0;
+        if (apuKg > 0) {
+            const opening = balanceQty;
+            const closing = kg(opening - apuKg);
+            const value = money(apuKg * (map || 0));
+            balanceValue = money((balanceValue || 0) - value);
+            balanceQty = closing;
+            generatedLedger.push({
+                ID: uuid5('ROB_LEDGER:APU:' + f.ID),
+                aircraft_type_code: f.aircraft_type || '', tail_number: tail, tail_registration: tail,
+                record_date: f.flight_date, record_time: f.scheduled_departure || '00:00:00',
+                sequence: nextSequence(f.flight_date), line_order: LINE_ORDER.APU_BURN,
+                entry_type: 'APU_BURN',
+                flight_ID: f.ID, sector,
+                airport_code: f.origin_airport || '',
+                airport_ID: (airportByIata.get(f.origin_airport) || {}).ID || '',
+                flight_aobt: stampFor(f),
+                opening_rob_kg: opening, uplift_kg: 0, burn_kg: apuKg, adjustment_kg: 0,
+                closing_rob_kg: closing, qty_kg: -apuKg,
+                rate_usd_per_kg: map || '', value_usd: value === null ? '' : -value,
+                balance_value_usd: balanceValue, map_usd_per_kg: map || '',
+                wt_avg_specific_gravity: wtAvgSg === null ? '' : wtAvgSg,
+                max_capacity_kg: capacity ?? '', rob_percentage: pct(closing),
+                data_source: 'MANUAL', is_estimated: 'true',
                 created_at: STAMP, created_by: BY, modified_at: STAMP, modified_by: BY
             });
         }

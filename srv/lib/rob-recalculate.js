@@ -35,13 +35,49 @@ const LEDGER  = 'fuelsphere.ROB_LEDGER';
 const TICKETS = 'fuelsphere.FUEL_TICKETS';
 const ORDERS  = 'fuelsphere.FUEL_ORDERS';
 
-/** Movement order within one flight date. */
-const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, TRANSFER: 2, ADJUSTMENT: 3 };
+/**
+ * Movement order within one flight date.
+ *
+ * APU_BURN SITS AFTER BURN, by instruction: the block burn is what the leg
+ * consumed between the chocks, and the ground APU burn happens on stand after
+ * it. Both deduct; neither moves the moving average price.
+ */
+const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, TRANSFER: 2, APU_BURN: 3, ADJUSTMENT: 4 };
 const lineOrderOf = (entryType) => (LINE_ORDER[entryType] !== undefined ? LINE_ORDER[entryType] : 3);
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const money = (v) => Number(Number(v).toFixed(2));
 const rate4 = (v) => Number(Number(v).toFixed(4));
+const sg4 = (v) => (v === null ? null : Number(Number(v).toFixed(4)));
+
+/**
+ * The density of the tank after an uplift: TOTAL MASS OVER TOTAL VOLUME.
+ *
+ * Chosen 2 Oct 2026 over averaging the two densities by mass. The two differ
+ * by about 0.06% on a 0.78/0.82 blend - roughly 8 litres per 10 tonnes - and
+ * always in the same direction, so the error compounds across uplifts. This
+ * one is what physically comes out of the bowser: mass stays mass, volume
+ * stays volume, density is the ratio.
+ *
+ *   blend = (m_before + m_uplift) / (m_before/sg_before + m_uplift/sg_uplift)
+ *
+ * With nothing in the tank, or no density on record for what is already
+ * there, the uplift's own density IS the blend - there is nothing to blend it
+ * with, and inventing one would be worse than carrying the measured figure.
+ */
+function blendGravity(massBefore, sgBefore, massUplift, sgUplift) {
+    const mb = num(massBefore) || 0;
+    const mu = num(massUplift) || 0;
+    const sb = num(sgBefore);
+    const su = num(sgUplift);
+
+    if (!su || su <= 0) return sb;                  // nothing measured: carry on
+    if (mb <= 0 || !sb || sb <= 0) return sg4(su);  // empty tank, or no prior density
+    if (mu <= 0) return sg4(sb);
+
+    const volume = (mb / sb) + (mu / su);
+    return volume > 0 ? sg4((mb + mu) / volume) : sg4(sb);
+}
 
 /**
  * The price per kilogram for an uplift row.
@@ -95,6 +131,11 @@ function movementOf(row) {
 
     if (row.entry_type === 'INITIAL') return { kind: 'opening', qty: num(row.closing_rob_kg) || 0 };
     if (uplift > 0) return { kind: 'uplift', qty: uplift };
+    // AN APU LINE IS A BURN. Named explicitly rather than left to the burn_kg
+    // test below, so a zero-quantity APU row still reads as a burn of nothing
+    // instead of as 'none' - the line exists because the APU ran, and a row
+    // that classifies as nothing would be valued as nothing and sorted wrong.
+    if (row.entry_type === 'APU_BURN') return { kind: 'burn', qty: burn };
     // Adjustments are burn corrections and are valued like burns. An
     // adjustment recorded as a positive number still REDUCES the balance -
     // that is how the existing rows read: opening 1950, adjustment 52.5,
@@ -102,6 +143,36 @@ function movementOf(row) {
     if (burn > 0) return { kind: 'burn', qty: burn };
     if (adj) return { kind: 'burn', qty: Math.abs(adj) };
     return { kind: 'none', qty: 0 };
+}
+
+/**
+ * THE UPLIFT'S OWN DENSITY, from the ticket that recorded it.
+ *
+ * density_value on a fuel ticket is always kg per litre - the unit is not the
+ * operator's to choose (ticket-measurement.js stamps KGL). A ticket with no
+ * density, which happens on a mass ticket, falls back to the mass over the
+ * metered volume where both are there: that IS the density, measured rather
+ * than assumed, and it is how the ledger's litre columns were derived before
+ * this column existed.
+ */
+async function upliftGravity(row, tx) {
+    if (!row.fuel_ticket_ID) return null;
+
+    const t = await tx.run(SELECT.one.from(TICKETS)
+        .columns('density_value', 'quantity_kg', 'quantity_metered', 'quantity', 'uom_code')
+        .where({ ID: row.fuel_ticket_ID }));
+    if (!t) return null;
+
+    const stated = num(t.density_value);
+    if (stated && stated > 0.5 && stated < 1.2) return sg4(stated);
+
+    const kg = num(t.quantity_kg);
+    const litres = num(row.volume_l);
+    if (kg && litres && litres > 0) {
+        const derived = kg / litres;
+        if (derived > 0.5 && derived < 1.2) return sg4(derived);
+    }
+    return null;
 }
 
 /**
@@ -171,9 +242,25 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
     const openRate = await openingRate(tailNumber, tx);
     let balQty = 0, balValue = 0, map = null, flagged = 0, unpriced = 0, openingAssumed = false;
 
+    // THE DENSITY OF WHAT IS IN THE TANK, carried across the whole replay. It
+    // changes only on an uplift - burning fuel does not change the density of
+    // what is left - so a burn line simply repeats the blend it was burnt at,
+    // which is what converts it to litres.
+    let wtAvgSg = null;
+
+    // The arrival gauge of each flight, for the unallocated column. Read once
+    // per tail rather than per row: a tail flying four legs a day over three
+    // days is 12 reads that would otherwise be 12 round trips.
+    const flightIds = [...new Set(rows.map(r => r.flight_ID).filter(Boolean))];
+    const flights = flightIds.length
+        ? await tx.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+            .columns('ID', 'fob_at_in_kg').where({ ID: { in: flightIds } }))
+        : [];
+    const arrivalFob = new Map(flights.map(f => [f.ID, num(f.fob_at_in_kg)]));
+
     for (const row of rows) {
         const move = movementOf(row);
-        let qtySigned = 0, rowRate = null, rowValue = null;
+        let qtySigned = 0, rowRate = null, rowValue = null, rowSg = null;
 
         if (move.kind === 'opening') {
             // Valued at the tail's first priced uplift - see openingRate.
@@ -185,6 +272,11 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
             qtySigned = move.qty;
             if (openRate > 0 && move.qty > 0) openingAssumed = true;
         } else if (move.kind === 'uplift') {
+            // THE UPLIFT'S OWN DENSITY, from the ticket that recorded it, and
+            // the blend it produces. Both are written to the row below.
+            rowSg = await upliftGravity(row, tx);
+            wtAvgSg = blendGravity(balQty, wtAvgSg, move.qty, rowSg);
+
             const { rate, basis } = await upliftRate(row, tx);
             if (basis === 'unpriced') unpriced += 1;
             rowRate = rate;
@@ -213,6 +305,23 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
             qtySigned = 0; rowRate = null; rowValue = null;
         }
 
+        // WHAT THE LEDGER CANNOT ACCOUNT FOR. On a BLOCK burn line only: the
+        // balance this replay has arrived at, minus what the aircraft's own
+        // gauge said on arrival. Ground APU burn that nobody recorded, meter
+        // tolerance and rounding all show up here, and a figure far below zero
+        // means fuel left the tanks without a line to say so.
+        //
+        // Not computed on the APU line: that line comes after, and comparing a
+        // post-APU balance with an arrival reading taken before the APU ran
+        // would report the APU burn itself as unaccounted for.
+        let unallocated = null;
+        if (row.entry_type === 'BURN' && row.flight_ID) {
+            const fobIn = arrivalFob.get(row.flight_ID);
+            if (fobIn !== null && fobIn !== undefined) {
+                unallocated = money(balQty - fobIn);
+            }
+        }
+
         // A balance at or below zero has no average price to speak of. Hold
         // the last good one and mark the row rather than dividing into it.
         let rowFlagged = false;
@@ -232,6 +341,9 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
             closing_rob_kg: balQty,
             balance_value_usd: balValue,
             map_usd_per_kg: map,
+            specific_gravity: rowSg,
+            wt_avg_specific_gravity: wtAvgSg,
+            unallocated_fuel_kg: unallocated,
             recalc_flagged: rowFlagged,
             recalculated_by: userId || null,
             recalculated_at: stamp
@@ -244,4 +356,4 @@ async function recalculateTail(tailNumber, userId, tx = cds.db) {
     };
 }
 
-module.exports = { recalculateTail, lineOrderOf, LINE_ORDER };
+module.exports = { recalculateTail, lineOrderOf, LINE_ORDER, blendGravity };
