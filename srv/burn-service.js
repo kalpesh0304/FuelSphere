@@ -14,6 +14,7 @@ const { applyLedgerLitres } = require('./lib/rob-litres');
 const { resolveTail } = require('./lib/tail-resolver');
 const { recalculateTail, lineOrderOf } = require('./lib/rob-recalculate');
 const { applyFlightSummary } = require('./lib/burn-summary');
+const { applyBurnEmissions } = require('./lib/carbon-emissions');
 const {
     PHASE, SOURCE, BASIS,
     rateForTail, deriveCycle, allocate, splitBlockBurn
@@ -66,6 +67,10 @@ module.exports = class BurnService extends cds.ApplicationService {
         // ====================================================================
         this.after(['READ'], [FuelBurns, FuelBurns.drafts], async (data) => {
             await applyFlightSummary(data);
+            // AFTER the summary, not before: the emission reads fqis_out_kg
+            // and fqis_in_kg, and those are what applyFlightSummary has just
+            // put on the row from the flight's gauges.
+            await applyBurnEmissions(data);
         });
 
         // ====================================================================

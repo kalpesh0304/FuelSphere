@@ -335,7 +335,17 @@ service PlanningService {
         // time is earlier than the departure's (an overnight sector). Filled
         // on read by planning-service.js; display only.
         virtual null as scheduled_departure_lt : String(20),
-        virtual null as scheduled_arrival_lt   : String(20)
+        virtual null as scheduled_arrival_lt   : String(20),
+
+        // HOW LONG THE APU RAN ON THIS LEG, in hours. The register's
+        // apu_burn_rate_kg_hr beside it says how fast the APU drinks; this
+        // says for how long, and the two multiply to the kilograms. Asked for
+        // 2 Oct 2026 - the rate alone cannot be checked against anything.
+        //
+        // SUMMED ON READ rather than stored: cycles arrive after the leg has
+        // flown, so a stored total would be wrong between the flight landing
+        // and its last cycle being downlinked.
+        virtual null as apu_usage_hours : Decimal(8,2)
     } excluding { fuel_order }
     actions {
         /**

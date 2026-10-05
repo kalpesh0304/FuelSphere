@@ -228,8 +228,8 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with {
 annotate PlanningService.FlightDispatches with @(
     UI: {
         HeaderInfo: {
-            TypeName       : 'Dispatch Plan',
-            TypeNamePlural : 'Dispatch Plans',
+            TypeName       : 'Operational Flight Plan',
+            TypeNamePlural : 'Operational Flight Plans',
             Title          : { Value: plan_group_id },
             Description    : { Value: plan_status }
         },
@@ -400,8 +400,8 @@ annotate PlanningService.FlightSchedule with @(
     UI: {
         // --- Header ---
         HeaderInfo: {
-            TypeName       : 'Flight Schedule',
-            TypeNamePlural : 'Flight Schedule',
+            TypeName       : 'Flight Detail',
+            TypeNamePlural : 'Flight Details',
             Title          : { Value: flight_number },
             Description    : { Value: flight_date }
         },
@@ -413,7 +413,10 @@ annotate PlanningService.FlightSchedule with @(
             origin_airport,
             destination_airport,
             aircraft_type,
-            airline_code,
+            // REGISTRATION RATHER THAN AIRLINE. One carrier flies every row
+            // in this system, so the airline filter narrowed nothing; the
+            // tail is what a planner actually searches by.
+            aircraft_reg,
             status,
             // A. THE SME ASKED FOR THE SUPPLIER AS A FILTER AND A COLUMN,
             // twice in one session. Both, not either.
@@ -472,6 +475,27 @@ annotate PlanningService.FlightSchedule with @(
                 Label: 'Designated Supplier',
                 ![@UI.Importance]: #High
             },
+            // THE CODE BESIDE THE NAME on the list as well as the object page.
+            // Both travel the same path - DESIGNATED_SUPPLIERS.supplier into
+            // MASTER_SUPPLIERS - so they are blank together or filled
+            // together, which is itself worth seeing: a blank pair beside a
+            // filled contract number says the designation row is sound and
+            // the supplier master is what cannot be reached.
+            {
+                Value: designated.supplier_code,
+                Label: 'Supplier Code',
+                ![@UI.Importance]: #Medium
+            },
+            // HOW LONG THE APU RAN ON THIS LEG. A property of the flight, not
+            // of the tail: the register's apu_burn_rate_kg_hr says how fast
+            // the APU drinks and is the same figure on every leg that tail
+            // flies, so the rate lives on the register and the hours live
+            // here. Hours x rate is the APU's fuel.
+            {
+                Value: apu_usage_hours,
+                Label: 'APU Usage (Hours)',
+                ![@UI.Importance]: #Medium
+            },
             // WHICH AXIS ANSWERED, beside the name rather than resolved away.
             // "Air Total" means something different when it is an arrangement
             // for THIS FLIGHT than when it is what LHR does by default, and a
@@ -484,12 +508,11 @@ annotate PlanningService.FlightSchedule with @(
             { Value: gate_number,  Label: 'Gate',  ![@UI.Importance]: #Medium },
             { Value: stand_number, Label: 'Stand', ![@UI.Importance]: #Medium },
 
-            {
-                $Type  : 'UI.DataFieldForAction',
-                Action : 'PlanningService.importFlightScheduleExcel',
-                Label  : 'Upload Flight Schedule',
-                Inline : false
-            },
+            // UPLOAD FLIGHT SCHEDULE IS NOT ON THIS SCREEN. Withdrawn
+            // 1 Oct 2026: the schedule arrives through the interface, and a
+            // button that loads it by hand beside the list invites a second,
+            // divergent source. The action itself still exists on
+            // PlanningService for the integration to call.
 
             // ================================================================
             // THE LIST REPORT TOOLBAR IS THE SURFACE THAT RENDERS ON THIS
@@ -646,7 +669,7 @@ annotate PlanningService.FlightSchedule with @(
             {
                 $Type  : 'UI.CollectionFacet',
                 ID     : 'DispatchPlans',
-                Label  : 'Dispatch Plans',
+                Label  : 'Operational Flight Plan (Fuel)',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', ID: 'RaiseOrder',
                       Target: '@UI.FieldGroup#RaiseOrder' },
@@ -811,7 +834,12 @@ annotate PlanningService.FlightSchedule with @(
                 { Value: fob_at_off_kg, Label: 'FOB at OFF (kg)' },
                 { Value: fob_at_on_kg,  Label: 'FOB at ON (kg)' },
                 { Value: fob_at_in_kg,  Label: 'FOB at IN (kg)' },
-                { Value: fob_source,    Label: 'Reading Source' }
+                { Value: fob_source,    Label: 'Reading Source' },
+                // THE APU'S HOURS WITH THE FOUR GAUGES, because this is the
+                // panel that has to add up. The block burn is OUT minus IN;
+                // the ground APU burn is additional to it and is the usual
+                // reason those two readings do not reconcile on their own.
+                { Value: apu_usage_hours, Label: 'APU Usage (Hours)' }
             ]
         },
 
@@ -914,6 +942,8 @@ annotate PlanningService.FlightSchedule with {
     fob_at_on_kg                  @title: 'FOB at ON (kg)';
     fob_at_in_kg                  @title: 'FOB at IN (kg)';
     fob_source                    @title: 'Gauge Reading Source';
+    apu_usage_hours               @title: 'APU Usage (Hours)'
+                                  @Common.QuickInfo: 'How long the APU ran on this leg, summed from the recorded APU cycles this flight bears the cost of. Hours x the rate on the aircraft register is the APU''s fuel. BLANK MEANS NO CYCLE WAS RECORDED, not that the APU stood idle - an overnight or maintenance cycle belongs to no leg and is counted against none.';
     // WP-31. On the association so the label reaches closure_document_ID.
     closure_document              @title: 'Tech Log Image';
     flight_closure_utc            @title: 'Flight Closure (UTC)';
@@ -1022,6 +1052,14 @@ annotate PlanningService.DesignatedSuppliers with @(
 
         LineItem #FlightBlock: [
             { Value: supplier.supplier_name,    Label: 'Supplier',        ![@UI.Importance]: #High },
+            // THE CODE BESIDE THE NAME, both blocks. Asked for 2 Oct 2026:
+            // the contract number read clearly on screen while the supplier
+            // it belongs to did not, so the company had to be inferred from
+            // the contract's own name - 'B6-WFS-2026-001' read as WFS. The
+            // code and the S/4 vendor number are what the posting will carry,
+            // so they belong beside the name rather than one page deeper.
+            { Value: supplier.supplier_code,    Label: 'Supplier code',   ![@UI.Importance]: #High },
+            { Value: supplier.s4_vendor_no,     Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
             { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
             // TRUE means the supplier fuels its own product and the two agent
             // columns are EMPTY BY DESIGN - a different state from "not known
@@ -1039,6 +1077,14 @@ annotate PlanningService.DesignatedSuppliers with @(
         LineItem #StationBlock: [
             { Value: station_code,              Label: 'Station',         ![@UI.Importance]: #High },
             { Value: supplier.supplier_name,    Label: 'Supplier',        ![@UI.Importance]: #High },
+            // THE CODE BESIDE THE NAME, both blocks. Asked for 2 Oct 2026:
+            // the contract number read clearly on screen while the supplier
+            // it belongs to did not, so the company had to be inferred from
+            // the contract's own name - 'B6-WFS-2026-001' read as WFS. The
+            // code and the S/4 vendor number are what the posting will carry,
+            // so they belong beside the name rather than one page deeper.
+            { Value: supplier.supplier_code,    Label: 'Supplier code',   ![@UI.Importance]: #High },
+            { Value: supplier.s4_vendor_no,     Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
             { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
             { Value: supplier_performs_uplift,  Label: 'Supplier fuels',  ![@UI.Importance]: #High },
             { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent', ![@UI.Importance]: #High },
@@ -1392,12 +1438,11 @@ annotate PlanningService.FlightContacts with @(
             // EXISTS. The row is the finding; the null is how it reads.
             { Value: primary_name,     Label: 'Contact', Criticality: contactCriticality,
               ![@UI.Importance]: #High },
-            // THE THIRD STATE, SPELT OUT. A blank Contact now means two
-            // opposite things and this is the column that separates them:
-            // NOT_APPLICABLE is a fact about the split, NONE_RECORDED is a
-            // gap in our records. role_note carries the one-clause reason.
-            { Value: role_status,      Label: 'Status',  ![@UI.Importance]: #High },
-            { Value: role_note,        Label: 'Why',     ![@UI.Importance]: #High },
+            // STATUS AND WHY BOTH REMOVED, 1 Oct 2026. The strip is now the
+            // four columns a planner rings somebody from: party, company,
+            // role, contact. Both explanatory columns are still on the
+            // entity - role_status and role_note - so putting either back is
+            // one line, and the contact object page still carries them.
             { Value: primary_phone,    Label: 'Phone',   ![@UI.Importance]: #High },
             { Value: primary_mobile,   Label: 'Mobile',  ![@UI.Importance]: #Medium },
             { Value: primary_hours,    Label: 'Hours',   ![@UI.Importance]: #High },
@@ -2156,7 +2201,7 @@ annotate PlanningService.FuelBurns with @(
             Label: 'Burn Split',
             Data: [
                 { Value: actual_burn_kg, Label: 'Block Burn (kg)' },
-                { Value: apu_burn_kg,    Label: 'APU in Block (kg)' },
+                { Value: apu_burn_kg,    Label: 'APU burn (kg)' },
                 { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
             ]
         }
@@ -2174,15 +2219,19 @@ annotate PlanningService.FuelBurns with {
     // rather than letting an absence render as a figure - after NOT_RECORDED,
     // "no flight-level designation", "not applicable - the supplier invoices"
     // and the seeded opening balance.
-    apu_burn_kg    @title: 'APU in Block (kg)'
+    apu_burn_kg    @title: 'APU burn (kg)'
                    @Common.QuickInfo: 'APU fuel burned BETWEEN BLOCK-OFF AND BLOCK-ON only. 0.00 does not mean the APU was idle - it means no APU cycle falls inside the block window, which is true of every cycle in this dataset: each one runs wholly before block-off or wholly after block-on. The fuel is in the APU Cycles section below, on the ground either side. D42.';
     engine_burn_kg @title: 'Engine Burn (kg)'
                    @Common.QuickInfo: 'Block burn less APU in block. Equal to block burn wherever no cycle falls inside the block window, which is everywhere in this dataset.';
 };
 
 // The scheduled date + time (LT) fields are virtual (planning-service.js):
-// not filterable or sortable in the database.
+// not filterable or sortable in the database. apu_usage_hours joined them on
+// 2 Oct 2026 - it is summed from APU_USAGE on read, so there is no column for
+// a WHERE or an ORDER BY to name. See srv/virtual-restrictions.cds, which
+// carries the same declaration for the other 23 entities; this one stays here
+// because CDS refuses a second assignment of the term on one entity.
 annotate PlanningService.FlightSchedule with @(
-    Capabilities.FilterRestrictions.NonFilterableProperties: [ scheduled_departure_lt, scheduled_arrival_lt ],
-    Capabilities.SortRestrictions.NonSortableProperties:     [ scheduled_departure_lt, scheduled_arrival_lt ]
+    Capabilities.FilterRestrictions.NonFilterableProperties: [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours ],
+    Capabilities.SortRestrictions.NonSortableProperties:     [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours ]
 );

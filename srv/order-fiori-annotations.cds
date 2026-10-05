@@ -49,6 +49,12 @@ annotate FuelOrderService.FuelOrders with @(
             { Value: flight_number, Label: 'Flight', ![@UI.Importance]: #Medium },
             { Value: station_code, Label: 'Station', ![@UI.Importance]: #High },
             { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
+            // THE SUPPLIER'S NUMBERS ON THE ORDER ITSELF. Every ticket under
+            // an order is with this one supplier, so the number the purchase
+            // order will carry to S/4 is a property of the order, not
+            // something to be looked up a page deeper.
+            { Value: supplier.supplier_code, Label: 'Supplier code', ![@UI.Importance]: #Medium },
+            { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
             { Value: product.product_name, Label: 'Fuel Type', ![@UI.Importance]: #Medium },
             { Value: ordered_quantity, Label: 'Quantity (kg)', ![@UI.Importance]: #High },
             {
@@ -163,7 +169,7 @@ annotate FuelOrderService.FuelOrders with @(
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'OrderDispatchPlan',
                 Target : 'dispatch_plan/@UI.FieldGroup#RegulatedStack',
-                Label  : 'Dispatch Plan'
+                Label  : 'Operational Flight Plan'
             },
             // Section 5: Fuel Deliveries (ePOD)
             {
@@ -183,12 +189,10 @@ annotate FuelOrderService.FuelOrders with @(
                 Target: '@UI.FieldGroup#JourneyProgress',
                 Label: 'Journey Progress'
             },
-            // Section 8: Cockpit Crew Review
-            {
-                $Type: 'UI.ReferenceFacet',
-                Target: '@UI.FieldGroup#CrewReview',
-                Label: 'Cockpit Crew Review'
-            },
+            // SECTION 8 WAS COCKPIT CREW REVIEW, removed 1 Oct 2026. The
+            // field group is left defined below: the columns still exist and
+            // the data is still written, so nothing is lost by taking the
+            // section off the page, and putting it back is one facet.
             // Section 9: Administrative
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -226,6 +230,8 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: station_code, Label: 'Station Code' },
                 { Value: airport.airport_name, Label: 'Airport' },
                 { Value: supplier.supplier_name, Label: 'Supplier' },
+                { Value: supplier.supplier_code, Label: 'Supplier code' },
+                { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no' },
                 { Value: supplier.supplier_type, Label: 'Supplier Type' },
                 { Value: contract.contract_number, Label: 'Contract' }
             ]
@@ -493,7 +499,7 @@ annotate FuelOrderService.FuelOrders with {
             // simply not something anyone needs to read.
             TextArrangement: #TextOnly,
             ValueList: {
-                Label: 'Flight Schedule',
+                Label: 'Flight Detail',
                 CollectionPath: 'FlightSchedule',
                 Parameters: [
                     { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
@@ -739,7 +745,11 @@ annotate FuelOrderService.FuelDeliveries with @(
             status,
             recon_status,
             fob_source,
-            flight_number
+            flight_number,
+            // THE FLIGHT'S OWN DATE, beside the delivery's. They differ on a
+            // night turnaround, and a delivery is looked for by the flight it
+            // fuelled.
+            flight_date
         ],
 
         Facets: [
@@ -1282,6 +1292,11 @@ annotate FuelOrderService.FuelTickets with {
     // paints an asterisk on a field nobody can type into.
     flight_date                  @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
     vehicle_id                   @title: 'Vehicle';
+    // TITLED ON THIS PROJECTION TOO. ticket-fiori-annotations.cds titles them
+    // on TicketService.FuelTickets; a projection in another service does not
+    // inherit that, and the two were rendering their technical names here.
+    meter_calibration_cert       @title: 'Calibration Certificate No';
+    meter_calibration_valid_to   @title: 'Calibration Valid Until';
     meter_serial                 @title: 'Meter Serial';
     // WP-31. On the ASSOCIATION, because CAP propagates it to the generated
     // foreign key - ticket_document_ID takes its label from here. Labelling
@@ -1329,8 +1344,8 @@ annotate FuelOrderService.FuelTickets with {
 annotate FuelOrderService.FlightSchedule with @(
     UI: {
         HeaderInfo: {
-            TypeName       : 'Flight Schedule',
-            TypeNamePlural : 'Flight Schedule',
+            TypeName       : 'Flight Detail',
+            TypeNamePlural : 'Flight Details',
             Title          : { Value: flight_number },
             Description    : { Value: flight_date }
         },
@@ -1384,7 +1399,7 @@ annotate FuelOrderService.FlightSchedule with @(
                 // as the table - a LineItem toolbar action must bind the
                 // table's own entity, and this one binds the FLIGHT.
                 ID     : 'FlightDispatchPlans',
-                Label  : 'Dispatch Plans',
+                Label  : 'Operational Flight Plans',
                 $Type  : 'UI.CollectionFacet',
                 Facets : [
                     { $Type: 'UI.ReferenceFacet', ID: 'RaiseOrder',
@@ -1443,6 +1458,14 @@ annotate FuelOrderService.FlightSchedule with {
 // FLIGHT DISPATCHES - List Report + Object Page
 // ============================================================================
 
+// A DISPATCH PLAN IS NOT DELETED. It is what the dispatcher released, and
+// the uplift, the order variance and the burn comparison all read it; a plan
+// that can be removed takes their basis with it and leaves figures that
+// cannot be explained. Superseded plans arrive as new versions.
+annotate FuelOrderService.FlightDispatches with @(
+    Capabilities.DeleteRestrictions: { Deletable: false }
+);
+
 annotate FuelOrderService.FlightDispatches with @(
     UI: {
         // --- Header Info ---
@@ -1454,13 +1477,14 @@ annotate FuelOrderService.FlightDispatches with @(
         },
 
         // --- Filter Bar ---
+        // DISPATCH SOURCE AND VERSION SOURCE ARE NOT FILTERS. Removed 1 Oct
+        // 2026: both describe how a row ARRIVED rather than what it is about,
+        // and nobody narrows a worklist by provenance.
         SelectionFields: [
             flight_number,
             flight_date,
-            dispatch_source,
             tail_number,
-            plan_status,
-            plan_version_source
+            plan_status
         ],
 
         // --- List Report Table ---
@@ -1476,16 +1500,19 @@ annotate FuelOrderService.FlightDispatches with @(
             // rather than one level down.
             { Value: block_fuel_kg, Label: 'Block Fuel (kg)', ![@UI.Importance]: #High },
             { Value: required_uplift_kg, Label: 'Required Uplift (kg)', ![@UI.Importance]: #High },
-            { Value: rob_departure_kg, Label: 'FOB Departure (kg)', ![@UI.Importance]: #Medium },
+            { Value: rob_departure_kg, Label: 'Plan FOB (Pre-fueling)', ![@UI.Importance]: #Medium },
             { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
             { Value: dispatch_source, Label: 'Source', ![@UI.Importance]: #Medium },
             { Value: dispatch_timestamp, Label: 'Dispatch Time', ![@UI.Importance]: #Low },
-            {
-                $Type  : 'UI.DataFieldForAction',
-                Action : 'FuelOrderService.importFlightDispatchExcel',
-                Label  : 'Upload Dispatch Data',
-                Inline : false
-            }
+            // THE ROUTE THE PLAN IS FOR. Read through the flight rather than
+            // copied: FLIGHT_DISPATCH carries the flight number and date but
+            // never the airports, so the list could say which flight without
+            // saying where it goes.
+            { Value: flight_schedule.origin_airport, Label: 'Origin', ![@UI.Importance]: #High },
+            { Value: flight_schedule.destination_airport, Label: 'Destination', ![@UI.Importance]: #High }
+            // UPLOAD DISPATCH DATA IS NOT ON THIS SCREEN - withdrawn 1 Oct
+            // 2026 for the reason the flight schedule upload was. The action
+            // remains on FuelOrderService for the interface.
         ],
 
         // --- Default Sort ---
@@ -1515,7 +1542,7 @@ annotate FuelOrderService.FlightDispatches with @(
         FieldGroup #DispatchQuantities: {
             Data: [
                 { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)' },
-                { Value: rob_departure_kg, Label: 'FOB Departure (kg)' },
+                { Value: rob_departure_kg, Label: 'Plan FOB (Pre-fueling)' },
                 { Value: payload_kg, Label: 'Payload (kg)' }
             ]
         },
@@ -1641,6 +1668,12 @@ annotate FuelOrderService.FlightDispatches with @(
                 { Value: dispatch_order_id, Label: 'Dispatch Order ID' },
                 { Value: flight_number, Label: 'Flight Number' },
                 { Value: flight_date, Label: 'Flight Date' },
+                // THE SECTOR THE PLAN IS FOR, read through the flight.
+                // FLIGHT_DISPATCH names the flight and the date and stops
+                // there, so a plan opened on its own said which flight it was
+                // for without saying where that flight goes.
+                { Value: flight_schedule.origin_airport, Label: 'Origin' },
+                { Value: flight_schedule.destination_airport, Label: 'Destination' },
                 { Value: dispatch_source, Label: 'Source' },
                 { Value: ofplan_reference, Label: 'OFP Reference' }
             ]
@@ -1703,7 +1736,7 @@ annotate FuelOrderService.FlightDispatches with {
     ata                  @title: 'ATA (UTC)';
     dispatch_timestamp   @title: 'Dispatch Time';
     dispatch_qty_kg      @title: 'Dispatch Qty (kg)';
-    rob_departure_kg     @title: 'FOB Departure (kg)';
+    rob_departure_kg     @title: 'Plan FOB (Pre-fueling)';
     payload_kg           @title: 'Payload (kg)';
     flight_level         @title: 'Flight Level';
     wind_component       @title: 'Wind Component';
@@ -1945,7 +1978,7 @@ annotate FuelOrderService.FuelDeliveries with {
 // ----------------------------------------------------------------------------
 
 annotate FuelOrderService.FuelOrders with {
-    dispatch_plan @title: 'Dispatch Plan';
+    dispatch_plan @title: 'Operational Flight Plan';
 };
 
 annotate FuelOrderService.FlightDispatches with {

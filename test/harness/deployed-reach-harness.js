@@ -272,8 +272,11 @@ describe('What a deployed app actually opens', function () {
         // group, which is a SIBLING annotation. A scanner that over-runs would
         // swallow the sibling and report the toolbar entry present when it is not.
         const lineItem = scopeOf(blk, 'LineItem');
-        assert.ok(lineItem.includes('importFlightScheduleExcel'),
-            'scanner control: the LineItem scope must contain the known-present toolbar action');
+        assert.ok(lineItem.includes('designated/supplier_name'),
+            'scanner control: the LineItem scope must contain a known-present data field. '
+          + 'This control read importFlightScheduleExcel until 1 Oct 2026, when that button '
+          + 'was withdrawn from this screen - a control must rest on a literal fact of the '
+          + 'block, not on a policy decision that can be reversed.');
         assert.ok(!lineItem.includes('RaiseOrder'),
             'scanner control: the LineItem scope must NOT reach the sibling field group');
         out(`  LineItem scope ${lineItem.length} chars, controls pass`);

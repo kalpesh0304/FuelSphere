@@ -147,7 +147,12 @@ describe('The service surface this repository declares', () => {
       'BurnService.FuelDeliveries#BurnDeliveryUplift',
       // Taken off the Flight Schedule page at the user's request (Sep 2026)
       // and kept defined, so it returns with one facet line.
-      'PlanningService.FlightSchedule#ActualRouting'
+      'PlanningService.FlightSchedule#ActualRouting',
+      // Cockpit Crew Review, taken off the Fuel Order page 1 Oct 2026 at the
+      // user's request. The six columns still exist and are still written, so
+      // the group is kept defined and the section returns with one facet line
+      // - the same decision as the two above.
+      'FuelOrderService.FuelOrders#CrewReview'
     ]);
     const { orphans } = sweepGroups();
     const fresh = orphans.filter(o => !KNOWN_ORPHAN.has(o));

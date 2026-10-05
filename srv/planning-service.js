@@ -89,6 +89,42 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 }
                 r.scheduled_arrival_lt = arrDate && arr ? `${arrDate} ${arr}` : null;
             }
+
+            // ----------------------------------------------------------------
+            // APU USAGE HOURS - the minutes the APU actually ran, as hours.
+            //
+            // KEYED THE WAY THE COST IS: allocated_flight is which flight
+            // BEARS the cycle, and it is what every other APU figure in the
+            // system sums on, so the hours shown here are the hours behind
+            // this flight's APU burn rather than a second, differently-keyed
+            // total. Cycles with no allocation fall back to the leg they were
+            // recorded against; OVERNIGHT and MAINTENANCE cycles belong to no
+            // leg at all and are counted nowhere, which is correct.
+            //
+            // NULL, NOT ZERO, when no cycle exists. Zero would assert the APU
+            // stood idle; the truth is that nothing was recorded.
+            // ----------------------------------------------------------------
+            const ids = rows.map(r => r.ID);
+            const COLS = ['flight_ID', 'allocated_flight_ID', 'running_minutes'];
+            // TWO SELECTS, NOT ONE DISJUNCTION. The cycles this flight bears,
+            // and then the cycles recorded against it that were never
+            // allocated anywhere - which is the fallback, stated rather than
+            // buried in an `or`.
+            const allocated = await SELECT.from('fuelsphere.APU_USAGE')
+                .columns(...COLS).where({ allocated_flight_ID: { in: ids } });
+            const unallocated = await SELECT.from('fuelsphere.APU_USAGE')
+                .columns(...COLS).where({ allocated_flight_ID: null, flight_ID: { in: ids } });
+            const minutesBy = new Map();
+            for (const c of [...allocated, ...unallocated]) {
+                const key = c.allocated_flight_ID || c.flight_ID;
+                if (!key) continue;
+                minutesBy.set(key, (minutesBy.get(key) || 0) + (Number(c.running_minutes) || 0));
+            }
+            for (const r of rows) {
+                const mins = minutesBy.get(r.ID);
+                r.apu_usage_hours = (mins === undefined || mins === null)
+                    ? null : Math.round((mins / 60) * 100) / 100;
+            }
         });
 
         // ====================================================================

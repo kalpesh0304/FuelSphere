@@ -153,11 +153,12 @@ describe('D50 — no annotation on any service points at nothing', () => {
   //
   // It fires BEFORE the sweep, which is why a stale constant is worse than it
   // looks: the whole dangling check was skipped for as long as it was wrong.
-  it('EXIT-3  ALL SEVENTEEN SERVICES, zero dangling', () => {
+  it('EXIT-3  ALL EIGHTEEN SERVICES, zero dangling', () => {
     const names = Object.keys(edmx).sort();
-    // Seventeen since Sep 2026: ExceptionService carries the four exception
-    // reports. Raised deliberately, as the note above says, never loosened.
-    assert.strictEqual(names.length, 17, `expected 17 services, compiled ${names.length}`);
+    // Eighteen since 30 Sep 2026: MappingService carries the S/4 posting maps
+    // (carrier master, station-plant, station-supplier, flight-supplier).
+    // Raised deliberately, as the note above says, never loosened.
+    assert.strictEqual(names.length, 18, `expected 18 services, compiled ${names.length}`);
 
     let TP = 0, TF = 0; const bad = [];
     const rows = [];

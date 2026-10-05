@@ -38,6 +38,11 @@ service BurnService {
         *,
         flight              : redirected to FlightSchedule,
         flight.flight_number as flight_number,  // denormalized for cross-app nav filtering (flight-overview)
+        // THE FLIGHT'S OWN DATE, so the report can be filtered by it. burn_date
+        // is when the burn was recorded and the two part company on a night
+        // sector - a leg that lands after midnight is reported against the day
+        // it flew, which is the day somebody looks it up by.
+        flight.flight_date   as flight_date,
         aircraft            : redirected to Aircraft,
         origin_airport      : redirected to Airports,
         destination_airport : redirected to Airports,
@@ -71,6 +76,15 @@ service BurnService {
         virtual null as expected_delta_kg      : Decimal(12,2),
         virtual null as actual_delta_kg        : Decimal(12,2),
         virtual null as uplift_value_usd       : Decimal(15,2),
+
+        // CARBON, per leg. (FOB out - FOB in) x the combustion factor, both
+        // read at read time - the factor is a parameter (PARAM-CO2-FACTOR) and
+        // the gauge pair is the flight's. carbon_basis says which pair was
+        // used, because a leg missing a reading falls back to the recorded
+        // burn and the figure should not pretend otherwise.
+        virtual null as carbon_emission_kg     : Decimal(15,3),
+        virtual null as co2_factor_v           : Decimal(8,4),
+        virtual null as carbon_basis_v         : String(20),
         virtual null as block_burn_kg          : Decimal(12,2),
         virtual null as block_burn_value_usd   : Decimal(15,2),
         virtual null as apu_hours              : Decimal(8,2),
@@ -81,10 +95,44 @@ service BurnService {
         // populated. The stored column keeps its object-page meaning.
         virtual null as apu_burn_sum_kg        : Decimal(12,2),
         virtual null as apu_burn_value_usd     : Decimal(15,2),
+        // BLOCK PLUS GROUND APU. The two are separate fuel - the APU runs on
+        // stand, outside the block period - so the total is what the leg and
+        // its turnaround actually cost the tail.
+        virtual null as total_burn_kg          : Decimal(12,2),
+        virtual null as total_burn_value_usd   : Decimal(15,2),
         virtual null as engine_burn_split_kg   : Decimal(12,2),
         virtual null as engine_burn_value_usd  : Decimal(15,2),
         virtual null as map_usd_per_kg         : Decimal(15,4),
-        virtual null as arrival_rob_kg         : Decimal(12,2)
+        virtual null as arrival_rob_kg         : Decimal(12,2),
+
+        // UNALLOCATED FUEL USAGE - what the ledger's running balance arrives
+        // at for this leg, less the aircraft's own arrival gauge. The ledger
+        // computes it (rob-recalculate.js) and this reads its block-burn line
+        // rather than recomputing, so the report and the ledger can never
+        // disagree. Ground APU burn, metering tolerance and rounding all land
+        // here; blank where the leg recorded no arrival gauge, because
+        // nothing can be compared against a reading that does not exist.
+        virtual null as unallocated_fuel_kg    : Decimal(12,2),
+
+        // ---- PLANNED BLOCK BURN, AND THE VARIANCE AGAINST IT ------------
+        //
+        // Asked for 5 Oct 2026: the planned figure is TRIP FUEL PLUS TAXI
+        // FUEL from the operational flight plan, which is what "block" means
+        // - chocks to chocks, the taxi included. FUEL_BURNS.planned_burn_kg
+        // is a stored figure from a different source and is no longer what
+        // the report shows.
+        //
+        // FROM THE ACTIVE PLAN ONLY. A flight can carry several plans - 684
+        // of 2,457 are SUPERSEDED - and summing them would add a revision to
+        // the revision that replaced it.
+        virtual null as planned_block_burn_kg  : Decimal(12,2),
+
+        // ACTUAL BLOCK BURN LESS PLANNED, so a positive figure means the leg
+        // burned MORE than the plan allowed. Named for the comparison it is,
+        // because the report carries other variances that are not this one.
+        virtual null as block_burn_variance_kg : Decimal(12,2),
+        virtual null as block_burn_variance_pct : Decimal(8,2),
+        virtual null as block_burn_variance_status : String(12)
     } actions {
         /**
          * Confirm burn record
@@ -151,6 +199,12 @@ service BurnService {
         // THE SAME ROWS IN LITRES - read-time conversions of the kilogram
         // columns (srv/lib/rob-litres.js). Display only; the ledger is kept
         // in kilograms.
+        // THE LINE TYPE IN WORDS. entry_type is the stored code and stays the
+        // filter; this is what the table shows. BURN reads as "Block burn"
+        // from 2 Oct 2026 now that APU_BURN sits beside it - the code was not
+        // renamed, because renaming an enum value rewrites 1,772 seeded rows
+        // and every filter anyone has saved.
+        virtual null as line_type_v    : String(20),
         virtual null as density_kgl    : Decimal(6,4),
         virtual null as qty_l          : Decimal(15,2),
         virtual null as opening_rob_l  : Decimal(15,2),

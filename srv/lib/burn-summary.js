@@ -129,10 +129,16 @@ async function applyFlightSummary(data) {
         .where({ ID: { in: flightIds } })) : [];
     const flightById = new Map(flights.map(f => [f.ID, f]));
 
+    // THE ACTIVE PLAN, NOT EVERY PLAN. A flight can carry several - 684 of
+    // 2,457 rows are SUPERSEDED - and the previous read took them all, so a
+    // revised flight had its dispatch quantity counted once per revision.
+    // plan_status is what separates the plan in force from its history.
     const dispatches = flightIds.length ? await cds.db.run(SELECT.from(DISPATCH)
-        .columns('flight_schedule_ID', 'required_uplift_kg')
+        .columns('flight_schedule_ID', 'required_uplift_kg', 'plan_status',
+                 'trip_fuel_kg', 'taxi_fuel_kg')
         .where({ flight_schedule_ID: { in: flightIds } })) : [];
-    const dispatchByFlight = groupBy(dispatches, 'flight_schedule_ID');
+    const activePlans = dispatches.filter(d => d.plan_status === 'ACTIVE');
+    const dispatchByFlight = groupBy(activePlans, 'flight_schedule_ID');
 
     // TICKETS REACH A FLIGHT TWO WAYS, and the second is not redundant. The
     // association is the intended link, but it was added late and the tickets
@@ -202,10 +208,23 @@ async function applyFlightSummary(data) {
 
     const ledger = tails.length ? await cds.db.run(SELECT.from(LEDGER)
         .columns('tail_number', 'record_date', 'line_order', 'record_time',
-                 'sequence', 'map_usd_per_kg')
+                 'sequence', 'map_usd_per_kg', 'flight_ID', 'entry_type',
+                 'unallocated_fuel_kg')
         .where({ tail_number: { in: tails } })
         .orderBy('record_date', 'line_order', 'record_time', 'sequence')) : [];
     const ledgerByTail = groupBy(ledger, 'tail_number');
+
+    // THE LEDGER'S OWN FIGURE, per flight. Taken from the block-burn line,
+    // which is where rob-recalculate.js writes it: that line is the point in
+    // the replay where the running balance can first be set against the
+    // arrival gauge. Reading it rather than recomputing it is what keeps this
+    // report and the FOB ledger from showing two different numbers.
+    const unallocByFlight = new Map();
+    for (const r of ledger) {
+        if (!r.flight_ID || r.entry_type !== 'BURN') continue;
+        if (r.unallocated_fuel_kg === null || r.unallocated_fuel_kg === undefined) continue;
+        unallocByFlight.set(r.flight_ID, num(r.unallocated_fuel_kg));
+    }
 
     /** The MAP prevailing on a tail at the end of a given flight date. */
     const mapAt = (tail, onDate) => {
@@ -238,8 +257,26 @@ async function applyFlightSummary(data) {
         row.fqis_in_kg  = fqisIn;
         row.arrival_rob_kg = fqisIn;   // the same number, named for its use
 
+        const unalloc = base.flight_ID ? unallocByFlight.get(base.flight_ID) : undefined;
+        row.unallocated_fuel_kg = (unalloc === undefined) ? null : mass(unalloc);
+
         const disp = dispatchByFlight.get(base.flight_ID) || [];
         row.dispatch_kg = mass(total(disp, d => num(d.required_uplift_kg)));
+
+        // ---- PLANNED BLOCK BURN: trip fuel plus taxi fuel ----------------
+        //
+        // What the operational flight plan allowed for chocks-to-chocks. Taxi
+        // is INSIDE the block and outside the trip, so a planned figure that
+        // omits it is not comparable with a block burn measured from the
+        // gauges - which is the whole point of the comparison below.
+        //
+        // NULL, NOT ZERO, where no active plan exists. Zero would assert the
+        // flight was planned to burn nothing.
+        const trip = total(disp, d => num(d.trip_fuel_kg));
+        const taxi = total(disp, d => num(d.taxi_fuel_kg));
+        const plannedBlock = (trip === null && taxi === null)
+            ? null : mass((trip || 0) + (taxi || 0));
+        row.planned_block_burn_kg = plannedBlock;
 
         // ---- the uplift, from the tickets against this leg ----------------
         const tks = ticketsByFlight.get(base.flight_ID) || [];
@@ -290,6 +327,34 @@ async function applyFlightSummary(data) {
         const apuKg = mass(total(cycles, c => num(c.apu_burn_kg)));
         row.apu_burn_sum_kg = apuKg;
 
+        // ---- THE VARIANCE, AGAINST THE PLAN --------------------------------
+        //
+        // Actual block burn less planned block burn: positive means the leg
+        // burned MORE than the plan allowed. Both sides are block figures, so
+        // the subtraction compares like with like - the reason the planned
+        // side had to gain taxi fuel.
+        //
+        // THE 5% BAND IS THE ONE ALREADY IN USE, read off the seeded rows
+        // rather than invented: every NORMAL row sits at or under 5.00% and
+        // every EXCEEDED row above it. Recomputing the status from the new
+        // basis keeps the word and the number telling the same story.
+        if (plannedBlock !== null && plannedBlock !== 0 && block !== null) {
+            row.block_burn_variance_kg = mass(block - plannedBlock);
+            const pct = ((block - plannedBlock) / plannedBlock) * 100;
+            row.block_burn_variance_pct = Number(pct.toFixed(2));
+            row.block_burn_variance_status = Math.abs(pct) <= 5 ? 'NORMAL' : 'EXCEEDED';
+        } else {
+            row.block_burn_variance_kg = null;
+            row.block_burn_variance_pct = null;
+            row.block_burn_variance_status = null;
+        }
+
+        // BLOCK PLUS APU, the fuel this leg and its turnaround consumed. The
+        // APU burn is additional to the block burn, not inside it (confirmed
+        // 2 Oct 2026), so these add rather than overlap.
+        row.total_burn_kg = (block !== null || apuKg !== null)
+            ? mass((block || 0) + (apuKg || 0)) : null;
+
         // HELD - see the header. Block less APU may understate the engine burn.
         row.engine_burn_split_kg = (block !== null && apuKg !== null)
             ? mass(block - apuKg) : (block !== null ? block : null);
@@ -303,6 +368,9 @@ async function applyFlightSummary(data) {
         row.block_burn_value_usd  = at(block);
         row.apu_burn_value_usd    = at(apuKg);
         row.engine_burn_value_usd = at(row.engine_burn_split_kg);
+        // Valued at the same price as its two parts, so the total is exactly
+        // their sum rather than a separately rounded figure.
+        row.total_burn_value_usd  = at(row.total_burn_kg);
     }
 }
 

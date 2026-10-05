@@ -28,6 +28,9 @@ annotate BurnService.FuelBurns with @(
         SelectionFields: [
             tail_number,
             burn_date,
+            // Asked for 1 Oct 2026. See the note in burn-service.cds on why
+            // this is not the same filter as burn_date.
+            flight_date,
             data_source,
             status,
             variance_status,
@@ -61,6 +64,11 @@ annotate BurnService.FuelBurns with @(
             { Value: expected_delta_kg, Label: 'Expected delta kg', ![@UI.Importance]: #Low },
             { Value: actual_delta_kg, Label: 'Actual delta kg', ![@UI.Importance]: #Medium },
             { Value: uplift_value_usd, Label: 'Uplift value USD', ![@UI.Importance]: #Medium },
+            // CARBON, per leg: (FOB out - FOB in) x the combustion factor.
+            // The basis column says which pair the figure came from, because a
+            // leg missing a gauge reading falls back to the recorded burn.
+            { Value: carbon_emission_kg, Label: 'Carbon emission (kg CO2)', ![@UI.Importance]: #High },
+            { Value: carbon_basis_v, Label: 'Emission basis', ![@UI.Importance]: #Low },
 
             // ---- consumption, APU and engine split ------------------------
             { Value: block_burn_kg, Label: 'Block burn kg', ![@UI.Importance]: #High },
@@ -69,30 +77,39 @@ annotate BurnService.FuelBurns with @(
             { Value: apu_rate_kg_hr, Label: 'APU rate kg/h', ![@UI.Importance]: #Low },
             { Value: apu_burn_sum_kg, Label: 'APU burn kg', ![@UI.Importance]: #Medium },
             { Value: apu_burn_value_usd, Label: 'APU burn value USD', ![@UI.Importance]: #Low },
+            { Value: total_burn_kg, Label: 'Total burn kg', ![@UI.Importance]: #High },
+            { Value: unallocated_fuel_kg, Label: 'Unallocated fuel usage (kg)', ![@UI.Importance]: #Medium },
+            { Value: total_burn_value_usd, Label: 'Total burn value USD', ![@UI.Importance]: #High },
             { Value: engine_burn_split_kg, Label: 'Engine burn kg', ![@UI.Importance]: #Medium },
             { Value: engine_burn_value_usd, Label: 'Engine burn value USD', ![@UI.Importance]: #Low },
             { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #Medium },
             { Value: arrival_rob_kg, Label: 'Arrival FOB kg', ![@UI.Importance]: #Medium },
 
             // ---- the burn record's own columns ----------------------------
-            { Value: planned_burn_kg, Label: 'Planned Burn (kg)', ![@UI.Importance]: #Low },
-            { Value: variance_kg, Label: 'Variance (kg)', ![@UI.Importance]: #Low },
-            { Value: variance_pct, Label: 'Variance %', ![@UI.Importance]: #Low },
-            { Value: variance_status, Label: 'Variance Status', ![@UI.Importance]: #Medium },
+            // PLANNED BLOCK BURN, and the variance against it (5 Oct 2026).
+            // The stored planned_burn_kg, variance_kg, variance_pct and
+            // variance_status came off this report with them: they compare a
+            // different planned figure against the same actual, and two
+            // variances under one heading is how a reader ends up arguing
+            // with the wrong number. The columns and their data are untouched
+            // on FUEL_BURNS for anything that still reads them.
+            { Value: planned_block_burn_kg, Label: 'Planned Block Burn (kg)', ![@UI.Importance]: #Medium },
+            { Value: block_burn_variance_kg, Label: 'Variance (Block burn) kg', ![@UI.Importance]: #Medium },
+            { Value: block_burn_variance_pct, Label: 'Variance (Block burn) %', ![@UI.Importance]: #Medium },
+            { Value: block_burn_variance_status, Label: 'Variance (Block burn) status', ![@UI.Importance]: #Medium },
             { Value: data_source, Label: 'Source', ![@UI.Importance]: #Low },
-            { Value: status, Label: 'Status', ![@UI.Importance]: #High },
-            {
-                $Type  : 'UI.DataFieldForAction',
-                Action : 'BurnService.importFuelBurnExcel',
-                Label  : 'Upload Fuel Burns',
-                Inline : false
-            },
-            {
-                $Type  : 'UI.DataFieldForAction',
-                Action : 'BurnService.importPlannedBurnExcel',
-                Label  : 'Upload Planned Burns',
-                Inline : false
-            }
+            { Value: status, Label: 'Status', ![@UI.Importance]: #High }
+            // UPLOAD FUEL BURNS AND UPLOAD PLANNED BURNS CAME OFF THIS TOOLBAR
+            // on 2 Oct 2026 at the user's request. This is a REPORT - it is
+            // opened to read 1,774 rows, and a hand-upload button beside that
+            // reading invites a second source for figures the burn pipeline
+            // already derives.
+            //
+            // THE ACTIONS THEMSELVES ARE UNTOUCHED. importFuelBurnExcel and
+            // importPlannedBurnExcel stay declared on BurnService with their
+            // handlers, so the integration can still call them and putting
+            // either button back is one annotation. Create and Delete stay as
+            // well - the user asked for the uploads only.
         ],
 
         // --- Default Sort ---
@@ -122,7 +139,7 @@ annotate BurnService.FuelBurns with @(
             Data: [
                 { Value: actual_burn_kg, Label: 'Actual Burn (kg)' },
                 { Value: planned_burn_kg, Label: 'Planned Burn (kg)' },
-                { Value: apu_burn_kg, Label: 'APU in Block (kg)' },
+                { Value: apu_burn_kg, Label: 'APU burn (kg)' },
                 { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
             ]
         },
@@ -196,7 +213,7 @@ annotate BurnService.FuelBurns with @(
         FieldGroup #BurnSplit: {
             Data: [
                 { Value: actual_burn_kg,  Label: 'Block Burn (kg)' },
-                { Value: apu_burn_kg,     Label: 'APU in Block (kg)' },
+                { Value: apu_burn_kg,     Label: 'APU burn (kg)' },
                 { Value: engine_burn_kg,  Label: 'Engine Burn (kg)' },
                 { Value: burn_time,       Label: 'Burn Time' },
                 { Value: finance_posted,  Label: 'Posted to Finance' },
@@ -268,6 +285,12 @@ annotate BurnService.FuelBurns with {
     // would need a currency or UoM column beside it that does not exist.
     // ------------------------------------------------------------------
     flight_date_v                 @title: 'Flight date'            @Common.FieldControl: #ReadOnly;
+    // THE STORED COLUMN, which SelectionFields offers as a filter. Without a
+    // title the filter field renders "flight_date" - a property label is the
+    // only label a filter field has, unlike a LineItem entry which can carry
+    // its own. The virtual above is the DISPLAY column and they are
+    // deliberately different filters (see burn-service.cds).
+    flight_date                   @title: 'Flight date (schedule)';
     sector                        @title: 'Sector'                 @Common.FieldControl: #ReadOnly;
     dispatch_kg                   @title: 'Dispatch kg'            @Common.FieldControl: #ReadOnly;
     fqis_out_kg                   @title: 'FOB out kg'            @Common.FieldControl: #ReadOnly;
@@ -277,6 +300,9 @@ annotate BurnService.FuelBurns with {
     expected_delta_kg             @title: 'Expected delta kg'      @Common.FieldControl: #ReadOnly;
     actual_delta_kg               @title: 'Actual delta kg'        @Common.FieldControl: #ReadOnly;
     uplift_value_usd              @title: 'Uplift value USD'       @Common.FieldControl: #ReadOnly;
+    carbon_emission_kg            @title: 'Carbon emission (kg CO2)' @Common.FieldControl: #ReadOnly;
+    co2_factor_v                  @title: 'Combustion factor'       @Common.FieldControl: #ReadOnly;
+    carbon_basis_v                @title: 'Emission basis'          @Common.FieldControl: #ReadOnly;
     block_burn_kg                 @title: 'Block burn kg'          @Common.FieldControl: #ReadOnly;
     block_burn_value_usd          @title: 'Block burn value USD'   @Common.FieldControl: #ReadOnly;
     apu_hours                     @title: 'APU hours'              @Common.FieldControl: #ReadOnly;
@@ -391,7 +417,10 @@ annotate BurnService.ROBLedger with @(
             { Value: record_date, Label: 'Flight date', ![@UI.Importance]: #High },
             { Value: flight.flight_number, Label: 'Flight', ![@UI.Importance]: #High },
             { Value: sector, Label: 'Sector', ![@UI.Importance]: #High },
-            { Value: entry_type, Label: 'Line type', ![@UI.Importance]: #High },
+            { Value: line_type_v, Label: 'Line type', ![@UI.Importance]: #High },
+            { Value: wt_avg_specific_gravity, Label: 'Wt avg sp. gravity', ![@UI.Importance]: #Medium },
+            { Value: specific_gravity, Label: 'Sp. gravity (uplift)', ![@UI.Importance]: #Low },
+            { Value: unallocated_fuel_kg, Label: 'Unallocated fuel kg', ![@UI.Importance]: #Medium },
             { Value: flight_aobt, Label: 'Flight AOBT (UTC)', ![@UI.Importance]: #High },
             { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket', ![@UI.Importance]: #High },
             { Value: fuel_order.order_number, Label: 'Fuel Order', ![@UI.Importance]: #High },
@@ -407,15 +436,16 @@ annotate BurnService.ROBLedger with @(
             { Value: map_usd_per_l, Label: 'MAP USD/L', ![@UI.Importance]: #High },
             { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #Low },
             { Value: rob_percentage, Label: 'FOB %', ![@UI.Importance]: #Low },
-            {
-                $Type  : 'UI.DataFieldForAction',
-                Action : 'BurnService.importROBInitialExcel',
-                Label  : 'Upload FOB Data',
-                Inline : false
-            },
-            // Placeholder - the handler returns the row untouched and says
-            // so. See burn-service.cds for why it is declared rather than
-            // left out until the calculation is specified.
+            // UPLOAD FOB DATA CAME OFF THIS TOOLBAR on 2 Oct 2026 with the two
+            // on the burn report above, and for the same reason: the ledger is
+            // a derived record - every row is produced by replaying a tail's
+            // movements - so a button that loads opening balances by hand sits
+            // beside 5,580 rows it cannot be reconciled against.
+            //
+            // importROBInitialExcel stays declared on BurnService with its
+            // handler. RE-CALCULATE STAYS ON THE SCREEN: replaying a tail from
+            // its opening balance is how the ledger is READ back into
+            // agreement, not a way of entering data into it.
             {
                 $Type  : 'UI.DataFieldForAction',
                 Action : 'BurnService.recalculate',
@@ -968,11 +998,16 @@ annotate BurnService.Airports with @(
 annotate BurnService.ROBLedger with @(
     Capabilities.FilterRestrictions.NonFilterableProperties: [
         density_kgl, qty_l, opening_rob_l, uplift_l, burn_l, adjustment_l,
-        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l
+        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l,
+        // ADDED 2 Oct 2026 with the line type itself. entry_type is the
+        // stored code and stays the filter; this is the words beside it,
+        // filled on read, so it cannot be one.
+        line_type_v
     ],
     Capabilities.SortRestrictions.NonSortableProperties: [
         density_kgl, qty_l, opening_rob_l, uplift_l, burn_l, adjustment_l,
-        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l
+        closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l,
+        line_type_v
     ]
 );
 annotate BurnService.ROBLedger with {

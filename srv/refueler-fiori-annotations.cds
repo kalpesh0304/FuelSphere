@@ -362,7 +362,7 @@ annotate RefuelerService.SalesOrders with {
             Text: flight.flight_number,
             TextArrangement: #TextFirst,
             ValueList: {
-                Label: 'Flight Schedule',
+                Label: 'Flight Detail',
                 CollectionPath: 'FlightSchedule',
                 Parameters: [
                     { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
