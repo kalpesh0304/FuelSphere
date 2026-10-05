@@ -193,27 +193,84 @@ module.exports = class MasterDataService extends cds.ApplicationService {
                 };
             }
             // ------------------------------------------------------------------
-            // STEP 4: Full replace in HANA Cloud (inside DB transaction)
-            // DELETE all → chunked INSERT
+            // STEP 4: MATCH ON THE BUSINESS KEY AND KEEP THE ROW'S IDENTITY.
+            //
+            // THIS WAS "DELETE all -> INSERT" AND IT DESTROYED THE LANDSCAPE ON
+            // 2 Oct 2026. These tables carry a generated UUID, and every other
+            // table points at that UUID: DESIGNATED_SUPPLIERS, MASTER_CONTRACTS,
+            // FUEL_ORDERS, INVOICES, SUPPLIER_CONTACTS, STATION_SUPPLIER_MAP and
+            // FLIGHT_SUPPLIER_MAP all store supplier_ID. mapRow does not set ID,
+            // so the re-insert minted a NEW uuid for every row and every one of
+            // those foreign keys was left pointing at a row that no longer
+            // existed. One button press, and the supplier went blank on the
+            // Flight Schedule, the fuel orders and the invoices at once, with
+            // nothing on any screen to say why. Nothing errored: a dangling
+            // managed association renders as empty, not as a failure.
+            //
+            // SO THE ROW'S IDENTITY IS NOW PRESERVED. S/4 is the authority on
+            // what a supplier is CALLED; this system is the authority on which
+            // row that supplier IS. The business key (config.keyField) joins the
+            // two, which is what a key is for.
+            //
+            // AND NOTHING IS DELETED. A row S/4 no longer returns is REPORTED,
+            // never removed - deleting it would break the same references by a
+            // slower route, and a fuel ticket from March still has to name the
+            // supplier that fuelled it even if that contract has since ended.
             // ------------------------------------------------------------------
             const dbEntity = cds.entities[config.dbEntity]
                           || cds.model.definitions[config.dbEntity];
+            const keyField = config.keyField;
+            if (!keyField) {
+                return {
+                    success     : false,
+                    recordsSync : 0,
+                    errors      : [`No keyField configured for ${entityType} - refusing to sync, `
+                                 + 'because without a business key the only way to apply this data '
+                                 + 'is to replace rows, and that breaks every reference to them.'],
+                    syncTime    : syncTimestamp
+                };
+            }
 
-            // await cds.tx(req, async (tx) => {
+            // 4a. What is already here, by business key.
+            const existing = await SELECT.from(dbEntity).columns('ID', keyField);
+            const idByKey = new Map(existing
+                .filter(r => r[keyField] !== null && r[keyField] !== undefined)
+                .map(r => [String(r[keyField]), r.ID]));
+            LOG.info(`[${entityType}] ${existing.length} existing row(s), `
+                   + `${idByKey.size} with a business key`);
 
-                // 4a. DELETE all existing records
-                LOG.info(`[${entityType}] Deleting existing records...`);
-                // await tx.run(DELETE.from(dbEntity));
-                await DELETE.from(dbEntity);
-                /***  4b. Batch INSERT — 200 rows per chunk to avoid DB limits **/
-                const CHUNK_SIZE = 200;
-                for (let i = 0; i < mappedRows.length; i += CHUNK_SIZE) {
-                    const chunk = mappedRows.slice(i, i + CHUNK_SIZE);
-                    // await tx.run(INSERT.into(dbEntity).entries(chunk));
-                    await INSERT.into(dbEntity).entries(chunk);
-                    LOG.info(`[${entityType}] Inserted ${Math.min(i + CHUNK_SIZE, mappedRows.length)}/${mappedRows.length}`);
+            // 4b. Each S/4 row onto the row that already holds its key, or in
+            //     as a new one. UPDATE rather than INSERT is the whole point:
+            //     the ID stays, so every reference to it stays.
+            let updated = 0, inserted = 0;
+            const seen = new Set();
+            for (const row of mappedRows) {
+                const key = row[keyField] === null || row[keyField] === undefined
+                    ? null : String(row[keyField]);
+                if (!key) { errors.push(`A row arrived with no ${keyField} and was skipped`); continue; }
+                seen.add(key);
+                const id = idByKey.get(key);
+                if (id) {
+                    // The key identifies the row; it is not re-written.
+                    const { [keyField]: _k, ID: _id, ...changes } = row;
+                    await UPDATE(dbEntity).set(changes).where({ ID: id });
+                    updated++;
+                } else {
+                    await INSERT.into(dbEntity).entries(row);
+                    inserted++;
                 }
-            // });
+            }
+
+            // 4c. What S/4 did not return. Reported, not touched.
+            const absent = [...idByKey.keys()].filter(k => !seen.has(k));
+            if (absent.length) {
+                LOG.info(`[${entityType}] ${absent.length} local row(s) not returned by S/4, left in place`);
+                errors.push(`${absent.length} record(s) exist here but were not returned by S/4 and `
+                          + `were left untouched (${keyField}: ${absent.slice(0, 10).join(', ')}`
+                          + `${absent.length > 10 ? ', ...' : ''}). They are still referenced by `
+                          + 'existing documents; deactivate them in the app if they are genuinely gone.');
+            }
+            LOG.info(`[${entityType}] ${updated} updated, ${inserted} inserted, ${absent.length} left alone`);
 
            const { cnt } = await cds.run(
             SELECT.one
@@ -222,7 +279,7 @@ module.exports = class MasterDataService extends cds.ApplicationService {
             );
 
             LOG.info(`[${entityType}] DB COUNT AFTER SYNC = ${cnt}`);
-            LOG.info(`[${entityType}] Sync complete. ${mappedRows.length} records inserted.`);
+            LOG.info(`[${entityType}] Sync complete. ${updated} updated, ${inserted} inserted.`);
 
             // ------------------------------------------------------------------
             // STEP 5: Return result — matches SyncResult type in .cds
