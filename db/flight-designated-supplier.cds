@@ -79,6 +79,13 @@
 namespace fuelsphere;
 
 using { fuelsphere as db } from './schema';
+// THE MAPS, which this view now resolves from (4 Oct 2026).
+using { fuelsphere.STATION_SUPPLIER_MAP, fuelsphere.FLIGHT_SUPPLIER_MAP }
+    from './mapping-tables';
+// DESIGNATED_SUPPLIERS is still imported because `station_default` on
+// FLIGHT_SCHEDULE still points at it. That association is the next thing to
+// move; until it does, the import stays rather than the file failing to
+// compile for a reason unrelated to this change.
 using { fuelsphere.DESIGNATED_SUPPLIERS } from './designated-suppliers';
 
 // ============================================================================
@@ -88,67 +95,120 @@ using { fuelsphere.DESIGNATED_SUPPLIERS } from './designated-suppliers';
 // from the one the join selected, and the view would decline for a row that
 // was never a candidate — or worse, fail to decline for one that was.
 // ============================================================================
-entity FLIGHT_DESIGNATED_SUPPLIER as select from db.FLIGHT_SCHEDULE as f
-    join DESIGNATED_SUPPLIERS as d
-      on  d.designation_type = 'PRIMARY'
-      and ( d.is_active    is null or d.is_active    =  true )
-      and ( d.station_code is null or d.station_code =  f.origin_airport )
-      and ( d.carrier_code is null or d.carrier_code =  f.airline_code )
-      and ( d.flight_number is null or d.flight_number = f.flight_number )
-      and ( d.valid_from   is null or d.valid_from   <= f.flight_date )
-      and ( d.valid_to     is null or d.valid_to     >= f.flight_date )
-{
-    key f.ID            as flight_ID,
-        d.ID            as designation_ID,
+// RESOLVED FROM THE TWO MAPS since 4 Oct 2026. DESIGNATED_SUPPLIERS held the
+// same answer and the maps held the posting coordinates, and CAR405 could only
+// report when the two disagreed. One question, one place.
+//
+// A UNION OF TWO ARMS, because the precedence now spans two tables. The flight
+// arm reads FLIGHT_SUPPLIER_MAP and reaches its station coverage row for the
+// contract - a flight-level row names a supplier, never a contract line, which
+// is exactly why CAR410 requires that supplier to be mapped at the station. The
+// station arm reads the station default, and only where the flight arm found
+// nothing: that `not exists` IS the precedence rule, flight beats station,
+// written the way the previous view wrote it.
+entity FLIGHT_DESIGNATED_SUPPLIER as
 
-        // WHICH AXIS ANSWERED, carried beside the name rather than resolved
-        // away. A planner reading "Air Total" needs to know whether that is
-        // an arrangement for THIS FLIGHT or what the station does by default
-        // — package D already took that decision for the two blocks and this
-        // is the same decision for the column.
-        case when d.flight_number is null then 'STATION' else 'FLIGHT' end
-                        as axis : String(8),
+    // ---- the flight arm ---------------------------------------------------
+    select from db.FLIGHT_SCHEDULE as f
+        join FLIGHT_SUPPLIER_MAP as m
+          on  ( m.is_active is null or m.is_active = true )
+          and m.flight_number        =  f.flight_number
+          and m.carrier.carrier_code =  f.airline_code
+        // THE STATION, THROUGH THE AIRPORT TABLE. A join condition may only
+        // name the FOREIGN KEYS of a managed association, and the airport's
+        // key is its uuid - iata_code is a field on the target. So the
+        // airport is joined and the three-letter code compared there.
+        join db.MASTER_AIRPORTS as ap
+          on  ap.ID        =  m.airport.ID
+          and ap.iata_code =  f.origin_airport
+          and ( m.valid_from is null or m.valid_from <= f.flight_date )
+          and ( m.valid_to   is null or m.valid_to   >= f.flight_date )
+        // The contract comes from the station coverage row for this supplier.
+        // LEFT, not inner: a missing coverage row must not delete the
+        // designation, it must show a supplier with no contract - which is a
+        // finding, where a vanished row is a silence.
+        left join STATION_SUPPLIER_MAP as c
+          on  c.airport.ID           =  m.airport.ID
+          and c.carrier.carrier_code =  m.carrier.carrier_code
+          and c.supplier.ID          =  m.supplier.ID
+          and ( c.is_active is null or c.is_active = true )
+          and ( c.valid_from is null or c.valid_from <= f.flight_date )
+          and ( c.valid_to   is null or c.valid_to   >= f.flight_date )
+    {
+        key f.ID                   as flight_ID,
+            m.ID                   as designation_ID,
+            'FLIGHT'               as axis : String(8),
+            m.supplier.supplier_name as supplier_name : String(100),
+            m.supplier.supplier_code as supplier_code : String(20),
+            c.contract.contract_number as contract_number : String(20),
+            m.supplier,
+            m.into_plane_agent.supplier_name as agent_name : String(100),
+            m.supplier_performs_uplift,
+            'PRIMARY'              as designation_type : String(20),
+            100                    as priority : Integer,
+            m.valid_from,
+            m.valid_to
+    }
+    // THE DECLINE: never pick among equals. Two live flight rows for the same
+    // flight, station and carrier resolve to nothing at all, so `designated`
+    // stays a to-one by construction rather than by hope.
+    where not exists (
+            select 1 from FLIGHT_SUPPLIER_MAP as y
+            where y.ID                 <> m.ID
+              and ( y.is_active is null or y.is_active = true )
+              and y.flight_number        =  f.flight_number
+              and y.airport.iata_code    =  f.origin_airport
+              and y.carrier.carrier_code =  f.airline_code
+              and ( y.valid_from is null or y.valid_from <= f.flight_date )
+              and ( y.valid_to   is null or y.valid_to   >= f.flight_date ) )
 
-        d.supplier.supplier_name     as supplier_name : String(100),
-        d.supplier.supplier_code     as supplier_code : String(20),
-        d.supplier,
-        d.into_plane_agent.supplier_name as agent_name : String(100),
-        d.supplier_performs_uplift,
-        d.designation_type,
-        d.priority,
-        d.valid_from,
-        d.valid_to
-}
-where
-    // ---- THE AXIS: a station row is excluded where a flight row exists -----
-    (   d.flight_number is not null
-     or not exists (
-            select 1 from DESIGNATED_SUPPLIERS as x
-            where x.flight_number    =  f.flight_number
-              and x.designation_type =  'PRIMARY'
-              and ( x.is_active    is null or x.is_active    =  true )
-              and ( x.station_code is null or x.station_code =  f.origin_airport )
-              and ( x.carrier_code is null or x.carrier_code =  f.airline_code )
-              and ( x.valid_from   is null or x.valid_from   <= f.flight_date )
-              and ( x.valid_to     is null or x.valid_to     >= f.flight_date ) ) )
+union all
 
-    // ---- THE DECLINE: never pick among equals -----------------------------
-    // No OTHER in-scope row sits at the same axis. Where one does, this row is
-    // suppressed, its twin is suppressed for the same reason, and the flight
-    // gets no row at all. Specificity and priority would separate them and
-    // that is the resolver's job, not this view's.
-    and not exists (
-            select 1 from DESIGNATED_SUPPLIERS as y
-            where y.ID              <> d.ID
-              and y.designation_type =  'PRIMARY'
-              and ( y.is_active    is null or y.is_active    =  true )
-              and ( y.station_code is null or y.station_code =  f.origin_airport )
-              and ( y.carrier_code is null or y.carrier_code =  f.airline_code )
-              and ( y.flight_number is null or y.flight_number = f.flight_number )
-              and ( y.valid_from   is null or y.valid_from   <= f.flight_date )
-              and ( y.valid_to     is null or y.valid_to     >= f.flight_date )
-              and ( case when y.flight_number is null then 2 else 1 end )
-                = ( case when d.flight_number is null then 2 else 1 end ) );
+    // ---- the station arm, only where the flight arm is silent -------------
+    select from db.FLIGHT_SCHEDULE as f
+        join STATION_SUPPLIER_MAP as m
+          on  ( m.is_active is null or m.is_active = true )
+          and m.is_default           =  true
+          and m.carrier.carrier_code =  f.airline_code
+        join db.MASTER_AIRPORTS as ap
+          on  ap.ID        =  m.airport.ID
+          and ap.iata_code =  f.origin_airport
+          and ( m.valid_from is null or m.valid_from <= f.flight_date )
+          and ( m.valid_to   is null or m.valid_to   >= f.flight_date )
+    {
+        key f.ID                   as flight_ID,
+            m.ID                   as designation_ID,
+            'STATION'              as axis : String(8),
+            m.supplier.supplier_name as supplier_name : String(100),
+            m.supplier.supplier_code as supplier_code : String(20),
+            m.contract.contract_number as contract_number : String(20),
+            m.supplier,
+            m.into_plane_agent.supplier_name as agent_name : String(100),
+            m.supplier_performs_uplift,
+            'PRIMARY'              as designation_type : String(20),
+            100                    as priority : Integer,
+            m.valid_from,
+            m.valid_to
+    }
+    where not exists (
+            // the flight arm answered, so this one must not
+            select 1 from FLIGHT_SUPPLIER_MAP as x
+            where ( x.is_active is null or x.is_active = true )
+              and x.flight_number        =  f.flight_number
+              and x.airport.iata_code    =  f.origin_airport
+              and x.carrier.carrier_code =  f.airline_code
+              and ( x.valid_from is null or x.valid_from <= f.flight_date )
+              and ( x.valid_to   is null or x.valid_to   >= f.flight_date ) )
+      and not exists (
+            // ...and the same decline, among station defaults
+            select 1 from STATION_SUPPLIER_MAP as y
+            where y.ID                 <> m.ID
+              and ( y.is_active is null or y.is_active = true )
+              and y.is_default           =  true
+              and y.airport.iata_code    =  f.origin_airport
+              and y.carrier.carrier_code =  f.airline_code
+              and ( y.valid_from is null or y.valid_from <= f.flight_date )
+              and ( y.valid_to   is null or y.valid_to   >= f.flight_date ) );
 
 
 // ============================================================================

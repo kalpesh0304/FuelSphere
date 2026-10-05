@@ -108,6 +108,22 @@ describe('Designation states', () => {
     assert.ok(before.designated, 'PLANT ANCHOR: AC901 does not resolve before the plant');
 
     try {
+      // PLANTED IN BOTH SOURCES, which is the whole point of this criterion.
+      // The RESOLVED VIEW reads STATION_SUPPLIER_MAP since 4 Oct 2026; the
+      // page's designation_state and the two blocks still read
+      // DESIGNATED_SUPPLIERS through `designation` and `station_default`. A
+      // tie planted in one place would make the two diverge for the wrong
+      // reason - because they read different tables rather than because they
+      // answer different questions - and this criterion exists to show the
+      // SECOND kind of divergence. Both inserts collapse to one when the two
+      // associations move to the maps.
+      const yyz = await cds.db.run(SELECT.one.from('fuelsphere.MASTER_AIRPORTS')
+        .columns('ID').where({ iata_code: 'YYZ' }));
+      await cds.db.run(INSERT.into('fuelsphere.STATION_SUPPLIER_MAP').entries({
+        ID: PLANT, airport_ID: yyz.ID, carrier_carrier_code: 'AC',
+        supplier_ID: sup.ID, contract_line_item: '10', is_default: true,
+        is_active: true, valid_from: '2026-01-01', valid_to: null,
+        supplier_performs_uplift: false }));
       await cds.db.run(INSERT.into('fuelsphere.DESIGNATED_SUPPLIERS').entries({
         ID: PLANT, flight_number: null, station_code: 'YYZ', carrier_code: 'AC',
         supplier_ID: sup.ID, designation_type: 'PRIMARY', priority: 50,
@@ -125,6 +141,7 @@ describe('Designation states', () => {
       out('with a same-axis tie planted: the resolved view declines (null) and the page still '
         + 'reads STATION_DEFAULT — the two sources diverge, and the blocks are the right one');
     } finally {
+      await cds.db.run(DELETE.from('fuelsphere.STATION_SUPPLIER_MAP').where({ ID: PLANT }));
       await cds.db.run(DELETE.from('fuelsphere.DESIGNATED_SUPPLIERS').where({ ID: PLANT }));
       assert.strictEqual((await read()).designation_state, 'STATION_DEFAULT',
         'the plant did not clean up');

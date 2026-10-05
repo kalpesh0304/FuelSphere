@@ -143,6 +143,25 @@ describe('D56 — the designated supplier column', () => {
       'PLANT ANCHOR: AC901 does not resolve to one row before the plant, so the plant proves nothing');
 
     try {
+      // PLANTED IN THE MAP, which is where the view reads since 4 Oct 2026.
+      // A second DEFAULT row at YYZ for AC is the same-axis tie this proves:
+      // two rows both claiming to be what the station does by default, which
+      // only specificity-then-priority could separate - and that lives in
+      // parameter-store, not in SQL.
+      const yyz = await cds.db.run(SELECT.one.from('fuelsphere.MASTER_AIRPORTS')
+        .columns('ID').where({ iata_code: 'YYZ' }));
+      await cds.db.run(INSERT.into('fuelsphere.STATION_SUPPLIER_MAP').entries({
+        ID: PLANT, airport_ID: yyz.ID, carrier_carrier_code: 'AC',
+        supplier_ID: byName['Air Total International'],
+        contract_line_item: '10', is_default: true,
+        is_active: true, valid_from: '2026-01-01', valid_to: null,
+        supplier_performs_uplift: false }));
+      // AND IN THE OLD TABLE, because two things read a designation right now
+      // and they read different tables: the VIEW resolves from the map (since
+      // 4 Oct 2026) while designation-resolver.js - which truthFor calls as
+      // the INDEPENDENT answer - still reads DESIGNATED_SUPPLIERS. The tie has
+      // to exist in both or one of the two sees no tie at all. This collapses
+      // back to a single insert when the resolver moves to the maps.
       await cds.db.run(INSERT.into('fuelsphere.DESIGNATED_SUPPLIERS').entries({
         ID: PLANT, flight_number: null, station_code: 'YYZ', carrier_code: 'AC',
         supplier_ID: byName['Air Total International'], designation_type: 'PRIMARY',
@@ -163,6 +182,7 @@ describe('D56 — the designated supplier column', () => {
       out(`plant: AC901 view rows 1 -> 0 (declines), resolver still answers `
         + `"${t.name}" from ${t.candidates} candidates by priority`);
     } finally {
+      await cds.db.run(DELETE.from('fuelsphere.STATION_SUPPLIER_MAP').where({ ID: PLANT }));
       await cds.db.run(DELETE.from('fuelsphere.DESIGNATED_SUPPLIERS').where({ ID: PLANT }));
     }
   });

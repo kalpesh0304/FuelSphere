@@ -1,0 +1,4 @@
+carrier_code;carrier_name;company_code;is_active;notes
+B6;JetBlue Airways;B600;true;From the mapping sheet of 30 Sep 2026.
+B7;JetBlue (second company code);B601;true;From the mapping sheet of 30 Sep 2026.
+AC;Air Canada;AC00;true;Added by the designation migration (4 Oct 2026). COMPANY CODE IS A PLACEHOLDER - set it before any posting is raised for this carrier.
