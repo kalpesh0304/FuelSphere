@@ -25,8 +25,8 @@ annotate InvoiceService.Invoices with @(
 annotate InvoiceService.Invoices with @(
     UI: {
         HeaderInfo: {
-            TypeName       : 'Invoice',
-            TypeNamePlural : 'Invoices',
+            TypeName       : 'Fuel Invoice',
+            TypeNamePlural : 'Fuel Invoices',
             Title          : { Value: invoice_number },
             Description    : { Value: supplier.supplier_name },
             ImageUrl       : 'sap-icon://receipt'
@@ -63,6 +63,10 @@ annotate InvoiceService.Invoices with @(
             { Value: dep_airport,         Label: 'Departure airport',  ![@UI.Importance]: #Medium },
             { Value: arr_airport,         Label: 'Arrival airport',    ![@UI.Importance]: #Medium },
             { Value: flight_status_v,     Label: 'Flight status',      ![@UI.Importance]: #Medium },
+            // THE SUPPLIER'S NAME, not only their invoice number. An invoice
+            // list that names neither the company nor the station is a list of
+            // numbers; this is the first thing anybody looks for.
+            { Value: supplier.supplier_name, Label: 'Supplier', ![@UI.Importance]: #High },
             { Value: invoice_number,      Label: 'Supplier invoice number', ![@UI.Importance]: #High },
             { Value: sap_invoice_number,  Label: 'SAP invoice number', ![@UI.Importance]: #High },
             { Value: invoice_status_v,    Label: 'Invoice status',     ![@UI.Importance]: #High },
@@ -149,18 +153,33 @@ annotate InvoiceService.Invoices with @(
             Visualizations: [ '@UI.LineItem' ]
         },
 
+        // ====================================================================
+        // THE HEADER, CUT TO WHAT WAS ASKED FOR (2 Oct 2026).
+        //
+        // It carried five groups and nineteen figures, five of them rule
+        // counters. The brief lists eight things: who the invoice is from,
+        // their number, the vendor invoice number and date, gross, net,
+        // currency, and the two verdicts. That is what is here now.
+        //
+        // THE COUNTERS ARE NOT DELETED, THEY ARE MOVED. #PostingGate and
+        // #RuleCoverage are now a section on the page below ("Validation and
+        // gate"). The five still sum, the gate is still dated, and a reader
+        // who wants to know WHY the header says "Exceptions exist" is one
+        // scroll from the answer rather than reading it in the header of
+        // every invoice that has nothing wrong with it.
+        // ====================================================================
         HeaderFacets: [
-            // FIRST, because it is the answer to the question the screen is
-            // open to settle.
+            // WHO IT IS FROM, first: the question anybody opening an invoice
+            // asks before any other.
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#PostingGate',
-                Label  : 'Posting Gate'
+                Target : '@UI.FieldGroup#SupplierHeader',
+                Label  : 'Supplier'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#InvoiceStatus',
-                Label  : 'Status'
+                Target : '@UI.FieldGroup#InvoiceIdentity',
+                Label  : 'Invoice'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -169,18 +188,43 @@ annotate InvoiceService.Invoices with @(
             },
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#MatchingStatus',
-                Label  : 'Matching'
+                Target : '@UI.FieldGroup#ValidationStatus',
+                Label  : 'Validation checks'
             },
-            // SECOND IN READING ORDER AFTER THE GATE, because the gate says
-            // whether the document may post and this says how much of that
-            // verdict rests on anything having been looked at.
             {
                 $Type  : 'UI.ReferenceFacet',
-                Target : '@UI.FieldGroup#RuleCoverage',
-                Label  : 'Rule coverage'
+                Target : '@UI.FieldGroup#MatchingStatus',
+                Label  : 'Matching'
             }
         ],
+
+        // THE SUPPLIER AND BOTH ITS NUMBERS. The code is what FuelSphere
+        // calls them; the SAP vendor number is what the posting will carry.
+        FieldGroup#SupplierHeader: {
+            Data: [
+                { Value: supplier.supplier_name, Label: 'Supplier' },
+                { Value: supplier.supplier_code, Label: 'Supplier code' },
+                { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no' }
+            ]
+        },
+
+        // THE DOCUMENT'S OWN IDENTITY, and how many lines arrived on it. The
+        // line count is in the header because a reader deciding whether to
+        // open a 100-line invoice wants to know it is 100 lines first.
+        FieldGroup#InvoiceIdentity: {
+            Data: [
+                { Value: invoice_number, Label: 'Vendor invoice number' },
+                { Value: invoice_date,   Label: 'Invoice date' },
+                { Value: total_lines,    Label: 'Invoice lines' }
+            ]
+        },
+
+        FieldGroup#ValidationStatus: {
+            Data: [
+                { Value: validation_status_v, Label: 'Validation checks',
+                  Criticality: validationCriticality }
+            ]
+        },
 
         // THE FIVE, AND THEY SUM. Shown together because the sum is the
         // reading: a document with 5 passed and 16 not checked is not the
@@ -234,8 +278,11 @@ annotate InvoiceService.Invoices with @(
 
         FieldGroup#MatchingStatus: {
             Data: [
-                { Value: match_status, Label: 'Matching', Criticality: matchingCriticality },
-                { Value: price_variance, Label: 'Variance' }
+                // THE TWO WORDS THE BRIEF ASKED FOR. The stored enum tells a
+                // price variance from a quantity one; that distinction is on
+                // the Three-Way Matching section, where there is room to act
+                // on it.
+                { Value: matching_status_v, Label: 'Matching', Criticality: matchingCriticality }
             ]
         },
 
@@ -263,6 +310,32 @@ annotate InvoiceService.Invoices with @(
                 ID     : 'ThreeWayMatching',
                 Label  : 'Three-Way Matching',
                 Target : '@UI.FieldGroup#ThreeWayMatching'
+            },
+            // STATUS AND APPROVAL, which the brief's header list does not
+            // name but the page still has to carry: where the invoice is in
+            // its own lifecycle is a different question from whether it may
+            // post, and taking it off the header was not a decision to stop
+            // showing it.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'InvoiceStatusSection',
+                Label  : 'Status',
+                Target : '@UI.FieldGroup#InvoiceStatus'
+            },
+            // WHERE THE HEADER'S "Exceptions exist" IS EXPLAINED. Both groups
+            // came off the header strip on 2 Oct 2026 and landed here, one
+            // scroll from the exception list they describe.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'PostingGateSection',
+                Label  : 'Posting gate',
+                Target : '@UI.FieldGroup#PostingGate'
+            },
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'RuleCoverageSection',
+                Label  : 'Rule coverage',
+                Target : '@UI.FieldGroup#RuleCoverage'
             },
             {
                 $Type  : 'UI.ReferenceFacet',
@@ -368,7 +441,8 @@ annotate InvoiceService.Invoices with @(
                 // leads General Information, and one input in two places on the
                 // same page is two boxes for one value.
                 { Value: supplier_ID, Label: 'Supplier' },
-                { Value: supplier.supplier_code, Label: 'Supplier Code' }
+                { Value: supplier.supplier_code, Label: 'Supplier Code' },
+                { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no' }
             ]
         },
 
@@ -770,8 +844,13 @@ annotate InvoiceService.InvoiceItems with @(
 annotate InvoiceService.Invoices with {
     supplier @(
         Common: {
+            Label: 'Supplier',
             Text: supplier.supplier_name,
-            TextArrangement: #TextFirst,
+            // TextOnly, NOT TextFirst. TextFirst appends the key, and this
+            // key is a uuid - reported 2 Oct 2026 as "alphanumeric
+            // non-readable text" in the vendor field, which is exactly what
+            // it is. Nobody reads a supplier by its uuid.
+            TextArrangement: #TextOnly,
             ValueList: {
                 Label: 'Suppliers',
                 CollectionPath: 'Suppliers',

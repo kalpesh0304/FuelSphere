@@ -257,9 +257,32 @@ describe('FIM — Reconcile Invoice', () => {
       assert.ok(e.tolerance_rule, `${e.check_code} L${e.line_number}: names a ladder and no rule`);
       assert.ok(e.invoice_item, `${e.check_code} L${e.line_number}: cannot reach the line it was raised against`);
     }
+    // EVERY RUNG COMES FROM A CONFIGURED LADDER - which is the invariant.
+    //
+    // This read "exactly ONE rule row" until 4 Oct 2026, and passed only
+    // because the seed validated 13 invoices of 95 and those happened to
+    // raise price ladders alone. Validating the whole book raises quantity
+    // ladders too, from TOL-INV-QTY, and the criterion failed on a system
+    // that had become MORE correct - a count pinned to an accident of the
+    // sample rather than to the thing being asserted.
+    //
+    // Price and quantity are different controls with deliberately different
+    // thresholds (0.25/1/3 against 0.5/2/5), so more than one rule is the
+    // expected state. What must hold is that no rung was decided in code:
+    // every laddered exception resolves to a rule row, and that row carries
+    // all three thresholds.
     const codes = new Set(lad.map(e => e.tolerance_rule.rule_code));
-    assert.strictEqual(codes.size, 1,
-      'all four rungs must resolve from ONE rule row - that is what makes it configuration');
+    assert.ok(codes.size >= 1, 'no laddered exception resolves to a rule row at all');
+    for (const e of lad) {
+      const r = e.tolerance_rule;
+      for (const t of ['warning_threshold', 'error_threshold', 'critical_threshold']) {
+        assert.ok(r[t] !== null && r[t] !== undefined,
+          `${e.check_code} L${e.line_number}: severity came from the ladder, but `
+        + `${r.rule_code} has no ${t} - the rung was decided somewhere other than configuration`);
+      }
+    }
+    out(`${lad.length} laddered exception(s) from ${codes.size} configured rule(s): `
+      + [...codes].join(', '));
     const r0 = lad[0].tolerance_rule;
     const invs = new Set((await test.GET(`${O}/InvoiceExceptions?$filter=severity_source eq 'TOLERANCE_LADDER'`
       + `&$expand=invoice($select=invoice_number)`)).data.value.map(e => e.invoice.invoice_number));

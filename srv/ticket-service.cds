@@ -45,6 +45,34 @@ service TicketService {
         // page reads flight.flight_date through the association as before.
         coalesce(flight.flight_date, order.flight.flight_date) as flight_date : Date,
         virtual null as statusCriticality : Integer,
+
+        // WHO SOLD THE FUEL, AND WHERE IT ENDED UP BILLED. Asked for 1 Oct
+        // 2026. All four are read at read time (srv/ticket-service.js) rather
+        // than stored: the supplier belongs to the order and the invoice line
+        // belongs to the invoice, and copying either onto the ticket would
+        // leave it saying something the source has since corrected.
+        //
+        // A ticket may carry several invoice lines in principle. Where it
+        // does, these name the FIRST and the count says so - the detail is in
+        // the invoice itself, and a ticket billed twice is an exception the
+        // invoice screens already report.
+        virtual null as supplier_name_v    : String(100),
+        virtual null as s4_vendor_no_v     : String(10),
+        virtual null as billing_status_v   : String(12),
+        // THE INVOICE'S KEY, so the link on the number can open that invoice
+        // rather than the invoice list. Not displayed - it exists to be handed
+        // to the target app as a startup parameter.
+        virtual null as invoice_id_v       : UUID,
+        virtual null as invoice_number_v   : String(30),
+        virtual null as invoice_line_v     : Integer,
+        virtual null as invoice_status_v   : String(20),
+        virtual null as invoice_count_v    : Integer,
+
+        // PROJECTED CARBON, uplift x the combustion factor. Projected, not
+        // emitted: the fuel is in the wing and may be burnt on another leg or
+        // tankered onward. This is the figure headed for SAP Green Ledger.
+        virtual null as carbon_projected_kg : Decimal(15,3),
+        virtual null as co2_factor_v        : Decimal(8,4),
         // Drives density_value/density_uom's FieldControl: mandatory on a
         // volume ticket, optional on a mass one. See applyDensityFieldControl.
         virtual null as densityFieldControl : Integer @UI.Hidden

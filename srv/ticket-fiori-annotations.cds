@@ -174,7 +174,14 @@ annotate TicketService.FuelTickets with @(
                     { $If: [ { $In: [{ $Path: 'status' }, ['Verified', 'Closed', 'Attached']] }, 3, 0 ] } ] } },
                 ![@UI.Importance]: #High
             },
-            { Value: match_status,       Label: 'Match Status',   ![@UI.Importance]: #Medium }
+            { Value: match_status,       Label: 'Match Status',   ![@UI.Importance]: #Medium },
+            // BILLING, ON THE LIST. The status says whether this ticket has
+            // reached an invoice and the number says which - and the number
+            // is a link to it. Both were on the object page only, so
+            // answering "has this been billed?" cost one navigation per
+            // ticket.
+            { Value: billing_status_v, Label: 'Billing status', ![@UI.Importance]: #Medium },
+            { Value: invoice_number_v, Label: 'Invoice number', ![@UI.Importance]: #Medium }
         ],
 
         HeaderFacets: [
@@ -186,7 +193,8 @@ annotate TicketService.FuelTickets with @(
             { $Type: 'UI.ReferenceFacet', ID: 'TicketDetails', Target: '@UI.FieldGroup#TicketDetails', Label: 'Ticket Details' },
             { $Type: 'UI.ReferenceFacet', ID: 'Measurement',   Target: '@UI.FieldGroup#Measurement',   Label: 'Meter & Density' },
             { $Type: 'UI.ReferenceFacet', ID: 'Pricing',       Target: '@UI.FieldGroup#Pricing',       Label: 'Rate & Amount' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Verification',  Target: '@UI.FieldGroup#Verification',  Label: 'Verification' }
+            { $Type: 'UI.ReferenceFacet', ID: 'Verification',  Target: '@UI.FieldGroup#Verification',  Label: 'Verification' },
+            { $Type: 'UI.ReferenceFacet', ID: 'Billing',       Target: '@UI.FieldGroup#Billing',       Label: 'Supplier & Invoice' }
         ],
 
         FieldGroup #TicketStatus: {
@@ -261,6 +269,27 @@ annotate TicketService.FuelTickets with @(
             ]
         },
 
+        // SUPPLIER AND INVOICE, filled on read by srv/ticket-service.js.
+        // billing_status is the same rule UNBILLED_TICKETS uses: BILLED when
+        // an invoice line references this ticket, UNBILLED when it has an
+        // order and no line, UNBILLABLE when it has neither - a ticket with
+        // no order can never be matched to an invoice, and saying so is the
+        // point of the third state.
+        FieldGroup #Billing: {
+            Data: [
+                { Value: supplier_name_v,  Label: 'Fuel supplier' },
+                { Value: s4_vendor_no_v,   Label: 'SAP supplier no' },
+                { Value: billing_status_v, Label: 'Billing status' },
+                { Value: invoice_number_v, Label: 'Invoice number' },
+                { Value: invoice_line_v,   Label: 'Invoice line item' },
+                { Value: invoice_status_v, Label: 'Invoice status' },
+                // PROJECTED, not emitted - the fuel is in the wing. This is
+                // the figure SAP Green Ledger receives.
+                { Value: carbon_projected_kg, Label: 'Projected carbon (kg CO2)' },
+                { Value: co2_factor_v,        Label: 'Combustion factor' }
+            ]
+        },
+
         FieldGroup #Verification: {
             Data: [
                 { Value: verified_by },
@@ -323,6 +352,36 @@ annotate TicketService.FuelTickets with {
     batch_coa_ref         @title: 'Batch Certificate';
     vehicle_id             @title: 'Vehicle';
     meter_serial           @title: 'Meter Serial';
+    // THE TICKET'S INVOICE, one click away. Semantic object `invoices`, the
+    // inbound the Manage Fuel Invoices app registers in its manifest.
+    //
+    // THE ID MAPPING IS NOT DECORATION. Fiori hands the target app every
+    // property named here, and the source row's own ID travels under the name
+    // `ID` unless it is renamed - the invoices app would read that as an
+    // invoice key and open nothing, or the wrong document. So ID is renamed
+    // to something that app ignores, and listed FIRST so it is emptied before
+    // anything useful is appended. This is the mirror of the link on the
+    // invoice side (invoice-fiori-annotations.cds), where the same ordering
+    // is recorded as load-bearing after it caused exactly that bug.
+    invoice_number_v @Common.SemanticObject: 'invoices'
+                     @Common.SemanticObjectMapping: [
+                         { LocalProperty: ID,               SemanticObjectProperty: 'FuelTicketID' },
+                         // THE INVOICE'S KEY, which is what makes this open the
+                         // invoice instead of the invoice LIST. Fiori deep-links
+                         // when the startup parameters carry the target's key;
+                         // with only a number to go on it can do no better than
+                         // open the list, which is what it did until 5 Oct 2026.
+                         //
+                         // THE KEY AND NOT A SEMANTIC KEY ON THE NUMBER: an
+                         // invoice number is unique per SUPPLIER, not globally
+                         // - INV473 exists to enforce that, and the seed carries
+                         // a deliberate repeat to prove the check works. Keyed
+                         // on the number, those would open one of two documents
+                         // with nothing to say which.
+                         { LocalProperty: invoice_id_v,     SemanticObjectProperty: 'ID' },
+                         { LocalProperty: invoice_number_v, SemanticObjectProperty: 'invoice_number' }
+                     ];
+
     meter_calibration_cert     @title: 'Calibration Certificate No'
                                @Common.QuickInfo: 'The meter calibration certificate this uplift was metered under, as printed on it. A meter reading is evidence only while the meter is certified.';
     meter_calibration_valid_to @title: 'Calibration Valid Until'
@@ -398,8 +457,29 @@ annotate TicketService.FuelTickets with {
 // ANY source - a startup parameter, an app state, or a user.
 // ============================================================================
 annotate TicketService.FuelTickets with @(
+    // THE WHOLE SET, not only the two that a cross-app link once collided
+    // with. The billing and carbon columns (srv/lib/ticket-billing.js,
+    // srv/lib/carbon-emissions.js) are filled on read like the two above and
+    // reject a filter for exactly the same reason; the column-header filter
+    // enabled on 2 Oct 2026 made that reachable from the table itself rather
+    // than only from an incoming startup parameter.
     Capabilities.FilterRestrictions: {
-        NonFilterableProperties: [ statusCriticality, densityFieldControl ]
+        NonFilterableProperties: [
+            statusCriticality, densityFieldControl,
+            supplier_name_v, s4_vendor_no_v, billing_status_v,
+            invoice_id_v, invoice_number_v, invoice_line_v, invoice_status_v,
+            invoice_count_v, carbon_projected_kg, co2_factor_v
+        ]
+    },
+    // AND SORTING, which the original pair never declared. $orderby is pushed
+    // down the same way $filter is: sorting a virtual is the same 500.
+    Capabilities.SortRestrictions: {
+        NonSortableProperties: [
+            statusCriticality, densityFieldControl,
+            supplier_name_v, s4_vendor_no_v, billing_status_v,
+            invoice_id_v, invoice_number_v, invoice_line_v, invoice_status_v,
+            invoice_count_v, carbon_projected_kg, co2_factor_v
+        ]
     }
 );
 

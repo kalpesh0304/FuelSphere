@@ -386,6 +386,7 @@ async function applyHeaderSummary(data, opts = {}) {
         row.reconciled_lines = ls.filter(l => l.resolved).length;
         row.unreconciled_lines = ls.length - row.reconciled_lines;
 
+
         // LITRES, like the lines beneath (Sep 2026). The kilogram totals came
         // off this view with the kilogram comparison: two units on one screen
         // is how a reader ends up comparing one against the other.

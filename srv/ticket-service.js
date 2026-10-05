@@ -11,6 +11,8 @@ const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = requi
 const { isMassUom } = require('./lib/fuel-uom');
 const { postTicketUplift } = require('./lib/rob-uplift');
 const { ensureDeliveryForTicket } = require('./lib/ticket-delivery');
+const { applyTicketBilling } = require('./lib/ticket-billing');
+const { applyTicketEmissions } = require('./lib/carbon-emissions');
 const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-variance');
 const { resolveTail } = require('./lib/tail-resolver');
 
@@ -30,6 +32,15 @@ module.exports = class TicketService extends cds.ApplicationService {
         // Density is mandatory where the quantity is in litres - see
         // applyDensityFieldControl. Registered on the draft too: the create
         // screen is a draft, and that is where the asterisk has to appear.
+        // WHO SOLD IT, WHERE IT WAS BILLED, AND WHAT IT WILL EMIT.
+        // Both on the ACTIVE and the DRAFT entity: a virtual element filled on
+        // only one comes back absent from the other, and Fiori stops rendering
+        // the field rather than showing it empty.
+        this.after(['READ'], [FuelTickets, FuelTickets.drafts], async (data) => {
+            await applyTicketBilling(data);
+            await applyTicketEmissions(data);
+        });
+
         this.after(['READ'], [FuelTickets, FuelTickets.drafts], async (data) => {
             await applyDensityFieldControl(data, isMassUom);
         });

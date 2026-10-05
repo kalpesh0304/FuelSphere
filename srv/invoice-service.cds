@@ -114,6 +114,58 @@ service InvoiceService {
         end as gateCriticality : Integer,
 
         // ====================================================================
+        // THE HEADER'S TWO VERDICTS, in the words the brief asked for
+        // (2 Oct 2026): "Pass / Exceptions exist" and "Matched / Exceeds
+        // tolerance". Each collapses a wider stored state into the one answer
+        // a reader opens an invoice to get.
+        //
+        // CASE EXPRESSIONS, NOT VIRTUALS. Everything they read is stored on
+        // this row, so they cost nothing to compute in the database - and
+        // being real columns they can be FILTERED and SORTED, which a virtual
+        // cannot: $filter and $orderby are pushed down, and a column that
+        // exists only in a handler is a 500 in either.
+        //
+        // NEITHER REPLACES WHAT IT SUMMARISES. posting_gate, the five rule
+        // counters and the full match_status enum are all still here and all
+        // still on the page, one section down.
+        //
+        // AND NEITHER CALLS AN ABSENCE A PASS. The gate reads NOT_CHECKED
+        // until the registry runs; reporting that as "Pass" would put a clean
+        // word on a document nobody has examined, which is the exact failure
+        // rules_not_applicable exists to make visible.
+        case
+            when posting_gate is null or posting_gate = 'NOT_CHECKED'
+                then 'Not checked'
+            when coalesce(open_hard_count, 0) + coalesce(open_soft_count, 0)
+               + coalesce(warning_count, 0) > 0
+                then 'Exceptions exist'
+            else 'Pass'
+        end as validation_status_v : String(20),
+
+        case
+            when posting_gate is null or posting_gate = 'NOT_CHECKED'
+                then 0
+            when coalesce(open_hard_count, 0) + coalesce(open_soft_count, 0)
+               + coalesce(warning_count, 0) > 0
+                then 1
+            else 3
+        end as validationCriticality : Integer,
+
+        // MATCHED, OR BY HOW MUCH IT IS NOT. The stored enum tells a price
+        // variance from a quantity one and both from an exception; the header
+        // asks only whether the document agrees with what was received, so
+        // the three collapse here and the specific one stays on the Three-Way
+        // Matching section, where there is room to act on it.
+        case match_status
+            when 'MATCHED'         then 'Matched'
+            when 'PRICE_VARIANCE'  then 'Exceeds tolerance'
+            when 'QTY_VARIANCE'    then 'Exceeds tolerance'
+            when 'PARTIAL_MATCH'   then 'Exceeds tolerance'
+            when 'EXCEPTION'       then 'Exceeds tolerance'
+            else 'Not matched'
+        end as matching_status_v : String(24),
+
+        // ====================================================================
         // WP-36 - THE HEADER LIST VIEW. Every figure below is the SUM of the
         // line figures, computed by srv/lib/invoice-summary.js so the header
         // and line views cannot disagree about one invoice. Virtual because
