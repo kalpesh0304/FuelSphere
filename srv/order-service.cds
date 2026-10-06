@@ -139,10 +139,26 @@ service FuelOrderService {
          * Cockpit crew review of fuel quantity (Step 4 of 7-step journey)
          * Captain confirms or adjusts dispatch quantity before refueling
          */
+        // NO @Common.Label HERE, AND IT WAS TRIED. Fiori elements takes BOTH
+        // the dialog title and its confirm button from the Label on the
+        // UI.DataFieldForAction that opened it, and ignores the action's own
+        // label entirely - measured on the deployed dialog, 5 Oct 2026, where
+        // both still read "Crew Review" with this set to something else. The
+        // two texts cannot be split by annotation; it takes a custom dialog.
         action crewReview(
+            @title: 'Captain'
+            @Common.FieldControl: #Mandatory
             captainName      : String,
+
+            // THE QUANTITY THE CAPTAIN WANTS, in kilograms. Left blank it
+            // means "as ordered" and the review records CONFIRMED.
+            @title: 'Adjusted Quantity (kg)'
             adjustedQuantity : Decimal,
+
+            @title: 'Reason for Adjustment'
             adjustmentReason : String,
+
+            @title: 'Crew Notes'
             notes            : String
         ) returns FuelOrders;
 

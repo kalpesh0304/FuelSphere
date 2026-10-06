@@ -1498,7 +1498,7 @@ annotate FuelOrderService.FlightDispatches with @(
             { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)', ![@UI.Importance]: #High },
             // UI-B-03: the two figures the whole plan resolves to, in the list
             // rather than one level down.
-            { Value: block_fuel_kg, Label: 'Block Fuel (kg)', ![@UI.Importance]: #High },
+            { Value: block_fuel_kg, Label: 'Total Fuel Requirement (kg)', ![@UI.Importance]: #High },
             { Value: required_uplift_kg, Label: 'Required Uplift (kg)', ![@UI.Importance]: #High },
             { Value: rob_departure_kg, Label: 'Plan FOB (Pre-fueling)', ![@UI.Importance]: #Medium },
             { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
@@ -1643,7 +1643,7 @@ annotate FuelOrderService.FlightDispatches with @(
                 { Value: taxi_fuel_kg,        Label: 'Taxi (kg)',             ![@UI.Importance]: #Medium },
                 { Value: additional_fuel_kg,  Label: 'Additional (kg)',       ![@UI.Importance]: #Medium },
                 { Value: extra_fuel_kg,       Label: 'Extra (kg)',            ![@UI.Importance]: #Medium },
-                { Value: block_fuel_kg,       Label: 'Block Fuel (kg)',       ![@UI.Importance]: #High },
+                { Value: block_fuel_kg,       Label: 'Total Fuel Requirement (kg)',       ![@UI.Importance]: #High },
                 { Value: required_uplift_kg,  Label: 'Required Uplift (kg)',  ![@UI.Importance]: #High }
             ]
         },
@@ -1993,7 +1993,7 @@ annotate FuelOrderService.FlightDispatches with {
     extra_fuel_kg         @title: 'Extra Fuel, Commander (kg)';
 
     // Derived, so read-only.
-    block_fuel_kg         @title: 'Block Fuel (kg)'      @Common.FieldControl: #ReadOnly;
+    block_fuel_kg         @title: 'Total Fuel Requirement (kg)'      @Common.FieldControl: #ReadOnly;
     required_uplift_kg    @title: 'Required Uplift (kg)' @Common.FieldControl: #ReadOnly;
 
     // Versioning. Every one of these is set by the import, never typed.

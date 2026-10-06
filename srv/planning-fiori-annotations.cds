@@ -236,7 +236,7 @@ annotate PlanningService.FlightDispatches with @(
         LineItem: [
             { Value: plan_version,       Label: 'Version',        ![@UI.Importance]: #High },
             { Value: plan_status,        Label: 'Status',         ![@UI.Importance]: #High },
-            { Value: block_fuel_kg,      Label: 'Block (kg)',     ![@UI.Importance]: #High },
+            { Value: block_fuel_kg,      Label: 'Total Fuel Requirement (kg)',     ![@UI.Importance]: #High },
             { Value: required_uplift_kg, Label: 'Uplift (kg)',    ![@UI.Importance]: #High },
             { Value: rob_departure_kg,   Label: 'FOB Dep (kg)',   ![@UI.Importance]: #Medium },
             { Value: alternate_airport,  Label: 'Alternate',      ![@UI.Importance]: #Medium },
@@ -254,7 +254,7 @@ annotate PlanningService.FlightDispatches with {
     plan_group_id       @title: 'Plan Family';
     plan_version        @title: 'Version';
     plan_status         @title: 'Status';
-    block_fuel_kg       @title: 'Block Fuel (kg)';
+    block_fuel_kg       @title: 'Total Fuel Requirement (kg)';
     required_uplift_kg  @title: 'Required Uplift (kg)';
     rob_departure_kg    @title: 'FOB at Departure (kg)';
     alternate_airport   @title: 'Alternate';
@@ -1200,7 +1200,7 @@ annotate PlanningService.FlightDispatches with @(
         { Value: trip_fuel_kg,        Label: 'Trip (kg)' },
         { Value: contingency_fuel_kg, Label: 'Contingency (kg)' },
         { Value: contingency_pct_of_trip, Label: '% of trip' },
-        { Value: block_fuel_kg,       Label: 'Block (kg)' },
+        { Value: block_fuel_kg,       Label: 'Total Fuel Requirement (kg)' },
         { Value: dispatch_qty_kg,     Label: 'Dispatch (kg)' },
         { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' },
         // Row-level cross-app navigation: standard UI.LineItem pattern, not
@@ -1729,7 +1729,7 @@ annotate PlanningService.FlightDispatches with @(
                 { Value: additional_fuel_kg,  Label: 'Additional — planned (kg)' },
                 { Value: taxi_fuel_kg,        Label: 'Taxi (kg)' },
                 { Value: extra_fuel_kg,       Label: 'Extra — commander (kg)' },
-                { Value: block_fuel_kg,       Label: 'Block = sum of the seven (kg)' },
+                { Value: block_fuel_kg,       Label: 'Total fuel requirement = sum of the seven (kg)' },
                 { Value: dispatch_qty_kg,     Label: 'Dispatch quantity, confirmed (kg)' },
                 { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' }
             ]
@@ -1932,7 +1932,7 @@ annotate PlanningService.FlightDispatches with {
     // constant 'KG' column on every row is a second place holding one fact.
     // The name carries it and the label says it.
     dispatch_qty_kg    @title: 'Dispatch Quantity (kg)';
-    block_fuel_kg      @title: 'Block Fuel (kg)'
+    block_fuel_kg      @title: 'Total Fuel Requirement (kg)'
                        @Common.QuickInfo: 'The sum of the seven components. Derived, never keyed - DSP450. The dispatcher-confirmed dispatch quantity should equal it.';
     required_uplift_kg @title: 'Required Uplift (kg)';
     rob_departure_kg   @title: 'FOB at Departure (kg)'
