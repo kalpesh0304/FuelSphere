@@ -603,3 +603,36 @@ annotate BurnService.ApuUsage actions {
 annotate BurnService.importFuelBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);
 annotate BurnService.importROBInitialExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);
 annotate BurnService.importPlannedBurnExcel with @(requires: ['BurnDataEdit', 'AdminAccess']);
+
+// ============================================================================
+// VALUATION SERVICE - Authorization (FIFO and moving-average fuel valuation)
+// ============================================================================
+//
+// NO NEW SCOPES, AND THAT IS THE POINT. The valuation is a second question
+// asked of movements somebody already has the right to read - the same
+// tickets, the same burns. Minting a scope for it would add a role template, a
+// role collection and a role assignment that every existing user would be
+// missing on the day it shipped, so the screen would be empty for everyone
+// until an administrator caught up. The FOB ledger's READ scopes are exactly
+// the right ones, and reusing them leaves xsuaa untouched.
+//
+// READ ONLY, WITH NOTHING TO GRANT. All three entities are @readonly in the
+// service, so no write grant is omitted here by oversight - there is no write
+// to grant. A row typed in by hand would be a valuation with no movement
+// behind it.
+
+using ValuationService from './valuation-service';
+
+annotate ValuationService with @(requires: 'authenticated-user');
+
+annotate ValuationService.StockMovements with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] }
+]);
+
+annotate ValuationService.StockBalances with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] }
+]);
+
+annotate ValuationService.BurnValuations with @(restrict: [
+    { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] }
+]);
