@@ -17,9 +17,22 @@ const { SELECT } = cds.ql;
  *   UNBILLED    no invoice line, but the ticket has an order
  *   UNBILLABLE  no invoice line AND no order - nothing to match against, ever
  *
- * A ticket with two invoice lines is possible and wrong. The first is named
- * and invoice_count says how many there are, rather than silently showing one
- * of them: the duplicate is the finding.
+ * A TICKET WITH TWO INVOICE LINES USED TO BE WRONG. Since 7 Oct 2026 it is
+ * routine: where a third-party into-plane agent fuels the aircraft, the
+ * supplier bills the fuel and the agent bills the uplift, so two lines on two
+ * invoices from two vendors are both correct. INV455 is keyed on ticket AND
+ * charge to match, and the object page lists every line.
+ *
+ * THE SCALARS BELOW NAME THE FUEL LINE, DELIBERATELY. They feed the LIST
+ * column "Invoice number" and the deep link that opens that invoice, and a
+ * ticket is first of all a record of fuel delivered - so the fuel invoice is
+ * the one a reader means. This mattered immediately: the agent's lines are
+ * numbered from 10 and the fuel lines run to 80, so ordering by line number
+ * alone handed the headline to the handling invoice on 716 tickets and pointed
+ * the deep link at the wrong document.
+ *
+ * invoice_count_v still counts ALL lines, and two is no longer a finding by
+ * itself - two lines of the SAME charge are, which is INV455's job.
  */
 
 const TICKET_COLUMNS = ['ID', 'order_ID'];
@@ -53,7 +66,7 @@ async function applyTicketBilling(rows) {
 
     // ---- the invoice lines that reference these tickets -------------------
     const lines = await cds.db.run(SELECT.from('fuelsphere.INVOICE_ITEMS')
-        .columns('ID', 'ticket_ID', 'invoice_ID', 'line_number')
+        .columns('ID', 'ticket_ID', 'invoice_ID', 'line_number', 'charge_type')
         .where({ ticket_ID: { in: ids } }));
 
     const invoiceIds = [...new Set(lines.map(l => l.invoice_ID).filter(Boolean))];
@@ -77,8 +90,13 @@ async function applyTicketBilling(rows) {
         r.supplier_name_v = supplier ? supplier.supplier_name : null;
         r.s4_vendor_no_v  = supplier ? supplier.s4_vendor_no : null;
 
+        // FUEL FIRST, THEN BY LINE NUMBER. A null charge counts as fuel: the
+        // column was added after 1,776 lines had been captured, and a line
+        // that predates it is a fuel line.
+        const chargeRank = (l) => ((l.charge_type || 'FUEL') === 'FUEL' ? 0 : 1);
         const own = (linesByTicket.get(r.ID) || [])
-            .sort((a, b) => (a.line_number || 0) - (b.line_number || 0));
+            .sort((a, b) => chargeRank(a) - chargeRank(b)
+                         || (a.line_number || 0) - (b.line_number || 0));
         const first = own[0] || null;
         const invoice = first ? invoiceById.get(first.invoice_ID) : null;
 

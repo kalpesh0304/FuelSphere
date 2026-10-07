@@ -1060,12 +1060,33 @@ annotate PlanningService.DesignatedSuppliers with @(
             // so they belong beside the name rather than one page deeper.
             { Value: supplier.supplier_code,    Label: 'Supplier code',   ![@UI.Importance]: #High },
             { Value: supplier.s4_vendor_no,     Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
-            { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
+            // The view carries the contract as a foreign key, not an
+            // association - a flight-level row overrides who FUELS, not what
+            // the fuel is bought on, so only the station arm has one and a
+            // path through an association would dangle on the other.
+            { Value: supplier_contract_ID,      Label: 'Fuel contract',   ![@UI.Importance]: #High },
             // TRUE means the supplier fuels its own product and the two agent
             // columns are EMPTY BY DESIGN - a different state from "not known
             // yet", and this column is what tells them apart.
             { Value: supplier_performs_uplift,  Label: 'Supplier fuels',  ![@UI.Importance]: #High },
-            { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent', ![@UI.Importance]: #High },
+
+            // ---- THE THREE CASES, 7 Oct 2026 ---------------------------
+            //
+            // into_plane_agent_name REPLACES into_plane_agent.supplier_name,
+            // and this is the column the whole change was asked for.
+            //
+            // The raw association is EMPTY wherever the supplier fuels its
+            // own product, which was 85 of 86 mappings - so this column read
+            // blank on nearly every flight, and a blank reads as missing data
+            // rather than as "no separate agent is involved". The derived
+            // name answers instead: the supplier under case 1, the agent
+            // under case 2, the word Self under case 3.
+            //
+            // The mode sits beside it because a supplier's name in an
+            // into-plane column is otherwise ambiguous between "the supplier
+            // fuels" and "an agent that happens to be the supplier".
+            { Value: into_plane_mode,           Label: 'Into-plane',      ![@UI.Importance]: #High },
+            { Value: into_plane_agent_name,     Label: 'Into-plane agent', ![@UI.Importance]: #High },
             { Value: into_plane_contract.contract_number, Label: 'Handling contract', ![@UI.Importance]: #Medium },
             { Value: valid_from,                Label: 'Valid from',      ![@UI.Importance]: #Medium },
             { Value: valid_to,                  Label: 'Valid to',        ![@UI.Importance]: #Medium }
@@ -1085,9 +1106,30 @@ annotate PlanningService.DesignatedSuppliers with @(
             // so they belong beside the name rather than one page deeper.
             { Value: supplier.supplier_code,    Label: 'Supplier code',   ![@UI.Importance]: #High },
             { Value: supplier.s4_vendor_no,     Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
-            { Value: supplier_contract.contract_number, Label: 'Fuel contract', ![@UI.Importance]: #High },
+            // The view carries the contract as a foreign key, not an
+            // association - a flight-level row overrides who FUELS, not what
+            // the fuel is bought on, so only the station arm has one and a
+            // path through an association would dangle on the other.
+            { Value: supplier_contract_ID,      Label: 'Fuel contract',   ![@UI.Importance]: #High },
             { Value: supplier_performs_uplift,  Label: 'Supplier fuels',  ![@UI.Importance]: #High },
-            { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent', ![@UI.Importance]: #High },
+
+            // ---- THE THREE CASES, 7 Oct 2026 ---------------------------
+            //
+            // into_plane_agent_name REPLACES into_plane_agent.supplier_name,
+            // and this is the column the whole change was asked for.
+            //
+            // The raw association is EMPTY wherever the supplier fuels its
+            // own product, which was 85 of 86 mappings - so this column read
+            // blank on nearly every flight, and a blank reads as missing data
+            // rather than as "no separate agent is involved". The derived
+            // name answers instead: the supplier under case 1, the agent
+            // under case 2, the word Self under case 3.
+            //
+            // The mode sits beside it because a supplier's name in an
+            // into-plane column is otherwise ambiguous between "the supplier
+            // fuels" and "an agent that happens to be the supplier".
+            { Value: into_plane_mode,           Label: 'Into-plane',      ![@UI.Importance]: #High },
+            { Value: into_plane_agent_name,     Label: 'Into-plane agent', ![@UI.Importance]: #High },
             { Value: into_plane_contract.contract_number, Label: 'Handling contract', ![@UI.Importance]: #Medium },
             { Value: valid_from,                Label: 'Valid from',      ![@UI.Importance]: #Medium },
             { Value: valid_to,                  Label: 'Valid to',        ![@UI.Importance]: #Medium }
@@ -1104,6 +1146,12 @@ annotate PlanningService.DesignatedSuppliers with {
     supplier                 @title: 'Supplier';
     supplier_contract        @title: 'Fuel Contract';
     supplier_performs_uplift @title: 'Supplier Performs Uplift';
+    self_fuelled             @title: 'Airline Fuels From Its Own Tanks';
+    into_plane_mode          @title: 'Into-Plane'
+                             @Common.QuickInfo: 'Which arrangement fuels this flight: SUPPLIER if the fuel supplier does it, THIRD_PARTY if a separate agent does, SELF if the airline fuels from its own tanks. Maintained on the mappings, never typed here.';
+    into_plane_agent_name    @title: 'Into-Plane Agent'
+                             @Common.QuickInfo: 'Who puts the fuel in the wing under any of the three arrangements - the supplier itself, a third-party agent, or the airline.';
+    supplier_contract_ID     @title: 'Fuel Contract';
     into_plane_agent         @title: 'Into-Plane Agent';
     into_plane_contract      @title: 'Handling Contract';
     designation_type         @title: 'Designation';
@@ -1257,7 +1305,26 @@ annotate PlanningService.FlightDesignation with @(
     UI.LineItem #DesignationCard: [
         { Value: axis,             Label: 'Applies by' },
         { Value: supplier.supplier_name,         Label: 'Supplier' },
-        { Value: into_plane_agent.supplier_name, Label: 'Into-plane agent' },
+
+        // ---- WHO PUTS IT IN THE WING, all three cases - 7 Oct 2026 ------
+        //
+        // into_plane_agent_name REPLACES into_plane_agent.supplier_name here,
+        // and the difference is what the planner sees on most flights.
+        //
+        // The raw association is EMPTY wherever the supplier fuels its own
+        // product - which is 2,137 of the 2,150 rows in this view. The column
+        // was therefore blank on almost every flight, and a blank reads as
+        // missing data rather than as "no separate agent is involved". The
+        // derived name answers the question instead: the supplier under case
+        // 1, the agent under case 2, the word Self under case 3.
+        //
+        // The mode sits beside it so the reader can tell WHICH arrangement
+        // produced that name - without it, a supplier name in this column is
+        // ambiguous between "the supplier fuels" and "an agent that happens
+        // to be the supplier".
+        { Value: into_plane_mode,      Label: 'Into-plane' },
+        { Value: into_plane_agent_name, Label: 'Into-plane agent' },
+
         { Value: station_code,     Label: 'Station' },
         { Value: designation_type, Label: 'Type' },
         { Value: priority,         Label: 'Priority' }
@@ -1383,6 +1450,14 @@ annotate PlanningService.FlightDesignation with {
     valid_to         @title: 'Valid To';
     flight_number    @title: 'Flight Number';
     flight_date      @title: 'Flight Date';
+
+    // ui02 EXIT-2c ratchets this: a card column with no title falls back to
+    // the technical name.
+    into_plane_mode  @title: 'Into-Plane'
+                     @Common.QuickInfo: 'Which arrangement fuels this flight: SUPPLIER if the fuel supplier does it, THIRD_PARTY if a separate agent does, SELF if the airline fuels from its own tanks.';
+    into_plane_agent_name @title: 'Into-Plane Agent'
+                     @Common.QuickInfo: 'Who puts the fuel in the wing, under any of the three arrangements. Maintained on the station-supplier and flight-supplier mappings, never typed here.';
+    self_fuelled     @title: 'Self-Fuelled';
 }
 annotate PlanningService.FlightAircraft with {
     registration        @title: 'Tail';

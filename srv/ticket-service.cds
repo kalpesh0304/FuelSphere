@@ -75,7 +75,14 @@ service TicketService {
         virtual null as co2_factor_v        : Decimal(8,4),
         // Drives density_value/density_uom's FieldControl: mandatory on a
         // volume ticket, optional on a mass one. See applyDensityFieldControl.
-        virtual null as densityFieldControl : Integer @UI.Hidden
+        virtual null as densityFieldControl : Integer @UI.Hidden,
+
+        // EVERY LINE THAT BILLED THIS TICKET, not just the first. The three
+        // scalars above name the first and count the rest, which was the
+        // whole truth while a second line meant a duplicate. A third-party
+        // into-plane agent bills the uplift separately from the supplier's
+        // fuel, so the object page needs the list.
+        invoice_lines : redirected to TicketInvoiceLines
     } actions {
         /**
          * Attach ticket to delivery
@@ -129,6 +136,42 @@ service TicketService {
 
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
+
+    /**
+     * TicketInvoiceLines - where this ticket was billed, one row per line.
+     *
+     * READ-ONLY AND FLATTENED. An invoice line belongs to the invoice, not to
+     * the ticket; this exists so the ticket page can SHOW the billing without
+     * owning it, and nothing here is editable from a ticket screen.
+     *
+     * THE VENDOR IS ON THE INVOICE, NOT THE LINE, and that is the column that
+     * makes the table worth having. Under a third-party into-plane
+     * arrangement the same ticket carries two lines whose charge_type differs
+     * and whose VENDORS differ - the supplier billed the fuel, the agent
+     * billed putting it in the wing. Without the vendor the two rows look
+     * like a duplicate; with it they read as the arrangement.
+     */
+    @readonly
+    entity TicketInvoiceLines as projection on db.INVOICE_ITEMS {
+        ID,
+        ticket,
+        invoice,
+        invoice.invoice_number           as invoice_number   : String(30),
+        invoice.invoice_date             as invoice_date     : Date,
+        invoice.status                   as invoice_status    : String(20),
+        invoice.supplier.supplier_name   as vendor_name       : String(100),
+        invoice.supplier.s4_vendor_no    as vendor_s4_no      : String(10),
+        line_number,
+        charge_type,
+        description,
+        quantity,
+        uom_code,
+        unit_price,
+        net_amount,
+        tax_amount,
+        line_match_status,
+        tolerance_status
+    };
 
     // Value-help target for uom_code's F4.
     @readonly

@@ -63,6 +63,17 @@ using { fuelsphere as db } from './schema';
 // The reverse of the link INVOICE_ITEMS already carries. Declared here
 // rather than in schema.cds because schema.cds cannot see a file that
 // imports it - the dependency runs one way.
+//
+// TWO READERS SINCE 7 Oct 2026. UNBILLED_TICKETS below asks only whether any
+// line exists; TicketService.TicketInvoiceLines projects the lines themselves
+// onto the ticket object page, because a ticket can now be billed TWICE
+// legitimately - the supplier for the fuel, a third-party into-plane agent
+// for putting it in the wing - and the page has to show both.
+//
+// Note what that does to the comment above this block: "one of them the
+// deliberately seeded INV455 double-billing" describes a duplicate, and a
+// fuel line beside an into-plane line is NOT one. INV455 is keyed on ticket
+// AND charge since the same date, so the two readings stay apart.
 extend db.FUEL_TICKETS with {
     invoice_lines : Association to many db.INVOICE_ITEMS
                     on invoice_lines.ticket = $self;

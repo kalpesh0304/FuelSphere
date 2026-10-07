@@ -195,6 +195,67 @@ entity STATION_SUPPLIER_MAP : cuid, db.ActiveStatus, db.AuditTrail {
         into_plane_agent   : Association to db.MASTER_SUPPLIERS;
         into_plane_contract : Association to db.MASTER_CONTRACTS;
 
+        // ---- CASE 3: THE AIRLINE'S OWN TANKS ----------------------------
+        //
+        // Added 7 Oct 2026. Some stations are fuelled by the airline itself -
+        // its own storage, its own trucks, its own staff - and until now the
+        // table could not say so. The nearest available row was "supplier
+        // does not fuel, and no agent named", which is the state meaning NOT
+        // YET DECIDED. Reading one as the other would have turned every
+        // half-finished mapping into a self-fuelling station.
+        //
+        // The FUEL is still bought from a supplier: the airline buys into its
+        // own tanks and puts it in its own wings. So `supplier` stays, and
+        // only the into-plane side changes.
+        self_fuelled       : Boolean default false;
+
+        // ---- THE THREE CASES, AS ONE ANSWER -----------------------------
+        //
+        // CALCULATED ON READ, NOT STORED, so it cannot contradict the flags
+        // it is read from. A fourth stored column would be a second truth
+        // about the same fact, and the two would drift the first time one was
+        // updated without the other.
+        //
+        //   SELF         the airline fuels from its own tanks
+        //   SUPPLIER     the fuel supplier also puts it in the wing
+        //   THIRD_PARTY  a separate into-plane agent does
+        //   null         not yet decided - and that is a real state, not a
+        //                default. An empty mapping must not read as an answer.
+        //
+        // SELF WINS over supplier_performs_uplift when both are set. The two
+        // together are contradictory and the save-time check refuses them
+        // (CAR410); this ordering decides what a row already in that state
+        // reads as, rather than leaving it to the row order of a CASE.
+        // `= true` IS LOAD-BEARING, not noise. SQLite accepts a boolean column
+        // as a CASE condition; HANA does not - it wants a PREDICATE, and
+        // `case when self_fuelled then` fails its view compiler with
+        // "incorrect syntax near THEN". Caught only at deployment, because
+        // every local harness runs on SQLite and passed. The rest of this
+        // codebase already writes the comparison out (see
+        // supplier_performs_uplift = false in db/supplier-contacts.cds).
+        into_plane_mode    : String(12) = case
+                                 when self_fuelled = true then 'SELF'
+                                 when supplier_performs_uplift = true then 'SUPPLIER'
+                                 when into_plane_agent.ID is not null then 'THIRD_PARTY'
+                             end;
+
+        // WHAT THE SCREENS SHOW, and the reason this field exists at all.
+        //
+        // Before it, case 1 displayed an EMPTY into-plane agent - correct in
+        // the database, because the supplier needs no agent, and useless on
+        // screen, where a blank reads as missing data. Every reader had to
+        // know to look at `supplier_performs_uplift` and mentally substitute
+        // the supplier's name. This does the substitution once, here.
+        //
+        // 'Self' is a LITERAL, not a supplier record. Creating a vendor row
+        // for the airline itself would put it in every supplier value help
+        // and make it selectable as a fuel supplier, which it is not.
+        into_plane_agent_name : String(100) = case
+                                    when self_fuelled = true then 'Self'
+                                    when supplier_performs_uplift = true then supplier.supplier_name
+                                    else into_plane_agent.supplier_name
+                                end;
+
         // The contract the fuel is bought on, and the line within it. The
         // value help offers contract LINES that cover the chosen station, so
         // supplier, contract and line arrive together and cannot be mismatched.
@@ -236,6 +297,67 @@ entity FLIGHT_SUPPLIER_MAP : cuid, db.ActiveStatus, db.AuditTrail {
         supplier_performs_uplift : Boolean default false;
         into_plane_agent    : Association to db.MASTER_SUPPLIERS;
         into_plane_contract : Association to db.MASTER_CONTRACTS;
+
+        // ---- CASE 3: THE AIRLINE'S OWN TANKS ----------------------------
+        //
+        // Added 7 Oct 2026. Some stations are fuelled by the airline itself -
+        // its own storage, its own trucks, its own staff - and until now the
+        // table could not say so. The nearest available row was "supplier
+        // does not fuel, and no agent named", which is the state meaning NOT
+        // YET DECIDED. Reading one as the other would have turned every
+        // half-finished mapping into a self-fuelling station.
+        //
+        // The FUEL is still bought from a supplier: the airline buys into its
+        // own tanks and puts it in its own wings. So `supplier` stays, and
+        // only the into-plane side changes.
+        self_fuelled       : Boolean default false;
+
+        // ---- THE THREE CASES, AS ONE ANSWER -----------------------------
+        //
+        // CALCULATED ON READ, NOT STORED, so it cannot contradict the flags
+        // it is read from. A fourth stored column would be a second truth
+        // about the same fact, and the two would drift the first time one was
+        // updated without the other.
+        //
+        //   SELF         the airline fuels from its own tanks
+        //   SUPPLIER     the fuel supplier also puts it in the wing
+        //   THIRD_PARTY  a separate into-plane agent does
+        //   null         not yet decided - and that is a real state, not a
+        //                default. An empty mapping must not read as an answer.
+        //
+        // SELF WINS over supplier_performs_uplift when both are set. The two
+        // together are contradictory and the save-time check refuses them
+        // (CAR410); this ordering decides what a row already in that state
+        // reads as, rather than leaving it to the row order of a CASE.
+        // `= true` IS LOAD-BEARING, not noise. SQLite accepts a boolean column
+        // as a CASE condition; HANA does not - it wants a PREDICATE, and
+        // `case when self_fuelled then` fails its view compiler with
+        // "incorrect syntax near THEN". Caught only at deployment, because
+        // every local harness runs on SQLite and passed. The rest of this
+        // codebase already writes the comparison out (see
+        // supplier_performs_uplift = false in db/supplier-contacts.cds).
+        into_plane_mode    : String(12) = case
+                                 when self_fuelled = true then 'SELF'
+                                 when supplier_performs_uplift = true then 'SUPPLIER'
+                                 when into_plane_agent.ID is not null then 'THIRD_PARTY'
+                             end;
+
+        // WHAT THE SCREENS SHOW, and the reason this field exists at all.
+        //
+        // Before it, case 1 displayed an EMPTY into-plane agent - correct in
+        // the database, because the supplier needs no agent, and useless on
+        // screen, where a blank reads as missing data. Every reader had to
+        // know to look at `supplier_performs_uplift` and mentally substitute
+        // the supplier's name. This does the substitution once, here.
+        //
+        // 'Self' is a LITERAL, not a supplier record. Creating a vendor row
+        // for the airline itself would put it in every supplier value help
+        // and make it selectable as a fuel supplier, which it is not.
+        into_plane_agent_name : String(100) = case
+                                    when self_fuelled = true then 'Self'
+                                    when supplier_performs_uplift = true then supplier.supplier_name
+                                    else into_plane_agent.supplier_name
+                                end;
 
         valid_from    : Date @mandatory;
         valid_to      : Date;                       // null = open-ended

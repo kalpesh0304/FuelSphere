@@ -937,12 +937,20 @@ service PlanningService {
      * service") and the flight page's supplier block has nothing to bind to -
      * D47's first kind.
      */
+    //
+    // READS THE MAPS SINCE 7 Oct 2026, not DESIGNATED_SUPPLIERS. The three
+    // into-plane cases are recorded on the maps, and this is the entity the
+    // flight page's two supplier blocks actually bind - so while it projected
+    // the legacy table, editing a mapping changed nothing on the flight page
+    // and case 3 could not be shown at all. See db/designated-suppliers.cds.
+    //
+    // `station` is gone from the redirects because the view carries
+    // station_code as a plain column rather than an association - the two
+    // line items bind the code, not the airport.
     @readonly
-    entity DesignatedSuppliers as projection on db.DESIGNATED_SUPPLIERS {
+    entity DesignatedSuppliers as projection on ds.DESIGNATION_FROM_MAPS {
         *,
-        station             : redirected to Airports,
         supplier            : redirected to Suppliers,
-        supplier_contract   : redirected to Contracts,
         into_plane_agent    : redirected to Suppliers,
         into_plane_contract : redirected to Contracts
     };

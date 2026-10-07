@@ -180,7 +180,7 @@ annotate MappingService.StationSupplierMappings with @(
             Title          : { Value: airport.iata_code },
             Description    : { Value: supplier.supplier_name }
         },
-        SelectionFields: [ airport_ID, carrier_carrier_code, supplier_ID, is_active ],
+        SelectionFields: [ airport_ID, carrier_carrier_code, supplier_ID, into_plane_mode, is_active ],
         LineItem: [
             { Value: airport.iata_code,             Label: 'Airport' },
             { Value: carrier_carrier_code,          Label: 'Carrier code' },
@@ -188,6 +188,13 @@ annotate MappingService.StationSupplierMappings with @(
             { Value: supplier.s4_vendor_no,         Label: 'SAP supplier no' },
             { Value: contract.s4_contract_number,   Label: 'SAP contract no' },
             { Value: contract_line_item,            Label: 'Contract line item' },
+            // ---- WHO PUTS IT IN THE WING, added 7 Oct 2026 --------------
+            // The mode is the filter and the name is the answer. Case 1 used
+            // to show an empty agent, which is true in the database and
+            // useless on screen; into_plane_agent_name resolves all three
+            // cases to the name a reader wants. See db/mapping-tables.cds.
+            { Value: into_plane_mode,               Label: 'Into-plane' },
+            { Value: into_plane_agent_name,         Label: 'Into-plane agent' },
             { Value: valid_from,                    Label: 'Valid from' },
             { Value: valid_to,                      Label: 'Valid to' },
             { Value: is_active,                     Label: 'Active' }
@@ -196,7 +203,9 @@ annotate MappingService.StationSupplierMappings with @(
             { $Type: 'UI.ReferenceFacet', ID: 'SupplierMapping',
               Target: '@UI.FieldGroup#SupplierMapping', Label: 'Mapping' },
             { $Type: 'UI.ReferenceFacet', ID: 'SupplierS4',
-              Target: '@UI.FieldGroup#SupplierS4', Label: 'What posts to S/4' }
+              Target: '@UI.FieldGroup#SupplierS4', Label: 'What posts to S/4' },
+            { $Type: 'UI.ReferenceFacet', ID: 'IntoPlane',
+              Target: '@UI.FieldGroup#IntoPlane', Label: 'Into-plane arrangement' }
         ],
         FieldGroup #SupplierMapping: {
             Data: [
@@ -212,6 +221,26 @@ annotate MappingService.StationSupplierMappings with @(
         },
         // The numbers themselves are the masters', shown here so the person
         // maintaining the mapping can see what will actually be posted.
+        // THE THREE CASES, ON ONE CARD. The two flags are what a person
+        // sets; the two below them are what the system reads back, so the
+        // consequence of a tick is visible on the same card rather than only
+        // in the list.
+        //
+        // supplier_performs_uplift and self_fuelled MUST NOT BOTH BE SET -
+        // the save-time check refuses the pair (CAR410). They are separate
+        // ticks rather than one dropdown because that is the shape the
+        // columns already had on 86 live rows.
+        FieldGroup #IntoPlane: {
+            Data: [
+                { Value: supplier_performs_uplift, Label: 'Supplier fuels the aircraft' },
+                { Value: self_fuelled,             Label: 'Airline fuels from its own tanks' },
+                { Value: into_plane_agent_ID,      Label: 'Into-plane agent' },
+                { Value: into_plane_contract_ID,   Label: 'Handling contract' },
+                { Value: into_plane_mode,          Label: 'Resolved as' },
+                { Value: into_plane_agent_name,    Label: 'Shown on the flight as' }
+            ]
+        },
+
         FieldGroup #SupplierS4: {
             Data: [
                 { Value: supplier.s4_vendor_no,       Label: 'SAP supplier no' },
@@ -232,6 +261,17 @@ annotate MappingService.StationSupplierMappings with {
     valid_from           @title: 'Valid from' @Common.FieldControl: #Mandatory;
     valid_to             @title: 'Valid to';
     is_active            @title: 'Active';
+    supplier_performs_uplift @title: 'Supplier fuels the aircraft'
+                     @Common.QuickInfo: 'Case 1: the company that sold the fuel also puts it in the wing, so no separate agent is named.';
+    self_fuelled     @title: 'Airline fuels from its own tanks'
+                     @Common.QuickInfo: 'Case 3: the airline buys into its own storage and fuels the aircraft itself. The fuel still has a supplier; the into-plane side reads Self.';
+    into_plane_agent_ID    @title: 'Into-plane agent'
+                     @Common.QuickInfo: 'Case 2: a third party takes the fuel from the supplier and puts it in the wing, and bills that service separately.';
+    into_plane_contract_ID @title: 'Handling contract';
+    into_plane_mode  @title: 'Into-plane'
+                     @Common.QuickInfo: 'Which of the three arrangements this row describes. Derived from the two flags and the agent, so it cannot disagree with them. Empty means not yet decided.';
+    into_plane_agent_name  @title: 'Into-plane agent'
+                     @Common.QuickInfo: 'The name the flight screens show: the supplier under case 1, the agent under case 2, and the word Self under case 3.';
 }
 
 // ===========================================================================
@@ -246,20 +286,29 @@ annotate MappingService.FlightSupplierMappings with @(
             Title          : { Value: flight_number },
             Description    : { Value: supplier.supplier_name }
         },
-        SelectionFields: [ flight_number, airport_ID, carrier_carrier_code, supplier_ID, is_active ],
+        SelectionFields: [ flight_number, airport_ID, carrier_carrier_code, supplier_ID, into_plane_mode, is_active ],
         LineItem: [
             { Value: flight_number,          Label: 'Flight no' },
             { Value: airport.iata_code,      Label: 'Airport' },
             { Value: carrier_carrier_code,   Label: 'Carrier code' },
             { Value: supplier.supplier_name, Label: 'Supplier' },
             { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no' },
+            // ---- WHO PUTS IT IN THE WING, added 7 Oct 2026 --------------
+            // The mode is the filter and the name is the answer. Case 1 used
+            // to show an empty agent, which is true in the database and
+            // useless on screen; into_plane_agent_name resolves all three
+            // cases to the name a reader wants. See db/mapping-tables.cds.
+            { Value: into_plane_mode,               Label: 'Into-plane' },
+            { Value: into_plane_agent_name,         Label: 'Into-plane agent' },
             { Value: valid_from,             Label: 'Valid from' },
             { Value: valid_to,               Label: 'Valid to' },
             { Value: is_active,              Label: 'Active' }
         ],
         Facets: [
             { $Type: 'UI.ReferenceFacet', ID: 'FlightMapping',
-              Target: '@UI.FieldGroup#FlightMapping', Label: 'Mapping' }
+              Target: '@UI.FieldGroup#FlightMapping', Label: 'Mapping' },
+            { $Type: 'UI.ReferenceFacet', ID: 'IntoPlane',
+              Target: '@UI.FieldGroup#IntoPlane', Label: 'Into-plane arrangement' }
         ],
         FieldGroup #FlightMapping: {
             Data: [
@@ -271,6 +320,26 @@ annotate MappingService.FlightSupplierMappings with @(
                 { Value: valid_from,             Label: 'Valid from' },
                 { Value: valid_to,               Label: 'Valid to' },
                 { Value: is_active,              Label: 'Active' }
+            ]
+        },
+
+        // THE THREE CASES, ON ONE CARD. The two flags are what a person
+        // sets; the two below them are what the system reads back, so the
+        // consequence of a tick is visible on the same card rather than only
+        // in the list.
+        //
+        // supplier_performs_uplift and self_fuelled MUST NOT BOTH BE SET -
+        // the save-time check refuses the pair (CAR410). They are separate
+        // ticks rather than one dropdown because that is the shape the
+        // columns already had on 86 live rows.
+        FieldGroup #IntoPlane: {
+            Data: [
+                { Value: supplier_performs_uplift, Label: 'Supplier fuels the aircraft' },
+                { Value: self_fuelled,             Label: 'Airline fuels from its own tanks' },
+                { Value: into_plane_agent_ID,      Label: 'Into-plane agent' },
+                { Value: into_plane_contract_ID,   Label: 'Handling contract' },
+                { Value: into_plane_mode,          Label: 'Resolved as' },
+                { Value: into_plane_agent_name,    Label: 'Shown on the flight as' }
             ]
         }
     }
@@ -284,6 +353,17 @@ annotate MappingService.FlightSupplierMappings with {
     valid_from           @title: 'Valid from' @Common.FieldControl: #Mandatory;
     valid_to             @title: 'Valid to';
     is_active            @title: 'Active';
+    supplier_performs_uplift @title: 'Supplier fuels the aircraft'
+                     @Common.QuickInfo: 'Case 1: the company that sold the fuel also puts it in the wing, so no separate agent is named.';
+    self_fuelled     @title: 'Airline fuels from its own tanks'
+                     @Common.QuickInfo: 'Case 3: the airline buys into its own storage and fuels the aircraft itself. The fuel still has a supplier; the into-plane side reads Self.';
+    into_plane_agent_ID    @title: 'Into-plane agent'
+                     @Common.QuickInfo: 'Case 2: a third party takes the fuel from the supplier and puts it in the wing, and bills that service separately.';
+    into_plane_contract_ID @title: 'Handling contract';
+    into_plane_mode  @title: 'Into-plane'
+                     @Common.QuickInfo: 'Which of the three arrangements this row describes. Derived from the two flags and the agent, so it cannot disagree with them. Empty means not yet decided.';
+    into_plane_agent_name  @title: 'Into-plane agent'
+                     @Common.QuickInfo: 'The name the flight screens show: the supplier under case 1, the agent under case 2, and the word Self under case 3.';
 }
 
 // ===========================================================================

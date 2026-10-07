@@ -103,12 +103,29 @@ describe('C — supplier contacts', () => {
     it('EXIT-4  the reading order is DECIDED, not alphabetical', async () => {
         // DISPUTES comes first alphabetically and is the one you ring last.
         // 'AGENT' < 'SUPPLIER' would work today by accident.
+        // ASKED PER PARTY, NOT OFF ONE PAGE. This read $top=200 and took the
+        // distinct parties from it, which worked while AGENT rows numbered a
+        // handful. The three into-plane cases put a third-party agent at JFK,
+        // BOS and FLL, so AGENT rows now fill the first page on their own and
+        // SUPPLIER never appeared in it - the criterion failed while the
+        // ORDERING it exists to check was still correct.
+        //
+        // The rank is the fact being asserted, so each party is asked for its
+        // own rank and the page size stops mattering.
+        const ranks = [];
+        for (const party of ['AGENT', 'SUPPLIER']) {
+            const { data: d } = await test.GET(
+                `${O}/FlightContacts?$select=party,partyRank&$filter=party eq '${party}'&$top=1`);
+            assert.ok(d.value.length, `no ${party} row at all - the party split is not working`);
+            ranks.push(`${d.value[0].partyRank}:${d.value[0].party}`);
+        }
+        assert.deepStrictEqual(ranks.slice().sort(), ['1:AGENT', '2:SUPPLIER'],
+            `party order is ${ranks.join(' ')} — AGENT first, because where the supplier does not `
+          + `perform its own uplift the agent is who a planner actually rings`);
+        const parties = ranks.slice().sort();
+
         const { data } = await test.GET(
             `${O}/FlightContacts?$select=party,partyRank,role_code,sort_order&$orderby=partyRank,sort_order&$top=200`);
-        const parties = [...new Set(data.value.map(r => `${r.partyRank}:${r.party}`))];
-        assert.deepStrictEqual(parties, ['1:AGENT','2:SUPPLIER'],
-            `party order is ${parties.join(' ')} — AGENT first, because where the supplier does not `
-          + `perform its own uplift the agent is who a planner actually rings`);
         const first = data.value.filter(r => r.partyRank === 1).map(r => r.role_code);
         assert.strictEqual(first[0], 'UPLIFT',
             `the first role is ${first[0]}, not UPLIFT. Sorting on role_code would put DISPUTES first, `

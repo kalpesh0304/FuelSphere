@@ -241,7 +241,23 @@ entity FLIGHT_CONTACTS as select from dsg.FLIGHT_DESIGNATION as fd
            fd.origin_airport, fd.destination_airport, fd.airline_code, rc.supplier_name,
            rc.role_name, rc.sort_order, rc.primary_name, rc.primary_position, rc.primary_phone,
            rc.primary_mobile, rc.primary_email, rc.primary_hours, rc.contact_count,
-           rc.other_count, fd.supplier_performs_uplift
+           rc.other_count
+// NOT GROUPED BY supplier_performs_uplift, and that is a fix rather than an
+// omission - 7 Oct 2026.
+//
+// This arm neither selects the flag nor reads it in any expression: only the
+// AGENT arm below does, where it decides role_status and role_note. Grouping
+// by it here was gratuitous, and it was HARMLESS ONLY WHILE THE VALUE WAS
+// UNIFORM for a given flight and supplier - which it was while 85 of 86
+// mappings said the supplier fuels its own product.
+//
+// The three into-plane cases broke that. A flight can now carry a station row
+// and a flight row naming the SAME supplier with DIFFERENT flags - the station
+// default where the supplier fuels, the flight-level override where an agent
+// does - and the group then split into two, putting every contact on the strip
+// twice. 48 duplicated rows, caught by c-supplier-contacts EXIT-6, which
+// exists because keying this view on designation_ID had already caused the
+// same duplication once.
 union all
 select from dsg.FLIGHT_DESIGNATION as fd
     join SUPPLIER_ROLE_CONTACTS as rc

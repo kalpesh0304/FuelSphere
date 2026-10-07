@@ -49,6 +49,10 @@ namespace fuelsphere;
 
 using { cuid } from '@sap/cds/common';
 using { fuelsphere as db } from './schema';
+// THE MAPS ARE NOW THE SOURCE of this file's flight view - see
+// FLIGHT_DESIGNATION below, which stopped reading DESIGNATED_SUPPLIERS on
+// 7 Oct 2026.
+using { fuelsphere.STATION_SUPPLIER_MAP, fuelsphere.FLIGHT_SUPPLIER_MAP } from './mapping-tables';
 
 /**
  * PRIMARY is the designation. ALTERNATE and EMERGENCY exist so a station can
@@ -159,12 +163,110 @@ entity DESIGNATED_SUPPLIERS : cuid, db.AuditTrail {
 // screen binding to several rows would show a designation that expired
 // beside one that did not.
 // ============================================================================
+
+// ===========================================================================
+// DESIGNATION_FROM_MAPS - the flight page's two blocks, read off the maps
+// ===========================================================================
+//
+// WHY THIS EXISTS, 7 Oct 2026. The flight page's supplier determination shows
+// two blocks through FLIGHT_SCHEDULE.designation and .station_default, and
+// both pointed at DESIGNATED_SUPPLIERS - the table superseded on 4 Oct. So the
+// three into-plane cases, which are recorded on the MAPS, could not reach the
+// screen that matters most: a planner edited a mapping and the flight page
+// went on showing the old arrangement, with case 3 not expressible at all.
+//
+// THE COLUMN NAMES ARE THE LEGACY TABLE'S, deliberately and exactly. The two
+// qualified line items in planning-fiori-annotations.cds (#FlightBlock and
+// #StationBlock) bind these names, and a column renamed here is a blank
+// column on the flight page. Three are ADDED - self_fuelled, into_plane_mode
+// and into_plane_agent_name - all of them calculated on the maps.
+//
+// THE STATION ARM CARRIES flight_number AS NULL, which is what makes
+// station_default's `flight_number is null` condition select it and keeps the
+// two blocks apart. That is the legacy semantics, preserved.
+//
+// designation_type and priority are CONSTANTS here. The maps hold neither,
+// because the tie-break they existed for lives in
+// srv/lib/designation-resolver.js - these two are carried so the annotations
+// that bind them still have something to read.
+entity DESIGNATION_FROM_MAPS as
+
+    // ---- the flight axis: an arrangement made for THIS flight ------------
+    select from FLIGHT_SUPPLIER_MAP as m
+        join db.MASTER_AIRPORTS as ap on ap.ID = m.airport.ID
+    {
+        key m.ID                   as ID,
+            m.flight_number        as flight_number : String(8),
+            ap.iata_code           as station_code : String(3),
+            m.carrier.carrier_code as carrier_code : String(3),
+            m.supplier,
+            // The flight map holds no fuel contract of its own - a
+            // flight-level row overrides WHO fuels, not what the fuel is
+            // bought on, which stays the station's contract.
+            null                   as supplier_contract_ID : UUID,
+            m.supplier_performs_uplift,
+            m.into_plane_agent,
+            m.into_plane_contract,
+            'PRIMARY'              as designation_type : String(20),
+            m.valid_from,
+            m.valid_to,
+            100                    as priority : Integer,
+            m.is_active,
+            m.notes,
+            m.self_fuelled,
+            m.into_plane_mode,
+            m.into_plane_agent_name,
+            m.created_at, m.created_by, m.modified_at, m.modified_by
+    }
+
+union all
+
+    // ---- the station axis: what the station does otherwise ---------------
+    //
+    // is_default only. The station map holds several suppliers per station -
+    // that is coverage - and the block answers "what does this station do",
+    // which has one answer.
+    select from STATION_SUPPLIER_MAP as m
+        join db.MASTER_AIRPORTS as ap on ap.ID = m.airport.ID
+    {
+        key m.ID                   as ID,
+            // NULL, so station_default selects this arm and designation does
+            // not. Not an omission - it is the discriminator.
+            null                   as flight_number : String(8),
+            ap.iata_code           as station_code : String(3),
+            m.carrier.carrier_code as carrier_code : String(3),
+            m.supplier,
+            m.contract.ID          as supplier_contract_ID : UUID,
+            m.supplier_performs_uplift,
+            m.into_plane_agent,
+            m.into_plane_contract,
+            'PRIMARY'              as designation_type : String(20),
+            m.valid_from,
+            m.valid_to,
+            100                    as priority : Integer,
+            m.is_active,
+            m.notes,
+            m.self_fuelled,
+            m.into_plane_mode,
+            m.into_plane_agent_name,
+            m.created_at, m.created_by, m.modified_at, m.modified_by
+    }
+    where m.is_default = true;
+
 extend db.FLIGHT_SCHEDULE with {
 
     // "Designated for AC410" — an arrangement made for THIS flight.
-    designation : Association to many DESIGNATED_SUPPLIERS
+    // REPOINTED AT THE MAPS, 7 Oct 2026 - see DESIGNATION_FROM_MAPS above.
+    //
+    // AND THE CARRIER IS NOW IN THE CONDITION. It never was, on either
+    // association: they matched on flight number and station alone, so a
+    // station's default could answer for a DIFFERENT carrier's flight. The
+    // same defect was found and fixed in FLIGHT_DESIGNATION on the same day,
+    // where it was showing 14 Air Canada flights JetBlue's arrangement.
+    designation : Association to many DESIGNATION_FROM_MAPS
                   on  designation.flight_number = flight_number
-                  and designation.station_code  = origin_airport;
+                  and designation.station_code  = origin_airport
+                  and designation.carrier_code  = airline_code;
 
     // "YYZ default" — what this station does for anything without one.
     //
@@ -182,8 +284,9 @@ extend db.FLIGHT_SCHEDULE with {
     // flight's. Without it a designation for a DIFFERENT flight that names
     // this station would answer here, which is the over-matching join one
     // rung below where designation-resolver.js guards against it.
-    station_default : Association to many DESIGNATED_SUPPLIERS
+    station_default : Association to many DESIGNATION_FROM_MAPS
                       on  station_default.station_code   = origin_airport
+                      and station_default.carrier_code   = airline_code
                       and station_default.flight_number is null;
 }
 
@@ -216,51 +319,133 @@ extend db.FLIGHT_SCHEDULE with {
  * tie-break: a row outside its validity does not APPLY, so showing it would
  * be wrong on a card as well as in the resolver.
  */
-entity FLIGHT_DESIGNATION as select from db.FLIGHT_SCHEDULE as f
-    join DESIGNATED_SUPPLIERS as d
-      on  d.station_code = f.origin_airport
-      and ( d.flight_number = f.flight_number or d.flight_number is null )
-      and ( d.valid_from is null or d.valid_from <= f.flight_date )
-      and ( d.valid_to   is null or d.valid_to   >= f.flight_date )
-{
-    key f.ID              as flight_ID,
-    key d.ID              as designation_ID,
+// ===========================================================================
+// REPOINTED AT THE MAPS - 7 Oct 2026, and it had to be.
+//
+// This view read DESIGNATED_SUPPLIERS until today. That table was superseded
+// by STATION_SUPPLIER_MAP and FLIGHT_SUPPLIER_MAP on 4 Oct, and the migration
+// harness proved the maps reproduce it exactly, but this view was left
+// pointing at the old table - stage two of the collapse, deferred.
+//
+// THE THREE INTO-PLANE CASES FORCED IT. They are recorded on the maps, so a
+// view reading the legacy table would show a planner the OLD arrangement
+// while the mapping app showed the new one: edit a mapping, see nothing
+// change on the flight. Two tables holding one fact is what the collapse
+// existed to end, and leaving this reader behind would have reinstated it.
+//
+// THE COLUMN LIST IS UNCHANGED, deliberately - supplier-contacts.cds and
+// planning-service.cds read this view, and a column dropped here is a card
+// gone blank somewhere else. Three are ADDED, all of them derived.
+// ===========================================================================
+entity FLIGHT_DESIGNATION as
 
-        // The global filter's names.
-        f.flight_number,
-        f.flight_date,
-        f.origin_airport,
-        f.destination_airport,
-        f.airline_code,
+    // ---- the flight arm: a named flight fuelled by somebody else ---------
+    select from db.FLIGHT_SCHEDULE as f
+        join FLIGHT_SUPPLIER_MAP as m
+          on  ( m.is_active is null or m.is_active = true )
+          and m.flight_number        =  f.flight_number
+          and m.carrier.carrier_code =  f.airline_code
+          and ( m.valid_from is null or m.valid_from <= f.flight_date )
+          and ( m.valid_to   is null or m.valid_to   >= f.flight_date )
+        // JOINED EXPLICITLY, never m.airport.iata_code in the ON clause: a
+        // join condition may only name foreign keys, and the path form
+        // compiles to a condition the database rejects. Same fix as
+        // flight-designated-supplier.cds.
+        join db.MASTER_AIRPORTS as ap
+          on  ap.ID        =  m.airport.ID
+          and ap.iata_code =  f.origin_airport
+    {
+        key f.ID              as flight_ID,
+        key m.ID              as designation_ID,
 
-        // WHICH AXIS ANSWERED. The whole reason both rows are shown.
-        case when d.flight_number is null then 'STATION' else 'FLIGHT' end
-                          as axis : String(8),
+            f.flight_number,
+            f.flight_date,
+            f.origin_airport,
+            f.destination_airport,
+            f.airline_code,
 
-        // AN EXPLICIT READING ORDER, NOT THE ALPHABET.
-        //
-        // 'FLIGHT' < 'STATION' is true and sorting on `axis` would work
-        // today - by alphabetical accident, and silently wrong the day a
-        // third axis is added. That is the recorded trap, and naming it in a
-        // comment while relying on it anyway is not answering it.
-        //
-        // FLIGHT first because it is the axis that GOVERNS where both exist.
-        case when d.flight_number is null then 2 else 1 end
-                          as axis_rank : Integer,
+            // WHICH AXIS ANSWERED. The whole reason both rows are shown.
+            'FLIGHT'          as axis : String(8),
 
-        d.station_code,
-        d.carrier_code,
-        d.designation_type,
-        d.priority,
-        d.valid_from,
-        d.valid_to,
-        d.supplier,
-        d.into_plane_agent,
+            // AN EXPLICIT READING ORDER, NOT THE ALPHABET. FLIGHT first,
+            // because it is the axis that GOVERNS where both exist. Carried
+            // over from the previous definition, trap and all: sorting on
+            // `axis` works today by alphabetical accident and breaks the day
+            // a third axis is added.
+            1                 as axis_rank : Integer,
 
-        // CARRIED SO THE CONTACT STRIP CAN DERIVE, NOT STORE. Where the
-        // supplier does not perform its own uplift, invoicing and disputes
-        // stay with the SUPPLIER - so the agent's invoicing row is NOT
-        // APPLICABLE rather than missing, and this flag is what says so.
-        // A stored marker would be a second place holding one fact.
-        d.supplier_performs_uplift
-};
+            ap.iata_code      as station_code : String(3),
+            m.carrier.carrier_code as carrier_code : String(3),
+
+            // The maps carry neither column. A flight-level row IS the
+            // primary arrangement, and the resolver's tie-break lives in
+            // srv/lib/designation-resolver.js rather than in this priority -
+            // these two are here because the readers expect them.
+            'PRIMARY'         as designation_type : String(20),
+            100               as priority : Integer,
+
+            m.valid_from,
+            m.valid_to,
+            m.supplier,
+            m.into_plane_agent,
+
+            // CARRIED SO THE CONTACT STRIP CAN DERIVE, NOT STORE. Where the
+            // supplier does not perform its own uplift, invoicing and
+            // disputes stay with the SUPPLIER - so the agent's invoicing row
+            // is NOT APPLICABLE rather than missing, and this flag says so.
+            m.supplier_performs_uplift,
+
+            // ---- the three cases, added 7 Oct 2026 ----------------------
+            // Calculated on the maps, carried here so the flight screens read
+            // the same answer the mapping app shows. See mapping-tables.cds.
+            m.self_fuelled,
+            m.into_plane_mode,
+            m.into_plane_agent_name
+    }
+
+union all
+
+    // ---- the station arm: the station's default arrangement --------------
+    //
+    // is_default, NOT every coverage row. The station map holds several
+    // suppliers per station - that is coverage, and a card showing all of
+    // them would answer "who MAY fuel here" where the reader asked "who
+    // DOES". The same arm in flight-designated-supplier.cds reads the flag
+    // the same way.
+    select from db.FLIGHT_SCHEDULE as f
+        join STATION_SUPPLIER_MAP as m
+          on  ( m.is_active is null or m.is_active = true )
+          and m.is_default           =  true
+          and m.carrier.carrier_code =  f.airline_code
+          and ( m.valid_from is null or m.valid_from <= f.flight_date )
+          and ( m.valid_to   is null or m.valid_to   >= f.flight_date )
+        join db.MASTER_AIRPORTS as ap
+          on  ap.ID        =  m.airport.ID
+          and ap.iata_code =  f.origin_airport
+    {
+        key f.ID              as flight_ID,
+        key m.ID              as designation_ID,
+
+            f.flight_number,
+            f.flight_date,
+            f.origin_airport,
+            f.destination_airport,
+            f.airline_code,
+
+            'STATION'         as axis : String(8),
+            2                 as axis_rank : Integer,
+
+            ap.iata_code      as station_code : String(3),
+            m.carrier.carrier_code as carrier_code : String(3),
+            'PRIMARY'         as designation_type : String(20),
+            100               as priority : Integer,
+
+            m.valid_from,
+            m.valid_to,
+            m.supplier,
+            m.into_plane_agent,
+            m.supplier_performs_uplift,
+            m.self_fuelled,
+            m.into_plane_mode,
+            m.into_plane_agent_name
+    };

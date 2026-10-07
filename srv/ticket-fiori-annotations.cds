@@ -194,7 +194,18 @@ annotate TicketService.FuelTickets with @(
             { $Type: 'UI.ReferenceFacet', ID: 'Measurement',   Target: '@UI.FieldGroup#Measurement',   Label: 'Meter & Density' },
             { $Type: 'UI.ReferenceFacet', ID: 'Pricing',       Target: '@UI.FieldGroup#Pricing',       Label: 'Rate & Amount' },
             { $Type: 'UI.ReferenceFacet', ID: 'Verification',  Target: '@UI.FieldGroup#Verification',  Label: 'Verification' },
-            { $Type: 'UI.ReferenceFacet', ID: 'Billing',       Target: '@UI.FieldGroup#Billing',       Label: 'Supplier & Invoice' }
+            { $Type: 'UI.ReferenceFacet', ID: 'Billing',       Target: '@UI.FieldGroup#Billing',       Label: 'Supplier & Invoice' },
+
+            // EVERY LINE THAT BILLED THIS TICKET - 7 Oct 2026.
+            //
+            // The Billing group above names the FIRST invoice and counts the
+            // rest. That was the whole story while a second line meant a
+            // duplicate; under a third-party into-plane arrangement the
+            // supplier bills the fuel and the agent bills the uplift, so two
+            // lines are correct and the reader needs both, each with its own
+            // line item number.
+            { $Type: 'UI.ReferenceFacet', ID: 'InvoiceLines',
+              Target: 'invoice_lines/@UI.LineItem', Label: 'Invoice Lines' }
         ],
 
         FieldGroup #TicketStatus: {
@@ -571,3 +582,69 @@ annotate TicketService.FuelTickets with {
         }
     );
 };
+
+// ===========================================================================
+// WHERE A TICKET WAS BILLED - one row per invoice line
+// ===========================================================================
+//
+// THE VENDOR AND THE CHARGE ARE THE TWO COLUMNS THAT MATTER, and neither was
+// reachable before. A ticket under a third-party into-plane arrangement
+// carries two lines: the supplier's fuel and the agent's uplift service. With
+// only the invoice number and the line item visible, those two rows are
+// indistinguishable from a double-billing; with the vendor and the charge they
+// read as the arrangement they are.
+//
+// Ordered by charge then vendor, so the fuel line leads and the handling line
+// follows it - the order somebody reading a ticket expects, and stable where
+// two agents bill the same uplift.
+annotate TicketService.TicketInvoiceLines with @(
+    UI: {
+        LineItem: [
+            { Value: invoice_number,    Label: 'Invoice number',   ![@UI.Importance]: #High },
+            { Value: line_number,       Label: 'Invoice line item', ![@UI.Importance]: #High },
+            { Value: charge_type,       Label: 'Charge',           ![@UI.Importance]: #High },
+            { Value: vendor_name,       Label: 'Billed by',        ![@UI.Importance]: #High },
+            { Value: vendor_s4_no,      Label: 'SAP vendor no',    ![@UI.Importance]: #Low },
+            { Value: invoice_date,      Label: 'Invoice date',     ![@UI.Importance]: #Medium },
+            { Value: invoice_status,    Label: 'Invoice status',    ![@UI.Importance]: #Medium },
+            { Value: description,       Label: 'Description',      ![@UI.Importance]: #Low },
+            { Value: quantity,          Label: 'Quantity',         ![@UI.Importance]: #Medium },
+            { Value: uom_code,          Label: 'UoM',              ![@UI.Importance]: #Low },
+            { Value: unit_price,        Label: 'Unit price',       ![@UI.Importance]: #Medium },
+            { Value: net_amount,        Label: 'Net amount',       ![@UI.Importance]: #High },
+            { Value: tolerance_status,  Label: 'Tolerance',        ![@UI.Importance]: #Low }
+        ],
+
+        PresentationVariant: {
+            SortOrder: [ { Property: charge_type }, { Property: vendor_name }, { Property: line_number } ],
+            Visualizations: ['@UI.LineItem']
+        },
+
+        HeaderInfo: {
+            TypeName       : 'Invoice line',
+            TypeNamePlural : 'Invoice Lines',
+            Title          : { Value: invoice_number },
+            Description    : { Value: charge_type }
+        }
+    }
+);
+
+annotate TicketService.TicketInvoiceLines with {
+    invoice_number   @title: 'Invoice number';
+    line_number      @title: 'Invoice line item';
+    charge_type      @title: 'Charge'
+                     @Common.QuickInfo: 'FUEL is the product. INTO_PLANE is the service of putting it in the wing, billed by a third-party agent where the supplier does not do it.';
+    vendor_name      @title: 'Billed by'
+                     @Common.QuickInfo: 'The invoice header supplier. Two rows with different vendors on one ticket is a third-party into-plane arrangement, not a duplicate.';
+    vendor_s4_no     @title: 'SAP vendor no';
+    invoice_date     @title: 'Invoice date';
+    invoice_status   @title: 'Invoice status';
+    description      @title: 'Description';
+    quantity         @title: 'Quantity';
+    uom_code         @title: 'UoM';
+    unit_price       @title: 'Unit price';
+    net_amount       @title: 'Net amount';
+    tax_amount       @title: 'Tax amount';
+    tolerance_status @title: 'Tolerance';
+    line_match_status @title: 'Match status';
+}

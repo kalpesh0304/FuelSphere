@@ -333,11 +333,27 @@ async function detectDuplicates(invoice, items, resolutions, registry, tx, note)
         note(C.DUP_INVOICE_NUMBER, {}, 'PASSED');
     }
 
-    // ---- key 2: same TICKET invoiced twice --------------------------------
+    // ---- key 2: same TICKET, SAME CHARGE, invoiced twice ------------------
+    //
     // Across all invoices AND within this one. INV455: a ticket may appear on
-    // at most one payable line, ever.
+    // at most one payable line PER CHARGE, ever.
+    //
+    // THE CHARGE IS PART OF THE KEY SINCE 7 Oct 2026, and without it this
+    // rule made a legitimate arrangement unpayable. Where a third-party
+    // into-plane agent fuels the aircraft, the supplier bills the fuel and the
+    // agent bills the uplift: two invoices, two vendors, one ticket, both
+    // correct. Keyed on the ticket alone, the second was a HARD_ERROR.
+    //
+    // Fuel billed twice is still a hard error - which is the half of this
+    // rule that was always right, and narrowing the key must not cost it.
     const allItems = await db.run(SELECT.from('fuelsphere.INVOICE_ITEMS')
-        .columns('ID', 'invoice_ID', 'line_number', 'ticket_number', 'ticket_ID'));
+        .columns('ID', 'invoice_ID', 'line_number', 'ticket_number', 'ticket_ID', 'charge_type'));
+
+    // A NULL CHARGE IS FUEL. The column was added after 1,776 lines had been
+    // captured; the seed backfills them, but an import that omits the column
+    // must fall INTO the fuel key rather than into a charge of its own, where
+    // it would duplicate freely and never be reported.
+    const chargeOf = (row) => (row && row.charge_type) || 'FUEL';
 
     for (const it of items) {
         const res = resolutions.get(it.ID);
@@ -353,7 +369,9 @@ async function detectDuplicates(invoice, items, resolutions, registry, tx, note)
             continue;
         }
 
+        const charge = chargeOf(it);
         const others = allItems.filter(o => o.ID !== it.ID &&
+            chargeOf(o) === charge &&
             ((tid && o.ticket_ID === tid) ||
              (tnum && (o.ticket_number || '').trim() === tnum)));
         if (!others.length) {
@@ -362,10 +380,11 @@ async function detectDuplicates(invoice, items, resolutions, registry, tx, note)
         }
 
         const sameInvoice = others.filter(o => o.invoice_ID === invoice.ID).length;
+        const label = charge === 'INTO_PLANE' ? 'into-plane service' : 'fuel';
         found.push(raise(registry, C.DUP_TICKET, {
             itemId: it.ID, line_number: it.line_number,
-            message: `Ticket ${tnum || tid} is invoiced on ${others.length + 1} lines in total `
-                   + `(${sameInvoice + 1} on this invoice). A ticket is payable once.`,
+            message: `Ticket ${tnum || tid} is invoiced for ${label} on ${others.length + 1} lines `
+                   + `in total (${sameInvoice + 1} on this invoice). A ticket is payable once per charge.`,
             observed: others.length + 1, expected: 1 }));
     }
 

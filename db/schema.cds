@@ -383,6 +383,24 @@ type PricingEngineMode : String(20) enum {
 }
 
 /**
+ * WHAT A LINE IS BILLING FOR - decision of 7 Oct 2026.
+ *
+ * THE RULE THIS EXISTS TO FIX. INV455 says a ticket is payable once, and it
+ * was keyed on the ticket alone. That is right when one vendor bills the fuel
+ * and wrong the moment a THIRD-PARTY INTO-PLANE AGENT bills the service of
+ * putting it in the wing: the same ticket then carries two legitimate lines on
+ * two invoices from two vendors, and the rule called the second one a
+ * duplicate and blocked payment with a HARD_ERROR.
+ *
+ * So the duplicate key gains an axis rather than losing its teeth. Fuel billed
+ * twice is still a hard error. Fuel once and handling once is not.
+ */
+type InvoiceChargeType : String(12) enum {
+    Fuel      = 'FUEL';        // The product itself
+    IntoPlane = 'INTO_PLANE';  // The service of fuelling the aircraft
+}
+
+/**
  * Formula Element Category - Per FDD-03 v2.0 Price Calculation Formula
  */
 type FormulaElementCategory : String(20) enum {
@@ -2801,6 +2819,24 @@ entity INVOICE_ITEMS : cuid {
 
         // The supplier's line is line_number. This is what SAP calls it.
         sap_line_number     : String(6);
+
+        // ====================================================================
+        // FUEL, OR THE SERVICE OF PUTTING IT IN THE WING - 7 Oct 2026.
+        //
+        // A ticket can be billed by TWO vendors: the supplier for the fuel and
+        // a third-party into-plane agent for the uplift. Both lines are
+        // correct, both name the same ticket, and before this column the
+        // second one was indistinguishable from a duplicate - see
+        // InvoiceChargeType above, and the INV455 key in
+        // srv/lib/invoice-checks.js that reads it.
+        //
+        // DEFAULT 'FUEL' AND THE SEED SAYS SO EXPLICITLY. Every line captured
+        // before today bills fuel, so the existing rows carry FUEL in the CSV
+        // rather than a null that each reader would have to interpret. The
+        // default covers new lines; the check still treats a null as FUEL,
+        // because an import that omits the column must not silently become a
+        // separate charge and escape the duplicate key.
+        charge_type         : InvoiceChargeType default 'FUEL';
 
         // WHAT THE TICKET SAYS, BESIDE WHAT THE INVOICE CLAIMS. Written by
         // the matcher from the resolved ticket, never typed on a screen, and

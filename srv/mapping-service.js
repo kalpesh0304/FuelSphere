@@ -99,6 +99,7 @@ module.exports = cds.service.impl(async function () {
     this.before('SAVE', StationSupplierMappings, async (req) => {
         const row = req.data;
         await checkWindow(req, row);
+        await checkIntoPlaneCases(req, row);
 
         // CAR402. THE RULE THAT REPLACED THE SERIAL NUMBER. A station and
         // carrier may name as many suppliers as it likes - that is the point
@@ -171,6 +172,7 @@ module.exports = cds.service.impl(async function () {
     this.before('SAVE', FlightSupplierMappings, async (req) => {
         const row = req.data;
         await checkWindow(req, row);
+        await checkIntoPlaneCases(req, row);
         if (row.flight_number) req.data.flight_number = String(row.flight_number).toUpperCase().trim();
 
         // CAR404. One flight out of one station under one carrier has one
@@ -285,6 +287,49 @@ module.exports = cds.service.impl(async function () {
             req.error(400, `${code}: ${what} already exists for these dates `
                 + `(${day(clash.valid_from)} to ${day(clash.valid_to) || 'open'}). `
                 + 'Close that one first, or choose dates that do not overlap.', 'valid_from');
+        }
+    }
+
+    /**
+     * CAR411. THE THREE INTO-PLANE CASES ARE MUTUALLY EXCLUSIVE.
+     *
+     * Added 7 Oct 2026 with self_fuelled. The two flags describe arrangements
+     * that cannot both hold: either the fuel supplier puts it in the wing or
+     * the airline does it from its own tanks. Both ticked, the derived
+     * into_plane_mode resolves to SELF - deterministically, by the order of
+     * the CASE in db/mapping-tables.cds - so the row would still READ as
+     * something, which is exactly why it has to be refused here. A row that
+     * quietly resolves one of two contradictory answers is worse than one
+     * that will not save.
+     *
+     * A THIRD-PARTY AGENT BESIDE EITHER FLAG IS ALSO REFUSED. Naming an agent
+     * while saying the supplier fuels its own product leaves the agent
+     * unreachable - into_plane_mode reads SUPPLIER and the agent is never
+     * shown anywhere - so the person would have recorded a fact the system
+     * then ignores. Better to say so at save time.
+     */
+    async function checkIntoPlaneCases(req, row) {
+        // Only what the request actually carries: a PATCH on one field must
+        // not be judged against undefined values for the others.
+        const performs = row.supplier_performs_uplift === true;
+        const self     = row.self_fuelled === true;
+        const agent    = row.into_plane_agent_ID || null;
+
+        if (performs && self) {
+            req.error(400, 'CAR411: the supplier cannot fuel the aircraft while the airline also '
+                + 'fuels it from its own tanks. Tick one: the supplier performs the uplift (case 1), '
+                + 'or the airline self-fuels (case 3).', 'self_fuelled');
+            return;
+        }
+        if (agent && performs) {
+            req.error(400, 'CAR411: an into-plane agent is named while the supplier is marked as '
+                + 'performing the uplift. Clear the agent, or untick "supplier fuels the aircraft" '
+                + 'so the agent is the one shown on the flight.', 'into_plane_agent_ID');
+            return;
+        }
+        if (agent && self) {
+            req.error(400, 'CAR411: an into-plane agent is named while the airline is marked as '
+                + 'self-fuelling. A self-fuelled station has no agent to bill.', 'into_plane_agent_ID');
         }
     }
 
