@@ -180,25 +180,67 @@ function field(v) {
 
     // The invoice file is UPDATED IN PLACE, row by row, so that only the ten
     // counter columns change and every other seeded value survives.
+    //
+    // THE READ HAS TO BE QUOTE-AWARE - fixed 13 Oct 2026.
+    //
+    // This rewrote rows by INDEX after `line.split(';')`. field() above
+    // already quotes a value containing a semicolon, so a quoted notes field
+    // splits into two and every column after `notes` (index 38) is read one
+    // place to the left - which is where the counters live, at 44 to 50.
+    //
+    // Nine into-plane invoices came out with rules_not_applicable empty and
+    // its value sitting in rules_bypassed, and the tool still said "updated
+    // the counters on 104 of 104". Caught by idr-rule-status EXIT-1, whose
+    // whole point is that the five counters must sum to the number evaluated.
+    //
+    // The WRITE side was always correct: field() is reused below, so a value
+    // that needs quoting keeps its quotes on the way back out.
+    const splitRow = (line) => {
+        const fields = [];
+        let cur = '';
+        let quoted = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (quoted) {
+                if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+                else if (ch === '"') quoted = false;
+                else cur += ch;
+            } else if (ch === '"') quoted = true;
+            else if (ch === ';') { fields.push(cur); cur = ''; }
+            else cur += ch;
+        }
+        fields.push(cur);
+        return fields;
+    };
+
     const invCols = headerOf(INV);
     const invText = fs.readFileSync(INV, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
     const idAt = invCols.indexOf('ID');
     const out = [invCols.join(';')];
     let touched = 0;
+    let misaligned = 0;
     for (const line of invText.slice(1)) {
         if (!line.trim()) continue;
-        const f = line.split(';');
+        const f = splitRow(line);
+        // A ROW WHOSE SHAPE WE STILL MISREAD IS COUNTED, NOT WRITTEN BLIND.
+        // Rewriting by index into a row of the wrong length is precisely how
+        // this corrupted nine invoices without saying a word.
+        if (f.length !== invCols.length) misaligned += 1;
         const h = headById.get(f[idAt]);
         if (h) {
             for (const c of COUNTERS) {
                 const at = invCols.indexOf(c);
-                if (at >= 0) f[at] = field(h[c]);
+                if (at >= 0) f[at] = h[c];
             }
             touched++;
         }
-        out.push(f.join(';'));
+        out.push(f.map(field).join(';'));
     }
     fs.writeFileSync(INV, out.join('\r\n') + '\r\n', 'utf8');
     console.log(`updated the counters on ${touched} of ${invText.length - 2} invoice rows`);
+    if (misaligned) {
+        console.log(`  WARNING: ${misaligned} row(s) did not have ${invCols.length} fields even after `
+                  + 'a quote-aware parse; their counters may be in the wrong columns.');
+    }
     process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

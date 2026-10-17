@@ -601,6 +601,17 @@ module.exports = class TicketService extends cds.ApplicationService {
             return query;
         });
 
+        // ====================================================================
+        // S/4HANA POSTING - PO and GR follow the uplift
+        // ====================================================================
+        //
+        // Registers after('CREATE') and the postToS4 retry action. The INVOICE
+        // step is NOT driven from here: it belongs to the supplier's document
+        // and is posted from the Invoices app (InvoiceService.postToS4HANA).
+        // See srv/lib/s4-fuel-posting.js for why the split is ours and not
+        // S/4's.
+        require('./lib/s4-fuel-posting').register(this);
+
         await super.init();
     }
 };

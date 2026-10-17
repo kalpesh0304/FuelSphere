@@ -168,6 +168,49 @@ const CARRIER = 'B6';
     const airports = await cds.db.run(SELECT.from('fuelsphere.MASTER_AIRPORTS').columns('ID', 'iata_code'));
     const airportByCode = new Map(airports.map(a => [a.iata_code, a.ID]));
 
+    // ---- the PO and GR a line resolves to --------------------------------
+    //
+    // STORED EVIDENCE MUST EQUAL WHAT THE RESOLVER COMPUTES. The lines this
+    // seeder writes carried resolution_source = TICKET_ID with
+    // resolved_po_number and resolved_gr_number left empty, which is a half-
+    // filled claim: the line says it resolved and then names nothing it
+    // resolved to. srv/lib/invoice-checks.js walks ticket -> order ->
+    // s4_po_number and ticket -> delivery -> s4_gr_number, so the same walk
+    // happens here. Caught by fim-reconcile EXIT-2, which compares the seeded
+    // resolution against the computed one field for field.
+    //
+    // AN INTO-PLANE LINE RESOLVES TO THE FUEL ORDER'S PO, and that is worth
+    // being explicit about rather than leaving as an accident of the walk.
+    // The agent's handling charge is not bought on the fuel purchase order -
+    // in S/4 it would be its own service entry - but the resolver has only
+    // one chain and reaches the fuel PO through the ticket. Storing what it
+    // computes keeps the seed honest; whether an into-plane line SHOULD match
+    // against a fuel PO is a question for the invoice design, not for this
+    // seeder to answer by writing something different.
+    const ticketRows = await cds.db.run(SELECT.from('fuelsphere.FUEL_TICKETS')
+        .columns('ID', 'order_ID', 'delivery_ID'));
+    const ticketById = new Map(ticketRows.map(t => [t.ID, t]));
+    const orderRows = await cds.db.run(SELECT.from('fuelsphere.FUEL_ORDERS')
+        .columns('ID', 's4_po_number'));
+    const poByOrder = new Map(orderRows.map(o => [o.ID, o.s4_po_number]));
+    const deliveryRows = await cds.db.run(SELECT.from('fuelsphere.FUEL_DELIVERIES')
+        .columns('ID', 'order_ID', 's4_gr_number'));
+    const grByDelivery = new Map(deliveryRows.map(d => [d.ID, d.s4_gr_number]));
+    const deliveryByOrder = new Map();
+    for (const d of deliveryRows) if (!deliveryByOrder.has(d.order_ID)) deliveryByOrder.set(d.order_ID, d);
+
+    const resolveFor = (ticketID) => {
+        const t = ticketById.get(ticketID);
+        if (!t) return { po: '', gr: '' };
+        const po = (t.order_ID && poByOrder.get(t.order_ID)) || '';
+        let gr = (t.delivery_ID && grByDelivery.get(t.delivery_ID)) || '';
+        if (!gr && t.order_ID) {
+            const d = deliveryByOrder.get(t.order_ID);
+            gr = (d && d.s4_gr_number) || '';
+        }
+        return { po: po || '', gr: gr || '' };
+    };
+
     console.log(`${flights.length} flight(s) in ${WINDOW.from}..${WINDOW.to}, `
               + `${tickets.length} ${CARRIER} ticket(s) against them`);
 
@@ -407,6 +450,8 @@ const CARRIER = 'B6';
                     ticket_number: it.t.ticket_number,
                     ticket_ID: it.t.ID,
                     flight_ID: it.f.ID,
+                    resolved_po_number: resolveFor(it.t.ID).po,
+                    resolved_gr_number: resolveFor(it.t.ID).gr,
                     resolution_source: 'TICKET_ID',
                     line_match_status: 'UNMATCHED',
                     review_status: 'NONE',
@@ -434,9 +479,17 @@ const CARRIER = 'B6';
             payment_terms: 'NET30',
             match_status: 'UNMATCHED', approval_status: 'PENDING',
             requires_dual_approval: 'false',
-            // RECEIVED, NOT POSTED. These have not been through the checks,
+            // SUBMITTED, NOT POSTED. These have not been through the checks,
             // and marking them POSTED would claim an approval nobody gave.
-            status: 'RECEIVED',
+            //
+            // NOT 'RECEIVED', which is what this said until 13 Oct 2026 and
+            // is not a value InvoiceStatus has - the enum runs DRAFT,
+            // SUBMITTED, VERIFIED, POSTED, PAID, CANCELLED. invoice_status_v
+            // groups those four ways for the screen and an unknown value
+            // falls through as itself, so nine invoices read "RECEIVED" in a
+            // column that is meant to read "In process". Caught by
+            // invoice-views EXIT-7, which checks exactly that grouping.
+            status: 'SUBMITTED',
             is_duplicate: 'false',
             received_date: g.date,
             notes: `Into-plane handling billed by ${agent.name} at ${g.station} on ${g.date}. `

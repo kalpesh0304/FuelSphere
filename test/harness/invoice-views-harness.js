@@ -419,8 +419,42 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         let h = (await test.GET(A)).data;
         assert.strictEqual(h.status, 'POSTED');
         assert.strictEqual(h.invoice_status_v, 'Posted', 'the display must read Posted, not jump to Paid');
-        assert.match(h.s4_document_number || '', /^51\d{8}$/, 'simulated FI document');
-        assert.match(h.sap_invoice_number || '', /^5105\d{6}$/, 'simulated SAP invoice number');
+        // ---- THE NUMBERS COME FROM S/4 NOW, 13 Oct 2026 -----------------
+        //
+        // This asserted the SIMULATION's shapes: /^51\d{8}$/ for a minted FI
+        // document and /^5105\d{6}$/ for a minted SAP invoice number. Both
+        // were generated from the invoice ID by simNo(). postToS4HANA now
+        // drives the real invoice step of ZFS_FUEL_POSTING_SRV, so the shapes
+        // are S/4's and the invariant is a different one.
+        //
+        // THE FI DOCUMENT IS DELIBERATELY EMPTY. ZFS_FUEL_POSTING_SRV returns
+        // the MM supplier invoice, not the FI accounting document, so putting
+        // anything in this column would be inventing one - which is exactly
+        // what the simulation did.
+        assert.ok(!h.s4_document_number,
+            `s4_document_number is ${h.s4_document_number}; the posting service returns the MM `
+            + 'supplier invoice, not an FI document, so nothing may be invented here');
+
+        // AND THE HEADER'S NUMBER MUST BE ONE OF ITS TICKETS'. S/4 posts one
+        // supplier invoice per ticket, so the header carries the first and the
+        // rest live on the lines - asserting the shape would only re-test the
+        // mock, where asserting the LINK tests the mapping.
+        const ticketNumbers = await cds.db.run(cds.ql.SELECT
+            .from('fuelsphere.INVOICE_ITEMS')
+            .columns('ticket_ID')
+            .where({ invoice_ID: INVOICE_ID }));
+        const ids = [...new Set(ticketNumbers.map(r => r.ticket_ID).filter(Boolean))];
+        const tickets = ids.length ? await cds.db.run(cds.ql.SELECT
+            .from('fuelsphere.FUEL_TICKETS')
+            .columns('ID', 's4_invoice_number')
+            .where({ ID: { in: ids } })) : [];
+        const posted = tickets.map(t => t.s4_invoice_number).filter(Boolean);
+        assert.ok(h.sap_invoice_number, 'the header carries no S/4 supplier invoice number');
+        assert.ok(posted.includes(h.sap_invoice_number),
+            `the header says ${h.sap_invoice_number} but no ticket on the invoice carries it `
+            + `(tickets have ${posted.join(', ') || 'none'})`);
+        assert.strictEqual(h.fi_posting_status, 'SUCCESS',
+            `fi_posting_status is ${h.fi_posting_status}; every ticket returned an invoice so it must be SUCCESS`);
         assert.ok(h.posting_date && h.received_date, 'posting and received dates stamped');
         assert.strictEqual(h.payment_date, null, 'posting must NOT fabricate a payment');
 
@@ -436,7 +470,7 @@ describe('Invoice views - header, lines, and the ticket link', () => {
         assert.strictEqual(h.invoice_status_v, 'Paid');
         assert.match(h.s4_payment_document || '', /^15\d{8}$/, 'simulated clearing document');
         assert.ok(h.payment_date, 'payment date stamped');
-        out(`gated refused; posted ${h.s4_document_number} / SAP ${h.sap_invoice_number}; `
+        out(`gated refused; S/4 supplier invoice ${h.sap_invoice_number} (FI document empty by design); `
             + `twice refused; paid ${h.s4_payment_document} on ${h.payment_date}`);
     });
 

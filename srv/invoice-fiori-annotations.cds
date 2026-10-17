@@ -601,10 +601,12 @@ annotate InvoiceService.Invoices with {
     first_approved_at    @title: 'First Approved At';
     final_approver       @title: 'Final Approver';
     final_approved_at    @title: 'Final Approved At';
-    s4_document_number   @title: 'S/4 Document' @Common.FieldControl: #ReadOnly;
+    s4_document_number   @title: 'S/4 Document' @Common.FieldControl: #ReadOnly
+                         @Common.QuickInfo: 'The FI accounting document. ZFS_FUEL_POSTING_SRV returns the MM supplier invoice, not the FI document, so this stays empty for invoices posted through it - the supplier invoice number is in SAP invoice number. Older rows carry a simulated value.';
     s4_fiscal_year       @title: 'Fiscal Year' @Common.FieldControl: #ReadOnly;
     s4_company_code      @title: 'Company Code' @Common.FieldControl: #ReadOnly;
-    fi_posting_status    @title: 'FI Posting Status' @Common.FieldControl: #ReadOnly;
+    fi_posting_status    @title: 'FI Posting Status' @Common.FieldControl: #ReadOnly
+                         @Common.QuickInfo: 'SUCCESS every ticket on this invoice returned an S/4 supplier invoice; PARTIAL some did and some did not; FAILED none did; NOT_SENT the S/4 integration is switched off; NOTHING_TO_POST no line resolved to a ticket.';
     status               @title: 'Status';
     notes                @title: 'Notes' @UI.MultiLineText;
     rejection_reason     @title: 'Rejection Reason' @UI.MultiLineText;
@@ -813,6 +815,23 @@ annotate InvoiceService.InvoiceItems with @(
                     Criticality: poAgreementCriticality
                 },
                 { Value: resolved_gr_number, Label: 'GR reached through the ticket' },
+
+                // ---- WHAT S/4 HOLDS, read live - 13 Oct 2026 -----------
+                //
+                // resolved_po_number and resolved_gr_number above are STORED
+                // by the matcher and now prefer the ticket's S/4 numbers, so
+                // they agree with these after a check run and lag before one.
+                // These read straight through the ticket, so a PO posted a
+                // minute ago is visible without re-running the checks.
+                //
+                // The S/4 SUPPLIER INVOICE is the one this app's Post to
+                // S/4HANA button creates - one per ticket, which is why it
+                // belongs on the line and not on the header.
+                { Value: ticket.s4_po_number,      Label: 'PO in S/4HANA' },
+                { Value: ticket.s4_gr_number,      Label: 'GR in S/4HANA' },
+                { Value: ticket.s4_invoice_number, Label: 'Supplier invoice in S/4HANA' },
+                { Value: ticket.s4_posting_status, Label: 'S/4 posting status' },
+                { Value: ticket.s4_posting_message, Label: 'S/4 posting message' },
                 {
                     $Type: 'UI.DataFieldWithNavigationPath',
                     Value: delivery.delivery_number,

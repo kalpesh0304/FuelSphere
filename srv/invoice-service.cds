@@ -690,6 +690,26 @@ service InvoiceService {
         flight_number,
         match_status,
         delivery_timestamp,
+
+        // ---- THE THREE-WAY MATCH REFERENCES - 13 Oct 2026 --------------
+        //
+        // ADDED TO A PROJECTION THAT IS DELIBERATELY NARROW, and on the same
+        // principle that made it narrow: different reader, different facts.
+        // The note above excludes the ticket's own object page in miniature,
+        // and these are not that. They are the documents an accounts payable
+        // clerk matches the invoice AGAINST - the PO and the goods receipt
+        // the supplier is billing for - which is this reader's whole job.
+        //
+        // resolved_po_number and resolved_gr_number on the LINE already carry
+        // these numbers, but only after a check run writes them. Read through
+        // the ticket they are current, which is what lets the invoice screen
+        // show a PO posted a minute ago.
+        s4_po_number,
+        s4_gr_number,
+        s4_invoice_number,
+        s4_posting_status,
+        s4_posting_message,
+
         order : redirected to FuelOrders
     };
 

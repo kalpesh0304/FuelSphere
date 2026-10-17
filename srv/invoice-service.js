@@ -24,6 +24,8 @@
  */
 
 const cds = require('@sap/cds');
+// The invoice step of the S/4 fuel posting - see postToS4HANA below.
+const s4Posting = require('./lib/s4-fuel-posting');
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 const C = require('./lib/invoice-checks');
 const { applyHeaderSummary, applyLineSummary, computeLines } = require('./lib/invoice-summary');
@@ -743,31 +745,88 @@ module.exports = class InvoiceService extends cds.ApplicationService {
 
             const today = new Date().toISOString().slice(0, 10);
             const year = today.slice(0, 4);
-            const docNo = simNo('51', inv.ID, 8);
-            const sapInvoiceNo = simNo('5105', inv.ID + ':inv', 6);
             const companyCode = inv.s4_company_code || '1000';
+            const receivedDate = inv.received_date
+                || (inv.created_at ? String(inv.created_at).slice(0, 10) : today);
+
+            // ================================================================
+            // THE INVOICE STEP IN S/4 - real since 13 Oct 2026.
+            //
+            // This was a simulation that minted FI document numbers from the
+            // invoice ID. It now drives the SUPPLIER INVOICE step of
+            // ZFS_FUEL_POSTING_SRV, once per distinct ticket on this invoice,
+            // and stores what S/4 returns on each ticket.
+            //
+            // ONE S/4 INVOICE PER TICKET, where this invoice spans many. S/4
+            // keys its posting on the ticket, so there is no single S/4
+            // invoice number for a FuelSphere invoice - which is why the
+            // numbers live on the tickets and the line items show them. The
+            // header keeps the FIRST one in sap_invoice_number so the status
+            // column has something to read, and the count is in the message.
+            //
+            // OFF MODE STILL POSTS THE FuelSphere SIDE. Switching the S/4
+            // integration off must not make the Invoices app unusable - the
+            // document still moves to POSTED, with fi_posting_status saying
+            // no S/4 call was made.
+            const s4Mode = s4Posting.mode();
+            let outcome = { attempted: 0, posted: 0, failed: 0, unresolved: 0, results: [] };
+            if (s4Mode !== 'off') {
+                outcome = await s4Posting.postInvoiceTicketsToS4(invoiceId);
+            }
+
+            const first = outcome.results.find(r => r.s4_invoice_number) || null;
+            // PARTIAL IS NOT SUCCESS, AND NOT FAILURE EITHER. Some tickets
+            // reaching S/4 and some not is the normal state while company
+            // code 3000 has no tolerance key PP, so it gets its own value
+            // rather than being rounded to one of the two.
+            const fiStatus = s4Mode === 'off' ? 'NOT_SENT'
+                : outcome.attempted === 0 ? 'NOTHING_TO_POST'
+                : outcome.failed === 0 ? 'SUCCESS'
+                : outcome.posted === 0 ? 'FAILED' : 'PARTIAL';
+
             await UPDATE('fuelsphere.INVOICES').set({
+                // THE DOCUMENT MOVES ON THE FuelSphere SIDE REGARDLESS. The
+                // gate above is what decides whether an invoice may post; a
+                // configuration problem in S/4 must not silently re-open a
+                // gate that was cleared. The S/4 outcome is recorded beside
+                // it, not substituted for it.
                 status: 'POSTED',
-                fi_posting_status: 'SUCCESS',
-                s4_document_number: docNo,
-                s4_fiscal_year: year,
+                fi_posting_status: fiStatus,
+                s4_fiscal_year: first ? (first.s4_invoice_year || year) : year,
                 s4_company_code: companyCode,
-                sap_invoice_number: sapInvoiceNo,
+                sap_invoice_number: first ? first.s4_invoice_number : null,
                 posting_date: today,
                 // Stamped only if nothing supplied one: when the record
                 // reached FuelSphere is the truthful fallback, not today.
-                received_date: inv.received_date
-                    || (inv.created_at ? String(inv.created_at).slice(0, 10) : today)
+                received_date: receivedDate
             }).where({ ID: invoiceId });
 
-            req.info(200, `Posted to S/4HANA (SIMULATED): FI document ${docNo}, `
-                + `SAP invoice ${sapInvoiceNo}, posting date ${today}.`);
+            const summary = s4Mode === 'off'
+                ? 'S/4HANA posting is switched off (FS_S4_POSTING_MODE=off); no document was created.'
+                : `${outcome.posted} of ${outcome.attempted} ticket(s) returned an S/4 supplier invoice`
+                  + (outcome.failed ? `, ${outcome.failed} did not` : '')
+                  + (outcome.unresolved ? `; ${outcome.unresolved} line(s) resolved to no ticket (INV450)` : '')
+                  + '.';
+
+            if (fiStatus === 'SUCCESS') {
+                req.info(200, `Posted to S/4HANA: ${summary}`);
+            } else {
+                // NOT req.error - the FuelSphere posting succeeded and the row
+                // is committed. Erroring here would roll it back and leave the
+                // user unable to post an invoice because S/4 is misconfigured.
+                req.warn(`Invoice posted in FuelSphere, S/4HANA invoice step ${fiStatus}: ${summary}`
+                    + (first ? '' : ' Retry from the ticket once S/4 is configured.'));
+            }
+
             return {
-                success: true, invoiceId, invoiceNumber: inv.invoice_number,
-                s4DocumentNumber: docNo, s4FiscalYear: year, s4CompanyCode: companyCode,
+                success: fiStatus === 'SUCCESS',
+                invoiceId, invoiceNumber: inv.invoice_number,
+                s4DocumentNumber: first ? first.s4_invoice_number : null,
+                s4FiscalYear: first ? (first.s4_invoice_year || year) : year,
+                s4CompanyCode: companyCode,
                 postingDate: today, postedAmount: inv.gross_amount,
                 currency: inv.currency_code,
-                message: 'Simulated posting - no document was created in S/4HANA.'
+                message: summary
             };
         });
 

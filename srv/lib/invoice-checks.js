@@ -248,8 +248,20 @@ function raise(registry, code, opts = {}) {
 // This is the chain the supplier cannot walk and we can. They quote a ticket
 // number; they do not know our PO. REQ-CP-006.
 //
-//     ticket_number -> FUEL_TICKETS -> order -> s4_po_number
-//                                   -> delivery -> s4_gr_number
+//     ticket_number -> FUEL_TICKETS -> s4_po_number / s4_gr_number   (S/4)
+//                                   -> order    -> s4_po_number      (fallback)
+//                                   -> delivery -> s4_gr_number      (fallback)
+//
+// THE TICKET'S OWN NUMBERS COME FIRST SINCE 13 Oct 2026, because S/4 issued
+// them: srv/lib/s4-fuel-posting.js posts the PO and the GR when the ticket is
+// saved and writes them onto the ticket.
+//
+// THE FALLBACK IS NOT POLITENESS. FUEL_ORDERS.s4_po_number and
+// FUEL_DELIVERIES.s4_gr_number are filled by a SIMULATION in
+// srv/order-service.js, and 2,494 seeded invoice lines resolve through them.
+// Preferring the ticket without falling back would fail INV464 and INV466 on
+// every one of those lines, and take INV474's order-and-GR key with them.
+// Retiring the simulation needs the seed regenerated and is a separate job.
 //
 // Every step can fail, and each failure is a DIFFERENT exception, because
 // "the ticket does not exist" and "the ticket exists and was never ordered"
@@ -287,7 +299,10 @@ async function resolveLine(item, tx) {
     out.order = await db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS').where({ ID: ticket.order_ID }));
     if (!out.order) { out.failure = 'TICKET_NO_ORDER'; return out; }
 
-    out.resolved_po_number = out.order.s4_po_number || null;
+    // The ticket's number is the one S/4 issued; the order's is the
+    // simulation's. Prefer the real one, accept either.
+    out.resolved_po_number = ticket.s4_po_number || out.order.s4_po_number || null;
+    out.po_source = ticket.s4_po_number ? 'TICKET_S4' : (out.order.s4_po_number ? 'ORDER_SIMULATED' : null);
     if (!out.resolved_po_number) out.failure = 'ORDER_NO_PO';
 
     // The GR hangs off the delivery, and a ticket may name one directly or
@@ -297,7 +312,10 @@ async function resolveLine(item, tx) {
     if (!out.delivery && out.order) {
         out.delivery = await db.run(SELECT.one.from('fuelsphere.FUEL_DELIVERIES').where({ order_ID: out.order.ID }));
     }
-    out.resolved_gr_number = (out.delivery && out.delivery.s4_gr_number) || null;
+    out.resolved_gr_number = ticket.s4_gr_number
+        || (out.delivery && out.delivery.s4_gr_number) || null;
+    out.gr_source = ticket.s4_gr_number ? 'TICKET_S4'
+        : ((out.delivery && out.delivery.s4_gr_number) ? 'DELIVERY_SIMULATED' : null);
     if (!out.failure && !out.resolved_gr_number) out.failure = 'NO_GR';
 
     return out;

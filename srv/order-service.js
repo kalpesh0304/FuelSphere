@@ -37,6 +37,11 @@ const {
     toleranceKg
 } = require('./lib/fob-reconciliation');
 const { deriveDeliveryUplift, DERIVED_SOURCE } = require('./lib/fob-derivation');
+const s4Posting = require('./lib/s4-fuel-posting');
+const s4Mapper = require('./lib/s4-fuel-posting-mapper');
+// This file logged nothing before; the S/4 hook needs somewhere to put a
+// failure that it deliberately does not rethrow. cds.log is what srv/lib uses.
+const S4LOG = cds.log('s4-posting');
 const { reconcileFlight, reconcileFlightForDelivery } = require('./lib/flight-variance');
 const { createSignatureDocuments } = require('./lib/signature-documents');
 const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
@@ -2067,6 +2072,47 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
         // init — measured under WP-13: registering there silently no-ops and
         // the guard never fires. Registered once, guarded against a second
         // registration if the service is initialised twice in one process.
+
+        // ====================================================================
+        // S/4HANA POSTING FOR TICKETS CREATED INSIDE THE ORDER DRAFT
+        // ====================================================================
+        //
+        // A DEEP SAVE DOES NOT FIRE CREATE ON FuelTickets. Saving an order
+        // with its tickets writes the children through the composition, so
+        // the after('CREATE') that srv/lib/s4-fuel-posting.js registers on
+        // TicketService never runs for them - and those are the majority of
+        // tickets in this system, because the order draft is where they are
+        // normally captured. Without this hook, posting would appear to work
+        // on the standalone ticket app and silently do nothing on the path
+        // everyone actually uses.
+        //
+        // s4_posting_status IS NULL ONLY FOR A TICKET NEVER ATTEMPTED, which
+        // is what makes it the right filter: a ticket that failed keeps its
+        // status and is retried deliberately, from the button, rather than on
+        // every subsequent save of its order.
+        this.after(['CREATE', 'UPDATE'], FuelOrders, async (order, req) => {
+            if (!order || !order.ID || s4Posting.mode() === 'off') return;
+            const { FUEL_TICKETS } = cds.entities('fuelsphere');
+            const notPosted = await SELECT.from(FUEL_TICKETS).columns('ID')
+                .where({ order_ID: order.ID, s4_posting_status: null });
+            if (!notPosted.length) return;
+            let incomplete = 0;
+            for (const { ID } of notPosted) {
+                try {
+                    const fields = await s4Posting.postTicketToS4(ID);
+                    if (Object.keys(fields).length && !s4Mapper.upliftPosted(fields)) incomplete += 1;
+                } catch (err) {
+                    incomplete += 1;
+                    S4LOG.error(`S/4 posting of ticket ${ID} on order ${order.ID} failed`, err);
+                }
+            }
+            // ONE MESSAGE FOR THE BATCH. An order with twelve tickets must not
+            // raise twelve warnings on one save.
+            if (incomplete) {
+                req.warn(`Order saved. S/4HANA PO/GR posting is incomplete for `
+                    + `${incomplete} of ${notPosted.length} ticket(s) - open the ticket to see why.`);
+            }
+        });
 
         await super.init();
     }

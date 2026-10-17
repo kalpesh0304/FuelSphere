@@ -81,6 +81,16 @@
             "forwardAuthToken": true
           }
         }
+      },
+      "ZFS_FUEL_POSTING_SRV": {
+        "kind": "odata-v2",
+        "csrf": true,
+        "csrfInBatch": true,
+        "requestTimeout": 120000,
+        "credentials": {
+          "destination": "S2A",
+          "path": "/sap/opu/odata/sap/ZFS_FUEL_POSTING_SRV"
+        }
       }
     },
     "features": {

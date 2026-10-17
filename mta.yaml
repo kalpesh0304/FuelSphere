@@ -42,6 +42,23 @@ modules:
       buildpack: nodejs_buildpack
       memory: 1024M
       disk-quota: 2048M
+    properties:
+      # ==================== S/4 FUEL POSTING ====================
+      #
+      # mock ON PURPOSE, not an oversight. srv/lib/s4-fuel-posting.js defaults
+      # to LIVE on the production profile, and live posting against S2A cannot
+      # work yet for two independent reasons:
+      #
+      #   1. The master data does not match S2A. The seed carries contracts
+      #      4600000001.., materials 10000001.., plants MNL1/DXB1.. and no COK
+      #      airport at all; S2A needs 7000000033, JETA1 and 3COK.
+      #   2. The invoice step is blocked anyway - company code 3000 has no
+      #      invoice tolerance key PP (OMR6), so every invoice fails M8 215.
+      #
+      # Left on live, every ticket save would make a real call and write an
+      # error onto the ticket. Set this to live once (1) is seeded and (2) is
+      # configured; use off to stop posting entirely.
+      FS_S4_POSTING_MODE: mock
     build-parameters:
       builder: custom
       commands:

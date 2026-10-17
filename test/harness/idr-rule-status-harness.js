@@ -311,6 +311,28 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
         }
         assert.ok(byLine.size >= 10, `instrument check: only ${byLine.size} lines to measure over`);
 
+        // ---- THE SECOND AXIS, WRITTEN DOWN - 13 Oct 2026 -----------------
+        //
+        // This bucketed on cascade depth alone and asserted one grey count per
+        // depth. It broke the day a second kind of line existed, and the
+        // failure message asked for exactly this: "applicability has started
+        // depending on something other than how far the cascade got, and
+        // whatever that something is, nobody wrote it down."
+        //
+        // IT IS WHETHER THE LINE STATES A PO. INV465 compares the PO the
+        // supplier printed against the one we resolved; with no printed PO
+        // there is nothing to compare, so it is NOT_APPLICABLE and the line
+        // carries one more grey. Measured: of 2,484 fully resolved lines,
+        // 1,766 state a PO and are grey on INV470/471/472, and 718 state none
+        // and are grey on INV465 as well.
+        //
+        // NOT KEYED ON charge_type, though every one of those 718 happens to
+        // be an into-plane line. SEVEN FUEL LINES ALSO STATE NO PO, and
+        // bucketing by charge type would put them in with the 1,769 that do
+        // and hide a genuine inconsistency behind a correlation.
+        const statesPo = new Map((await d.run(SELECT.from('fuelsphere.INVOICE_ITEMS')
+            .columns('ID', 'po_number'))).map(i => [i.ID, Boolean(i.po_number)]));
+
         const bucket = new Map();
         for (const [id, rs] of byLine) {
             let depth = CASCADE.length;
@@ -318,30 +340,45 @@ describe('IDR rule status — the verdicts, and the counters over them', () => {
                 const v = rs.find(r => r.check_code === CASCADE[i]);
                 if (v && v.status === 'FAILED') { depth = i; break; }
             }
-            if (!bucket.has(depth)) bucket.set(depth, []);
-            bucket.get(depth).push({ id, na: rs.filter(r => r.status === 'NOT_APPLICABLE').length });
+            const key = `${depth}|${statesPo.get(id) ? 'po' : 'nopo'}`;
+            if (!bucket.has(key)) bucket.set(key, []);
+            bucket.get(key).push({ id, na: rs.filter(r => r.status === 'NOT_APPLICABLE').length });
         }
-        const seen = [...bucket.keys()].sort((a, b) => a - b);
+        const depthOf = (k) => Number(String(k).split('|')[0]);
+        const seen = [...bucket.keys()].sort((a, b) => depthOf(a) - depthOf(b)
+            || String(a).localeCompare(String(b)));
         assert.ok(seen.length >= 3,
             `instrument check: lines fail at only ${seen.length} distinct depth(s), so this proves little`);
 
         const report = [];
-        let prev = Infinity;
-        for (const dep of seen) {
-            const b = bucket.get(dep);
+        for (const key of seen) {
+            const b = bucket.get(key);
+            const dep = depthOf(key);
             const counts = [...new Set(b.map(x => x.na))];
-            const label = dep === CASCADE.length ? 'resolved' : `rung${dep + 1}`;
+            const label = (dep === CASCADE.length ? 'resolved' : `rung${dep + 1}`)
+                + (String(key).endsWith('|nopo') ? '/no-stated-PO' : '');
             assert.strictEqual(counts.length, 1,
                 `${b.length} lines all first fail at ${label} and carry DIFFERENT grey counts `
               + `(${counts.sort((a,c)=>a-c).join(', ')}). Applicability has started depending on something `
-              + `other than how far the cascade got, and whatever that something is, nobody wrote it down.`);
+              + `other than how far the cascade got and whether the line states a PO, and whatever that `
+              + `something is, nobody wrote it down.`);
             report.push(`${label}=${counts[0]}`);
-            // Monotonicity is reported, not guarded - see the note above.
-            assert.ok(counts[0] <= prev, `grey rose at ${label}`);
-            prev = counts[0];
         }
-        out(`${byLine.size} lines, grey per line by first failing rung: ${report.join('  ')} `
-          + `— exact within each depth`);
+
+        // MONOTONICITY IS CHECKED WITHIN ONE PO BUCKET, not across both.
+        // Comparing a no-stated-PO line at one depth against a stated-PO line
+        // at the next would compare two different questions, and grey would
+        // appear to rise for a reason that is not depth.
+        for (const flavour of ['po', 'nopo']) {
+            let prev = Infinity;
+            for (const key of seen.filter(k => String(k).endsWith('|' + flavour))) {
+                const n = bucket.get(key)[0].na;
+                assert.ok(n <= prev, `grey rose at ${key} within the ${flavour} bucket`);
+                prev = n;
+            }
+        }
+        out(`${byLine.size} lines, grey per line by first failing rung and stated PO: `
+          + `${report.join('  ')} — exact within each bucket`);
     });
 
     it('EXIT-9  RUNG 5 IS UNEXERCISED BY DATA, and says so', async () => {

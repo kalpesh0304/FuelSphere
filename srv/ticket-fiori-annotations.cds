@@ -181,7 +181,12 @@ annotate TicketService.FuelTickets with @(
             // answering "has this been billed?" cost one navigation per
             // ticket.
             { Value: billing_status_v, Label: 'Billing status', ![@UI.Importance]: #Medium },
-            { Value: invoice_number_v, Label: 'Invoice number', ![@UI.Importance]: #Medium }
+            { Value: invoice_number_v, Label: 'Invoice number', ![@UI.Importance]: #Medium },
+            // SCANNED, NOT OPENED. A buyer reconciling against S/4 wants the
+            // PO and GR in the list; the rest of the trail is one click away.
+            { Value: s4_po_number,     Label: 'Purchase order',  ![@UI.Importance]: #Medium },
+            { Value: s4_gr_number,     Label: 'Goods receipt',    ![@UI.Importance]: #Medium },
+            { Value: s4_posting_status, Label: 'S/4 status',      ![@UI.Importance]: #Low }
         ],
 
         HeaderFacets: [
@@ -205,7 +210,16 @@ annotate TicketService.FuelTickets with @(
             // lines are correct and the reader needs both, each with its own
             // line item number.
             { $Type: 'UI.ReferenceFacet', ID: 'InvoiceLines',
-              Target: 'invoice_lines/@UI.LineItem', Label: 'Invoice Lines' }
+              Target: 'invoice_lines/@UI.LineItem', Label: 'Invoice Lines' },
+
+            // WHAT S/4 CREATED FOR THIS UPLIFT - 13 Oct 2026.
+            //
+            // Its own card, not folded into Supplier & Invoice, because these
+            // are documents in ANOTHER system. The numbers above are
+            // FuelSphere's view of the supplier's billing; these are what
+            // ME23N, MB03 and MIR4 will open.
+            { $Type: 'UI.ReferenceFacet', ID: 'S4Posting',
+              Target: '@UI.FieldGroup#S4Posting', Label: 'S/4HANA Posting' }
         ],
 
         FieldGroup #TicketStatus: {
@@ -298,6 +312,30 @@ annotate TicketService.FuelTickets with @(
                 // the figure SAP Green Ledger receives.
                 { Value: carbon_projected_kg, Label: 'Projected carbon (kg CO2)' },
                 { Value: co2_factor_v,        Label: 'Combustion factor' }
+            ]
+        },
+
+        // THE STATUS AND THE MESSAGE LEAD, because when something is wrong
+        // that is the only part worth reading - the numbers below are blank
+        // precisely then.
+        FieldGroup #S4Posting: {
+            Data: [
+                { Value: s4_posting_status,   Label: 'Posting status' },
+                { Value: s4_posting_message,  Label: 'Posting message' },
+                { Value: s4_posted_at,        Label: 'Last attempted' },
+                { Value: s4_contract_number,  Label: 'Contract called off' },
+                { Value: s4_po_number,        Label: 'Purchase order' },
+                { Value: s4_po_item,          Label: 'PO item' },
+                { Value: s4_po_quantity,      Label: 'PO quantity' },
+                { Value: s4_po_unit,          Label: 'PO unit' },
+                { Value: s4_gr_number,        Label: 'Goods receipt' },
+                { Value: s4_gr_year,          Label: 'GR year' },
+                { Value: s4_invoice_number,   Label: 'S/4 supplier invoice' },
+                { Value: s4_invoice_year,     Label: 'S/4 invoice year' },
+                { Value: s4_invoice_amount,   Label: 'S/4 invoice amount' },
+                { Value: s4_invoice_currency, Label: 'Currency' },
+                { $Type: 'UI.DataFieldForAction', Label: 'Post to S/4HANA',
+                  Action: 'TicketService.postToS4' }
             ]
         },
 
@@ -647,4 +685,34 @@ annotate TicketService.TicketInvoiceLines with {
     tax_amount       @title: 'Tax amount';
     tolerance_status @title: 'Tolerance';
     line_match_status @title: 'Match status';
+}
+
+// ===========================================================================
+// THE S/4 TRAIL - titles, because a card column with none falls back to the
+// technical name and ui02 EXIT-2c ratchets exactly that.
+// ===========================================================================
+annotate TicketService.FuelTickets with {
+    s4_posting_status    @title: 'S/4 Posting Status'
+                         @Common.QuickInfo: 'S complete, P partial - some documents posted and a later step failed, E error. Empty means the ticket has never been sent to S/4.';
+    s4_posting_message   @title: 'S/4 Posting Message'
+                         @Common.QuickInfo: 'What S/4 said, prefixed with the FuelSphere code for the step still missing: INT401 no purchase order, INT402 no goods receipt, INV406 no supplier invoice.'
+                         @UI.MultiLineText;
+    s4_posted_at         @title: 'S/4 Last Attempted'
+                         @Common.QuickInfo: 'Stamped on every attempt including the failures, so a stale error cannot look fresh.';
+    s4_contract_number   @title: 'Contract Called Off'
+                         @Common.QuickInfo: 'The contract S/4 actually used. It can differ from the order''s: where no contract is sent, S/4 picks the valid one for the plant and material with open quantity.';
+    s4_po_number         @title: 'Purchase Order'
+                         @Common.QuickInfo: 'Created in S/4 when the ticket was saved. Open it with ME23N.';
+    s4_po_item           @title: 'PO Item';
+    s4_po_quantity       @title: 'PO Quantity'
+                         @Common.QuickInfo: 'As the purchase order carries it, which is not always what the ticket says - a kilogram ticket against a contract in litres is converted by S/4 using the density.';
+    s4_po_unit           @title: 'PO Unit';
+    s4_gr_number         @title: 'Goods Receipt'
+                         @Common.QuickInfo: 'Movement type 101, posted with the purchase order. Open it with MB03 - the year is part of the key.';
+    s4_gr_year           @title: 'GR Year';
+    s4_invoice_number    @title: 'S/4 Supplier Invoice'
+                         @Common.QuickInfo: 'Posted from the Invoices app, not on ticket save: the invoice follows the supplier''s document. Distinct from the FuelSphere invoice number above, which is the document being verified.';
+    s4_invoice_year      @title: 'S/4 Invoice Year';
+    s4_invoice_amount    @title: 'S/4 Invoice Amount';
+    s4_invoice_currency  @title: 'S/4 Invoice Currency';
 }
