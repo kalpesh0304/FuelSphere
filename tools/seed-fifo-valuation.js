@@ -198,6 +198,33 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
     }
 
     // ---- every movement, as one list per tail ---------------------------
+    //
+    // THE LEDGER IS THE MOVEMENT SOURCE, SINCE 18 Oct 2026. This read tickets,
+    // FUEL_BURNS and APU_USAGE directly and derived its own movements, which
+    // made it a SECOND implementation of a question ROB_LEDGER already
+    // answers - and the two disagreed. Measured before the change: the MAP
+    // rate matched on 242 of 265 tails, but closing stock value matched on
+    // only 48, and the fleet totals were 1,494,458 USD on the ledger against
+    // 1,481,027 USD here, 13,431 apart.
+    //
+    // Two causes, both fixed by reading the ledger:
+    //
+    //   DIFFERENT MOVEMENTS. The ledger holds what was POSTED to it,
+    //   including ADJUSTMENT rows this seeder never read at all. C-FDMO had
+    //   8 movements on the ledger and 10 here, and the closing quantities
+    //   differed by 1,236 kg.
+    //
+    //   AN INVENTED OPENING PRICE. This carried opening stock at the tail's
+    //   first uplift rate "because ROB_LEDGER leaves rate and value empty on
+    //   INITIAL rows". It does not: 263 of 273 carry a rate. The assumption
+    //   was unnecessary and wrong.
+    //
+    // MAP IS NOT RECOMPUTED HERE ANY MORE - it is COPIED from the ledger,
+    // which computes it incrementally when a movement posts (srv/lib/
+    // rob-uplift.js) and replays a tail on correction (rob-recalculate.js).
+    // That is the only way two screens can be guaranteed to show one number.
+    // FIFO is still computed here, because it needs batch layers and the
+    // ledger has nowhere to keep them - but now over the SAME movements.
     const byTail = new Map();
     const push = (tail, mv) => {
         if (!tail) return;
@@ -205,129 +232,111 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
         byTail.get(tail).push(mv);
     };
 
-    // ---- what was already on board ---------------------------------------
+    // ---- SEQUENCE IS AUTHORITATIVE, NOT record_time --------------------
     //
-    // THE OPENING QUANTITY IS RECORDED AND ITS PRICE IS NOT. ROB_LEDGER's
-    // INITIAL rows carry closing_rob_kg and leave rate and value empty, so
-    // FIFO has a layer with no price to value it at.
+    // MEASURED ON THE LEDGER ITSELF, not assumed. On N645JB:
     //
-    // It is carried at the TAIL'S FIRST UPLIFT RATE, and that is an
-    // ASSUMPTION, marked as one: the batch is called OPENING so no reader
-    // mistakes it for a ticket, and a tail that never uplifts carries its
-    // opening stock at zero rather than at a price invented for it. The
-    // alternative - leaving the stock out - was worse: it made 923 burns
-    // look like they drew on fuel that did not exist.
-    let openingTails = 0, openingUnpriced = 0;
-    const firstRateByTail = new Map();
-    for (const t of tickets) {
-        const mass = num(t.quantity_kg), amount = num(t.total_amount);
-        const tail = t.tail_registration;
-        if (!tail || firstRateByTail.has(tail) || mass === null || mass <= 0 || amount === null) continue;
-        firstRateByTail.set(tail, rate(amount / mass));
-    }
+    //   seq 1  00:00:00  INITIAL   closing 3981.34
+    //   seq 2  23:18:34  UPLIFT    closing 8746.20
+    //   seq 3  22:50:00  BURN      closing 2750.94
+    //   seq 4  22:50:00  APU_BURN  closing 2670.27
     //
-    // ONE OPENING LAYER PER TAIL, AND THREE TAILS FORCE THE RULE. C-FDMO,
-    // C-FDMP and C-GDMS each carry TWO INITIAL rows in ROB_LEDGER, twenty
-    // minutes apart at the same station - one from an older seed vintage with
-    // no line_order, one current. Taking both gave the tail two opening
-    // layers, double-counting stock that was only ever there once, and
-    // collided their balance rows on a shared batch_ref.
+    // The uplift's timestamp is LATER than the burn's, and the closing
+    // balance chain 3981 -> 8746 -> 2751 -> 2670 reconciles only in SEQUENCE
+    // order. Whatever wrote closing_rob_kg walked the sequence.
     //
-    // The LAST in replay order wins, which is the ledger's own semantic: an
-    // INITIAL row sets the balance, so a later one supersedes an earlier one
-    // rather than adding to it. Here it also happens to pick the current-
-    // vintage row, but the rule is the reason, not the coincidence.
-    const initialByTail = new Map();
-    const ledgerKey = (r) => [r.record_date || '', r.record_time || '',
-        String(r.line_order ?? '').padStart(6, '0'), String(r.sequence ?? '').padStart(6, '0')].join('|');
+    // Sorting by time first therefore puts a burn ahead of the uplift that
+    // fuels it, and FIFO meets an empty tank: 472 burns overdrew by 849,489
+    // kg, against 8 before this seeder changed source.
+    //
+    // NOTE FOR WHOEVER READS THIS NEXT: srv/lib/rob-recalculate.js orders by
+    // (date, time, sequence) and srv/lib/rob-litres.js by (date, line_order,
+    // time, sequence). Neither matches the sequence the data was written in,
+    // and the fleet's closing stock value reads 1,992,615 / 1,494,458 /
+    // 1,481,022 USD depending on which of the three you pick. That is a
+    // ledger defect, not a valuation one, and it is NOT fixed here - fixing
+    // it changes what the FOB ledger and Fuel Overview Report display.
+    const LEDGER_ENTRY_RANK = { INITIAL: 0, UPLIFT: 1, BURN: 2, APU_BURN: 3, TRANSFER: 4, ADJUSTMENT: 5 };
+    const ledgerOrder = (a, b) =>
+        String(a.record_date || '').localeCompare(String(b.record_date || ''))
+        || (num(a.sequence) || 0) - (num(b.sequence) || 0)
+        // Only where two rows share a sequence: an uplift lands before the
+        // burn that draws on it.
+        || (LEDGER_ENTRY_RANK[a.entry_type] ?? 9) - (LEDGER_ENTRY_RANK[b.entry_type] ?? 9);
+
+    // ROB_LEDGER entry types in this file's vocabulary.
+    const LEDGER_LINE_TYPE = {
+        INITIAL: 'INITIAL',
+        UPLIFT: 'UPLIFT',
+        BURN: 'BLOCK_BURN',
+        APU_BURN: 'APU_BURN',
+        TRANSFER: 'TRANSFER',
+        ADJUSTMENT: 'ADJUSTMENT'
+    };
+
+    let unpricedLedger = 0, unvaluedAdjustments = 0;
+    const ledgerByTail = new Map();
     for (const r of ledger) {
-        if (r.entry_type !== 'INITIAL') continue;
-        const qty = num(r.closing_rob_kg);
-        if (qty === null || qty <= 0 || !r.tail_number) continue;
-        const prev = initialByTail.get(r.tail_number);
-        if (!prev || ledgerKey(r) >= ledgerKey(prev)) initialByTail.set(r.tail_number, r);
-    }
-    let openingSuperseded = 0;
-    for (const r of ledger) {
-        if (r.entry_type !== 'INITIAL' || !r.tail_number) continue;
-        const qty0 = num(r.closing_rob_kg);
-        if (qty0 === null || qty0 <= 0) continue;
-        if (initialByTail.get(r.tail_number) !== r) openingSuperseded += 1;
-    }
-    for (const r of initialByTail.values()) {
-        const qty = num(r.closing_rob_kg);
-        const tail = r.tail_number;
-        const assumed = firstRateByTail.get(tail);
-        if (assumed === undefined) openingUnpriced += 1;
-        openingTails += 1;
-        push(tail, {
-            line_type: 'INITIAL',
-            reference: 'OPENING',
-            batch_ref: 'OPENING',
-            qty_kg: kg(qty),
-            specific_gravity: num(r.wt_avg_specific_gravity),
-            rate_usd_per_kg: assumed ?? 0,
-            value_usd: money(qty * (assumed ?? 0)),
-            flight_number: null,
-            flight_date: r.record_date || null,
-            flight_aobt: r.record_date ? `${r.record_date}T${r.record_time || '00:00:00'}Z` : null,
-            station: r.airport_code || null
-        });
+        if (!r.tail_number) continue;
+        if (!ledgerByTail.has(r.tail_number)) ledgerByTail.set(r.tail_number, []);
+        ledgerByTail.get(r.tail_number).push(r);
     }
 
-    let noPrice = 0, noMass = 0;
-    for (const t of tickets) {
-        const mass = num(t.quantity_kg);
-        if (mass === null || mass <= 0) { noMass++; continue; }
-        const amount = num(t.total_amount);
-        if (amount === null) noPrice++;
-        const f = flightById.get(t.flight_ID);
-        const sg = num(t.density_value);
-        push(t.tail_registration, {
-            line_type: 'UPLIFT',
-            reference: t.ticket_number || t.ID,
-            batch_ref: t.ticket_number || t.ID,
-            qty_kg: kg(mass),
-            specific_gravity: sg,
-            // THE PRICE THE TICKET PAID, back-solved per kilogram so that
-            // rate x qty rebuilds the ticket's own value exactly. A ticket
-            // with no amount is carried at zero rather than refused - the
-            // fuel moved, and the money is simply not known yet.
-            rate_usd_per_kg: amount === null ? 0 : rate(amount / mass),
-            value_usd: amount === null ? 0 : money(amount),
-            flight_number: t.flight_number || (f ? f.flight_number : null),
-            flight_date: f ? f.flight_date : null,
-            flight_aobt: aobtOf(f),
-            station: f ? f.origin_airport : null
-        });
-    }
+    for (const [tail, rows] of ledgerByTail) {
+        for (const r of rows.slice().sort(ledgerOrder)) {
+            const lineType = LEDGER_LINE_TYPE[r.entry_type];
+            if (!lineType) continue;
 
-    for (const b of burns) {
-        const mass = num(b.actual_burn_kg);
-        const f = flightById.get(b.flight_ID);
-        if (mass !== null && mass > 0) {
-            push(b.tail_registration || b.tail_number, {
-                line_type: 'BLOCK_BURN',
-                reference: b.ID,
-                qty_kg: kg(mass),
-                flight_number: b.flight_number || (f ? f.flight_number : null),
-                flight_date: f ? f.flight_date : b.burn_date,
-                flight_aobt: aobtOf(f),
-                station: f ? f.origin_airport : null,
-                qty_basis: 'REPORTED_BURN'
-            });
-        }
-        const apuKg = b.flight_ID ? apuByFlight.get(b.flight_ID) : null;
-        if (apuKg) {
-            push(b.tail_registration || b.tail_number, {
-                line_type: 'APU_BURN',
-                reference: `${b.ID}:APU`,
-                qty_kg: kg(apuKg),
-                flight_number: b.flight_number || (f ? f.flight_number : null),
-                flight_date: f ? f.flight_date : b.burn_date,
-                flight_aobt: aobtOf(f),
-                station: f ? f.origin_airport : null,
-                qty_basis: 'APU_CYCLES'
+            // SIGNED, AS THE LEDGER KEEPS IT: + uplift, - burn. qty_kg is the
+            // ledger's own signed movement column, so no sign is inferred.
+            //
+            // BUT THE LEDGER IS MIXED VINTAGE and qty_kg is not always there.
+            // Measured: of 273 INITIAL rows only 266 carry it, and the older
+            // ones leave it empty with the opening quantity in closing_rob_kg
+            // (opening_rob_kg being 0). Reading qty_kg alone gave those tails
+            // no opening layer at all, and FIFO then overdrew on 472 burns
+            // for 849,489 kg - against 8 burns before this seeder changed
+            // source. An ADJUSTMENT keeps its delta in a third place again.
+            //
+            // So the quantity is taken from whichever column the row actually
+            // uses, in order of how directly it states the movement.
+            let qty = num(r.qty_kg);
+            if (qty === null && r.entry_type === 'INITIAL') {
+                qty = num(r.closing_rob_kg);
+            }
+            if (qty === null && r.entry_type === 'ADJUSTMENT') {
+                const delta = num(r.adjustment_kg);
+                const open = num(r.opening_rob_kg), close = num(r.closing_rob_kg);
+                qty = delta !== null ? delta
+                    : (open !== null && close !== null ? kg(close - open) : null);
+            }
+            const rate = num(r.rate_usd_per_kg);
+
+            // AN ADJUSTMENT MOVES QUANTITY AND CARRIES NO VALUE - on all 7 of
+            // them, in the ledger as well as here. It is passed through so
+            // FIFO sees the movement rather than silently diverging from the
+            // ledger's quantity, and counted so the gap is visible.
+            if (lineType === 'ADJUSTMENT' && (qty === null || rate === null)) unvaluedAdjustments += 1;
+            if (qty !== null && qty !== 0 && rate === null) unpricedLedger += 1;
+
+            push(tail, {
+                line_type: lineType,
+                reference: r.ID,
+                batch_ref: lineType === 'UPLIFT' || lineType === 'INITIAL' ? (r.ID || '') : null,
+                qty_kg: qty === null ? null : kg(qty),
+                specific_gravity: num(r.specific_gravity) || num(r.wt_avg_specific_gravity),
+                rate_usd_per_kg: rate,
+                value_usd: num(r.value_usd),
+                flight_number: null,
+                flight_date: r.record_date || null,
+                flight_aobt: r.record_date ? `${r.record_date}T${r.record_time || '00:00:00'}Z` : null,
+                station: r.airport_code || null,
+                qty_basis: 'ROB_LEDGER',
+                // What the ledger already decided, carried so the MAP rows
+                // below are a copy rather than a second calculation.
+                ledger_balance_qty: num(r.closing_rob_kg),
+                ledger_balance_value: num(r.balance_value_usd),
+                ledger_map: num(r.map_usd_per_kg)
             });
         }
     }
@@ -337,10 +346,12 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
     let shortfalls = 0, shortfallKg = 0;
 
     for (const [tail, list] of [...byTail.entries()].sort()) {
-        list.sort((a, b) =>
-            String(a.flight_aobt || '').localeCompare(String(b.flight_aobt || ''))
-            || (LINE_ORDER[a.line_type] - LINE_ORDER[b.line_type])
-            || String(a.reference).localeCompare(String(b.reference)));
+        // ALREADY IN LEDGER ORDER - pushed that way above, and re-sorting on
+        // flight_aobt would undo it: the ledger orders by date, time and
+        // sequence, which is the order the day actually happened in. A
+        // re-sort here put all of a four-leg day's uplifts ahead of all its
+        // burns, and the running balance then swung through figures the
+        // aircraft never held (the trap rob-recalculate.js records).
 
         // ---- FIFO -------------------------------------------------------
         const layers = [];              // { ref, qty, left, rate, sg, ... }
@@ -348,7 +359,9 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
         for (const mv of list) {
             seq += 1;
             if (mv.line_type === 'UPLIFT' || mv.line_type === 'INITIAL') {
-                layers.push({ ...mv, left: mv.qty_kg, layer_no: layers.length + 1 });
+                // ABS, BECAUSE THE LEDGER'S qty_kg IS SIGNED. It reads +
+                // on an uplift and - on a burn; a layer holds a magnitude.
+                layers.push({ ...mv, left: Math.abs(mv.qty_kg || 0), layer_no: layers.length + 1 });
                 movements.push(row('FIFO', tail, mv, {
                     batch_ref: mv.batch_ref,
                     qty_kg: mv.qty_kg,
@@ -360,7 +373,11 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             }
             // A BURN EATS THE OLDEST LAYER FIRST, and one row is written per
             // layer it touches - that explosion is what FIFO is.
-            let need = mv.qty_kg, taken = 0, value = 0, used = 0;
+            // ABS FOR THE SAME REASON. A burn arrives as a NEGATIVE qty_kg
+            // from the ledger, and `need <= 0` broke the consumption loop on
+            // its first test - every burn consumed nothing, FIFO charged 0
+            // USD across the fleet and left the entire 21.4m in open layers.
+            let need = Math.abs(mv.qty_kg || 0), taken = 0, value = 0, used = 0;
             for (const L of layers) {
                 if (need <= 0) break;
                 if (L.left <= 0) continue;
@@ -405,37 +422,46 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
         }
 
         // ---- MAP --------------------------------------------------------
-        let qty = 0, val = 0, map = 0;
+        //
+        // COPIED FROM THE LEDGER, NOT RECOMPUTED. ROB_LEDGER computes the
+        // moving average when a movement posts and stores it on the row; the
+        // FOB ledger and the Fuel Overview Report both display it. Working it
+        // out again here would be a second implementation of one rule, which
+        // is exactly what produced a 13,431 USD disagreement on closing stock
+        // before 18 Oct 2026.
+        //
+        // So every MAP figure below is the ledger's own: the rate it charged,
+        // the running balance it carried, the average it held afterwards.
+        // s4-style arithmetic is not repeated - it is read.
+        let lastQty = null, lastValue = null, lastMap = null;
         seq = 0;
         for (const mv of list) {
             seq += 1;
-            if (mv.line_type === 'UPLIFT' || mv.line_type === 'INITIAL') {
-                qty = kg(qty + mv.qty_kg); val = money(val + (mv.value_usd || 0));
-                map = qty > 0 ? rate(val / qty) : map;
-                movements.push(row('MAP', tail, mv, {
-                    qty_kg: mv.qty_kg,
-                    rate_usd_per_kg: mv.rate_usd_per_kg,
-                    value_usd: mv.value_usd,
-                    balance_qty_kg: qty, balance_value_usd: val, map_usd_per_kg: map,
-                    seq
-                }));
-                continue;
+            const isIn = mv.line_type === 'UPLIFT' || mv.line_type === 'INITIAL';
+            if (mv.ledger_balance_qty !== null && mv.ledger_balance_qty !== undefined) {
+                lastQty = mv.ledger_balance_qty;
+                lastValue = mv.ledger_balance_value;
+                lastMap = mv.ledger_map;
             }
-            // A BURN LEAVES THE AVERAGE ALONE - it takes fuel out at the price
-            // the stock already stood at, which is the whole of the method.
-            const take = Math.min(mv.qty_kg, Math.max(qty, 0));
-            const value = money(take * map);
-            qty = kg(qty - take); val = money(val - value);
             movements.push(row('MAP', tail, mv, {
-                qty_kg: kg(-take),
-                rate_usd_per_kg: map,
-                value_usd: money(-value),
-                balance_qty_kg: qty, balance_value_usd: val, map_usd_per_kg: map,
+                qty_kg: mv.qty_kg,
+                rate_usd_per_kg: mv.rate_usd_per_kg,
+                value_usd: mv.value_usd,
+                balance_qty_kg: mv.ledger_balance_qty,
+                balance_value_usd: mv.ledger_balance_value,
+                map_usd_per_kg: mv.ledger_map,
                 seq
             }));
-            burnHeaders.push(header('MAP', tail, mv, take, value, 1));
+            // A BURN'S COST UNDER MAP IS WHAT THE LEDGER CHARGED IT. On the
+            // ledger a burn's rate_usd_per_kg IS the MAP it was consumed at,
+            // so the burn header takes that rather than deriving one.
+            if (!isIn && mv.qty_kg !== null && mv.qty_kg < 0) {
+                const takenKg = Math.abs(mv.qty_kg);
+                const chargedValue = Math.abs(num(mv.value_usd) ?? (takenKg * (mv.rate_usd_per_kg || 0)));
+                burnHeaders.push(header('MAP', tail, mv, takenKg, chargedValue, 1));
+            }
         }
-        balances.push(balance('MAP', tail, { station: null, flight_number: null, flight_date: null, flight_aobt: null, specific_gravity: null, qty_kg: null }, qty, val, map));
+        balances.push(balance('MAP', tail, { station: null, flight_number: null, flight_date: null, flight_aobt: null, specific_gravity: null, qty_kg: null }, lastQty ?? 0, lastValue ?? 0, lastMap ?? 0));
     }
 
     // ---- shapes ---------------------------------------------------------
@@ -496,10 +522,7 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
 
     // ---- report ---------------------------------------------------------
     const by = (rows, m) => rows.filter(r => r.valuation_method === m).length;
-    console.log(`${byTail.size} tails replayed`);
-    console.log(`  opening stock carried on ${openingTails} tail(s) at the tail's first uplift rate `
-              + `(${openingUnpriced} had no uplift and carry it at zero)`);
-    console.log(`  ${openingSuperseded} earlier INITIAL ledger row(s) superseded by a later one on the same tail`);
+    console.log(`${byTail.size} tails replayed from ROB_LEDGER (${ledger.length} ledger rows)`);
     const noCarrier = [...byTail.keys()].filter(t => !carrierOf(t));
     console.log(`  carrier code resolved for ${[...byTail.keys()].length - noCarrier.length} of `
               + `${[...byTail.keys()].length} tail(s)`
@@ -507,7 +530,8 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
               + (viaOperator ? `; ${viaOperator} resolved through the operator code `
                              + `(${[...operatorToIata].map(([o, c]) => o + '->' + c).join(', ')})` : '')
               + (noCarrier.length ? `; BLANK on ${noCarrier.length}: ${noCarrier.slice(0, 5).join(', ')}` : ''));
-    console.log(`  tickets skipped, no mass: ${noMass}; carried at zero rate, no amount: ${noPrice}`);
+    console.log(`  ${unpricedLedger} ledger movement(s) move quantity with no rate - carried at zero, never invented`);
+    console.log(`  ${unvaluedAdjustments} ADJUSTMENT row(s) carry neither quantity nor value, on the ledger as here`);
     console.log(`movements   ${movements.length}  (FIFO ${by(movements, 'FIFO')}, MAP ${by(movements, 'MAP')})`);
     console.log(`balances    ${balances.length}  (FIFO ${by(balances, 'FIFO')}, MAP ${by(balances, 'MAP')})`);
     console.log(`burn rows   ${burnHeaders.length}  (FIFO ${by(burnHeaders, 'FIFO')}, MAP ${by(burnHeaders, 'MAP')})`);

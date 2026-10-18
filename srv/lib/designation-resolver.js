@@ -27,7 +27,17 @@
  */
 const { resolveEffective } = require('./parameter-store');
 
-const E = 'fuelsphere.DESIGNATED_SUPPLIERS';
+// READS THE MAPS, NOT THE LEGACY TABLE - 18 Oct 2026.
+//
+// This pointed at DESIGNATED_SUPPLIERS, superseded on 4 Oct when the station
+// and flight maps took over. Nothing called this resolver, so it had gone
+// stale unnoticed; the S/4 posting is its first caller, and a posting
+// resolved from a superseded table would send S/4 an arrangement the mapping
+// apps no longer show.
+//
+// DESIGNATION_FROM_MAPS carries the legacy column names deliberately, so the
+// effective-dating in resolveEffective works unchanged.
+const E = 'fuelsphere.DESIGNATION_FROM_MAPS';
 
 /** How the designation was reached. Recorded, never inferred later. */
 const AXIS = { FLIGHT: 'FLIGHT', STATION: 'STATION', NONE: 'NONE' };

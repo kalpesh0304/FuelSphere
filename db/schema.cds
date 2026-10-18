@@ -255,6 +255,26 @@ entity AIRCRAFT_REGISTRATIONS : ActiveStatus, AuditTrail {
         confirmed_at        : DateTime;
 
         // Operational
+        // ====================================================================
+        // THE FUEL THIS TAIL TAKES - 18 Oct 2026, asked for by functional.
+        //
+        // IT IS THE S/4 MATERIAL, carried on the tail rather than inferred
+        // from the order's product. The instruction was explicit: "add a
+        // Field Fuel Type in Tail Master, map it as JETA1 of all tails. This
+        // is from where the Material Type is to be picked up for PO and GR
+        // creation."
+        //
+        // A PLAIN CODE, NOT AN ASSOCIATION TO MASTER_PRODUCTS, and that is
+        // deliberate rather than lazy. MASTER_PRODUCTS carries
+        // s4_material_number values (10000001..) that do not exist in S2A,
+        // and pointing at it would make every posting depend on fixing the
+        // product master first. This column holds what S/4 will accept,
+        // today, and the product master can be reconciled to it later.
+        //
+        // The posting falls back to order.product.s4_material_number where a
+        // tail has none, so nothing breaks before it is populated.
+        fuel_type           : String(20);          // S/4 material, e.g. JETA1
+
         operator_code       : String(3);           // Operating carrier where leased
         on_own_aoc          : Boolean default true; // false = wet lease or ACMI
 

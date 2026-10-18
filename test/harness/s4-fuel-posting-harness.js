@@ -21,6 +21,9 @@
  * EXIT-7  the two triggers are wired - ticket save, and the invoice action
  * EXIT-8  PO and GR resolution prefers the ticket and still falls back
  * EXIT-9  posting is NOT live by default on a deployed system
+ * EXIT-10 every attempt is recorded, the failures most of all
+ * EXIT-11 a repost keeps the earlier attempt, and the ticket shows the latest
+ * EXIT-12 the payload is built from the MAPPING TABLES, not the order
  */
 process.env.CDS_ENV = 'development';
 process.env.CDS_REQUIRES_DB_KIND = 'sqlite';
@@ -52,6 +55,16 @@ const ticket = {
 };
 
 describe('S/4HANA fuel ticket posting', () => {
+
+    // MOST OF THIS HARNESS NEEDS NO DATABASE - the mapper is pure, and that
+    // is why it runs in seconds. EXIT-10 and EXIT-11 do: they assert what the
+    // handler WRITES, which cannot be checked without somewhere to write it.
+    // Deployed once here rather than per test.
+    before(async function () {
+        this.timeout(120000);
+        if (!cds.db) await cds.deploy(await cds.load('*'));
+        cds.context = { user: new cds.User.Privileged() };
+    });
 
     // ------------------------------------------------------------- EXIT-1 --
     it('EXIT-1  the mapper builds the payload the Gateway will accept', () => {
@@ -232,5 +245,150 @@ describe('S/4HANA fuel ticket posting', () => {
         const src = fs.readFileSync(`${PROJECT}/srv/lib/s4-fuel-posting.js`, 'utf8');
         assert.ok(/mode\(\) === 'off'/.test(src), 'off mode is not checked before posting');
         assert.ok(/mode\(\) === 'mock'/.test(src), 'mock mode never short-circuits the call');
+    });
+
+    // ------------------------------------------------------------ EXIT-10 --
+    it('EXIT-10  every attempt is recorded, the failures most of all', async () => {
+        // A FAILED ATTEMPT IS THE ROW THE ERROR LOG EXISTS FOR. The business
+        // asked for a log "similar to the SAP application log", reachable
+        // from a tile, saying why a posting failed - so an attempt that
+        // created nothing must still leave a row, with its message.
+        process.env.FS_S4_POSTING_MODE = 'mock';
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT } = cds.ql;
+
+        // A ticket with no order cannot resolve a contract: validateRequest
+        // refuses it before S/4 is called, which is the commonest failure.
+        const bad = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID').where({ order_ID: null }));
+        assert.ok(bad, 'no un-ordered ticket to fail with');
+        await s4.postTicketToS4(bad.ID);
+
+        const attempts = await cds.db.run(SELECT.from('fuelsphere.S4_POSTING_ATTEMPTS')
+            .where({ ticket_ID: bad.ID }));
+        assert.strictEqual(attempts.length, 1, 'a failed posting left no history row');
+        const a = attempts[0];
+        assert.strictEqual(a.outcome, 'POERR',
+            `a posting that created no PO recorded outcome ${a.outcome}, expected POERR`);
+        assert.ok(!a.po_number && !a.gr_number, 'a failed attempt claims documents it did not create');
+
+        const msgs = await cds.db.run(SELECT.from('fuelsphere.S4_POSTING_MESSAGES')
+            .where({ attempt_ID: a.ID }));
+        assert.ok(msgs.length >= 1, 'the failure recorded no message - the log would be empty');
+        assert.strictEqual(msgs[0].step, 'PO', `the message blames step ${msgs[0].step}, expected PO`);
+        out(`failed posting -> attempt ${a.attempt_no} ${a.outcome}, ${msgs.length} message(s), step ${msgs[0].step}`);
+    });
+
+    // ------------------------------------------------------------ EXIT-11 --
+    it('EXIT-11  a repost keeps the earlier attempt, and the ticket shows the latest', async () => {
+        // THE REQUIREMENT IN ONE SENTENCE: "keep track of all postings
+        // (multiple posting and reversals) related to a ticket amendment".
+        // Columns hold one posting; this asserts the history holds them all
+        // WITHOUT the ticket's own columns changing meaning, because five
+        // screens read those.
+        process.env.FS_S4_POSTING_MODE = 'mock';
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT, UPDATE } = cds.ql;
+
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID').where({ order_ID: { '!=': null } }));
+        await s4.postTicketToS4(t.ID);
+        const first = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('s4_po_number').where({ ID: t.ID }));
+
+        // Stand in for "reversed in S/4, post again": the status is cleared
+        // so the handler does not short-circuit on an already-complete ticket.
+        await cds.db.run(UPDATE('fuelsphere.FUEL_TICKETS')
+            .set({ s4_posting_status: null }).where({ ID: t.ID }));
+        await s4.postTicketToS4(t.ID);
+
+        const attempts = await cds.db.run(SELECT.from('fuelsphere.S4_POSTING_ATTEMPTS')
+            .where({ ticket_ID: t.ID }));
+        assert.ok(attempts.length >= 2, `only ${attempts.length} attempt(s) recorded; the repost overwrote history`);
+
+        const nos = attempts.map(a => Number(a.attempt_no)).sort((x, y) => x - y);
+        assert.deepStrictEqual(nos, nos.map((_, i) => i + 1),
+            `attempt numbers are ${nos.join(',')} - they must run 1, 2, 3 in the order attempted`);
+
+        const pos = attempts.map(a => a.po_number).filter(Boolean);
+        assert.strictEqual(new Set(pos).size, pos.length,
+            'two attempts recorded the same PO - a repost must create new documents, not copy the old');
+
+        const latest = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('s4_po_number').where({ ID: t.ID }));
+        const newest = attempts.sort((x, y) => y.attempt_no - x.attempt_no)[0];
+        assert.strictEqual(latest.s4_po_number, newest.po_number,
+            'the ticket does not show the latest attempt - the screens would read a superseded posting');
+        assert.notStrictEqual(latest.s4_po_number, first.s4_po_number,
+            'the repost did not move the ticket on');
+        out(`${attempts.length} attempts kept; ticket shows attempt ${newest.attempt_no} (PO ${newest.po_number})`);
+    });
+
+    // ------------------------------------------------------------ EXIT-12 --
+    it('EXIT-12  the payload is built from the mapping tables, not the order', async () => {
+        // ASKED FOR DIRECTLY: "send the details from FuelSphere mapping
+        // tables while posting PO, GR and FI document". The order records
+        // what was bought; the maps record what S/4 accepts at that station,
+        // for that carrier, on that date - and they are what the mapping apps
+        // maintain. This asserts the payload follows the maps.
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT } = cds.ql;
+
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID').where({ flight_ID: { '!=': null }, order_ID: { '!=': null } }));
+        assert.ok(t, 'no ticket with both a flight and an order to resolve from');
+
+        const full = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS', t.ID, x => {
+            x('*'),
+            x.order(o => {
+                o.order_number,
+                o.contract(c => { c.s4_contract_number }),
+                o.supplier(sp => { sp.s4_vendor_no }),
+                o.airport(a => { a.s4_plant_code, a.iata_code }),
+                o.product(pr => { pr.s4_material_number })
+            }),
+            x.flight(f => { f.origin_airport, f.airline_code, f.flight_date }),
+            x.delivery(d => { d.density })
+        }));
+
+        const r = await s4.resolvePostingMasterData(full);
+        out('resolved from ' + JSON.stringify(r.sources));
+
+        // THE SUPPLIER COMES THROUGH THE DESIGNATION, which is the same path
+        // the flight screens use. A second resolution here would be the
+        // defect this codebase has paid for twice.
+        assert.ok(String(r.sources.supplier || '').startsWith('DESIGNATION_'),
+            `supplier resolved from ${r.sources.supplier}, expected the designation`);
+
+        // THE CONTRACT AND ITS LINE ITEM COME FROM THE STATION MAP.
+        assert.strictEqual(r.sources.contract, 'STATION_SUPPLIER_MAP',
+            `contract resolved from ${r.sources.contract}, expected the station-supplier map`);
+        assert.ok(r.contractItem, 'no contract line item resolved - the station map carries one');
+
+        // THE MATERIAL COMES FROM THE TAIL'S FUEL TYPE, as functional asked.
+        assert.strictEqual(r.sources.material, 'TAIL_FUEL_TYPE',
+            `material resolved from ${r.sources.material}, expected the tail master`);
+
+        // AND THE PAYLOAD CARRIES WHAT WAS RESOLVED, including ContractItem -
+        // which S/4 has always accepted and this integration never sent.
+        const payload = M.buildPostingRequest(full, r);
+        assert.strictEqual(payload.Contract, r.contract);
+        assert.strictEqual(payload.ContractItem, r.contractItem);
+        assert.strictEqual(payload.Material, r.material);
+        assert.strictEqual(payload.Supplier, r.supplier);
+
+        // The order's own product must NOT be what goes to S/4 where the
+        // tail says otherwise - that is the whole point of the change.
+        const fromOrderOnly = M.buildPostingRequest(full);
+        if (fromOrderOnly.Material && fromOrderOnly.Material !== r.material) {
+            out(`material: maps say ${r.material}, the order said ${fromOrderOnly.Material}`);
+        }
+        assert.ok(!('ContractItem' in fromOrderOnly),
+            'the order-only payload carries a contract line item, so this criterion proves nothing');
+
+        // FALLING BACK IS ALLOWED AND MUST BE VISIBLE. An unmaintained map
+        // must not stop a posting; it must say which source answered.
+        assert.ok(Object.keys(r.sources).length >= 3,
+            `only ${Object.keys(r.sources).length} source(s) recorded - a failed posting could not be explained`);
     });
 });

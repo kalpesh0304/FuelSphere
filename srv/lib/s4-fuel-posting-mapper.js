@@ -21,8 +21,27 @@
 /** FuelSphere UNIT_OF_MEASURE codes -> SAP commercial (external) unit */
 const UOM_TO_SAP = { KG: 'KG', LTR: 'L', L: 'L', GAL: 'GAL', USG: 'GAL' };
 
-/** ZFS_S_FUEL_POSTING-STATUS */
-const STATUS = Object.freeze({ COMPLETE: 'S', PARTIAL: 'P', ERROR: 'E' });
+/**
+ * ZFS_S_FUEL_POSTING-STATUS, plus the two the business asked for by name.
+ *
+ * S, P and E are what the service returns today. PO_ERROR and GR_ERROR are
+ * FuelSphere's own: the requirement is that an uplift records "Success if PO
+ * and GR creation is successful; if any error is encountered while creating
+ * PO or GR, status should be PO Error or GR Error respectively", and S/4
+ * cannot currently tell those two apart (CR-2c in
+ * docs/S4_Backend_Change_Requests.md asks it to).
+ *
+ * DERIVED HERE UNTIL THE SERVICE SENDS THEM, by looking at which document is
+ * missing - which is sound because the steps are strictly ordered: no PO
+ * means the PO failed, a PO with no GR means the GR did.
+ */
+const STATUS = Object.freeze({
+    COMPLETE: 'S',
+    PARTIAL:  'P',
+    ERROR:    'E',
+    PO_ERROR: 'POERR',
+    GR_ERROR: 'GRERR'
+});
 
 /** FuelSphere error codes (CLAUDE.md) per failed step */
 const ERROR_CODES = Object.freeze({ PO: 'INT401', GR: 'INT402', INVOICE: 'INV406' });
@@ -70,9 +89,13 @@ function truncate(text, max = MESSAGE_MAX) {
  *           airport { s4_plant_code }, product { s4_material_number } },
  *   delivery { density }
  */
-function buildPostingRequest(ticket) {
+function buildPostingRequest(ticket, resolved) {
     const order = ticket.order || {};
     const uom = String(ticket.uom_code || 'KG').toUpperCase();
+    // RESOLVED FROM THE MAPPING TABLES where the caller supplied it, the
+    // order otherwise. The second argument is optional so the pure unit
+    // criteria can still build a payload from a ticket alone.
+    const r = resolved || {};
 
     const payload = {
         // internal_number (FT-{STN}-{YYYYMMDD}-{SEQ}) is unique; the supplier's
@@ -82,10 +105,14 @@ function buildPostingRequest(ticket) {
         Uom: UOM_TO_SAP[uom] || uom,
         // Needed when the ticket is in KG and the contract in L (JETA1 in S2A is L only)
         Density: toEdmDecimal(ticket.delivery && ticket.delivery.density, 4),
-        Contract: order.contract && order.contract.s4_contract_number,
-        Supplier: order.supplier && order.supplier.s4_vendor_no,
-        Plant: order.airport && order.airport.s4_plant_code,
-        Material: order.product && order.product.s4_material_number,
+        Contract: r.contract || (order.contract && order.contract.s4_contract_number),
+        // THE CONTRACT LINE ITEM, sent for the first time on 18 Oct 2026.
+        // S/4 has always accepted it; the station-to-vendor mapping is where
+        // it is maintained, and functional named it as part of that mapping.
+        ContractItem: r.contractItem || undefined,
+        Supplier: r.supplier || (order.supplier && order.supplier.s4_vendor_no),
+        Plant: r.plant || (order.airport && order.airport.s4_plant_code),
+        Material: r.material || (order.product && order.product.s4_material_number),
         PostingDate: toEdmDateTime(ticket.delivery_timestamp)
     };
 
@@ -162,6 +189,26 @@ function upliftPosted(fields) {
     return Boolean(fields && fields.s4_po_number && fields.s4_gr_number);
 }
 
+/**
+ * Which step failed, as the business wants it recorded.
+ *
+ * ONLY FOR AN UPLIFT POSTING. The invoice step is driven separately and its
+ * absence is not a failure of the uplift - that distinction is the whole
+ * point of upliftPosted() above.
+ *
+ * It does NOT overwrite what S/4 said: a response that already carries a
+ * step-specific status keeps it. This fills the gap, it does not replace the
+ * source.
+ */
+function upliftOutcome(fields) {
+    if (!fields) return STATUS.ERROR;
+    if (fields.s4_posting_status === STATUS.PO_ERROR
+        || fields.s4_posting_status === STATUS.GR_ERROR) return fields.s4_posting_status;
+    if (upliftPosted(fields)) return STATUS.COMPLETE;
+    if (!fields.s4_po_number) return STATUS.PO_ERROR;
+    return STATUS.GR_ERROR;
+}
+
 function safeJson(text) {
     try { return JSON.parse(text); } catch { return null; }
 }
@@ -194,6 +241,7 @@ module.exports = {
     extractErrorMessage,
     httpStatusOf,
     upliftPosted,
+    upliftOutcome,
     toEdmDecimal,
     toEdmDateTime
 };

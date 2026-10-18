@@ -204,6 +204,11 @@ entity DESIGNATION_FROM_MAPS as
             // flight-level row overrides WHO fuels, not what the fuel is
             // bought on, which stays the station's contract.
             null                   as supplier_contract_ID : UUID,
+            // The flight map holds no contract, so no line item either. The
+            // posting resolves both from the STATION row for that supplier -
+            // a flight-level row overrides WHO fuels, not what it is bought
+            // on. See srv/lib/s4-fuel-posting.js.
+            null                   as contract_line_item : String(5),
             m.supplier_performs_uplift,
             m.into_plane_agent,
             m.into_plane_contract,
@@ -237,6 +242,11 @@ union all
             m.carrier.carrier_code as carrier_code : String(3),
             m.supplier,
             m.contract.ID          as supplier_contract_ID : UUID,
+            // CARRIED FOR THE POSTING. S/4 accepts a ContractItem beside the
+            // contract, and the station map is where the line item is
+            // maintained - functional named it explicitly as part of the
+            // station-to-vendor mapping.
+            m.contract_line_item,
             m.supplier_performs_uplift,
             m.into_plane_agent,
             m.into_plane_contract,

@@ -107,18 +107,47 @@ describe('A — the flight schedule', () => {
   });
 
   it('EXIT-5  the agent block distinguishes EMPTY BY DESIGN from unknown', async () => {
+    // THREE STATES SINCE 7 Oct 2026, NOT TWO.
+    //
+    // This asserted that supplier_performs_uplift FALSE must always name an
+    // agent - "half a designation" otherwise. That was true while there were
+    // only two arrangements. Self-fuelling is a third: the airline buys into
+    // its own tanks and fuels its own aircraft, so the supplier does NOT
+    // perform the uplift and there is deliberately NO agent to name.
+    //
+    // The criterion still earns its place - an undecided row is a real
+    // defect - but the discriminator is self_fuelled, not the absence of an
+    // agent. Latent since DesignatedSuppliers was repointed at the maps,
+    // which is where self_fuelled lives; the legacy table had no such column
+    // and could not express the state at all.
     const { data } = await test.GET(`${P}/DesignatedSuppliers`
-      + `?$select=station_code,flight_number,supplier_performs_uplift`
+      + `?$select=station_code,flight_number,supplier_performs_uplift,self_fuelled,into_plane_mode`
       + `&$expand=into_plane_agent($select=supplier_name),into_plane_contract($select=contract_number)`);
+
     const fuels = data.value.filter(d => d.supplier_performs_uplift === true);
-    const agent = data.value.filter(d => d.supplier_performs_uplift === false);
-    assert.ok(fuels.length && agent.length,
-      'instrument check: one of the two states is unseeded, so the contrast is untested');
+    const selfFuelled = data.value.filter(d => d.self_fuelled === true);
+    const thirdParty = data.value.filter(d => d.supplier_performs_uplift === false
+                                           && d.self_fuelled !== true);
+    assert.ok(fuels.length && thirdParty.length,
+      'instrument check: one of the two billed states is unseeded, so the contrast is untested');
+
+    // CASE 1 - the supplier fuels its own product, so no agent.
     for (const d of fuels) assert.strictEqual(d.into_plane_agent, null,
       'supplier_performs_uplift TRUE must leave the agent empty');
-    for (const d of agent) assert.ok(d.into_plane_agent?.supplier_name,
-      'supplier_performs_uplift FALSE with no agent is half a designation');
-    out(`${fuels.length} supplier-fuels (agent null by design), ${agent.length} with a named agent`);
+
+    // CASE 3 - the airline fuels itself, so no agent either. An agent here
+    // would be a company nobody contracted.
+    for (const d of selfFuelled) assert.strictEqual(d.into_plane_agent, null,
+      'a self-fuelled station names an into-plane agent - there is nobody to bill');
+
+    // CASE 2 - a third party fuels, and it must be named. THIS is the row
+    // that would otherwise be half a designation.
+    const nameless = thirdParty.filter(d => !d.into_plane_agent?.supplier_name);
+    assert.deepStrictEqual(nameless.map(d => `${d.station_code}/${d.flight_number || 'station'}`).slice(0, 5), [],
+      'supplier_performs_uplift FALSE, not self-fuelled, and no agent named - that is half a designation');
+
+    out(`${fuels.length} supplier-fuels, ${thirdParty.length} third-party agent, `
+      + `${selfFuelled.length} self-fuelled - agent empty by design on all but the middle group`);
   });
 
   it('EXIT-6  the aircraft block, and THREE FIELDS DELIBERATELY NOT BOUND HERE', async () => {

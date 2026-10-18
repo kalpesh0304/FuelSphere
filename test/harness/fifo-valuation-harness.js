@@ -106,11 +106,27 @@ describe('FIFO and moving average valuation', () => {
 
     // ------------------------------------------------------------- EXIT-4 --
     it('EXIT-4  FIFO consumes the oldest layer first', () => {
-        // Opened-at time per batch, from the row that created it.
+        // Opened-at POSITION per batch, from the row that created it.
+        //
+        // NOT flight_aobt, which this used until 18 Oct 2026 and which is not
+        // a reliable order. The movements now come from ROB_LEDGER, where
+        // record_time contradicts sequence - on N645JB an uplift timestamped
+        // 23:18 carries sequence 2 while the burn it fuels is timestamped
+        // 22:50 with sequence 3, and the closing balance chain reconciles
+        // only in sequence order. Judging "older" by the clock therefore
+        // called a correct FIFO consumption an out-of-order one.
+        //
+        // `sequence` is the replay position the seeder assigned walking the
+        // ledger in its authoritative order, so it IS the order layers
+        // opened in - which is exactly what this criterion means by older.
         const opened = new Map();
         for (const r of moves) {
             if (r.valuation_method !== 'FIFO' || n(r.qty_kg) <= 0 || !r.batch_ref) continue;
-            opened.set(`${r.tail_number}|${r.batch_ref}`, String(r.flight_aobt || ''));
+            const key = `${r.tail_number}|${r.batch_ref}`;
+            const at = n(r.sequence);
+            if (!opened.has(key) || (at !== null && at < opened.get(key))) {
+                opened.set(key, at === null ? Number.MAX_SAFE_INTEGER : at);
+            }
         }
 
         // Within one burn, the layers must be taken in opening order.
@@ -125,9 +141,12 @@ describe('FIFO and moving average valuation', () => {
         for (const [k, rows] of byBurn) {
             if (rows.length < 2) continue;
             spanning += 1;
-            const times = rows.map(r => opened.get(`${r.tail_number}|${r.batch_ref}`) || '');
-            for (let i = 1; i < times.length; i++) {
-                if (times[i] < times[i - 1]) { bad.push(k); break; }
+            const positions = rows.map(r => {
+                const v = opened.get(`${r.tail_number}|${r.batch_ref}`);
+                return v === undefined ? Number.MAX_SAFE_INTEGER : v;
+            });
+            for (let i = 1; i < positions.length; i++) {
+                if (positions[i] < positions[i - 1]) { bad.push(k); break; }
             }
         }
         out(`${byBurn.size} FIFO burns, ${spanning} spanning more than one layer, ${bad.length} out of order`);

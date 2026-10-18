@@ -1,6 +1,7 @@
 namespace fuelsphere;
 
 using { fuelsphere as db } from './schema';
+using { cuid } from '@sap/cds/common';
 
 /**
  * FuelSphere - what S/4HANA created for a fuel ticket.
@@ -98,3 +99,128 @@ extend db.FUEL_TICKETS with {
     s4_invoice_amount    : Decimal(15,3);
     s4_invoice_currency  : String(5);
 };
+
+// ===========================================================================
+// S4_POSTING_ATTEMPTS - every posting of a ticket, not just the last one
+// ===========================================================================
+//
+// WHY A TABLE AND NOT MORE COLUMNS. The fourteen s4_* fields above hold ONE
+// posting. The business requires a ticket amendment to be reversed in S/4 and
+// posted again, and asked that FuelSphere "keep track of all postings
+// (multiple posting and reversals) related to a ticket amendment". A ticket
+// posted, reversed and reposted has three outcomes and three sets of document
+// numbers; columns can hold one.
+//
+// THE COLUMNS ABOVE STAY, AND STAY AUTHORITATIVE FOR THE SCREEN. They carry
+// the LATEST attempt, which is what the ticket page, the list column and the
+// invoice line all read today. This table is additive: nothing that renders
+// now changes because it exists. The alternative - making those columns a
+// projection of this table - would have rewritten five screens to gain
+// nothing a reader can see.
+//
+// ONE ROW PER ATTEMPT, INCLUDING THE FAILURES. An attempt that created
+// nothing is the most useful row in the table: it is the one somebody opens
+// the error log to understand.
+entity S4_POSTING_ATTEMPTS : cuid, db.AuditTrail {
+        ticket          : Association to db.FUEL_TICKETS @mandatory;
+
+        // 1, 2, 3 within a ticket, in the order attempted. Not a timestamp:
+        // two attempts can land in one second and the order still matters.
+        attempt_no      : Integer @mandatory;
+        attempted_at    : Timestamp;
+
+        // WHICH POSTING THIS WAS. The uplift's PO+GR, the into-plane agent's
+        // service chain, the goods issue from own storage, the supplier
+        // invoice, or a reversal of an earlier attempt. One history serves
+        // all of them, because a reader asking "what did S/4 do with this
+        // ticket" means all of it.
+        posting_kind    : String(16);   // UPLIFT | INTO_PLANE | GOODS_ISSUE | INVOICE | REVERSAL
+
+        // S complete, POERR the purchase order failed, GRERR the goods
+        // receipt failed, P partial, E error. The two middle values are the
+        // ones the business asked for by name.
+        outcome         : String(8);
+        message         : String(220);
+
+        // ---- what S/4 created on this attempt ---------------------------
+        //
+        // NULL IS THE NORMAL CASE on most of these: a failed PO leaves every
+        // one of them empty, and an uplift posting fills the PO and GR
+        // columns and none of the invoice ones.
+        company_code    : String(4);
+        contract_number : String(10);
+
+        po_number       : String(10);
+        po_item         : String(5);
+        po_quantity     : Decimal(13,3);
+        po_unit         : String(3);
+
+        gr_number       : String(10);
+        gr_year         : String(4);
+
+        // THE FI DOCUMENT THE GR CREATES. Asked for explicitly, and not
+        // returned by ZFS_FUEL_POSTING_SRV today - see CR-2 in
+        // docs/S4_Backend_Change_Requests.md. The column exists now so the
+        // handler has somewhere to put it the day the service returns it.
+        fi_doc_number   : String(10);
+        fi_fiscal_year  : String(4);
+
+        // ---- filled by postings this integration cannot make yet --------
+        // CR-4 (into-plane service chain) and CR-6 (goods issue from own
+        // storage). Declared here rather than added later so the history has
+        // one shape across all five posting kinds.
+        ses_number      : String(10);
+        gi_doc_number   : String(10);
+        gi_doc_year     : String(4);
+
+        invoice_number  : String(10);
+        invoice_item    : String(6);
+        invoice_year    : String(4);
+        supplier_invoice_number : String(16);   // XBLNR, 16 characters
+
+        // WHICH ATTEMPT THIS ONE UNDOES. Set only on a REVERSAL, so the
+        // history reads as a chain rather than a list: posted, reversed,
+        // posted again. Without it nobody can tell which of three postings
+        // the reversal cancelled.
+        reverses        : Association to S4_POSTING_ATTEMPTS;
+
+        // The S/4 messages behind this attempt, in full.
+        messages        : Composition of many S4_POSTING_MESSAGES
+                              on messages.attempt = $self;
+}
+
+// ===========================================================================
+// S4_POSTING_MESSAGES - the application log, as S/4 words it
+// ===========================================================================
+//
+// THE BAPI RETURN STRUCTURE, FIELD FOR FIELD. The business asked for an error
+// log "similar to the SAP application log", reachable from a tile, showing
+// the reason and the resolution. A 220-character message column cannot carry
+// that: an SAP message is a type, a class, a number and four variables, and
+// it is the class and number that a functional person looks up.
+//
+// SHAPED FOR WHAT S/4 WILL SEND, NOT FOR WHAT IT SENDS TODAY.
+// ZFS_FUEL_POSTING_SRV returns one flat message string right now (CR-2d asks
+// for the table). Storing the flat string in msg_text with the rest null
+// costs nothing and means this table does not change shape when the service
+// starts returning the real thing.
+entity S4_POSTING_MESSAGES : cuid {
+        attempt     : Association to S4_POSTING_ATTEMPTS @mandatory;
+        sequence    : Integer;
+
+        // E error, W warning, I information, S success - as S/4 types them.
+        msg_type    : String(1);
+        msg_id      : String(20);       // message class, e.g. M8
+        msg_number  : String(3);        // e.g. 215
+        msg_text    : String(255);
+
+        msg_v1      : String(50);
+        msg_v2      : String(50);
+        msg_v3      : String(50);
+        msg_v4      : String(50);
+
+        // WHICH STEP RAISED IT. The same message class can come from the PO
+        // or the invoice, and "where did this fail" is the first question
+        // anyone asks of the log.
+        step        : String(16);       // PO | GR | FI | SES | GI | INVOICE
+}
