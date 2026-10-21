@@ -273,7 +273,18 @@ entity AIRCRAFT_REGISTRATIONS : ActiveStatus, AuditTrail {
         //
         // The posting falls back to order.product.s4_material_number where a
         // tail has none, so nothing breaks before it is populated.
-        fuel_type           : String(20);          // S/4 material, e.g. JETA1
+        // SUPERSEDED 19 Oct 2026 - NOTHING READS THIS.
+        //
+        // Added the day before, when the instruction was one fuel type per
+        // tail. It is now several, time-dependent, and lives in
+        // AIRCRAFT_FUEL_TYPES (db/s4-fuel-posting.cds). This column stays
+        // only because dropping a column from a deployed HDI container needs
+        // a migration, and a dead column is cheaper than that risk.
+        //
+        // DO NOT READ IT. It is not maintained and will not track the table
+        // that replaced it. Drop it in the next migration that touches this
+        // entity.
+        fuel_type           : String(20);          // dead; see AIRCRAFT_FUEL_TYPES
 
         operator_code       : String(3);           // Operating carrier where leased
         on_own_aoc          : Boolean default true; // false = wet lease or ACMI

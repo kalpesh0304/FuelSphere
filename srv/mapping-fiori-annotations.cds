@@ -180,7 +180,7 @@ annotate MappingService.StationSupplierMappings with @(
             Title          : { Value: airport.iata_code },
             Description    : { Value: supplier.supplier_name }
         },
-        SelectionFields: [ airport_ID, carrier_carrier_code, supplier_ID, into_plane_mode, is_active ],
+        SelectionFields: [ airport_ID, carrier_carrier_code, supplier_ID, fuel_type, into_plane_mode, is_active ],
         LineItem: [
             { Value: airport.iata_code,             Label: 'Airport' },
             { Value: carrier_carrier_code,          Label: 'Carrier code' },
@@ -188,6 +188,10 @@ annotate MappingService.StationSupplierMappings with @(
             { Value: supplier.s4_vendor_no,         Label: 'SAP supplier no' },
             { Value: contract.s4_contract_number,   Label: 'SAP contract no' },
             { Value: contract_line_item,            Label: 'Contract line item' },
+            // THE FUEL THIS MAPPING IS FOR. It joins the uniqueness key, so
+            // a station can take Jet A-1 from one supplier and AVGAS from
+            // another - which the single default flag could not express.
+            { Value: fuel_type,                     Label: 'Fuel type' },
             // ---- WHO PUTS IT IN THE WING, added 7 Oct 2026 --------------
             // The mode is the filter and the name is the answer. Case 1 used
             // to show an empty agent, which is true in the database and
@@ -214,6 +218,7 @@ annotate MappingService.StationSupplierMappings with @(
                 { Value: supplier_ID,          Label: 'Supplier' },
                 { Value: contract_ID,          Label: 'Contract' },
                 { Value: contract_line_item,   Label: 'Contract line item' },
+                { Value: fuel_type,            Label: 'Fuel type' },
                 { Value: valid_from,           Label: 'Valid from' },
                 { Value: valid_to,             Label: 'Valid to' },
                 { Value: is_active,            Label: 'Active' }
@@ -236,6 +241,9 @@ annotate MappingService.StationSupplierMappings with @(
                 { Value: self_fuelled,             Label: 'Airline fuels from its own tanks' },
                 { Value: into_plane_agent_ID,      Label: 'Into-plane agent' },
                 { Value: into_plane_contract_ID,   Label: 'Handling contract' },
+                // "It is not sufficient to map the contract, the contract
+                // line item level should also be mapped" - 19 Oct 2026.
+                { Value: into_plane_contract_line_item, Label: 'Handling contract line item' },
                 { Value: into_plane_mode,          Label: 'Resolved as' },
                 { Value: into_plane_agent_name,    Label: 'Shown on the flight as' }
             ]
@@ -258,6 +266,8 @@ annotate MappingService.StationSupplierMappings with {
     supplier_ID          @title: 'Supplier' @Common.FieldControl: #Mandatory;
     contract_ID          @title: 'Contract' @Common.FieldControl: #Mandatory;
     contract_line_item   @title: 'Contract line item' @Common.FieldControl: #Mandatory;
+    fuel_type            @title: 'Fuel type'
+                         @Common.QuickInfo: 'The S/4 material this mapping covers, e.g. JETA1. It joins the uniqueness key: one default vendor per fuel type, per station, at a time. Leave it empty and the row answers for any fuel.';
     valid_from           @title: 'Valid from' @Common.FieldControl: #Mandatory;
     valid_to             @title: 'Valid to';
     is_active            @title: 'Active';
@@ -268,6 +278,9 @@ annotate MappingService.StationSupplierMappings with {
     into_plane_agent_ID    @title: 'Into-plane agent'
                      @Common.QuickInfo: 'Case 2: a third party takes the fuel from the supplier and puts it in the wing, and bills that service separately.';
     into_plane_contract_ID @title: 'Handling contract';
+    into_plane_contract_line_item @title: 'Handling Contract Line Item'
+                     @Common.QuickInfo: 'Which line of the agent service contract the handling PO calls off. Mapping the contract alone leaves the posting to guess the line, and a guessed line commits against the wrong one.';
+
     into_plane_mode  @title: 'Into-plane'
                      @Common.QuickInfo: 'Which of the three arrangements this row describes. Derived from the two flags and the agent, so it cannot disagree with them. Empty means not yet decided.';
     into_plane_agent_name  @title: 'Into-plane agent'
@@ -338,6 +351,9 @@ annotate MappingService.FlightSupplierMappings with @(
                 { Value: self_fuelled,             Label: 'Airline fuels from its own tanks' },
                 { Value: into_plane_agent_ID,      Label: 'Into-plane agent' },
                 { Value: into_plane_contract_ID,   Label: 'Handling contract' },
+                // "It is not sufficient to map the contract, the contract
+                // line item level should also be mapped" - 19 Oct 2026.
+                { Value: into_plane_contract_line_item, Label: 'Handling contract line item' },
                 { Value: into_plane_mode,          Label: 'Resolved as' },
                 { Value: into_plane_agent_name,    Label: 'Shown on the flight as' }
             ]
@@ -360,6 +376,9 @@ annotate MappingService.FlightSupplierMappings with {
     into_plane_agent_ID    @title: 'Into-plane agent'
                      @Common.QuickInfo: 'Case 2: a third party takes the fuel from the supplier and puts it in the wing, and bills that service separately.';
     into_plane_contract_ID @title: 'Handling contract';
+    into_plane_contract_line_item @title: 'Handling Contract Line Item'
+                     @Common.QuickInfo: 'Which line of the agent service contract the handling PO calls off. Mapping the contract alone leaves the posting to guess the line, and a guessed line commits against the wrong one.';
+
     into_plane_mode  @title: 'Into-plane'
                      @Common.QuickInfo: 'Which of the three arrangements this row describes. Derived from the two flags and the agent, so it cannot disagree with them. Empty means not yet decided.';
     into_plane_agent_name  @title: 'Into-plane agent'

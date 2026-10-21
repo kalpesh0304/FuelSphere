@@ -82,7 +82,12 @@ service TicketService {
         // whole truth while a second line meant a duplicate. A third-party
         // into-plane agent bills the uplift separately from the supplier's
         // fuel, so the object page needs the list.
-        invoice_lines : redirected to TicketInvoiceLines
+        invoice_lines : redirected to TicketInvoiceLines,
+
+        // EVERY S/4 POSTING OF THIS TICKET. The s4_* fields hold the latest;
+        // this is the chain - posted, reversed, reposted - which the business
+        // asked to be kept in full.
+        s4_attempts   : redirected to TicketPostingAttempts
     } actions {
         /**
          * Attach ticket to delivery
@@ -136,6 +141,112 @@ service TicketService {
 
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
+
+    /**
+     * TicketPostingAttempts - what S/4 did, attempt by attempt.
+     *
+     * READ-ONLY, AND THAT IS NOT NEGOTIABLE. Every row is what S/4 answered;
+     * a row typed on a screen would be a document number nobody can find in
+     * S/4. The only way a row appears here is a posting.
+     *
+     * THE FAILURES ARE THE POINT. A ticket that posted cleanly needs one
+     * glance at the card above it; a ticket that did not is why this table
+     * exists, which is why outcome and message lead the columns.
+     */
+    @readonly
+    // THE CANONICAL PROJECTION OF S4_POSTING_ATTEMPTS ON THIS SERVICE.
+    //
+    // S4PostingErrors projects it too, so CAP cannot pick a target for
+    // TicketPostingMessages:attempt and refuses to guess. Pinned HERE
+    // because this is the one the ticket page navigates into; the error tile
+    // is a report over the same rows, not the place a message belongs to.
+    // Same reasoning as @cds.redirection.target on InvoiceService.FuelTickets.
+    @cds.redirection.target
+    entity TicketPostingAttempts as projection on db.S4_POSTING_ATTEMPTS {
+        *,
+        ticket   : redirected to FuelTickets,
+        messages : redirected to TicketPostingMessages,
+
+        // A SEARCHED CASE, NOT A SIMPLE ONE. `case outcome when null then 0`
+        // never matches - SQL compares NULL with = and gets unknown, so every
+        // unposted row would fall through to the else and render GREEN. That
+        // defect is recorded in invoice-service.cds and is not repeated here.
+        //
+        // Every branch is a PREDICATE, which HANA requires: a bare column as
+        // a CASE condition compiles on SQLite and fails the HANA view builder
+        // with "incorrect syntax near THEN" - already paid for once.
+        case
+            when outcome = 'S'                      then 3
+            when outcome = 'P'                      then 2
+            when outcome in ('E', 'POERR', 'GRERR') then 1
+            else                                         0
+        end as outcomeCriticality : Integer
+    };
+
+    /**
+     * TicketPostingMessages - the S/4 application log for one attempt.
+     *
+     * The message class and number are what a functional person looks up -
+     * M8 215 is the tolerance-key problem by name - so they are columns, not
+     * buried in the text.
+     */
+    /**
+     * S4PostingErrors - the tile, across every ticket.
+     *
+     * WHAT THE BUSINESS ASKED FOR, in its words: error details "logged
+     * (similar to SAP application log) and accessible via a tile to
+     * understand reason of error and resolution".
+     *
+     * CROSS-TICKET, AND THAT IS THE DIFFERENCE from the history table on the
+     * ticket page. The question at 08:00 is "what failed overnight", not
+     * "what happened to this one ticket" - and answering the first from the
+     * second means opening tickets one at a time to find out which broke.
+     *
+     * NOT FILTERED TO FAILURES IN THE MODEL. The entity carries every
+     * attempt and the app's own filter opens on the failures: a reader who
+     * has fixed a configuration problem wants to see the successful repost
+     * beside the error it replaced, and a view that cannot show success
+     * cannot show that it was fixed.
+     */
+    @readonly
+    entity S4PostingErrors as projection on db.S4_POSTING_ATTEMPTS {
+        *,
+        ticket.ticket_number        as ticket_number : String(50),
+        ticket.internal_number      as internal_number : String(30),
+        ticket.aircraft_reg         as aircraft_reg : String(10),
+        ticket.flight_number        as flight_number : String(10),
+        ticket.delivery_timestamp   as delivery_timestamp : Timestamp,
+        ticket                      : redirected to FuelTickets,
+        messages                    : redirected to TicketPostingMessages,
+
+        // THE FIRST MESSAGE'S CLASS AND NUMBER, ON THE LIST ROW. "M8 215" is
+        // how the tolerance-key problem is recognised, and a list that makes
+        // somebody open each row to see it is a list nobody scans.
+        case
+            when outcome = 'S'                      then 3
+            when outcome = 'P'                      then 2
+            when outcome in ('E', 'POERR', 'GRERR') then 1
+            else                                         0
+        end as outcomeCriticality : Integer,
+
+        // A PLAIN FLAG TO FILTER ON. The app opens on failures, and a filter
+        // bar needs something simpler than three status values to do it.
+        case
+            when outcome in ('E', 'POERR', 'GRERR') then true
+            else                                         false
+        end as is_failure : Boolean
+    };
+
+    @readonly
+    entity TicketPostingMessages as projection on db.S4_POSTING_MESSAGES {
+        *,
+        case
+            when msg_type = 'S' then 3
+            when msg_type = 'W' then 2
+            when msg_type = 'E' then 1
+            else                     0
+        end as msgCriticality : Integer
+    };
 
     /**
      * TicketInvoiceLines - where this ticket was billed, one row per line.

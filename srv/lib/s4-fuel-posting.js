@@ -213,14 +213,58 @@ async function resolvePostingMasterData(ticket, tx = cds.db) {
         out.sources.contract = 'ORDER_CONTRACT';
     }
 
-    // ---- material, from the tail's fuel type -----------------------------
+    // ---- material: a fuel this tail is approved for, on this date --------
+    //
+    // AIRCRAFT_FUEL_TYPES, NOT THE COLUMN ON THE TAIL MASTER. Functional, 19
+    // Oct: "Option to have multiple fuel type mapped to each tail. Uplift can
+    // happen only for fuels types that are allowed to be used for a tail.
+    // This needs to be time dependent data."
+    //
+    // AIRCRAFT_REGISTRATIONS.fuel_type is dead - see the note on it in
+    // db/schema.cds. Reading both would be two truths about one fact, which
+    // this codebase has already paid for three times.
+    //
+    // WHICH ONE, WHERE A TAIL IS APPROVED FOR SEVERAL: the fuel actually
+    // uplifted decides, so the order's product wins if it is among the
+    // approved ones. Only where the uplift does not say does the default
+    // apply. A posting must never choose a material on its own.
     const tailReg = ticket.tail_registration || ticket.aircraft_reg || null;
-    if (tailReg) {
-        const reg = await tx.run(SELECT.one.from('fuelsphere.AIRCRAFT_REGISTRATIONS')
-            .columns('fuel_type').where({ registration: tailReg }));
-        if (reg && reg.fuel_type) {
-            out.material = reg.fuel_type;
-            out.sources.material = 'TAIL_FUEL_TYPE';
+    if (tailReg && asOf) {
+        const approved = (await tx.run(SELECT.from('fuelsphere.AIRCRAFT_FUEL_TYPES')
+            .columns('fuel_type', 'valid_from', 'valid_to', 'is_default', 'is_active')
+            .where({ registration: tailReg })))
+            .filter(r => live(r, asOf));
+
+        if (approved.length) {
+            const uplifted = order.product && order.product.s4_material_number;
+            const match = uplifted ? approved.find(r => r.fuel_type === uplifted) : null;
+            if (match) {
+                out.material = match.fuel_type;
+                out.sources.material = 'TAIL_APPROVED_MATCHING_UPLIFT';
+            } else {
+                const def = approved.find(r => r.is_default === true);
+                if (def) {
+                    out.material = def.fuel_type;
+                    out.sources.material = 'TAIL_APPROVED_DEFAULT';
+                } else if (approved.length === 1) {
+                    out.material = approved[0].fuel_type;
+                    out.sources.material = 'TAIL_APPROVED_ONLY';
+                } else {
+                    // SEVERAL APPROVED, NONE DEFAULT, AND THE UPLIFT SILENT.
+                    // Reported rather than guessed: S/4 will refuse a posting
+                    // with no material and say so, which is a better outcome
+                    // than a posting against a fuel nobody chose.
+                    out.sources.material = 'AMBIGUOUS_NO_DEFAULT';
+                }
+            }
+
+            // THE UPLIFT MUST BE A FUEL THE TAIL IS APPROVED FOR. Recorded
+            // rather than refused here: blocking the posting would hide the
+            // finding, and the posting history is where it belongs.
+            if (uplifted && !approved.some(r => r.fuel_type === uplifted)) {
+                out.sources.material_warning =
+                    `the uplift names ${uplifted}, which is not approved for ${tailReg} on ${asOf}`;
+            }
         }
     }
     if (!out.material && order.product && order.product.s4_material_number) {
@@ -320,8 +364,11 @@ async function postTicketToS4(ID) {
     // s4_* columns are what every screen reads and must land first; the
     // history is the record beside them. Written for the invoice step too,
     // which is why the kind is derived rather than hard-coded.
+    // THE PAYLOAD GOES WITH IT, including on the validation failures - a
+    // payload we refused to send is exactly the one somebody needs to see to
+    // understand WHY we refused it.
     await recordAttempt(ticket, fields, fields.s4_invoice_number && !fields.s4_po_number
-        ? 'INVOICE' : 'UPLIFT');
+        ? 'INVOICE' : 'UPLIFT', null, { ...payload, _resolvedFrom: resolved.sources });
 
     return fields;
 }
@@ -343,12 +390,16 @@ function pickS4(ticket) {
  * as failed because writing its history row failed. The write is logged and
  * swallowed.
  *
+ * THE PAYLOAD IS STORED BESIDE THE OUTCOME, and that pairing is the point:
+ * a response alone says what S/4 refused, and only the request says whether
+ * it was right to refuse it.
+ *
  * ONE FLAT MESSAGE TODAY, A TABLE TOMORROW. ZFS_FUEL_POSTING_SRV returns a
  * single message string; CR-2d asks for the BAPI message table. Until then
  * the string lands in msg_text with the rest null, which is why
  * S4_POSTING_MESSAGES is shaped for the structured form from the start.
  */
-async function recordAttempt(ticket, fields, kind, messages) {
+async function recordAttempt(ticket, fields, kind, messages, payload) {
     try {
         const prior = await cds.db.run(SELECT.from('fuelsphere.S4_POSTING_ATTEMPTS')
             .columns('attempt_no').where({ ticket_ID: ticket.ID }));
@@ -378,9 +429,13 @@ async function recordAttempt(ticket, fields, kind, messages) {
             // has somewhere to put them the day it does.
             fi_doc_number: fields.s4_fi_doc_number || null,
             fi_fiscal_year: fields.s4_fi_fiscal_year || null,
+            fi_posting_date: fields.s4_fi_posting_date || null,
             company_code: fields.s4_company_code || null,
             invoice_number: fields.s4_invoice_number || null,
             invoice_year: fields.s4_invoice_year || null,
+            // WHAT WE SENT. Pretty-printed rather than compact: this is read
+            // by a person in a text area, not parsed by anything.
+            request_payload: payload ? JSON.stringify(payload, null, 2) : null,
             created_at: new Date().toISOString(),
             created_by: 'S4_POSTING'
         }));

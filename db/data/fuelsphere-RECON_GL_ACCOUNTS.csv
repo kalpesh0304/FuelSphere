@@ -1,0 +1,3 @@
+ID;carrier_carrier_code;company_code;gl_account;account_role;description;valid_from;valid_to;is_active;notes;created_at;created_by;modified_at;modified_by
+8a100000-0000-4000-8000-00000000ac01;B6;B600;600780;UPLIFT;Fuel uplift - into plane;2026-01-01;;true;Given by the functional consultant on the reconciliation specification, 19 Oct 2026.;2026-10-19T00:00:00Z;SEED_RECON_GL;2026-10-19T00:00:00Z;SEED_RECON_GL
+8a100000-0000-4000-8000-00000000ac02;B6;B600;600781;UPLIFT;Fuel uplift - second account;2026-01-01;;true;Given by the functional consultant on the reconciliation specification, 19 Oct 2026.;2026-10-19T00:00:00Z;SEED_RECON_GL;2026-10-19T00:00:00Z;SEED_RECON_GL

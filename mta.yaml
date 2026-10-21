@@ -45,20 +45,34 @@ modules:
     properties:
       # ==================== S/4 FUEL POSTING ====================
       #
-      # mock ON PURPOSE, not an oversight. srv/lib/s4-fuel-posting.js defaults
-      # to LIVE on the production profile, and live posting against S2A cannot
-      # work yet for two independent reasons:
+      # LIVE SINCE 19 Oct 2026, on instruction, and deliberately pinned here.
       #
-      #   1. The master data does not match S2A. The seed carries contracts
-      #      4600000001.., materials 10000001.., plants MNL1/DXB1.. and no COK
-      #      airport at all; S2A needs 7000000033, JETA1 and 3COK.
-      #   2. The invoice step is blocked anyway - company code 3000 has no
-      #      invoice tolerance key PP (OMR6), so every invoice fails M8 215.
+      # IT IS PINNED BECAUSE A DEPLOY RESETS IT. `cf set-env` survives a
+      # restage and does NOT survive an MTA deploy - the deploy rewrites the
+      # application's environment from this file. Live testing was being
+      # silently returned to mock by every deploy, which is the worst kind of
+      # wrong: postings appeared to succeed and nothing reached S/4.
       #
-      # Left on live, every ticket save would make a real call and write an
-      # error onto the ticket. Set this to live once (1) is seeded and (2) is
-      # configured; use off to stop posting entirely.
-      FS_S4_POSTING_MODE: mock
+      # WHAT CHANGED SINCE IT READ `mock`. Both blockers below have been
+      # worked through:
+      #
+      #   1. The master data now matches S2A - contract 7000000033, material
+      #      JETA1, plant 3COK - maintained through the mapping apps rather
+      #      than the seed, and a real PO has been created in S2A against it.
+      #   2. The invoice step is a SEPARATE action (InvoiceService), not part
+      #      of ticket save, so the OMR6 tolerance-key gap no longer blocks
+      #      uplift posting. It still blocks the invoice step itself.
+      #
+      # WHAT LIVE MEANS, PLAINLY: every fuel ticket save now makes a real call
+      # to S2A and creates a real purchase order and goods receipt. A ticket
+      # that fails records the error on itself and in the posting log rather
+      # than throwing, so a bad master-data row is visible instead of silently
+      # dropped - but the documents it does create are real and have to be
+      # reversed in S/4, not deleted in FuelSphere.
+      #
+      # Use `off` to stop posting entirely; `mock` for a demo that must not
+      # touch S2A.
+      FS_S4_POSTING_MODE: live
     build-parameters:
       builder: custom
       commands:

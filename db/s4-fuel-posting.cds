@@ -98,6 +98,35 @@ extend db.FUEL_TICKETS with {
     s4_invoice_year      : String(4);
     s4_invoice_amount    : Decimal(15,3);
     s4_invoice_currency  : String(5);
+
+    // ---- WHEN FINANCE SEES IT, which is not when we sent it ----------
+    //
+    // THE FI DOCUMENT'S POSTING DATE, and it is the date the reconciliation
+    // turns on. An uplift flown on 30 September whose goods receipt posts on
+    // 2 October belongs to September operationally and to October in the
+    // books, and "Posting to subsequent period" on the reconciliation screen
+    // is the whole value of that gap.
+    //
+    // IT IS NOT s4_posted_at. That is when FuelSphere called S/4; this is the
+    // date S/4 booked against, and they differ whenever a period is closed, a
+    // posting is backdated, or the two systems sit in different time zones at
+    // month end - which is precisely when the difference matters.
+    //
+    // NULL ON EVERY ROW TODAY. ZFS_FUEL_POSTING_SRV does not return it - that
+    // is CR-2. The column exists now so the handler has somewhere to put it
+    // the day it does, and so the reconciliation can report how many postings
+    // it cannot yet place rather than quietly assuming they landed on time.
+    s4_fi_posting_date   : Date;
+
+    // ---- EVERY ATTEMPT, NOT JUST THE LATEST --------------------------
+    //
+    // UNMANAGED, so it adds no column: the reverse of
+    // S4_POSTING_ATTEMPTS.ticket below. The fourteen fields above hold the
+    // LATEST posting, which is what the card, the list column and the
+    // invoice line read. This is how the ticket page reaches the rest -
+    // posted, reversed, reposted - which columns cannot express.
+    s4_attempts          : Association to many S4_POSTING_ATTEMPTS
+                               on s4_attempts.ticket = $self;
 };
 
 // ===========================================================================
@@ -164,6 +193,9 @@ entity S4_POSTING_ATTEMPTS : cuid, db.AuditTrail {
         // handler has somewhere to put it the day the service returns it.
         fi_doc_number   : String(10);
         fi_fiscal_year  : String(4);
+        // The date the FI document posted - BUDAT, not the date we called.
+        // Same reasoning as s4_fi_posting_date above, and the same CR.
+        fi_posting_date : Date;
 
         // ---- filled by postings this integration cannot make yet --------
         // CR-4 (into-plane service chain) and CR-6 (goods issue from own
@@ -183,6 +215,29 @@ entity S4_POSTING_ATTEMPTS : cuid, db.AuditTrail {
         // posted again. Without it nobody can tell which of three postings
         // the reversal cancelled.
         reverses        : Association to S4_POSTING_ATTEMPTS;
+
+        // ---- WHAT WE SENT, added 19 Oct 2026 ----------------------------
+        //
+        // THE REQUEST, VERBATIM, AS JSON. Until now the only record of what
+        // FuelSphere sent S/4 was a line in the Cloud Foundry log, which
+        // rotates within hours and needs a CF login to read. The question it
+        // answers - "is the posting wrong, or is the master data wrong?" -
+        // gets asked days later, by somebody who cannot run `cf logs`.
+        //
+        // IT IS THE ONE THING THE RESPONSE CANNOT TELL YOU. S/4 answering
+        // "contract 7000000033 item 10 has no open quantity" is only half an
+        // argument; whether WE should have sent that contract at all is the
+        // other half, and it is unanswerable without the payload beside it.
+        //
+        // NO CREDENTIALS PASS THROUGH HERE. The payload is plant, supplier,
+        // material, contract, quantity and dates - master data that every
+        // reader of this table can already see on the ticket. The
+        // destination's client certificate lives in the BTP destination and
+        // never enters the payload, so storing this adds no secret.
+        //
+        // LargeString, NOT String(n). A payload truncated at some round
+        // number is worse than none: it reads as complete and is not.
+        request_payload : LargeString;
 
         // The S/4 messages behind this attempt, in full.
         messages        : Composition of many S4_POSTING_MESSAGES
@@ -223,4 +278,54 @@ entity S4_POSTING_MESSAGES : cuid {
         // or the invoice, and "where did this fail" is the first question
         // anyone asks of the log.
         step        : String(16);       // PO | GR | FI | SES | GI | INVOICE
+}
+
+// ===========================================================================
+// AIRCRAFT_FUEL_TYPES - which fuels a tail may take, and when
+// ===========================================================================
+//
+// ASKED FOR ON 19 Oct 2026, and it replaces what was built the day before:
+// "Option to have multiple fuel type mapped to each tail. Uplift can happen
+// only for fuels types that are allowed to be used for a tail. This needs to
+// be time dependent data."
+//
+// AIRCRAFT_REGISTRATIONS.fuel_type WAS A SINGLE COLUMN, which answered the
+// first instruction ("add a Field Fuel Type in Tail Master, map it as JETA1
+// of all tails") and cannot answer this one. A column holds one value for all
+// time; a tail re-certified for a second fuel next March needs two rows with
+// two windows.
+//
+// THIS TABLE IS THE ONLY SOURCE. The column on the tail master is left in
+// place - dropping a column from a deployed HDI container needs a migration
+// and is not worth the risk for a field nothing reads - but no code reads it
+// any more. It is dead and marked dead, rather than a second truth that can
+// drift from this table.
+//
+// is_default PICKS AMONG SEVERAL. Where a tail is approved for two fuels on
+// one date, the uplift's own product decides which was actually taken; where
+// the uplift does not say, this is what the posting falls back to. Without
+// it, a tail with two approved fuels would make the posting choose, and a
+// posting that chooses a material is a posting that can be wrong silently.
+entity AIRCRAFT_FUEL_TYPES : cuid, db.AuditTrail {
+        // THE REGISTRATION, NOT AN ASSOCIATION. AIRCRAFT_REGISTRATIONS is
+        // keyed on `registration` rather than a UUID, and the uplift records
+        // a tail by that string too - so this joins the way the data is
+        // actually addressed.
+        registration   : String(10) @mandatory;
+
+        // The S/4 material, e.g. JETA1. Same convention as the maps: what
+        // S/4 will accept, not what MASTER_PRODUCTS happens to carry.
+        fuel_type      : String(20) @mandatory;
+
+        valid_from     : Date @mandatory;
+        valid_to       : Date;                      // null = open-ended
+
+        // Exactly one default per tail per window - CAR412 refuses a second.
+        is_default     : Boolean default false;
+
+        is_active      : Boolean default true;
+
+        // Why this tail may take this fuel: a certification, an STC, an
+        // operational approval. The reason somebody will ask for in an audit.
+        notes          : String(500);
 }

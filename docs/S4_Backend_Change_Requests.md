@@ -43,7 +43,23 @@ Each item says what the service does today, what is now required, and why, so yo
 
 The business requires the **FI document number and fiscal year** recorded against every uplift. The GR creates it; the service does not return it.
 
-**Add:** `FiDocNumber`, `FiFiscalYear`.
+**Add:** `FiDocNumber`, `FiFiscalYear`, **and `FiPostingDate`**.
+
+`FiPostingDate` (BUDAT) was added to this request on 19 October 2026 and is
+now the item we most need from 2a. The reconciliation screen Finance asked for
+has a column — *Posting to subsequent period* — defined as "posting period of
+the FI document is &lt;&gt; the flight period". Without the posting date we
+cannot place a document in a period at all, and that column reads zero for
+every row.
+
+**It is not the date we called you.** FuelSphere already records when it sent
+the request. The two differ exactly when it matters: a 30 September uplift
+posted on 2 October, or a backdated posting into a period that has since been
+closed. That difference is the whole content of the column.
+
+If BUDAT is not readily available on the response, the **fiscal period and
+year** the document posted into (`FiPostingPeriod` + `FiFiscalYear`) would
+serve just as well — the screen works in periods, not days.
 
 ### 2b. Company code
 

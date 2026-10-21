@@ -219,7 +219,14 @@ annotate TicketService.FuelTickets with @(
             // FuelSphere's view of the supplier's billing; these are what
             // ME23N, MB03 and MIR4 will open.
             { $Type: 'UI.ReferenceFacet', ID: 'S4Posting',
-              Target: '@UI.FieldGroup#S4Posting', Label: 'S/4HANA Posting' }
+              Target: '@UI.FieldGroup#S4Posting', Label: 'S/4HANA Posting' },
+
+            // EVERY ATTEMPT, BENEATH THE LATEST ONE. The card above answers
+            // "where did this ticket end up"; this answers "how did it get
+            // there" - which is the only question worth asking of a ticket
+            // that was posted, reversed and posted again.
+            { $Type: 'UI.ReferenceFacet', ID: 'S4PostingHistory',
+              Target: 's4_attempts/@UI.LineItem', Label: 'S/4HANA Posting History' }
         ],
 
         FieldGroup #TicketStatus: {
@@ -715,4 +722,147 @@ annotate TicketService.FuelTickets with {
     s4_invoice_year      @title: 'S/4 Invoice Year';
     s4_invoice_amount    @title: 'S/4 Invoice Amount';
     s4_invoice_currency  @title: 'S/4 Invoice Currency';
+}
+
+// ===========================================================================
+// THE POSTING HISTORY, AND THE MESSAGES UNDER IT
+// ===========================================================================
+//
+// NEWEST FIRST. A ticket posted three times is read from the outcome
+// backwards - what is true now, then how it got there. Ascending order would
+// bury the current state at the bottom of the table.
+annotate TicketService.TicketPostingAttempts with @(
+    UI: {
+        LineItem: [
+            { Value: attempt_no,      Label: 'Attempt',       ![@UI.Importance]: #High },
+            { Value: attempted_at,    Label: 'When',          ![@UI.Importance]: #High },
+            { Value: posting_kind,    Label: 'Posting',       ![@UI.Importance]: #High },
+            { Value: outcome,         Label: 'Outcome',       ![@UI.Importance]: #High,
+              Criticality: outcomeCriticality },
+            { Value: message,         Label: 'Message',       ![@UI.Importance]: #High },
+            { Value: po_number,       Label: 'Purchase order', ![@UI.Importance]: #Medium },
+            { Value: po_item,         Label: 'PO item',       ![@UI.Importance]: #Low },
+            { Value: gr_number,       Label: 'Goods receipt', ![@UI.Importance]: #Medium },
+            { Value: gr_year,         Label: 'GR year',       ![@UI.Importance]: #Low },
+            { Value: fi_doc_number,   Label: 'FI document',   ![@UI.Importance]: #Medium },
+            { Value: company_code,    Label: 'Company code',  ![@UI.Importance]: #Low },
+            { Value: contract_number, Label: 'Contract',      ![@UI.Importance]: #Low },
+            { Value: invoice_number,  Label: 'S/4 invoice',   ![@UI.Importance]: #Medium }
+        ],
+
+        PresentationVariant: {
+            SortOrder: [ { Property: attempt_no, Descending: true } ],
+            Visualizations: ['@UI.LineItem']
+        },
+
+        HeaderInfo: {
+            TypeName       : 'Posting attempt',
+            TypeNamePlural : 'Posting Attempts',
+            Title          : { Value: posting_kind },
+            Description    : { Value: outcome }
+        },
+
+        Facets: [
+            { $Type: 'UI.ReferenceFacet', ID: 'AttemptDetail',
+              Target: '@UI.FieldGroup#AttemptDetail', Label: 'What S/4 created' },
+            { $Type: 'UI.ReferenceFacet', ID: 'AttemptMessages',
+              Target: 'messages/@UI.LineItem', Label: 'S/4HANA Messages' }
+        ],
+
+        FieldGroup #AttemptDetail: {
+            Data: [
+                { Value: attempt_no,              Label: 'Attempt' },
+                { Value: posting_kind,            Label: 'Posting' },
+                { Value: outcome,                 Label: 'Outcome' },
+                { Value: attempted_at,            Label: 'Attempted at' },
+                { Value: message,                 Label: 'Message' },
+                { Value: company_code,            Label: 'Company code' },
+                { Value: contract_number,         Label: 'Contract called off' },
+                { Value: po_number,               Label: 'Purchase order' },
+                { Value: po_item,                 Label: 'PO item' },
+                { Value: po_quantity,             Label: 'PO quantity' },
+                { Value: po_unit,                 Label: 'PO unit' },
+                { Value: gr_number,               Label: 'Goods receipt' },
+                { Value: gr_year,                 Label: 'GR year' },
+                { Value: fi_doc_number,           Label: 'FI document' },
+                { Value: fi_fiscal_year,          Label: 'FI fiscal year' },
+                { Value: ses_number,              Label: 'Service entry sheet' },
+                { Value: gi_doc_number,           Label: 'Goods issue' },
+                { Value: gi_doc_year,             Label: 'GI year' },
+                { Value: invoice_number,          Label: 'S/4 invoice' },
+                { Value: invoice_item,            Label: 'S/4 invoice item' },
+                { Value: invoice_year,            Label: 'S/4 invoice year' },
+                { Value: supplier_invoice_number, Label: 'Supplier invoice no' }
+            ]
+        }
+    }
+);
+
+annotate TicketService.TicketPostingAttempts with {
+    attempt_no      @title: 'Attempt'
+                    @Common.QuickInfo: 'Counted within the ticket, in the order attempted. A ticket posted, reversed and posted again has three.';
+    attempted_at    @title: 'When';
+    posting_kind    @title: 'Posting'
+                    @Common.QuickInfo: 'UPLIFT is the PO and goods receipt. INTO_PLANE is a third-party agent service chain, GOODS_ISSUE a draw from the airline own storage, INVOICE the supplier invoice, REVERSAL an undo of an earlier attempt.';
+    outcome         @title: 'Outcome'
+                    @Common.QuickInfo: 'S both documents posted. POERR the purchase order failed and nothing posted. GRERR the purchase order posted and the goods receipt failed. P partial, E error.';
+    message         @title: 'Message' @UI.MultiLineText;
+    company_code    @title: 'Company Code';
+    contract_number @title: 'Contract Called Off';
+    po_number       @title: 'Purchase Order';
+    po_item         @title: 'PO Item';
+    po_quantity     @title: 'PO Quantity';
+    po_unit         @title: 'PO Unit';
+    gr_number       @title: 'Goods Receipt';
+    gr_year         @title: 'GR Year';
+    fi_doc_number   @title: 'FI Document'
+                    @Common.QuickInfo: 'Created by the goods receipt. Empty until S/4 returns it - see CR-2 in docs/S4_Backend_Change_Requests.md.';
+    fi_fiscal_year  @title: 'FI Fiscal Year';
+    ses_number      @title: 'Service Entry Sheet';
+    gi_doc_number   @title: 'Goods Issue';
+    gi_doc_year     @title: 'GI Year';
+    invoice_number  @title: 'S/4 Invoice';
+    invoice_item    @title: 'S/4 Invoice Item';
+    invoice_year    @title: 'S/4 Invoice Year';
+    supplier_invoice_number @title: 'Supplier Invoice No';
+}
+
+// THE MESSAGE CLASS AND NUMBER ARE COLUMNS, not text to read. "M8 215" is
+// how a functional person finds the tolerance-key problem; burying it in a
+// sentence makes them read every sentence.
+annotate TicketService.TicketPostingMessages with @(
+    UI: {
+        LineItem: [
+            { Value: msg_type,   Label: 'Type',    ![@UI.Importance]: #High,
+              Criticality: msgCriticality },
+            { Value: step,       Label: 'Step',    ![@UI.Importance]: #High },
+            { Value: msg_id,     Label: 'Class',   ![@UI.Importance]: #High },
+            { Value: msg_number, Label: 'Number',  ![@UI.Importance]: #High },
+            { Value: msg_text,   Label: 'Message', ![@UI.Importance]: #High },
+            { Value: msg_v1,     Label: 'Var 1',   ![@UI.Importance]: #Low },
+            { Value: msg_v2,     Label: 'Var 2',   ![@UI.Importance]: #Low },
+            { Value: msg_v3,     Label: 'Var 3',   ![@UI.Importance]: #Low },
+            { Value: msg_v4,     Label: 'Var 4',   ![@UI.Importance]: #Low }
+        ],
+        PresentationVariant: {
+            SortOrder: [ { Property: sequence } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+annotate TicketService.TicketPostingMessages with {
+    msg_type   @title: 'Type'
+               @Common.QuickInfo: 'E error, W warning, I information, S success - as S/4 types them.';
+    step       @title: 'Step'
+               @Common.QuickInfo: 'Which step raised it: PO, GR, FI, SES, GI or INVOICE. The same message class can come from more than one.';
+    msg_id     @title: 'Message Class'
+               @Common.QuickInfo: 'The SAP message class, e.g. M8. Looked up with the number in SE91.';
+    msg_number @title: 'Message Number';
+    msg_text   @title: 'Message' @UI.MultiLineText;
+    msg_v1     @title: 'Variable 1';
+    msg_v2     @title: 'Variable 2';
+    msg_v3     @title: 'Variable 3';
+    msg_v4     @title: 'Variable 4';
+    sequence   @title: 'Sequence';
 }

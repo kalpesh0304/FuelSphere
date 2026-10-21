@@ -106,16 +106,56 @@ module.exports = cds.service.impl(async function () {
         // of the table - but the same supplier twice, with overlapping dates,
         // is two answers to one question. An EXPIRED row does not block: that
         // is how a contract line is re-entered after it lapses.
+        //
+        // FUEL TYPE JOINS THE KEY, 19 Oct 2026. Functional confirmed it in so
+        // many words: "Only one default vendor per fuel type, per station, at
+        // a time" - "Yes, it joins that key."
+        //
+        // Without it a station that takes Jet A-1 from one supplier and AVGAS
+        // from another could not say so: the second mapping was refused as a
+        // duplicate of the first.
         await refuseOverlap(req, {
             table: SUPPLIER_MAP,
             where: {
                 airport_ID: row.airport_ID,
                 carrier_carrier_code: row.carrier_carrier_code,
-                supplier_ID: row.supplier_ID
+                supplier_ID: row.supplier_ID,
+                fuel_type: row.fuel_type ?? null
             },
             code: 'CAR402',
-            what: 'a mapping for this station, carrier and supplier'
+            what: 'a mapping for this station, carrier, supplier and fuel type'
         });
+
+        // CAR413. ONE DEFAULT VENDOR PER FUEL TYPE PER STATION AT A TIME.
+        //
+        // This is the half of the rule that refuseOverlap cannot express: it
+        // guards the same supplier twice, and this guards two DIFFERENT
+        // suppliers both claiming to be the default for one fuel.
+        //
+        // A STATION WITH TWO DEFAULTS RESOLVES TO NEITHER, which is worse
+        // than having none: the posting picks whichever row the database
+        // returns first, and the answer changes between reads.
+        if (row.is_default === true) {
+            const rivals = await SELECT.from(SUPPLIER_MAP)
+                .columns('ID', 'supplier_ID', 'valid_from', 'valid_to', 'fuel_type')
+                .where({
+                    airport_ID: row.airport_ID,
+                    carrier_carrier_code: row.carrier_carrier_code,
+                    is_default: true,
+                    is_active: true
+                });
+            const sameFuel = rivals.filter(r => (r.fuel_type || null) === (row.fuel_type ?? null));
+            const clash = sameFuel.find(other => other.ID !== req.data.ID
+                && overlaps(req.data.valid_from, req.data.valid_to, other.valid_from, other.valid_to));
+            if (clash) {
+                const sup = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                    .columns('supplier_name').where({ ID: clash.supplier_ID });
+                req.error(400, `CAR413: ${sup ? sup.supplier_name : 'another supplier'} is already the `
+                    + `default for ${row.fuel_type || 'any fuel'} at this station for these dates `
+                    + `(${day(clash.valid_from)} to ${day(clash.valid_to) || 'open'}). `
+                    + 'A station resolves to one default vendor per fuel type, or to none.', 'is_default');
+            }
+        }
 
         // CAR401. THE CONTRACT MUST BELONG TO THE SUPPLIER.
         //

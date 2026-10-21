@@ -20,10 +20,12 @@
  * EXIT-6  the model carries every column the handler writes
  * EXIT-7  the two triggers are wired - ticket save, and the invoice action
  * EXIT-8  PO and GR resolution prefers the ticket and still falls back
- * EXIT-9  posting is NOT live by default on a deployed system
+ * EXIT-9  the deployed posting mode is PINNED, valid, and honoured
  * EXIT-10 every attempt is recorded, the failures most of all
  * EXIT-11 a repost keeps the earlier attempt, and the ticket shows the latest
  * EXIT-12 the payload is built from the MAPPING TABLES, not the order
+ * EXIT-13 the material is a fuel the tail is approved for, on that date
+ * EXIT-14 the attempt stores what we SENT, not only what came back
  */
 process.env.CDS_ENV = 'development';
 process.env.CDS_REQUIRES_DB_KIND = 'sqlite';
@@ -229,16 +231,45 @@ describe('S/4HANA fuel ticket posting', () => {
     });
 
     // ------------------------------------------------------------- EXIT-9 --
-    it('EXIT-9  posting is not live by default on a deployed system', () => {
-        // mode() DEFAULTS TO LIVE ON THE PRODUCTION PROFILE. The seed's master
-        // data matches nothing in S2A - no COK airport, contracts 4600000001..
-        // against S2A's 7000000033 - so a live default means every ticket save
-        // makes a real call and writes an error onto the ticket.
+    it('EXIT-9  the deployed posting mode is PINNED, valid, and honoured', () => {
+        // THIS CRITERION CHANGED ON 19 Oct 2026, and the reason is recorded
+        // here rather than lost in a diff.
+        //
+        // It used to assert the mode was NOT live, because the seed's master
+        // data matched nothing in S2A - no COK airport, contracts
+        // 4600000001.. against S2A's 7000000033 - so live meant every ticket
+        // save made a real call and wrote an error onto the ticket.
+        //
+        // THAT PREMISE IS GONE. The S2A master data is now maintained through
+        // the mapping apps, a real purchase order has been created against
+        // contract 7000000033 at plant 3COK, and live was asked for
+        // explicitly. A criterion that still refused `live` would be
+        // asserting a fact that stopped being true, and the next person would
+        // delete it rather than read it.
+        //
+        // WHAT IS STILL WORTH GUARDING is the thing that actually bit:
+        // the value must be PINNED in mta.yaml. `cf set-env` survives a
+        // restage and does NOT survive an MTA deploy, so a mode set only on
+        // the command line is silently reverted by the next deploy - and a
+        // posting that quietly goes back to mock looks exactly like a posting
+        // that worked.
         const mta = fs.readFileSync(`${PROJECT}/mta.yaml`, 'utf8');
         const m = /FS_S4_POSTING_MODE:\s*(\w+)/.exec(mta);
-        assert.ok(m, 'the deployed service does not pin FS_S4_POSTING_MODE at all');
-        assert.notStrictEqual(m[1], 'live',
-            'the deployed service is set to live while the S2A master data does not match');
+        assert.ok(m, 'the deployed service does not pin FS_S4_POSTING_MODE at all - '
+            + 'the next deploy will fall back to the code default, which is live');
+        assert.ok(['live', 'mock', 'off'].includes(m[1]),
+            `FS_S4_POSTING_MODE is pinned to "${m[1]}", which is not one of live, mock or off - `
+          + 'an unrecognised value falls through to the default');
+
+        // LIVE IS A DECISION, SO IT HAS TO READ AS ONE. A pin to live with no
+        // note beside it is indistinguishable from a leftover, and the cost
+        // of getting it wrong is real documents in S2A.
+        if (m[1] === 'live') {
+            const block = mta.slice(Math.max(0, m.index - 2000), m.index);
+            assert.ok(/LIVE SINCE/.test(block),
+                'the mode is pinned to live with nothing saying it was meant to be - '
+              + 'every ticket save now creates a real PO and GR in S2A');
+        }
         out(`deployed mode is pinned to ${m[1]}`);
 
         // And the switch has to be honoured, not just configured.
@@ -365,9 +396,16 @@ describe('S/4HANA fuel ticket posting', () => {
             `contract resolved from ${r.sources.contract}, expected the station-supplier map`);
         assert.ok(r.contractItem, 'no contract line item resolved - the station map carries one');
 
-        // THE MATERIAL COMES FROM THE TAIL'S FUEL TYPE, as functional asked.
-        assert.strictEqual(r.sources.material, 'TAIL_FUEL_TYPE',
-            `material resolved from ${r.sources.material}, expected the tail master`);
+        // THE MATERIAL COMES FROM THE FUELS THE TAIL IS APPROVED FOR.
+        //
+        // This asserted TAIL_FUEL_TYPE - the single column on the tail master
+        // - until 19 Oct 2026, when functional replaced that instruction with
+        // "multiple fuel type mapped to each tail ... time dependent data".
+        // The column is dead and AIRCRAFT_FUEL_TYPES answers instead; EXIT-13
+        // below is what proves the rules. Here it is enough that the material
+        // came from the approved list and not from the order.
+        assert.ok(String(r.sources.material || '').startsWith('TAIL_APPROVED'),
+            `material resolved from ${r.sources.material}, expected the tail's approved fuels`);
 
         // AND THE PAYLOAD CARRIES WHAT WAS RESOLVED, including ContractItem -
         // which S/4 has always accepted and this integration never sent.
@@ -390,5 +428,159 @@ describe('S/4HANA fuel ticket posting', () => {
         // must not stop a posting; it must say which source answered.
         assert.ok(Object.keys(r.sources).length >= 3,
             `only ${Object.keys(r.sources).length} source(s) recorded - a failed posting could not be explained`);
+    });
+
+    // ------------------------------------------------------------ EXIT-13 --
+    it('EXIT-13  the material is a fuel the tail is approved for, on that date', async () => {
+        // FUNCTIONAL, 19 Oct 2026: "Option to have multiple fuel type mapped
+        // to each tail. Uplift can happen only for fuels types that are
+        // allowed to be used for a tail. This needs to be time dependent
+        // data." A single column on the tail master cannot express any of
+        // that, which is why AIRCRAFT_FUEL_TYPES exists.
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT, INSERT, DELETE } = cds.ql;
+
+        const approved = await cds.db.run(SELECT.from('fuelsphere.AIRCRAFT_FUEL_TYPES')
+            .columns('registration', 'fuel_type', 'is_default'));
+        assert.ok(approved.length > 0,
+            'no approved fuel types seeded - the posting would fall back to the order on every ticket');
+
+        // ONE DEFAULT PER TAIL. Two defaults means the posting chooses, and a
+        // posting that chooses a material can be wrong without saying so.
+        const byTail = new Map();
+        for (const r of approved) {
+            if (r.is_default !== true) continue;
+            byTail.set(r.registration, (byTail.get(r.registration) || 0) + 1);
+        }
+        const multi = [...byTail.entries()].filter(([, n]) => n > 1);
+        assert.deepStrictEqual(multi.slice(0, 5), [],
+            'a tail has more than one default fuel type - the posting cannot choose');
+        out(`${approved.length} approved fuel type(s) over ${byTail.size} tail(s), one default each`);
+
+        // ---- it resolves, and says which rule answered -------------------
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID').where({ flight_ID: { '!=': null }, order_ID: { '!=': null } }));
+        const read = async (id) => cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS', id, x => {
+            x('*'),
+            x.order(o => {
+                o.order_number,
+                o.contract(c => { c.s4_contract_number }),
+                o.supplier(sp => { sp.s4_vendor_no }),
+                o.airport(a => { a.s4_plant_code, a.iata_code }),
+                o.product(pr => { pr.s4_material_number })
+            }),
+            x.flight(f => { f.origin_airport, f.airline_code, f.flight_date }),
+            x.delivery(d => { d.density })
+        }));
+
+        const r = await s4.resolvePostingMasterData(await read(t.ID));
+        assert.ok(String(r.sources.material || '').startsWith('TAIL_APPROVED'),
+            `material resolved from ${r.sources.material}; it must come from the approved list, `
+          + 'not the dead column on the tail master and not the order');
+        assert.ok(r.material, 'no material resolved at all');
+        out(`material ${r.material} via ${r.sources.material}`);
+
+        // ---- THE DEAD COLUMN MUST NOT BE READ ----------------------------
+        // AIRCRAFT_REGISTRATIONS.fuel_type was yesterday's answer and is
+        // superseded. If anything still read it, changing the approved list
+        // would leave the posting unmoved - the silent drift this codebase
+        // has paid for three times.
+        //
+        // THE CHECK READS CODE, NOT PROSE. Its first form was a text search
+        // for AIRCRAFT_REGISTRATIONS near fuel_type, which matched the
+        // COMMENT in the handler explaining that the column is dead - so
+        // documenting the decision broke the test that guards it. A check
+        // that punishes an explanation will have the explanation deleted.
+        const src = require('node:fs').readFileSync(`${PROJECT}/srv/lib/s4-fuel-posting.js`, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')      // block comments
+            .replace(/^\s*\/\/.*$/gm, '');          // line comments
+        assert.ok(!/AIRCRAFT_REGISTRATIONS/.test(src),
+            'the posting still reads AIRCRAFT_REGISTRATIONS - the dead fuel_type column '
+          + 'is being used as a second source of truth beside AIRCRAFT_FUEL_TYPES');
+
+        // ---- TIME DEPENDENCE IS REAL, not decoration ---------------------
+        // An approval that expired before the uplift must not answer for it.
+        const reg = approved[0].registration;
+        const planted = {
+            ID: '00000000-0000-4000-8000-0000000fuel1'.replace('fuel1', 'bbbb1'),
+            registration: reg, fuel_type: 'EXPIRED1',
+            valid_from: '2000-01-01', valid_to: '2000-12-31',
+            is_default: true, is_active: true
+        };
+        await cds.db.run(INSERT.into('fuelsphere.AIRCRAFT_FUEL_TYPES').entries(planted));
+        try {
+            const again = await s4.resolvePostingMasterData(await read(t.ID));
+            assert.notStrictEqual(again.material, 'EXPIRED1',
+                'an approval that lapsed in 2000 answered for a 2026 uplift - the window is ignored');
+            out('an expired approval does not answer: still ' + again.material);
+        } finally {
+            await cds.db.run(DELETE.from('fuelsphere.AIRCRAFT_FUEL_TYPES').where({ ID: planted.ID }));
+        }
+    });
+
+    // ------------------------------------------------------------ EXIT-14 --
+    it('EXIT-14  the attempt stores what we SENT, not only what came back', async () => {
+        // ASKED FOR ON 19 Oct 2026: "how can i see what exactly the payload is
+        // getting passed to s4 system for PO and GR creation". The answer was
+        // `cf logs`, which is a poor one - CF keeps hours, the question gets
+        // asked days later, and it needs a login the person asking may not
+        // have.
+        //
+        // AND THE RESPONSE ALONE CANNOT ANSWER IT. S/4 saying "contract
+        // 7000000033 item 10 has no open quantity" is half an argument;
+        // whether we should have sent that contract is the other half, and
+        // that is unanswerable without the request beside it.
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT } = cds.ql;
+
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID', 'internal_number')
+            .where({ flight_ID: { '!=': null }, order_ID: { '!=': null } }));
+        assert.ok(t, 'no ticket to post');
+
+        await s4.postTicketToS4(t.ID);
+
+        const attempt = await cds.db.run(SELECT.one.from('fuelsphere.S4_POSTING_ATTEMPTS')
+            .columns('attempt_no', 'outcome', 'request_payload')
+            .where({ ticket_ID: t.ID })
+            .orderBy({ ref: ['attempt_no'], sort: 'desc' }));
+        assert.ok(attempt, 'the posting recorded no attempt at all');
+        assert.ok(attempt.request_payload,
+            'the attempt stored no request payload - the only record of what we sent is '
+          + 'a Cloud Foundry log line that rotates within hours');
+
+        // IT MUST BE READABLE, and it must be the real thing.
+        let payload;
+        assert.doesNotThrow(() => { payload = JSON.parse(attempt.request_payload); },
+            'the stored payload is not valid JSON');
+        assert.ok(payload.TicketNumber, 'the stored payload has no ticket number');
+
+        // THE RESOLUTION SOURCES TRAVEL WITH IT. "Contract 7000000033" does
+        // not say which mapping table produced it, and that is the first
+        // question asked when the contract turns out to be wrong.
+        assert.ok(payload._resolvedFrom && typeof payload._resolvedFrom === 'object',
+            'the payload does not record WHICH mapping table answered for each field');
+        out(`attempt ${attempt.attempt_no} stored ${Object.keys(payload).length} payload field(s), `
+          + `resolved from ${JSON.stringify(payload._resolvedFrom)}`);
+
+        // ---- AND IT MUST REACH THE SCREEN -------------------------------
+        // A payload stored where no screen shows it is a payload that still
+        // needs a CF login to read, which was the whole complaint.
+        const ann = fs.readFileSync(`${PROJECT}/srv/s4-posting-log-annotations.cds`, 'utf8');
+        assert.ok(/request_payload/.test(ann),
+            'the posting log does not show the payload - it is stored and invisible');
+        assert.ok(/UI\.MultiLineText/.test(ann),
+            'the payload is rendered as a single-line field, which shows the first forty '
+          + 'characters of a twenty-line document');
+
+        // NO SECRET MAY PASS THROUGH HERE. The payload is master data every
+        // reader of this table can already see on the ticket; a credential
+        // would be a new disclosure.
+        const text = attempt.request_payload.toLowerCase();
+        for (const word of ['password', 'secret', 'authorization', 'clientsecret', 'certificate']) {
+            assert.ok(!text.includes(word),
+                `the stored payload contains "${word}" - storing it would disclose a credential`);
+        }
+        out('payload is visible on the posting log, as a block, and carries no credential');
     });
 });

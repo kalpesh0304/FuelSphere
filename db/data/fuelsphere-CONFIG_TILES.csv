@@ -4,3 +4,4 @@ c1a2b3c4-0001-4000-8000-000000000002;flight-excel-upload;Upload Flight Schedule;
 c1a2b3c4-0001-4000-8000-000000000003;fuel-deliveries;Fuel Deliveries (ePOD);Fuel Operations;#FuelDeliveries-manage;sap-icon://document;true
 c1a2b3c4-0001-4000-8000-000000000004;fuel-tickets;Fuel Tickets;Fuel Operations;#FuelTickets-manage;sap-icon://receipt;true
 c1a2b3c4-0001-4000-8000-000000000005;flight-schedule;Flight Schedule;Reference Data;#Flights-display;sap-icon://flight;true
+c1a2b3c4-0001-4000-8000-000000000006;fs-reconciliation;FS Reconciliation;Fuel Operations;#fsreconciliation-display;sap-icon://accounting-document-verification;true

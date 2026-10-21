@@ -4,6 +4,13 @@ const { SELECT } = cds.ql;
 /**
  * FuelSphere - who sold the fuel on a ticket, and where it was billed.
  *
+ * THE SUPPLIER COMES FROM THE ORDER, OR FROM THE MAPS. A ticket raised
+ * against a flight has no order, and showed no supplier at all until 19 Oct
+ * 2026 - an empty field that read as "nobody sold this fuel" when the
+ * station mapping knew perfectly well who did. The order wins where there is
+ * one, because it records what was actually bought rather than what was
+ * arranged.
+ *
  * READ AT READ TIME, NOT STORED. The supplier belongs to the order and the
  * invoice line belongs to the invoice; copying either onto the ticket would
  * leave it asserting something the source has since corrected - a supplier
@@ -35,7 +42,10 @@ const { SELECT } = cds.ql;
  * itself - two lines of the SAME charge are, which is INV455's job.
  */
 
-const TICKET_COLUMNS = ['ID', 'order_ID'];
+// flight_ID JOINS THE RE-READ, 19 Oct 2026. A ticket raised against a FLIGHT
+// rather than an order has no order to walk to a supplier, and the station
+// and date the maps are keyed on come from the flight.
+const TICKET_COLUMNS = ['ID', 'order_ID', 'flight_ID'];
 
 async function applyTicketBilling(rows) {
     const list = (Array.isArray(rows) ? rows : [rows]).filter(r => r && r.ID);
@@ -57,7 +67,70 @@ async function applyTicketBilling(rows) {
         : [];
     const supplierOf = new Map(orders.map(o => [o.ID, o.supplier_ID]));
 
-    const supplierIds = [...new Set(orders.map(o => o.supplier_ID).filter(Boolean))];
+    // ---- and where there is no order, through the MAPS -------------------
+    //
+    // A TICKET RAISED AGAINST A FLIGHT HAS NO ORDER, and decision A1 says
+    // that is legitimate: fuel is routinely delivered with no order in the
+    // system - a verbal post-freeze top-up, a diversion uplift, fuel put on
+    // a reassigned tail. Those tickets showed an EMPTY fuel supplier, which
+    // reads as "nobody sold this fuel" when the truth is "the station's
+    // mapping says who did".
+    //
+    // THE SAME RESOLUTION THE POSTING USES - resolveDesignation, flight
+    // override then station default. The screen and the S/4 payload must
+    // name one supplier; resolving it twice in two ways is how they come to
+    // disagree, which this codebase has paid for three times already.
+    //
+    // THE ORDER STILL WINS WHERE THERE IS ONE. An order records who was
+    // actually bought from, which is a fact; the map records who is supposed
+    // to fuel there, which is an arrangement. Where both exist the fact wins.
+    const noOrder = stored.filter(t => !t.order_ID && t.flight_ID);
+    const flightIds = [...new Set(noOrder.map(t => t.flight_ID))];
+    const flights = flightIds.length
+        ? await cds.db.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+            .columns('ID', 'flight_number', 'origin_airport', 'airline_code', 'flight_date')
+            .where({ ID: { in: flightIds } }))
+        : [];
+    const flightById = new Map(flights.map(f => [f.ID, f]));
+
+    // RESOLVED ONCE PER DISTINCT ARRANGEMENT, not once per ticket. A list
+    // report showing thirty orderless tickets at one station would otherwise
+    // run thirty identical resolutions.
+    const mappedSupplierOf = new Map();   // ticket ID -> supplier ID
+    if (noOrder.length) {
+        const { resolveDesignation } = require('./designation-resolver');
+        const combos = new Map();
+        for (const t of noOrder) {
+            const f = flightById.get(t.flight_ID);
+            if (!f || !f.origin_airport || !f.flight_date) continue;
+            const key = `${f.flight_number || ''}|${f.origin_airport}|${f.airline_code || ''}|${f.flight_date}`;
+            if (!combos.has(key)) combos.set(key, { f, tickets: [] });
+            combos.get(key).tickets.push(t.ID);
+        }
+        for (const { f, tickets } of combos.values()) {
+            try {
+                const d = await resolveDesignation({
+                    flightNumber: f.flight_number || null,
+                    stationCode: f.origin_airport,
+                    asOfDate: f.flight_date,
+                    carrierCode: f.airline_code || null
+                });
+                if (d.resolved && d.row && d.row.supplier_ID) {
+                    for (const id of tickets) mappedSupplierOf.set(id, d.row.supplier_ID);
+                }
+            } catch (err) {
+                // NEVER FAILS THE READ. A ticket that cannot resolve a mapped
+                // supplier shows an empty one, exactly as before; it does not
+                // take the whole list down with it.
+                void err;
+            }
+        }
+    }
+
+    const supplierIds = [...new Set([
+        ...orders.map(o => o.supplier_ID),
+        ...mappedSupplierOf.values()
+    ].filter(Boolean))];
     const suppliers = supplierIds.length
         ? await cds.db.run(SELECT.from('fuelsphere.MASTER_SUPPLIERS')
             .columns('ID', 'supplier_name', 's4_vendor_no').where({ ID: { in: supplierIds } }))
@@ -85,7 +158,10 @@ async function applyTicketBilling(rows) {
     // ---- onto the rows ----------------------------------------------------
     for (const r of list) {
         const orderId = orderOf.get(r.ID) || null;
-        const supplier = supplierById.get(supplierOf.get(orderId)) || null;
+        // The order's supplier first, the station's mapping second.
+        const supplier = supplierById.get(supplierOf.get(orderId))
+            || supplierById.get(mappedSupplierOf.get(r.ID))
+            || null;
 
         r.supplier_name_v = supplier ? supplier.supplier_name : null;
         r.s4_vendor_no_v  = supplier ? supplier.s4_vendor_no : null;

@@ -20,6 +20,7 @@
  * EXIT-7  cases 1 and 3 are billed ONCE - no agent line where no agent fuels
  * EXIT-8  CAR411 refuses the contradictory combinations
  * EXIT-9  the ticket's headline invoice is the FUEL one, not the handling one
+ * EXIT-10 fuel type joins the mapping key, and one default vendor per fuel
  */
 process.env.CDS_ENV = 'development';
 process.env.CDS_REQUIRES_DB_KIND = 'sqlite';
@@ -453,5 +454,55 @@ describe('into-plane agent - the three arrangements', () => {
         out(`${sample.length} case-2 ticket(s) checked, ${wrong.length} with the wrong headline`);
         assert.deepStrictEqual(wrong.slice(0, 5), [],
             'the ticket headline names the handling invoice instead of the fuel invoice');
+    });
+
+    // ------------------------------------------------------------ EXIT-10 --
+    it('EXIT-10  fuel type joins the mapping key, and one default vendor per fuel', async () => {
+        // FUNCTIONAL, 19 Oct 2026, on "only one default vendor per fuel type,
+        // per station, at a time": "Yes, it joins that key."
+        //
+        // Before that, a station had one default vendor full stop, so a
+        // station taking Jet A-1 from one supplier and AVGAS from another
+        // could not be expressed: the second mapping was refused as a
+        // duplicate of the first.
+        const { SELECT } = cds.ql;
+        const set = '/odata/v4/mappings/StationSupplierMappings';
+
+        // THE COLUMN EXISTS AND IS REACHABLE. A key that a screen cannot set
+        // is a key nobody maintains.
+        const defs = cds.model.definitions['MappingService.StationSupplierMappings'];
+        assert.ok(defs.elements.fuel_type, 'StationSupplierMappings has no fuel_type');
+        assert.ok(defs.elements.into_plane_contract_line_item,
+            'no into_plane_contract_line_item - "the contract line item level should also be mapped"');
+
+        // ---- CAR413: a second default for the same fuel is refused -------
+        const base = stations.find(r => r.carrier_carrier_code === 'B6' && r.is_default);
+        assert.ok(base, 'no default station row to test against');
+        const rival = stations.find(r => r.airport_ID === base.airport_ID
+            && r.carrier_carrier_code === base.carrier_carrier_code
+            && r.supplier_ID !== base.supplier_ID);
+        if (!rival) { out('instrument: no second supplier at that station, CAR413 untested by data'); return; }
+
+        const key = `(ID=${rival.ID},IsActiveEntity=false)`;
+        try { await DELETE(`${set}${key}`); } catch (e) { void e; }
+        await POST(`${set}(ID=${rival.ID},IsActiveEntity=true)/MappingService.draftEdit`,
+                   { PreserveChanges: false });
+        // Same fuel type as the row that is already default - so this is a
+        // SECOND default for one fuel, which must be refused.
+        await PATCH(`${set}${key}`, { is_default: true, fuel_type: base.fuel_type ?? null });
+
+        let message = null;
+        try { await POST(`${set}${key}/MappingService.draftActivate`, {}); }
+        catch (e) {
+            message = String((e.response && e.response.data && JSON.stringify(e.response.data))
+                || e.message || '');
+        }
+        try { await DELETE(`${set}${key}`); } catch (e) { void e; }
+
+        assert.ok(message, 'a second default vendor for the same fuel type was ACCEPTED - '
+            + 'the station now resolves to whichever row the database returns first');
+        assert.ok(message.includes('CAR413'),
+            `refused, but not by CAR413: ${message.slice(0, 140)}`);
+        out('a second default for the same fuel type is refused by CAR413');
     });
 });

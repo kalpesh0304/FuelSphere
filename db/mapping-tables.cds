@@ -195,6 +195,19 @@ entity STATION_SUPPLIER_MAP : cuid, db.ActiveStatus, db.AuditTrail {
         into_plane_agent   : Association to db.MASTER_SUPPLIERS;
         into_plane_contract : Association to db.MASTER_CONTRACTS;
 
+        // ---- THE AGENT'S CONTRACT LINE, added 19 Oct 2026 ---------------
+        //
+        // ASKED FOR IN THESE WORDS: "It is not sufficient to map the
+        // contract, the contract line item level should also be mapped."
+        //
+        // The same reasoning as contract_line_item on the fuel side: a
+        // service contract with the into-plane agent runs for a year or two
+        // and carries several lines, and S/4 needs to be told which line the
+        // service PO calls off. Mapping the contract alone leaves the posting
+        // to guess, and a posting that guesses a contract line is a posting
+        // against the wrong commitment.
+        into_plane_contract_line_item : String(5);   // 10, 20, 30
+
         // ---- CASE 3: THE AIRLINE'S OWN TANKS ----------------------------
         //
         // Added 7 Oct 2026. Some stations are fuelled by the airline itself -
@@ -262,6 +275,26 @@ entity STATION_SUPPLIER_MAP : cuid, db.ActiveStatus, db.AuditTrail {
         contract           : Association to db.MASTER_CONTRACTS @mandatory;
         contract_line_item : String(5) @mandatory;  // 10, 20, 30
 
+        // ---- WHICH FUEL THIS MAPPING IS FOR, added 19 Oct 2026 ----------
+        //
+        // IT JOINS THE UNIQUENESS KEY, confirmed by functional: "Only one
+        // default vendor per fuel type, per station, at a time" - "Yes, it
+        // joins that key."
+        //
+        // Before this, a station could have exactly one default vendor full
+        // stop. A station that takes Jet A-1 from one supplier and AVGAS from
+        // another had no way to say so: the second mapping was refused as a
+        // duplicate of the first. With the fuel type in the key both are
+        // legitimate, and the posting picks the row matching the fuel being
+        // uplifted.
+        //
+        // NULL MEANS "ANY FUEL", and that is deliberate rather than lax. The
+        // 86 rows that exist predate this column; refusing to resolve them
+        // would break every posting at every station until somebody filled
+        // it in. A null row answers for any fuel type, and a row naming one
+        // is preferred over it.
+        fuel_type          : String(20);   // S/4 material, e.g. JETA1
+
         valid_from         : Date @mandatory;
         valid_to           : Date;                  // null = open-ended
 
@@ -297,6 +330,19 @@ entity FLIGHT_SUPPLIER_MAP : cuid, db.ActiveStatus, db.AuditTrail {
         supplier_performs_uplift : Boolean default false;
         into_plane_agent    : Association to db.MASTER_SUPPLIERS;
         into_plane_contract : Association to db.MASTER_CONTRACTS;
+
+        // ---- THE AGENT'S CONTRACT LINE, added 19 Oct 2026 ---------------
+        //
+        // ASKED FOR IN THESE WORDS: "It is not sufficient to map the
+        // contract, the contract line item level should also be mapped."
+        //
+        // The same reasoning as contract_line_item on the fuel side: a
+        // service contract with the into-plane agent runs for a year or two
+        // and carries several lines, and S/4 needs to be told which line the
+        // service PO calls off. Mapping the contract alone leaves the posting
+        // to guess, and a posting that guesses a contract line is a posting
+        // against the wrong commitment.
+        into_plane_contract_line_item : String(5);   // 10, 20, 30
 
         // ---- CASE 3: THE AIRLINE'S OWN TANKS ----------------------------
         //
