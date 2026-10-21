@@ -211,11 +211,26 @@ service TicketService {
     @readonly
     entity S4PostingErrors as projection on db.S4_POSTING_ATTEMPTS {
         *,
-        ticket.ticket_number        as ticket_number : String(50),
-        ticket.internal_number      as internal_number : String(30),
-        ticket.aircraft_reg         as aircraft_reg : String(10),
-        ticket.flight_number        as flight_number : String(10),
-        ticket.delivery_timestamp   as delivery_timestamp : Timestamp,
+        // ---- THE STAMP FIRST, THE ASSOCIATION AS FALLBACK ---------------
+        //
+        // These read ONLY through `ticket` until 21 Oct 2026, and the posting
+        // log showed a column of outcomes with no ticket, no tail and no
+        // flight beside them - rows that say something failed without saying
+        // what. Whatever stops the association resolving (a ticket deleted
+        // after its posting, a row whose fields were never filled), the log
+        // is the one place that must still be able to say which uplift it is
+        // talking about.
+        //
+        // THE COALESCE IS FOR THE ROWS THAT PREDATE THE STAMP. Attempts
+        // written before this change have no stamped values, so they keep
+        // resolving the old way; attempts written after it no longer depend
+        // on anything but themselves. Once no unstamped rows remain the
+        // fallback can go, and nothing will change when it does.
+        coalesce(ticket_number,      ticket.ticket_number)      as ticket_number      : String(50),
+        coalesce(internal_number,    ticket.internal_number)    as internal_number    : String(30),
+        coalesce(aircraft_reg,       ticket.aircraft_reg)       as aircraft_reg       : String(10),
+        coalesce(flight_number,      ticket.flight_number)      as flight_number      : String(10),
+        coalesce(delivery_timestamp, ticket.delivery_timestamp) as delivery_timestamp : Timestamp,
         ticket                      : redirected to FuelTickets,
         messages                    : redirected to TicketPostingMessages,
 

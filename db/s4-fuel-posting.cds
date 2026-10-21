@@ -216,6 +216,28 @@ entity S4_POSTING_ATTEMPTS : cuid, db.AuditTrail {
         // the reversal cancelled.
         reverses        : Association to S4_POSTING_ATTEMPTS;
 
+        // ---- WHO THIS POSTING WAS FOR, STAMPED AT THE TIME --------------
+        //
+        // DENORMALISED ON PURPOSE, 21 Oct 2026. The posting log read these
+        // four through the `ticket` association, so every one of them went
+        // blank the moment the association could not be followed - and the
+        // log then showed a column of outcomes belonging to nobody. An audit
+        // log that depends on another row still existing is not an audit log.
+        //
+        // IT ALSO RECORDS WHAT WAS TRUE AT POSTING TIME, which is what an
+        // audit reader actually wants. A ticket renumbered or re-tailed next
+        // month must not silently rewrite the history of what was sent to
+        // S/4 in September; the association would do exactly that.
+        //
+        // The association STAYS, because navigating to the live ticket is
+        // still the right action from a log row. These are for display; it
+        // is for going there.
+        ticket_number       : String(50);
+        internal_number     : String(30);
+        aircraft_reg        : String(10);
+        flight_number       : String(10);
+        delivery_timestamp  : Timestamp;
+
         // ---- WHAT WE SENT, added 19 Oct 2026 ----------------------------
         //
         // THE REQUEST, VERBATIM, AS JSON. Until now the only record of what

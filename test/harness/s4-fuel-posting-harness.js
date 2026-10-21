@@ -26,6 +26,7 @@
  * EXIT-12 the payload is built from the MAPPING TABLES, not the order
  * EXIT-13 the material is a fuel the tail is approved for, on that date
  * EXIT-14 the attempt stores what we SENT, not only what came back
+ * EXIT-15 the posting log still names its uplift when the ticket is gone
  */
 process.env.CDS_ENV = 'development';
 process.env.CDS_REQUIRES_DB_KIND = 'sqlite';
@@ -582,5 +583,83 @@ describe('S/4HANA fuel ticket posting', () => {
                 `the stored payload contains "${word}" - storing it would disclose a credential`);
         }
         out('payload is visible on the posting log, as a block, and carries no credential');
+    });
+
+    // ------------------------------------------------------------ EXIT-15 --
+    it('EXIT-15  the posting log still names its uplift when the ticket is gone', async () => {
+        // REPORTED FROM THE DEPLOYED SCREEN, 21 Oct 2026: the S/4HANA Posting
+        // Log showed two GRERR rows with Ticket, Internal no, Tail and Flight
+        // all blank - outcomes belonging to nobody.
+        //
+        // Those four read through the `ticket` association, so they go blank
+        // together the moment it cannot be followed, while the attempt's own
+        // columns carry on showing fine. An audit log that depends on another
+        // row still existing is not an audit log, which is why the identity
+        // is now STAMPED on the attempt at posting time.
+        const s4 = require(`${PROJECT}/srv/lib/s4-fuel-posting`);
+        const { SELECT, DELETE } = cds.ql;
+
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('ID', 'ticket_number', 'internal_number', 'aircraft_reg', 'flight_number')
+            .where({ flight_ID: { '!=': null }, internal_number: { '!=': null } }));
+        assert.ok(t, 'no identifiable ticket to post');
+
+        await s4.postTicketToS4(t.ID);
+
+        const stamped = await cds.db.run(SELECT.one.from('fuelsphere.S4_POSTING_ATTEMPTS')
+            .columns('ID', 'ticket_number', 'internal_number', 'aircraft_reg', 'flight_number')
+            .where({ ticket_ID: t.ID }).orderBy({ ref: ['attempt_no'], sort: 'desc' }));
+        assert.ok(stamped, 'no attempt recorded');
+        assert.strictEqual(stamped.internal_number, t.internal_number,
+            'the attempt did not stamp the internal number - the log depends on the ticket again');
+        assert.strictEqual(stamped.aircraft_reg, t.aircraft_reg, 'tail not stamped');
+        assert.strictEqual(stamped.flight_number, t.flight_number, 'flight not stamped');
+        out(`attempt stamped ${stamped.internal_number} / ${stamped.aircraft_reg} / ${stamped.flight_number}`);
+
+        // ---- NOW TAKE THE TICKET AWAY -----------------------------------
+        // The association breaks; the log must not.
+        // THROUGH THE PROJECTION, NOT THE SERVICE. This harness deploys the
+        // model without serving it, and S4PostingErrors is a plain projection
+        // with no handler - so querying it on the database exercises exactly
+        // the SQL the list report runs, which is what is under test here.
+        const readLog = async () => (await cds.db.run(
+            SELECT.from('TicketService.S4PostingErrors')
+                .columns('ID', 'ticket_number', 'internal_number', 'aircraft_reg',
+                         'flight_number', 'outcome')
+                .where({ ID: stamped.ID })))[0];
+
+        const before = await readLog();
+        assert.strictEqual(before.internal_number, t.internal_number,
+            'the log does not show the internal number even with the ticket present');
+
+        const saved = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS').where({ ID: t.ID }));
+        await cds.db.run(DELETE.from('fuelsphere.FUEL_TICKETS').where({ ID: t.ID }));
+        try {
+            const after = await readLog();
+            assert.ok(after, 'the log row vanished with its ticket');
+            assert.strictEqual(after.internal_number, t.internal_number,
+                'the log went anonymous when its ticket was deleted - this is the reported defect');
+            assert.strictEqual(after.aircraft_reg, t.aircraft_reg, 'tail lost with the ticket');
+            assert.strictEqual(after.flight_number, t.flight_number, 'flight lost with the ticket');
+            assert.strictEqual(after.outcome, before.outcome, 'the outcome changed');
+            out('with the ticket deleted the log still names '
+              + `${after.internal_number} / ${after.aircraft_reg} / ${after.flight_number}`);
+        } finally {
+            await cds.db.run(INSERT.into('fuelsphere.FUEL_TICKETS').entries(saved));
+        }
+
+        // ---- AND THE FILTER BAR MUST NOT SHOW COLUMN NAMES --------------
+        // The same screenshot showed "outcome:", "posting_kind:",
+        // "attempted_at:" and "company_code:" as filter labels.
+        const ann = fs.readFileSync(`${PROJECT}/srv/s4-posting-log-annotations.cds`, 'utf8');
+        for (const f of ['outcome', 'posting_kind', 'attempted_at', 'company_code']) {
+            // A PLAIN STRING, NOT A TEMPLATE LITERAL. `\s` is not a valid
+            // escape in a template literal, so JS silently collapses it to a
+            // bare "s" - the pattern became \ns*outcomes+@title: and matched
+            // nothing, failing a check that was in fact satisfied.
+            assert.ok(new RegExp('\\n\\s*' + f + '\\s+@title:').test(ann),
+                `${f} is on the filter bar with no @title - it renders as "${f}:"`);
+        }
+        out('outcome, posting_kind, attempted_at and company_code all carry a label');
     });
 });

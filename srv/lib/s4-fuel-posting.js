@@ -416,6 +416,14 @@ async function recordAttempt(ticket, fields, kind, messages, payload) {
             attempt_no: attemptNo,
             attempted_at: fields.s4_posted_at || new Date().toISOString(),
             posting_kind: kind,
+            // STAMPED, NOT LOOKED UP LATER. See the note on these columns in
+            // db/s4-fuel-posting.cds: the log has to stay readable when the
+            // ticket behind it cannot be reached.
+            ticket_number: ticket.ticket_number || null,
+            internal_number: ticket.internal_number || null,
+            aircraft_reg: ticket.aircraft_reg || null,
+            flight_number: ticket.flight_number || null,
+            delivery_timestamp: ticket.delivery_timestamp || null,
             outcome,
             message: fields.s4_posting_message || null,
             contract_number: fields.s4_contract_number || null,

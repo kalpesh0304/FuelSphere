@@ -200,6 +200,40 @@ annotate TicketService.S4PostingErrors with {
     flight_number      @title: 'Flight';
     delivery_timestamp @title: 'Uplift At';
 
+    // ---- THE FILTER BAR WAS SHOWING RAW COLUMN NAMES -------------------
+    //
+    // outcome, posting_kind, attempted_at and company_code had no @title, so
+    // the filter bar rendered them as "outcome:", "posting_kind:",
+    // "attempted_at:" and "company_code:" - the database's words in front of
+    // a person who does not read the database. Everything on a filter bar is
+    // a label somebody has to understand under time pressure.
+    attempted_at       @title: 'Posted At'
+                       @Common.QuickInfo: 'When FuelSphere called S/4 - not the date S/4 booked against. The two differ at month end, which is when it matters.';
+
+    outcome            @title: 'Outcome'
+                       @Common.QuickInfo: 'S both documents posted; POERR the purchase order failed and nothing posted; GRERR the PO posted and the goods receipt failed; P partial; E error.';
+
+    posting_kind       @title: 'Posting'
+                       @Common.QuickInfo: 'Which posting this was: the uplift PO and GR, the into-plane service chain, a goods issue from own storage, a supplier invoice, or a reversal.';
+
+    company_code       @title: 'Company Code';
+    contract_number    @title: 'Contract Called Off';
+    po_number          @title: 'Purchase Order';
+    po_item            @title: 'PO Item';
+    po_quantity        @title: 'PO Quantity';
+    po_unit            @title: 'PO Unit';
+    gr_number          @title: 'Goods Receipt';
+    gr_year            @title: 'GR Year';
+    fi_doc_number      @title: 'FI Document';
+    fi_fiscal_year     @title: 'FI Fiscal Year';
+    fi_posting_date    @title: 'FI Posting Date'
+                       @Common.QuickInfo: 'The date S/4 booked against. Empty until ZFS_FUEL_POSTING_SRV returns it - CR-2a.';
+    invoice_number     @title: 'S/4 Invoice';
+    invoice_year       @title: 'Invoice Year';
+    supplier_invoice_number @title: 'Supplier Invoice No';
+    attempt_no         @title: 'Attempt';
+    message            @title: 'Message';
+
     // THE JSON AS A BLOCK, NOT A ONE-LINE INPUT. Without MultiLineText this
     // renders as a single-line field showing the first forty characters of a
     // twenty-line document, which is the same as showing nothing.
