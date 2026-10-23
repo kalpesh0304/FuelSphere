@@ -280,6 +280,37 @@ were reported as codes until airline prefixes were excluded.
 | `STG` | 1 | 1 | **BUILT** — never listed here |
 | `INT` | 10 | 1 | **DESIGNED** |
 | `CA` · `CMP` · `FPE` · `PLN` · `RA` · `SEC` | 10·12·12·10·10·12 | **0 each** | **DESIGNED** — declared in a `.cds` and executed by nothing |
+| `CAR` | 12 | 12 | **BUILT** — carrier, station-supplier and flight-supplier mapping guards. `CAR401`–`CAR411` and `CAR413`; **there is no `CAR412`**. All twelve executable. **Never listed here**, and found by the measurement below rather than by this table |
+| `DFL` | 0 | 0 | **RESERVED 23 Oct 2026** — defuel. Prefix registered ahead of its first code, deliberately: see below |
+
+#### Re-measured again, 23 Oct 2026, before adding `DFL`
+
+**Rule: measure the prefix before extending it.** Measured across `srv/**/*.{js,cds}`:
+
+- **three-letter prefixes: 16, carrying 172 codes** — `APU CAR CFG CMP DSP ENR EPD FPE
+  IMP INT INV MDM PLN PRC SEC STG`
+- plus the two-letter `FB`, `CA` and `RA` already listed above
+
+**A three-letter sweep undercounts**, because `FB402` is real and two letters long — so any
+figure quoted without its method is not comparable to any other. The 18/192 above was
+measured on 14 September with a different pattern; this is not a correction of it, because
+the two did not measure the same thing.
+
+**What the measurement did find is `CAR`.** **Twelve** codes, all twelve executable, none of
+them in this table — `CAR401` to `CAR411`, and `CAR413`. **There is no `CAR412`**, which is
+worth stating because a contiguous range is what a reader assumes and this one has a hole in
+it. That is one more prefix added without §8 moving, and it is added above rather than left
+for the next re-measurement.
+
+### Defuel — `DFL4xx` / `DFL5xx` — reserved, no codes yet
+
+**Registered before its first validation exists**, which is the opposite of how the ten
+unlisted prefixes arrived. `4xx` for business rules, `5xx` for technical failures.
+
+**Nothing claims a number yet.** The defuel work packages add codes here in the same commit
+that adds the validation, and a code appearing in this section with no `srv/` raise site is
+a declaration, not a guard — the same reading as every other prefix above.
+
 
 **"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a
 shared constant, so a raise-site count undercounts. A code appearing in a `.js` file is something
