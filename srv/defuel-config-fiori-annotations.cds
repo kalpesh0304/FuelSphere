@@ -21,6 +21,20 @@ annotate DefuelConfigService.StorageLocations with @(
     UI: {
         SelectionFields: [ station_code, location_type, is_active ],
 
+        // THE TAB. A multi-view list report needs one of these per view, and
+        // each names its own sort and visualization — without it the view has
+        // nothing to render and Fiori Elements falls back to the first entity.
+        SelectionPresentationVariant #Tab: {
+            $Type: 'UI.SelectionPresentationVariantType',
+            Text: 'Storage Locations',
+            SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
+            PresentationVariant: {
+                $Type: 'UI.PresentationVariantType',
+                SortOrder: [{ $Type: 'Common.SortOrderType', Property: code, Descending: false }],
+                Visualizations: ['@UI.LineItem']
+            }
+        },
+
         LineItem: [
             { Value: code,          Label: 'Location', ![@UI.Importance]: #High },
             { Value: description,   Label: 'Description' },
@@ -90,6 +104,20 @@ annotate DefuelConfigService.DefuelReasonCodes with @(
     UI: {
         SelectionFields: [ is_active ],
 
+        // THE TAB. A multi-view list report needs one of these per view, and
+        // each names its own sort and visualization — without it the view has
+        // nothing to render and Fiori Elements falls back to the first entity.
+        SelectionPresentationVariant #Tab: {
+            $Type: 'UI.SelectionPresentationVariantType',
+            Text: 'Reason Codes',
+            SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
+            PresentationVariant: {
+                $Type: 'UI.PresentationVariantType',
+                SortOrder: [{ $Type: 'Common.SortOrderType', Property: code, Descending: false }],
+                Visualizations: ['@UI.LineItem']
+            }
+        },
+
         LineItem: [
             { Value: code,            Label: 'Reason', ![@UI.Importance]: #High },
             { Value: description,     Label: 'Description', ![@UI.Importance]: #High },
@@ -143,6 +171,20 @@ annotate DefuelConfigService.DefuelReasonCodes with {
 annotate DefuelConfigService.DefuelGlAccounts with @(
     UI: {
         SelectionFields: [ carrier_code, account_role, is_active ],
+
+        // THE TAB. A multi-view list report needs one of these per view, and
+        // each names its own sort and visualization — without it the view has
+        // nothing to render and Fiori Elements falls back to the first entity.
+        SelectionPresentationVariant #Tab: {
+            $Type: 'UI.SelectionPresentationVariantType',
+            Text: 'G/L Accounts',
+            SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
+            PresentationVariant: {
+                $Type: 'UI.PresentationVariantType',
+                SortOrder: [{ $Type: 'Common.SortOrderType', Property: account_role, Descending: false }],
+                Visualizations: ['@UI.LineItem']
+            }
+        },
 
         LineItem: [
             { Value: account_role,  Label: 'Account role', ![@UI.Importance]: #High },

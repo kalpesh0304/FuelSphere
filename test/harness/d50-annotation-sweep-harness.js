@@ -153,8 +153,14 @@ describe('D50 — no annotation on any service points at nothing', () => {
   //
   // It fires BEFORE the sweep, which is why a stale constant is worse than it
   // looks: the whole dangling check was skipped for as long as it was wrong.
-  it('EXIT-3  ALL TWENTY SERVICES, zero dangling', () => {
+  it('EXIT-3  ALL TWENTY-ONE SERVICES, zero dangling', () => {
     const names = Object.keys(edmx).sort();
+    // Twenty-one since 23 Oct 2026: DefuelConfigService carries the three
+    // masters a defuel needs before one can be recorded — storage locations,
+    // reason codes and the G/L mapping. Its own service because the three are
+    // maintained by three different audiences, and a finance screen should not
+    // be reachable from an operations tile.
+    //
     // Twenty since 19 Oct 2026: ReconciliationService carries the Financials
     // to FuelSphere reconciliation. Its own service because every entity on
     // it is computed at read time rather than persisted, and because it must
@@ -167,7 +173,7 @@ describe('D50 — no annotation on any service points at nothing', () => {
     // Eighteen since 30 Sep 2026: MappingService carries the S/4 posting maps
     // (carrier master, station-plant, station-supplier, flight-supplier).
     // Raised deliberately, as the note above says, never loosened.
-    assert.strictEqual(names.length, 20, `expected 20 services, compiled ${names.length}`);
+    assert.strictEqual(names.length, 21, `expected 21 services, compiled ${names.length}`);
 
     let TP = 0, TF = 0; const bad = [];
     const rows = [];
