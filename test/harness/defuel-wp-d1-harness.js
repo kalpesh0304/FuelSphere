@@ -138,16 +138,32 @@ describe('Defuel WP-D1 — the vocabulary, enforced', () => {
         assert.ok(/DFL4xx/.test(claude) && /DFL5xx/.test(claude),
             '§8 does not record the 4xx/5xx split for DFL');
 
-        // AND IT MUST STILL BE HONEST ABOUT CARRYING NOTHING. A reserved
-        // prefix claiming codes it does not have is the defect this section
-        // was re-measured to remove.
-        const inSource = (require('node:child_process')
-            .execSync('git grep -ohE "\\bDFL[0-9]{3}\\b" -- srv db || true',
-                      { cwd: PROJECT, encoding: 'utf8' }) || '').trim();
-        assert.strictEqual(inSource, '',
-            `DFL codes exist in source (${inSource}) but WP-D1 adds no validation — `
-          + 'either the codes arrived without this harness, or §8 is now understating');
-        out('DFL registered in §8, 4xx/5xx recorded, zero codes claimed and zero in source');
+        // THIS ASSERTED ZERO CODES UNTIL WP-D4, and the change is the point
+        // rather than a relaxation. WP-D1 registered the prefix BEFORE any
+        // code existed — the opposite of how the eleven unlisted prefixes
+        // arrived — and WP-D4 then added thirteen, each in the same commit as
+        // the validation that raises it.
+        //
+        // What survives is the invariant that matters: §8 must not list a
+        // code nothing raises. A declaration in that section reads exactly
+        // like a guard. defuel-wp-d4 EXIT-9 checks the same thing from the
+        // other side.
+        const listed = [...new Set((claude.match(/`DFL\d{3}`/g) || [])
+            .map(c => c.replace(/`/g, '')))];
+        // READ FROM DISK, NOT FROM git grep. git grep searches COMMITTED
+        // content, so a code raised in a file that is staged but not yet
+        // committed reads as raised by nothing — and this criterion would
+        // fail on exactly the commit that adds it.
+        const raised = new Set();
+        for (const f of fs.readdirSync(`${PROJECT}/srv`)) {
+            if (!f.endsWith('.js')) continue;
+            for (const c of fs.readFileSync(`${PROJECT}/srv/${f}`, 'utf8')
+                              .match(/DFL\d{3}/g) || []) raised.add(c);
+        }
+        const phantom = listed.filter(c => !raised.has(c));
+        assert.deepStrictEqual(phantom, [],
+            `§8 lists ${phantom.join(', ')} which nothing in srv/ raises`);
+        out(`DFL registered with 4xx/5xx; ${listed.length} code(s) listed, all raised`);
 
         // THE PREFIX THE MEASUREMENT FOUND. CAR was executable in srv/ and
         // absent from §8 — the pattern the prompt warns about, caught here.

@@ -135,8 +135,22 @@ describe('Defuel WP-D2 — the schema', () => {
         const d = D('DEFUEL');
         for (const f of ['event_local', 'event_zone', 'event_utc']) {
             assert.ok(d.elements[f], `DEFUEL has no ${f}`);
+        }
+        // THE TWO THAT ARE ENTERED ARE MANDATORY; THE DERIVED ONE IS NOT —
+        // a distinction WP-D4 found rather than one designed in. event_utc is
+        // computed from the local time and the station's zone, and requiring
+        // it on input made the not-null assertion fire BEFORE the conversion
+        // ran: a local time that never existed was refused as a missing field
+        // instead of by DFL409. Right by accident, and unreadable.
+        //
+        // Nothing reaches the ledger without one — the handler computes it or
+        // refuses the row.
+        for (const f of ['event_local', 'event_zone']) {
             assert.strictEqual(d.elements[f]['@mandatory'], true, `DEFUEL.${f} is not mandatory`);
         }
+        assert.ok(!d.elements.event_utc['@mandatory'],
+            'event_utc is mandatory on input, so the daylight-saving refusals cannot be '
+          + 'reached — the not-null assertion fires first');
         assert.ok(d.elements.event_dst_fold,
             'no way to record which reading was taken when a local time occurred twice');
         out('defuel keeps local, zone and derived UTC, all three mandatory');

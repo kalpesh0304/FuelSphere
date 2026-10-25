@@ -307,9 +307,31 @@ for the next re-measurement.
 **Registered before its first validation exists**, which is the opposite of how the ten
 unlisted prefixes arrived. `4xx` for business rules, `5xx` for technical failures.
 
-**Nothing claims a number yet.** The defuel work packages add codes here in the same commit
-that adds the validation, and a code appearing in this section with no `srv/` raise site is
-a declaration, not a guard — the same reading as every other prefix above.
+**Twelve codes since 25 Oct 2026**, all raised in `srv/defuel-service.js`. A code appearing
+in this section with no `srv/` raise site would be a declaration, not a guard — the same
+reading as every other prefix above. These all execute.
+
+| Code | Description | State |
+|---|---|---|
+| `DFL401` | Defuel exceeds its uplift, net of earlier defuels | **BUILT** — R1.5, M1 only — M2 has no uplift to net against. Cumulative: the message says what was already taken |
+| `DFL402` | Uplift out of a DEFUEL location | **BUILT** — D4/R2.4 — a hard refusal. The return may already be priced and accrued |
+| `DFL403` | Balance would go negative — tail or location | **BUILT** — R5.6/R2.6 — the control. A clamped balance hides fuel that went missing |
+| `DFL404` | Credit exceeds the open held value | **BUILT** — R5.5/D2 — quotes both figures. A data-entry error every time |
+| `DFL405` | Reversal refused: the defuel is settled | **BUILT** — Q10 of 23 Oct — cancel the settlement first; the vendor agreed it |
+| `DFL406` | Already reversed | **BUILT** — R1.10 — kept and marked, never deleted, never reversed twice |
+| `DFL407` | FIFO carrier: no value can be produced | **BUILT** — D1 defaults to FIFO and FIFO layers are not maintained live here |
+| `DFL408` | No rate resolvable for the tail at that instant | **BUILT** — Nothing priced precedes the movement; name the uplift |
+| `DFL409` | Local time never existed (clocks forward) | **BUILT** — R3.9 — refused, never silently shifted |
+| `DFL410` | Local time occurred twice (clocks back) | **BUILT** — R3.9 — resolved explicitly; the row records which reading |
+| `DFL411` | Nothing left to write off | **BUILT** — The parcel is already exhausted |
+| `DFL412` | Settlement quantity exceeds what is still open | **BUILT** — R5.11: a parcel is settled in parts until exhausted |
+| `DFL501` | The defuel no longer exists | **BUILT** — Technical |
+
+**`DFL407` is the one worth reading twice.** The valuation method defaults to FIFO per
+carrier (Defuel BR D1), and FIFO layers in this system are produced by an offline replay
+rather than maintained live. So the DEFAULT method is the one a defuel cannot be valued
+under, and this code refuses rather than quietly valuing it as a moving average. A wrong
+figure that looks right is worse than a refusal that explains itself.
 
 
 **"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a

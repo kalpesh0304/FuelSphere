@@ -154,9 +154,22 @@ entity DEFUEL : cuid, db.AuditTrail {
         // its rules; the zone resolves the rule in force on the event date.
         // MASTER_AIRPORTS.timezone carries IANA names on 96 of 96 stations,
         // so this needs no master-data work.
+        // THE TWO THAT ARE ENTERED ARE MANDATORY; THE DERIVED ONE IS NOT.
+        //
+        // R3.7 makes the event time mandatory and it is — but what a person
+        // enters is the local time and the station's zone, and the UTC is
+        // what FuelSphere computes from them. Requiring it on input would
+        // make the screen supply a figure it is the system's job to derive,
+        // and — worse — the not-null assertion fires BEFORE the conversion
+        // runs, so a local time that never existed would be refused as a
+        // missing field rather than by DFL409. The refusal would be right by
+        // accident and unreadable.
+        //
+        // It is never absent in practice: the handler computes it or refuses
+        // the row, so nothing reaches the ledger without one.
         event_local   : DateTime @mandatory;        // as entered, at the station
         event_zone    : String(50) @mandatory;      // IANA, e.g. America/Vancouver
-        event_utc     : Timestamp @mandatory;       // derived; what the ledger orders by
+        event_utc     : Timestamp;                  // derived; what the ledger orders by
 
         // WHICH READING WAS TAKEN when clocks went back and a local time
         // occurred twice. Null on every ordinary row. R3's rule is that the
@@ -243,9 +256,42 @@ entity DEFUEL : cuid, db.AuditTrail {
         // airline is least likely to recover.
         held_value_usd : Decimal(15,2);
 
+        // ---- HOW MUCH OF IT IS SETTLED, as a running total ----------------
+        //
+        // R5.11 settles a parcel in PARTS — part credited and the rest
+        // declined, or credited across two memos a month apart. So "is it
+        // settled" is not a flag but an arithmetic question, and the open
+        // remainder is held_value minus these.
+        //
+        // MAINTAINED BY THE SETTLEMENT ACTION, never typed. They are totals
+        // of DEFUEL_SETTLEMENT rows, kept here because the list report has to
+        // sort and filter on what is still open without expanding every
+        // child on every row.
+        settled_qty_kg    : Decimal(15,3) default 0;
+        settled_value_usd : Decimal(15,2) default 0;
+        credited_usd      : Decimal(15,2) default 0;   // what the vendor gave
+        written_off_usd   : Decimal(15,2) default 0;   // what was not recovered
+
         // ---- status -----------------------------------------------------------
+        // PARKED BY DEFAULT (R5.9). A recorded defuel with no agreed outcome
+        // is a parked item — a real position on the books and the population
+        // month end accrues. Mandatory with no default meant the row was
+        // refused before the handler that sets it ever ran, which is the same
+        // trap event_utc fell into.
+        // SUPPLIED BY THE SYSTEM, SO NOT MANDATORY ON INPUT — the same trap
+        // event_utc fell into, and worth stating once for both.
+        //
+        // CAP's `default` is a DATABASE default; input validation still
+        // demands a @mandatory field in the payload, and it runs BEFORE any
+        // custom before-handler. So a field the handler is responsible for
+        // setting cannot also be mandatory on input: the row is refused
+        // before the code that would have filled it ever runs.
+        //
+        // The value is still guaranteed. @assert.range refuses anything
+        // outside the type, the database default supplies PARKED, and the
+        // handler sets it explicitly on every path.
         @assert.range
-        status        : DefuelStatus @mandatory;
+        status        : DefuelStatus default 'PARKED';
 
         // ---- M5, which is one transaction (R4.4) -------------------------------
         //
@@ -294,8 +340,15 @@ type DefuelMovementType : String(2) enum {
     M5 = 'M5';   // tail to tail                -> M3 then M4, one transaction
 }
 
+// NO 'DRAFT' MEMBER, and its absence is the decision.
+//
+// The entity is @odata.draft.enabled, so an in-progress defuel lives in the
+// DRAFT TABLE — the framework already owns that state. A DRAFT value on the
+// active row would be a second way of saying the same thing, and the two
+// would disagree the moment somebody activated a row without the handler
+// running. d39-status-fixture caught it: nothing in srv/ ever wrote DRAFT,
+// which is exactly what a redundant state looks like from the outside.
 type DefuelStatus : String(12) enum {
-    Draft      = 'DRAFT';
     Parked     = 'PARKED';       // recorded, nothing posted, outcome unknown (R5.9)
     Posted     = 'POSTED';       // settled in whole or in part (R5.11)
     Settled    = 'SETTLED';      // fully resolved to S1, S2 or S3

@@ -62,6 +62,27 @@ entity CARRIER_MASTER : db.ActiveStatus, db.AuditTrail {
     key carrier_code  : String(3);                  // IATA designator: B6, B7, AC
         carrier_name  : String(100);                // JetBlue Airways
         company_code  : String(4) @mandatory;       // SAP BUKRS: B600, B601
+
+        // ---- HOW THIS CARRIER'S FUEL IS COSTED, added 25 Oct 2026 --------
+        //
+        // BR D1: "The valuation method is configured per carrier code; where
+        // none is set the default is FIFO." The decision existed and the
+        // column did not, so every defuel resolved to the default and was
+        // refused by DFL407 — correct behaviour against a setting nobody
+        // could change.
+        //
+        // NULL MEANS FIFO, and that is the decision rather than an oversight.
+        // D1 makes FIFO the default, so a carrier nobody has configured is a
+        // FIFO carrier; the column records a DEPARTURE from the default, not
+        // the default itself.
+        //
+        // EFFECTIVE DATING IS O11 AND STILL OPEN. A carrier switched from MAP
+        // to FIFO mid-year leaves a tail holding fuel that was never layered,
+        // so there is nothing for FIFO to consume. Until O11 is answered this
+        // is a single current value and switching it does not restate
+        // history — which is why the basis is recorded on every valued row.
+        valuation_method : String(4);              // FIFO | MAP; null = FIFO
+
         notes         : String(500);
 
         // ---- TOLERANCE LIMITS, PER CARRIER ------------------------------
