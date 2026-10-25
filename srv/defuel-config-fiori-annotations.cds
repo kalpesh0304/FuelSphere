@@ -24,7 +24,7 @@ annotate DefuelConfigService.StorageLocations with @(
         // THE TAB. A multi-view list report needs one of these per view, and
         // each names its own sort and visualization — without it the view has
         // nothing to render and Fiori Elements falls back to the first entity.
-        SelectionPresentationVariant #Tab: {
+        SelectionPresentationVariant #Locations: {
             $Type: 'UI.SelectionPresentationVariantType',
             Text: 'Storage Locations',
             SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
@@ -107,7 +107,7 @@ annotate DefuelConfigService.DefuelReasonCodes with @(
         // THE TAB. A multi-view list report needs one of these per view, and
         // each names its own sort and visualization — without it the view has
         // nothing to render and Fiori Elements falls back to the first entity.
-        SelectionPresentationVariant #Tab: {
+        SelectionPresentationVariant #Reasons: {
             $Type: 'UI.SelectionPresentationVariantType',
             Text: 'Reason Codes',
             SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
@@ -175,7 +175,7 @@ annotate DefuelConfigService.DefuelGlAccounts with @(
         // THE TAB. A multi-view list report needs one of these per view, and
         // each names its own sort and visualization — without it the view has
         // nothing to render and Fiori Elements falls back to the first entity.
-        SelectionPresentationVariant #Tab: {
+        SelectionPresentationVariant #Accounts: {
             $Type: 'UI.SelectionPresentationVariantType',
             Text: 'G/L Accounts',
             SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
