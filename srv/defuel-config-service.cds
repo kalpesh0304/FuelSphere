@@ -40,6 +40,20 @@ service DefuelConfigService {
      * waiting for another aircraft. Same liquid, same tank, different
      * commercial situation — and R2.4 makes the difference a hard refusal.
      */
+    // DRAFT-ENABLED, which is what puts Create and Edit on the screen.
+    //
+    // Without it Fiori Elements renders a read-only list: the rows show, the
+    // Delete button greys out and there is NO Create button at all — which is
+    // what a person found on the deployed tile, with an empty G/L table and no
+    // way to add a row to it. A configuration screen nobody can type into is
+    // not a configuration screen, and EXIT-1 asserted these entities were not
+    // @readonly while missing that not-readonly is not the same as editable.
+    //
+    // It is also the estate convention: mapping-service, allocation-service,
+    // analytics-service and burn-service all draft-enable their editable
+    // entities, and the mapping harnesses drive them through draftEdit and
+    // draftActivate.
+    @odata.draft.enabled
     entity StorageLocations as projection on db.STORAGE_LOCATION {
         *,
         airport : redirected to Airports,
@@ -60,6 +74,7 @@ service DefuelConfigService {
      * fault entirely or the airline's problem entirely. It is the first thing
      * a controller looks at.
      */
+    @odata.draft.enabled
     entity DefuelReasonCodes as projection on db.DEFUEL_REASON_CODE;
 
     /**
@@ -74,6 +89,7 @@ service DefuelConfigService {
      * missing one stops the posting and asks a question. Finance fills this
      * in; until they do, the roles are visible and unconfigured.
      */
+    @odata.draft.enabled
     entity DefuelGlAccounts as projection on db.DEFUEL_GL_ACCOUNT {
         *,
         carrier : redirected to Carriers,
