@@ -327,7 +327,25 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
                 specific_gravity: num(r.specific_gravity) || num(r.wt_avg_specific_gravity),
                 rate_usd_per_kg: rate,
                 value_usd: num(r.value_usd),
-                flight_number: null,
+                // WHICH LEG THIS MOVEMENT BELONGS TO, resolved rather than
+                // left empty. ROB_LEDGER already names the flight on 5,306 of
+                // its 5,580 rows and FLIGHT_SCHEDULE.flight_number holds the
+                // IATA designator every other FuelSphere screen prints, so the
+                // column was never missing a source - only a lookup. The map
+                // is the one built above for the carrier vote.
+                //
+                // AN OPENING BALANCE NEVER CARRIES ONE, whatever the ledger
+                // says. An INITIAL row states what was already on board when
+                // the window opened - it is a starting position, not a leg
+                // that was flown - so a flight number against it would read as
+                // a claim that the fuel arrived on that flight.
+                //
+                // THIS OVERRIDES THE SOURCE ON 3 ROWS, deliberately. 270 of
+                // the 273 INITIAL ledger rows carry no flight_ID anyway; the
+                // remaining 3 do, and that link is suppressed here rather than
+                // shown, so the column means one thing on every row.
+                flight_number: lineType === 'INITIAL' ? null
+                    : (flightById.get(r.flight_ID) || {}).flight_number || null,
                 flight_date: r.record_date || null,
                 flight_aobt: r.record_date ? `${r.record_date}T${r.record_time || '00:00:00'}Z` : null,
                 station: r.airport_code || null,
@@ -475,6 +493,12 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             batch_ref: over.batch_ref || '',
             flight_number: mv.flight_number || '', flight_date: mv.flight_date || '',
             flight_aobt: mv.flight_aobt || '', station: mv.station || '',
+            // EMPTY ON EVERY SEEDED ROW, and it should be. A storage location
+            // is only ever written by a defuel posted through DefuelService;
+            // nothing in the historical replay put fuel into a tank on the
+            // ground. The column exists here so the seeded rows and the
+            // posted ones have the same shape.
+            storage_location: mv.storage_location || '',
             reference: mv.reference, line_type: mv.line_type,
             qty_kg: q, qty_l: litres(q, sg), specific_gravity: sg ?? '',
             rate_usd_per_kg: over.rate_usd_per_kg ?? '', value_usd: over.value_usd ?? '',
@@ -494,6 +518,7 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             ID: uuid5(`BAL:${method}:${tail}:${L.batch_ref || '-'}:${L.layer_no ?? 0}`),
             valuation_method: method, tail_number: tail, carrier_code: carrierOf(tail),
             batch_ref: L.batch_ref || '',
+            storage_location: L.storage_location || '',
             // Empty under MAP, whose pool no single movement opened.
             line_type: L.line_type || '',
             station: L.station || '', flight_number: L.flight_number || '',

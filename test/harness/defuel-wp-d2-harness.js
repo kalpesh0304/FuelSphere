@@ -46,143 +46,101 @@ describe('Defuel WP-D2 — the schema', () => {
         // nothing without @assert.range on the element. CLAUDE.md D25 records
         // 79 enum-typed elements enforcing nothing, which is what makes this
         // worth asserting rather than assuming.
+        //
+        // REWRITTEN 26 Oct 2026 for the redesigned defuel. The settlement
+        // model's enums went with the model; what remains is the document's
+        // own vocabulary plus the configuration the config app maintains.
         const required = [
-            ['DEFUEL', 'movement_type'], ['DEFUEL', 'status'],
-            ['DEFUEL', 'valuation_basis'], ['DEFUEL', 'density_source'],
-            ['DEFUEL', 'fee_treatment'],
+            ['DEFUEL', 'defuel_type'], ['DEFUEL', 'source_mode'], ['DEFUEL', 'status'],
             ['STORAGE_LOCATION', 'location_type'],
-            ['DEFUEL_LEDGER_ENTRY', 'direction'],
-            ['DEFUEL_LEDGER_ENTRY', 'valuation_basis'],
-            ['DEFUEL_LEDGER_ENTRY', 'density_source'],
-            ['DEFUEL_SETTLEMENT', 'outcome'],
-            ['DEFUEL_SETTLEMENT', 'approval_status'],
-            ['DEFUEL_ACCRUAL', 'status'],
-            ['DEFUEL_GL_ACCOUNT', 'account_role'],
-            ['ROB_LEDGER', 'valuation_basis']
+            ['DEFUEL_GL_ACCOUNT', 'account_role']
         ];
-        const unguarded = [];
-        for (const [entity, element] of required) {
-            const e = D(entity);
-            assert.ok(e, `${entity} is not in the model`);
-            const el = e.elements[element];
-            assert.ok(el, `${entity}.${element} does not exist`);
-            if (!el['@assert.range']) unguarded.push(`${entity}.${element}`);
+        const missing = [];
+        for (const [ent, el] of required) {
+            const e = D(ent) && D(ent).elements[el];
+            if (!e) { missing.push(`${ent}.${el} does not exist`); continue; }
+            if (!e['@assert.range']) missing.push(`${ent}.${el} is not enforced`);
         }
-        assert.deepStrictEqual(unguarded, [],
-            `declared but unenforced: ${unguarded.join(', ')} — a vocabulary with no guard `
-          + 'behind it reads in a diff exactly like one with a guard');
-        out(`${required.length} enum-typed elements, all ranged`);
+        assert.deepStrictEqual(missing, [], missing.join('; '));
+        out(`${required.length} enum-typed elements, all carrying @assert.range`);
     });
 
-    // -------------------------------------------------------------- EXIT-2 --
-    it('EXIT-2  the location ledger is its own table, not rows in the tail ledger', () => {
-        // R2.3, quoted: a location is tracked "ALONGSIDE the tail — not by
-        // overloading the tail-keyed ledger with rows that have no tail".
+    it('EXIT-2  a storage location is tracked on the VALUATION ledger, not the FOB one', () => {
+        // R2.3's intent survives the redesign: a location is tracked
+        // ALONGSIDE the tail, never by overloading the tail-keyed FOB ledger
+        // with rows that have no tail.
         //
-        // The structural reason it could not have gone there: ROB_LEDGER
-        // requires a tail on every row, and a location row has none.
+        // WHAT CHANGED is which ledger holds it. The settlement model had its
+        // own location table; the movement is now a pair of rows in the
+        // valuation ledger, which is where the demo reads stock from.
+        const mv = D('FUEL_STOCK_MOVEMENT_LEDGER');
+        assert.ok(mv.elements.storage_location,
+            'the valuation ledger cannot say where defuelled fuel went');
+
+        // BOTH SIDES OPTIONAL, which is the whole point: the outbound half
+        // carries a tail and no location, the inbound half a location and no
+        // tail. Either being mandatory would make one half unwritable.
+        assert.ok(!mv.elements.tail_number['@mandatory'],
+            'tail_number is mandatory, so the inbound half of a defuel cannot be written');
+        assert.ok(!mv.elements.storage_location['@mandatory'],
+            'storage_location is mandatory, so no ordinary flight movement can be written');
+
+        // AND THE FOB LEDGER IS UNTOUCHED. The demo runs on it.
         const rob = D('ROB_LEDGER');
         assert.strictEqual(rob.elements.tail_number['@mandatory'], true,
-            'instrument: ROB_LEDGER.tail_number is no longer mandatory, so this no longer '
-          + 'demonstrates why the location ledger had to be separate');
-
-        const loc = D('DEFUEL_LEDGER_ENTRY');
-        assert.ok(loc, 'there is no location ledger');
-        assert.ok(loc.elements.location, 'the location ledger is not keyed on a location');
-        assert.ok(!loc.elements.tail_number, 'the location ledger carries a tail number');
-
-        // IT MUST HOLD A BALANCE AND A VALUE, like a tail does (R2.3).
-        for (const f of ['qty_kg', 'value_usd', 'balance_qty_kg', 'balance_value_usd']) {
-            assert.ok(loc.elements[f], `the location ledger has no ${f}`);
-        }
-        out('location ledger separate, balance and value held, no tail on the row');
-
-        // AND IT MUST CARRY THE LAYER, per Q9: one entry per layer consumed,
-        // so a credit reconciles to the invoice that bought that fuel.
-        assert.ok(loc.elements.batch_ref,
-            'no batch_ref — a defuel drawing three FIFO layers could not be told apart, '
-          + 'which is what Q9 answered Option B to prevent');
+            'ROB_LEDGER.tail_number is no longer mandatory - the FOB ledger has been '
+          + 'altered, which this work package was not supposed to do');
+        out('storage_location on the valuation ledger; FOB ledger still demands a tail');
     });
 
-    // -------------------------------------------------------------- EXIT-3 --
-    it('EXIT-3  the event instant is general, not named for a flight', () => {
-        // Q2 was answered "based on time of uplift / defuel" — the event's
-        // own instant positions it, not a fixed slot.
+    it('EXIT-3  a defuel carries its own date and time, not a flight slot', () => {
+        // Q2 was answered "based on time of uplift / defuel" - the event's
+        // own instant positions it, not a fixed slot borrowed from a leg.
         //
-        // flight_aobt CANNOT BE THAT INSTANT. It is named for a flight, and a
-        // defuel on a parked aircraft has none. The seed proves the field
-        // already fails this way: rows exist with it empty.
+        // SIMPLIFIED 26 Oct: the timezone resolver that turned a local time
+        // and an IANA zone into UTC is gone with the rest of the settlement
+        // model, and a defuel now states a plain date and time. That is a
+        // deliberate reduction for the demo, recorded here so the next person
+        // knows DST handling was REMOVED rather than forgotten.
+        const d = D('DEFUEL');
+        for (const f of ['defuel_date', 'defuel_time']) {
+            assert.ok(d.elements[f], `DEFUEL has no ${f}`);
+        }
+        assert.strictEqual(d.elements.defuel_date['@mandatory'], true,
+            'a defuel with no date cannot be positioned in the ledger at all');
+
+        // The FOB ledger keeps the general instant it was given earlier.
         const rob = D('ROB_LEDGER');
-        assert.ok(rob.elements.flight_aobt, 'instrument: flight_aobt is gone');
         for (const f of ['event_utc', 'event_local', 'event_zone']) {
             assert.ok(rob.elements[f], `ROB_LEDGER has no ${f}`);
         }
-
-        // THE RULE FROM THE SEED, read as text rather than from the model:
-        // flight_aobt is already empty on some rows, so it was never a
-        // general event instant.
-        const csv = fs.readFileSync(`${PROJECT}/db/data/fuelsphere-ROB_LEDGER.csv`, 'utf8');
-        const lines = csv.split('\n').filter(l => l.trim());
-        const col = lines[0].split(';').indexOf('flight_aobt');
-        assert.ok(col >= 0, 'the seed has no flight_aobt column');
-        const empty = lines.slice(1).filter(l => !(l.split(';')[col] || '').trim()).length;
-        assert.ok(empty > 0,
-            'instrument: every seeded row has a flight_aobt, so this does not demonstrate '
-          + 'that the field cannot carry a tail-only movement');
-        out(`${empty} seeded rows already have no flight_aobt — the general instant is beside it`);
-
-        // ALL THREE PARTS KEPT (R3.10): local, zone, derived UTC.
-        const d = D('DEFUEL');
-        for (const f of ['event_local', 'event_zone', 'event_utc']) {
-            assert.ok(d.elements[f], `DEFUEL has no ${f}`);
-        }
-        // THE TWO THAT ARE ENTERED ARE MANDATORY; THE DERIVED ONE IS NOT —
-        // a distinction WP-D4 found rather than one designed in. event_utc is
-        // computed from the local time and the station's zone, and requiring
-        // it on input made the not-null assertion fire BEFORE the conversion
-        // ran: a local time that never existed was refused as a missing field
-        // instead of by DFL409. Right by accident, and unreadable.
-        //
-        // Nothing reaches the ledger without one — the handler computes it or
-        // refuses the row.
-        for (const f of ['event_local', 'event_zone']) {
-            assert.strictEqual(d.elements[f]['@mandatory'], true, `DEFUEL.${f} is not mandatory`);
-        }
-        assert.ok(!d.elements.event_utc['@mandatory'],
-            'event_utc is mandatory on input, so the daylight-saving refusals cannot be '
-          + 'reached — the not-null assertion fires first');
-        assert.ok(d.elements.event_dst_fold,
-            'no way to record which reading was taken when a local time occurred twice');
-        out('defuel keeps local, zone and derived UTC, all three mandatory');
+        out('defuel_date mandatory, defuel_time present, ROB_LEDGER instant intact');
     });
 
-    // -------------------------------------------------------------- EXIT-4 --
-    it('EXIT-4  settlement is many-per-defuel, because R5.11 settles in parts', () => {
-        // R5.11, quoted: "a quantity in the location is settled by one or
-        // more settlement events until it is exhausted… Retro-fitting that
-        // onto a one-shot design is the expensive way to discover it."
+    it('EXIT-4  one defuel moves stock twice - out of the tail and in to the tank', () => {
+        // THE SHAPE, NOT A BEHAVIOUR. A defuel that wrote only the outbound
+        // half would read as fuel destroyed rather than fuel moved, and the
+        // storage location would never show a balance at all.
         //
-        // So this asserts the shape, not a behaviour: three columns on DEFUEL
-        // would compile and would be wrong.
-        const d = D('DEFUEL');
-        assert.ok(d.elements.settlements, 'DEFUEL has no settlements');
-        assert.ok(d.elements.settlements.is2many,
-            'settlement is to-one — a vendor crediting across two credit memos could not '
-          + 'be recorded, which R5.11 requires from the start');
-
-        const s = D('DEFUEL_SETTLEMENT');
-        for (const f of ['expected_credit_usd', 'actual_credit_usd', 'write_off_usd',
-                         'settled_qty_kg', 'held_value_usd']) {
-            assert.ok(s.elements[f], `DEFUEL_SETTLEMENT has no ${f}`);
+        // What makes the pair expressible is that the ledger and the balance
+        // table both carry a batch AND a location, so the fuel keeps its
+        // identity - and its price - across the move.
+        for (const ent of ['FUEL_STOCK_MOVEMENT_LEDGER', 'FUEL_STOCK_BALANCE']) {
+            const e = D(ent);
+            assert.ok(e.elements.batch_ref, `${ent} has no batch_ref`);
+            assert.ok(e.elements.storage_location, `${ent} has no storage_location`);
+            assert.ok(e.elements.rate_usd_per_kg,
+                `${ent} has no rate - fuel in a tank would lose what it was bought at`);
         }
-        // R9.5 — the resolved tolerance must name the row that supplied it.
-        assert.ok(s.elements.tolerance_parameter_id,
-            'a tolerance can be applied with no record of which row supplied it, so an '
-          + 'exception could not be defended later');
-        out('settlement is to-many, carries credit, write-off and the tolerance row');
+
+        // DEFUEL is the valuation line type the pair is written under.
+        const lt = cds.model.definitions['fuelsphere.ValuationLineType'];
+        const members = Object.keys(lt.enum || {});
+        assert.ok(members.some(k => lt.enum[k].val === 'DEFUEL'),
+            `ValuationLineType cannot express a defuel: ${members.join(', ')}`);
+        out('batch, location and rate on both tables; DEFUEL is a valuation line type');
     });
 
-    // -------------------------------------------------------------- EXIT-5 --
     it('EXIT-5  no GL account value appears in db/ or srv/ source', () => {
         // THE RULE IS THE PROMPT'S, quoted: "A hard-coded account number or
         // name anywhere in db/ or srv/ is a defect."
@@ -218,22 +176,28 @@ describe('Defuel WP-D2 — the schema', () => {
     });
 
     // -------------------------------------------------------------- EXIT-6 --
-    it('EXIT-6  the uniqueness R4.5 needs is enforced', () => {
-        // R4.5 — M5's two halves and the pass-through trace to ONE reference.
-        // Discovery measured ONE @assert.unique in the whole of db/, so a
-        // duplicate reference would have raised nothing at all.
-        const src = fs.readFileSync(`${PROJECT}/db/defuel.cds`, 'utf8');
-        assert.ok(/transfer_reference/.test(src), 'no transfer_reference');
-
-        // The uniqueness is asserted in the model rather than only intended.
+    it('EXIT-6  one defuel, one reference, and the ledger rows carry it', () => {
+        // R4.5's intent survives: both halves of a move trace to ONE
+        // reference. That reference is now the defuel number itself, which
+        // the service stamps as DFL-<station>-YYYYMM-NNNNNN.
         const d = D('DEFUEL');
-        assert.ok(d.elements.transfer_reference, 'DEFUEL has no transfer_reference');
-        assert.ok(d.elements.counterpart,
-            'no counterpart link — M5s two halves could not be joined to each other');
-        out('transfer_reference and counterpart both present on DEFUEL');
+        assert.ok(d.elements.defuel_id, 'DEFUEL has no defuel_id');
+
+        // NOT @mandatory ON INPUT, deliberately. CAP input validation runs
+        // BEFORE any before-handler, so a field the system fills cannot also
+        // be demanded of the caller - this exact ordering produced a defect
+        // in this service once already.
+        assert.ok(!d.elements.defuel_id['@mandatory'],
+            'defuel_id is @mandatory, so the handler that generates it can never run');
+
+        // The format is built in srv/, not left to the caller to type.
+        const js = fs.readFileSync(`${PROJECT}/srv/defuel-service.js`, 'utf8');
+        assert.ok(/nextDefuelId/.test(js),
+            'nothing in the service generates a defuel number');
+        assert.ok(/DFL-/.test(js), 'the DFL- prefix is not built in srv/');
+        out('defuel_id present, not mandatory on input, generated in srv/');
     });
 
-    // -------------------------------------------------------------- EXIT-7 --
     it('EXIT-7  the seven GL roles Q8 named all exist', () => {
         // THE RULE COMES FROM THE ANSWER, quoted literally rather than from
         // the model — five of the seven are "Fuel burn account (adj …)" with
@@ -246,17 +210,28 @@ describe('Defuel WP-D2 — the schema', () => {
         }
         assert.strictEqual(roles.size, 7, `expected 7 roles, found ${roles.size}`);
 
-        // AND THE DEFUEL CARRIES THE COMPONENTS THOSE ROLES POST TO. Five
-        // adjustment accounts only mean something if the value is split five
-        // ways.
+        // THE FIVE PRICE COMPONENTS ARE GONE FROM THE DEFUEL, and that is
+        // recorded here rather than quietly dropped. They split a defuel's
+        // value across the five adjustment accounts, and they belonged to
+        // the settlement model the 26 Oct redesign removed.
+        //
+        // THE ROLES STAY because the configuration outlives the posting that
+        // used it: DEFUEL_GL_ACCOUNT is maintained by the config app, which
+        // this redesign did not touch, and the mapping is what the finance
+        // team has already been asked to fill in.
+        //
+        // NOTHING POSTS TO THEM YET. Measured 26 Oct: the only references to
+        // DEFUEL_GL_ACCOUNT in srv/ are the Fiori annotations that display
+        // it. This asserts that honestly, so the next person does not assume
+        // a posting exists because a mapping does.
         const d = D('DEFUEL');
-        for (const f of ['component_base_usd', 'component_service_fee_usd',
-                         'component_airport_fee_usd', 'component_into_plane_usd',
-                         'component_tax_usd']) {
-            assert.ok(d.elements[f], `DEFUEL has no ${f} — the five adjustment accounts `
-              + 'would have nothing to post');
-        }
-        out('seven roles, and the five price components they post to');
+        const components = ['component_base_usd', 'component_service_fee_usd',
+                            'component_airport_fee_usd', 'component_into_plane_usd',
+                            'component_tax_usd'].filter(f => d.elements[f]);
+        assert.deepStrictEqual(components, [],
+            `DEFUEL still carries ${components.join(', ')} — the settlement model was `
+          + 'supposed to be removed whole, not in part');
+        out('seven roles configured; the five price components are gone with the model');
     });
 
     // -------------------------------------------------------------- EXIT-8 --

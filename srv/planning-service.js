@@ -125,6 +125,34 @@ module.exports = class PlanningService extends cds.ApplicationService {
                 r.apu_usage_hours = (mins === undefined || mins === null)
                     ? null : Math.round((mins / 60) * 100) / 100;
             }
+
+            // ----------------------------------------------------------------
+            // HOW MUCH FUEL CAME BACK OFF THIS FLIGHT
+            // ----------------------------------------------------------------
+            //
+            // ONE QUERY FOR THE WHOLE PAGE, like the APU cycles above. A
+            // per-row lookup would be one round trip per flight on a list
+            // that routinely shows a hundred.
+            //
+            // POSTED ONLY. A reversed defuel did not happen, and counting it
+            // would show fuel coming off an aircraft that still has it.
+            //
+            // NULL, NOT ZERO, when nothing was recorded - zero would assert
+            // the aircraft was checked and nothing came off.
+            const defuels = await SELECT.from('fuelsphere.DEFUEL')
+                .columns('flight_ID', 'quantity_kg')
+                .where({ flight_ID: { in: ids }, status: 'POSTED' });
+            const defuelledBy = new Map();
+            for (const d of defuels) {
+                if (!d.flight_ID) continue;
+                defuelledBy.set(d.flight_ID,
+                    (defuelledBy.get(d.flight_ID) || 0) + (Number(d.quantity_kg) || 0));
+            }
+            for (const r of rows) {
+                const kg = defuelledBy.get(r.ID);
+                r.defuelled_qty_kg = (kg === undefined || kg === null)
+                    ? null : Math.round(kg * 1000) / 1000;
+            }
         });
 
         // ====================================================================
