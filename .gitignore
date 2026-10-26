@@ -57,3 +57,6 @@ app/package-lock.json
 # mbt build writes a timestamped makefile beside the project and leaves it
 # behind; it is a build artefact, not source.
 Makefile_*.mta
+
+# mbt build scratch directory, removed only sometimes by the tool itself.
+.*_mta_build_tmp/
