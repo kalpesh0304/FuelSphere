@@ -93,7 +93,12 @@ describe('Defuel — posting into the valuation ledger', () => {
             // generated ID to pass here.
             tail_registration: tail,
             station_code: 'JFK',
-            location_ID: location.ID,
+            // THE CODE, NOT THE KEY, because that is what the screen sends.
+            // The picker binds to location_code so the user sees a tank name
+            // instead of a GUID, and the service resolves the key behind it.
+            // A harness that posted the key would exercise a path no user
+            // takes and miss the resolution entirely.
+            location_code: location.code,
             defuel_date: '2026-09-24',
             defuel_time: '14:30:00',
             quantity_kg: 100,

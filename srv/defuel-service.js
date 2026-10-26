@@ -48,6 +48,73 @@ module.exports = cds.service.impl(async function () {
     const { Defuels } = this.entities;
 
     // =======================================================================
+    // FILL THE DERIVED FIELDS WHILE THE USER IS STILL TYPING
+    // =======================================================================
+    //
+    // ON THE DRAFT, NOT ONLY ON SAVE. Deriving solely in the SAVE handler is
+    // correct and useless: the user picks a flight, sees nothing happen, and
+    // only finds the station and carrier filled in after the record exists.
+    // A field that will be computed should be computed when its input
+    // changes.
+    //
+    // THE SAVE HANDLER STILL DERIVES EVERYTHING ITSELF. This one is a
+    // convenience for the screen; it is not the guarantee. A draft can be
+    // patched by anything, and the posting must not depend on the UI having
+    // been polite.
+    this.before('UPDATE', Defuels.drafts, async (req) => {
+        const d = req.data;
+        const db = cds.transaction(req);
+
+        if (d.flight_number !== undefined || d.flight_ID !== undefined) {
+            // THE PICKER WRITES THE NUMBER; the key follows it. Binding the
+            // field to flight_number is what stops the screen showing a GUID,
+            // so the number is what arrives and the row is found by it.
+            const where = d.flight_ID ? { ID: d.flight_ID }
+                : (d.flight_number ? { flight_number: d.flight_number } : null);
+            const f = where && await db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('ID', 'flight_number', 'flight_date', 'airline_code',
+                         'origin_airport', 'destination_airport', 'aircraft_reg')
+                .where(where).orderBy({ flight_date: 'desc' }));
+            if (f) {
+                d.flight_ID           = f.ID;
+                d.flight_number       = f.flight_number;
+                d.flight_date         = f.flight_date;
+                d.carrier_code        = f.airline_code;
+                d.origin_station      = f.origin_airport;
+                d.destination_station = f.destination_airport;
+                d.station_code        = d.station_code || f.origin_airport;
+                // THE SCHEDULE KNOWS THE TAIL, so the user should not have to
+                // type it - and a tail that disagreed with the schedule would
+                // be two records of one leg.
+                if (f.aircraft_reg) {
+                    d.tail_registration = f.aircraft_reg;
+                    d.tail_number       = f.aircraft_reg;
+                }
+            }
+        }
+
+        if (d.tail_registration !== undefined && d.tail_registration) {
+            d.tail_number = d.tail_registration;
+        }
+
+        if (d.location_code !== undefined || d.location_ID !== undefined) {
+            const where = d.location_ID ? { ID: d.location_ID }
+                : (d.location_code ? { code: d.location_code } : null);
+            const l = where && await db.run(SELECT.one.from('fuelsphere.STORAGE_LOCATION')
+                .columns('ID', 'code').where(where));
+            if (l) { d.location_ID = l.ID; d.location_code = l.code; }
+        }
+
+        if (d.supplier_name !== undefined || d.supplier_ID !== undefined) {
+            const where = d.supplier_ID ? { ID: d.supplier_ID }
+                : (d.supplier_name ? { supplier_name: d.supplier_name } : null);
+            const v = where && await db.run(SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                .columns('ID', 'supplier_name').where(where));
+            if (v) { d.supplier_ID = v.ID; d.supplier_name = v.supplier_name; }
+        }
+    });
+
+    // =======================================================================
     // DERIVE, VALIDATE, POST — all on draft activation
     // =======================================================================
     //
@@ -70,10 +137,11 @@ module.exports = cds.service.impl(async function () {
                     + 'the aircraft took outside a scheduled leg.', 'flight_ID');
             }
             const f = await db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
-                .columns('flight_number', 'flight_date', 'airline_code',
+                .columns('ID', 'flight_number', 'flight_date', 'airline_code',
                          'origin_airport', 'destination_airport')
                 .where({ ID: d.flight_ID }));
             if (!f) return req.error(400, 'DFL420: that flight no longer exists.', 'flight_ID');
+            d.flight_ID = f.ID;
 
             // THE SCHEDULE WINS on all four. A flight-referenced defuel that
             // disagreed with the schedule would be two records of one leg.
@@ -113,14 +181,31 @@ module.exports = cds.service.impl(async function () {
         }
         d.tail_number = tail.registration;
 
+        // BY KEY IF THERE IS ONE, BY CODE OTHERWISE. The picker binds to the
+        // readable code so the user never sees a GUID, which means the code
+        // can be the only thing that arrived.
         const loc = await db.run(SELECT.one.from('fuelsphere.STORAGE_LOCATION')
-            .columns('code', 'is_active').where({ ID: d.location_ID }));
+            .columns('ID', 'code', 'is_active')
+            .where(d.location_ID ? { ID: d.location_ID } : { code: d.location_code || '' }));
+        if (loc) d.location_ID = loc.ID;
         if (!loc) return req.error(400, 'DFL423: that storage location no longer exists.', 'location_ID');
         if (loc.is_active === false) {
             return req.error(400, `DFL423: ${loc.code} is not active and cannot receive fuel. `
                 + 'Pick another tank, or reactivate it in Defuel Configuration.', 'location_ID');
         }
         d.location_code = loc.code;
+
+        // THE DEFUELLING AGENT'S NAME IS STORED, not read through the
+        // association, so the picker can show a name instead of a GUID. It
+        // is resolved here as well so a document saved by anything other
+        // than the screen still carries it.
+        if (d.supplier_ID || d.supplier_name) {
+            const v = await db.run(SELECT.one.from('fuelsphere.MASTER_SUPPLIERS')
+                .columns('ID', 'supplier_name')
+                .where(d.supplier_ID ? { ID: d.supplier_ID }
+                                     : { supplier_name: d.supplier_name }));
+            if (v) { d.supplier_ID = v.ID; d.supplier_name = v.supplier_name; }
+        }
 
         const qty = r3(d.quantity_kg);
         if (!(qty > 0)) {

@@ -55,7 +55,6 @@ service DefuelService {
         // element behind it — the filter bar printed a raw "reason_code" on
         // the configuration app for exactly this reason.
         location.description as location_name   : String(100),
-        supplier.supplier_name as supplier_name : String(100),
 
         // THE TOTAL A STATION USER IS ASKED ABOUT. Charges and taxes are
         // what the handling cost; they are deliberately NOT folded into

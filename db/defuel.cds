@@ -236,6 +236,15 @@ entity DEFUEL : cuid, db.AuditTrail {
         ticket_number    : String(50);
         supplier         : Association to db.MASTER_SUPPLIERS;
 
+        // STORED, NOT READ THROUGH THE ASSOCIATION, and the reason is the
+        // screen. A generated foreign key cannot carry a value help or a
+        // text arrangement, so a picker bound to supplier_ID shows the user
+        // a GUID. Binding the picker to a readable STORED column and letting
+        // the value help write the key behind it is what puts a name on the
+        // screen - the same reason tail_number, carrier_code and
+        // location_code are stored beside their associations.
+        supplier_name    : String(100);
+
         // ONE QUANTITY FOR THE WHOLE DOCUMENT, answered 26 Oct. The fuel that
         // leaves the wing is the fuel that reaches the tank; the destination
         // section shows this same figure rather than carrying its own. A
@@ -251,7 +260,16 @@ entity DEFUEL : cuid, db.AuditTrail {
         specific_gravity : Decimal(8,4);
 
         // ---- destination: the tank on the ground --------------------------
-        location         : Association to STORAGE_LOCATION @mandatory;
+        // NOT @mandatory ON THE ASSOCIATION, and this is the same ordering
+        // trap as defuel_id. The screen binds to location_code so the user
+        // sees a tank name rather than a GUID, and the SERVICE resolves the
+        // key from it. CAP checks @mandatory BEFORE any handler runs, so
+        // demanding the key here refuses every save the screen makes.
+        //
+        // THE GUARD IS STILL THERE, and it is better: DFL423 refuses a
+        // location that does not exist or is not active, and says which.
+        // A null check would only have caught the first of those.
+        location         : Association to STORAGE_LOCATION;
         location_code    : String(20);
 
         defuel_charges_usd : Decimal(15,2) default 0;

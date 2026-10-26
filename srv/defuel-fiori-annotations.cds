@@ -105,7 +105,7 @@ annotate DefuelService.Defuels with @(
         // against a flight; the two context flight numbers unless it is
         // recorded against a tail.
         FieldGroup#Source: { Data: [
-            { Value: flight_ID, Label: 'Flight No.',
+            { Value: flight_number, Label: 'Flight No.',
               ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
             { Value: flight_date, Label: 'Flight Date',
               ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
@@ -140,8 +140,8 @@ annotate DefuelService.Defuels with @(
         // performed the defuelling - the counterpart of the into-plane agent
         // on an uplift - not the vendor the fuel was bought from.
         FieldGroup#Destination: { Data: [
-            { Value: location_ID,        Label: 'Storage Location' },
-            { Value: supplier_ID,        Label: 'Defuelling Agent' },
+            { Value: location_code,      Label: 'Storage Location' },
+            { Value: supplier_name,      Label: 'Defuelling Agent' },
             { Value: defuel_charges_usd, Label: 'Defuel Charges (USD)' },
             { Value: taxes_usd,          Label: 'Taxes (USD)' }
         ]}
@@ -164,7 +164,7 @@ annotate DefuelService.Defuels with {
     tail_number         @title: 'Tail'                @readonly;
     carrier_code        @title: 'Carrier'             @readonly;
 
-    flight_number       @title: 'Flight No.'          @readonly;
+    flight_number       @title: 'Flight No.';
     flight_date         @title: 'Flight Date'         @readonly;
     origin_station      @title: 'Departure Station'   @readonly;
     destination_station @title: 'Arrival Station'     @readonly;
@@ -181,9 +181,9 @@ annotate DefuelService.Defuels with {
     quantity_l          @title: 'Quantity (L)'        @readonly;
     specific_gravity    @title: 'Specific Gravity'    @readonly;
 
-    location_code       @title: 'Storage Location'    @readonly;
+    location_code       @title: 'Storage Location'    @Common.FieldControl: #Mandatory;
     location_name       @title: 'Location Name'       @readonly;
-    supplier_name       @title: 'Defuelling Agent'    @readonly;
+    supplier_name       @title: 'Defuelling Agent';
 
     defuel_charges_usd  @title: 'Defuel Charges (USD)';
     taxes_usd           @title: 'Taxes (USD)';
@@ -229,20 +229,27 @@ annotate DefuelService.Defuels with {
 
     // SELECTING A FLIGHT FILLS SIX FIELDS, so the picker shows what the user
     // chooses by: the number, the date, both airports and the tail.
-    flight @(Common: {
-        Text: flight_number, TextArrangement: #TextOnly,
+    flight_number @(Common: {
         ValueList: {
             CollectionPath: 'Flights',
             Label: 'Flights',
             Parameters: [
+                // IN OUT ON THE NUMBER, so the field shows AC410 and not a
+                // GUID. The key comes back as an Out parameter beside it.
                 { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: flight_number, ValueListProperty: 'flight_number' },
+                { $Type: 'Common.ValueListParameterOut',
                   LocalDataProperty: flight_ID, ValueListProperty: 'ID' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_number' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'flight_date' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airline_code' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' }
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: flight_date, ValueListProperty: 'flight_date' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: carrier_code, ValueListProperty: 'airline_code' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: origin_station, ValueListProperty: 'origin_airport' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: destination_station, ValueListProperty: 'destination_airport' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: tail_registration, ValueListProperty: 'aircraft_reg' }
             ]
         }
     });
@@ -264,32 +271,84 @@ annotate DefuelService.Defuels with {
     // THE TANKS THE CONFIGURATION APP MAINTAINS. location_type is shown so a
     // user picking a destination knows whether fuel can ever be re-uplifted
     // out of it, rather than finding out when an uplift is refused weeks on.
-    location @(Common: {
-        Text: location_code, TextArrangement: #TextOnly,
+    location_code @(Common: {
         ValueList: {
             CollectionPath: 'Locations',
             Label: 'Storage Locations',
             Parameters: [
                 { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: location_code, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterOut',
                   LocalDataProperty: location_ID, ValueListProperty: 'ID' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'code' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'description' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'station_code' },
+                // THE TYPE IS SHOWN IN THE PICKER, so a user choosing a
+                // destination knows whether fuel can ever be re-uplifted out
+                // of it, rather than finding out weeks later.
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'location_type' }
             ]
         }
     });
 
-    supplier @(Common: {
-        Text: supplier_name, TextArrangement: #TextOnly,
+    supplier_name @(Common: {
         ValueList: {
             CollectionPath: 'Vendors',
             Label: 'Defuelling Agents',
             Parameters: [
                 { $Type: 'Common.ValueListParameterInOut',
-                  LocalDataProperty: supplier_ID, ValueListProperty: 'ID' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'supplier_name' }
+                  LocalDataProperty: supplier_name, ValueListProperty: 'supplier_name' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: supplier_ID, ValueListProperty: 'ID' }
             ]
         }
     });
 };
+
+// ===========================================================================
+// SIDE EFFECTS — what the server fills in when the user picks something
+// ===========================================================================
+//
+// WITHOUT THESE THE SCREEN LIES. The draft handler fills station, carrier,
+// date and tail the moment a flight is chosen, but Fiori Elements has no way
+// to know those fields changed: it sent a PATCH for one property and gets no
+// instruction to re-read the others. The user picks a flight, sees nothing
+// move, and finds the fields populated only after the record is created -
+// which is exactly what was reported.
+//
+// TargetProperties, NOT TargetEntities: these are fields on this same
+// document, not a related collection.
+annotate DefuelService.Defuels with @(
+    Common.SideEffects #FlightPicked: {
+        SourceProperties: [ flight_number ],
+        TargetProperties: [
+            'flight_date', 'carrier_code', 'origin_station',
+            'destination_station', 'station_code',
+            'tail_registration', 'tail_number'
+        ]
+    },
+
+    // Switching the mode clears or restores the flight fields, so the whole
+    // source block has to be re-read rather than just the one property.
+    Common.SideEffects #ModeChanged: {
+        SourceProperties: [ source_mode ],
+        TargetProperties: [
+            'flight_number', 'flight_date', 'carrier_code',
+            'origin_station', 'destination_station', 'station_code'
+        ]
+    },
+
+    Common.SideEffects #TailPicked: {
+        SourceProperties: [ tail_registration ],
+        TargetProperties: [ 'tail_number' ]
+    },
+
+    Common.SideEffects #LocationPicked: {
+        SourceProperties: [ location_code ],
+        TargetProperties: [ 'location_code' ]
+    },
+
+    Common.SideEffects #AgentPicked: {
+        SourceProperties: [ supplier_name ],
+        TargetProperties: [ 'supplier_name' ]
+    }
+);
