@@ -4,33 +4,35 @@ using { DefuelService } from './defuel-service';
  * Defueling — the capture screen.
  *
  * ===========================================================================
- * REWRITTEN 26 Oct 2026 with the service beneath it. The previous file
- * annotated the settlement model: parked parcels, held value, credits and
- * write-offs. None of those fields exist any more.
+ * REWRITTEN TWICE. The first version annotated the settlement model that the
+ * 26 Oct redesign removed. This one fixes what that rewrite got wrong, and
+ * the mistakes are worth recording because both were already documented in
+ * this repository and I made them anyway.
  *
- * AND IT CARRIED A TRAP WORTH RECORDING. It set
- * `@Common.FieldControl: #Mandatory` on tail_number and carrier_code, both of
- * which the SERVICE fills rather than the user. CAP enforces FieldControl on
- * the server, so every save was refused with "Value is required" against two
- * fields nobody could have typed. An annotation is not decoration: a
- * mandatory flag on a derived field makes the entity unsaveable.
+ * VALUE HELPS GO ON THE ASSOCIATION, NOT THE FOREIGN KEY. flight_ID,
+ * location_ID and supplier_ID are GENERATED keys: they appear in the OData
+ * metadata but are not annotatable elements of the CDS model. Annotating
+ * them produced two warnings, four silently discarded value lists, and a
+ * screen where every picker was a plain text box. Measured afterwards: the
+ * compiled metadata contained ZERO Common.ValueList entries. Annotating the
+ * association is what reaches the key.
  *
- * TWO SECTIONS, SOURCE THEN DESTINATION, because that is the shape of the
- * transaction and the order a station user works in: where the fuel came
- * from, then where it went.
+ * AN ENUM RENDERS AS A TEXT BOX. A dropdown needs rows to point at, which is
+ * why DEFUEL_TYPE_CODE and DEFUEL_MODE_CODE exist and are seeded with two
+ * rows each. ValueListWithFixedValues makes them a select rather than a
+ * dialog.
  *
- * ON RADIO BUTTONS: the specification asks for a radio group for the two
- * types. Fiori Elements has no radio control - an enum field renders as a
- * dropdown, and forcing radios would mean a custom fragment and a freestyle
- * page. Both choices are modelled as enums so the BEHAVIOUR is right and the
- * control is the platform's; a custom fragment can replace the control later
- * without touching the data model.
+ * THE TWO MODES SHOW DIFFERENT FIELDS, and the switch is a UI.Hidden
+ * expression evaluated on the client against source_mode. Flight, flight
+ * date, both stations and carrier appear only for a flight-referenced
+ * defuel; the pre- and post-flight numbers only for a tail-only one. Hidden
+ * rather than merely empty, because a greyed-out flight number on a tail-only
+ * defuel invites somebody to fill it in.
  * ===========================================================================
  */
 annotate DefuelService.Defuels with @(
 
     UI: {
-        // ---- the list -------------------------------------------------
         SelectionFields: [
             defuel_id, defuel_type, tail_number, station_code,
             location_code, defuel_date, status
@@ -52,7 +54,6 @@ annotate DefuelService.Defuels with @(
               Label: 'Reverse' }
         ],
 
-        // ---- the object page header -----------------------------------
         HeaderInfo: {
             TypeName      : 'Defuel',
             TypeNamePlural: 'Defuels',
@@ -79,7 +80,6 @@ annotate DefuelService.Defuels with @(
             { Value: specific_gravity, Label: 'Specific Gravity' }
         ]},
 
-        // ---- the form -------------------------------------------------
         Facets: [
             { $Type: 'UI.ReferenceFacet', ID: 'TypeFacet',
               Target: '@UI.FieldGroup#Type',        Label: 'What this is' },
@@ -94,35 +94,54 @@ annotate DefuelService.Defuels with @(
             { Value: source_mode, Label: 'Recorded against' }
         ]},
 
-        // THE FLIGHT FIELD COMES FIRST and fills the four beneath it.
-        // Station, date, carrier and tail are SHOWN rather than hidden, so a
-        // user can see what the schedule supplied before saving.
+        // ---- SOURCE: where the fuel came from --------------------------
+        //
+        // WHAT CAME OFF AND FROM WHERE belongs here: the quantity and the
+        // gravity are properties of the fuel leaving the wing, not of the
+        // tank receiving it. The charges are what the handling cost and sit
+        // with the destination.
+        //
+        // The five flight fields are hidden unless the defuel is recorded
+        // against a flight; the two context flight numbers unless it is
+        // recorded against a tail.
         FieldGroup#Source: { Data: [
-            { Value: flight_ID,          Label: 'Flight' },
-            { Value: flight_date,        Label: 'Flight Date' },
-            { Value: station_code,       Label: 'Station' },
-            { Value: carrier_code,       Label: 'Carrier' },
-            { Value: tail_registration,  Label: 'Tail No.' },
-            { Value: pre_flight_number,  Label: 'Pre-flight No.' },
-            { Value: post_flight_number, Label: 'Post-flight No.' },
-            { Value: defuel_date,        Label: 'Defuel Date' },
-            { Value: defuel_time,        Label: 'Defuel Time' },
-            { Value: ticket_number,      Label: 'Ticket No.' },
-            { Value: supplier_ID,        Label: 'Supplier' },
-            { Value: quantity_kg,        Label: 'Quantity (kg)' },
-            { Value: defuel_charges_usd, Label: 'Defuel Charges (USD)' },
-            { Value: taxes_usd,          Label: 'Taxes (USD)' }
+            { Value: flight_ID, Label: 'Flight No.',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
+            { Value: flight_date, Label: 'Flight Date',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
+            { Value: origin_station, Label: 'Departure Station',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
+            { Value: destination_station, Label: 'Arrival Station',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
+            { Value: carrier_code, Label: 'Carrier',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITH_FLIGHT'] } } },
+
+            { Value: tail_registration, Label: 'Tail No.' },
+
+            { Value: pre_flight_number, Label: 'Pre-flight No.',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
+            { Value: post_flight_number, Label: 'Post-flight No.',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
+
+            { Value: station_code,     Label: 'Station' },
+            { Value: defuel_date,      Label: 'Defuel Date' },
+            { Value: defuel_time,      Label: 'Defuel Time' },
+            { Value: ticket_number,    Label: 'Ticket No.' },
+            { Value: quantity_kg,      Label: 'Quantity (kg)' },
+            // DERIVED, AND IT BELONGS WITH THE SOURCE: it is the weighted
+            // average gravity of the FIFO layers this defuel drew from, so it
+            // describes the fuel that left the aircraft.
+            { Value: specific_gravity, Label: 'Specific Gravity' }
         ]},
 
-        // ONE SET OF VALUES, SHOWN TWICE. Answered 26 Oct: the fuel that
-        // leaves the wing is the fuel that reaches the tank, so quantity,
-        // supplier, charges and taxes are the SAME fields repeated here for
-        // readability rather than second copies that could disagree.
+        // ---- DESTINATION: where it went, and what the handling cost -----
+        //
+        // THE SUPPLIER HERE IS THE SERVICE PROVIDER, the company that
+        // performed the defuelling - the counterpart of the into-plane agent
+        // on an uplift - not the vendor the fuel was bought from.
         FieldGroup#Destination: { Data: [
             { Value: location_ID,        Label: 'Storage Location' },
-            { Value: quantity_kg,        Label: 'Quantity (kg)' },
-            { Value: supplier_ID,        Label: 'Supplier' },
-            { Value: specific_gravity,   Label: 'Specific Gravity' },
+            { Value: supplier_ID,        Label: 'Defuelling Agent' },
             { Value: defuel_charges_usd, Label: 'Defuel Charges (USD)' },
             { Value: taxes_usd,          Label: 'Taxes (USD)' }
         ]}
@@ -132,59 +151,86 @@ annotate DefuelService.Defuels with @(
 // ---- labels and field behaviour ---------------------------------------
 //
 // NOTHING DERIVED IS MANDATORY. The service fills defuel_id, tail_number,
-// carrier_code, flight_number, flight_date, location_code, specific_gravity,
-// quantity_l and fuel_value_usd, so none of them may carry a mandatory flag -
-// that is precisely what made the previous version unsaveable.
+// carrier_code, flight_number, flight_date, both stations, location_code,
+// specific_gravity, quantity_l and fuel_value_usd. A mandatory flag on any of
+// them makes the entity unsaveable - CAP enforces FieldControl on the server,
+// and the previous version refused every save against two fields nobody could
+// have typed.
 annotate DefuelService.Defuels with {
-    defuel_id          @title: 'Defuel No.'          @readonly;
-    defuel_type        @title: 'Defuel to'           @Common.FieldControl: #Mandatory;
-    source_mode        @title: 'Recorded against'    @Common.FieldControl: #Mandatory;
+    defuel_id           @title: 'Defuel No.'          @readonly;
+    defuel_type         @title: 'Defuel to'           @Common.FieldControl: #Mandatory;
+    source_mode         @title: 'Recorded against'    @Common.FieldControl: #Mandatory;
 
-    tail_registration  @title: 'Tail No.'            @Common.FieldControl: #Mandatory;
-    tail_number        @title: 'Tail'                @readonly;
-    carrier_code       @title: 'Carrier'             @readonly;
+    tail_number         @title: 'Tail'                @readonly;
+    carrier_code        @title: 'Carrier'             @readonly;
 
-    flight_ID          @title: 'Flight';
-    flight_number      @title: 'Flight No.'          @readonly;
-    flight_date        @title: 'Flight Date'         @readonly;
-    station_code       @title: 'Station';
+    flight_number       @title: 'Flight No.'          @readonly;
+    flight_date         @title: 'Flight Date'         @readonly;
+    origin_station      @title: 'Departure Station'   @readonly;
+    destination_station @title: 'Arrival Station'     @readonly;
+    station_code        @title: 'Station';
 
-    pre_flight_number  @title: 'Pre-flight No.';
-    post_flight_number @title: 'Post-flight No.';
+    pre_flight_number   @title: 'Pre-flight No.';
+    post_flight_number  @title: 'Post-flight No.';
 
-    defuel_date        @title: 'Defuel Date'         @Common.FieldControl: #Mandatory;
-    defuel_time        @title: 'Defuel Time';
-    ticket_number      @title: 'Ticket No.';
-    supplier_ID        @title: 'Supplier';
+    defuel_date         @title: 'Defuel Date'         @Common.FieldControl: #Mandatory;
+    defuel_time         @title: 'Defuel Time';
+    ticket_number       @title: 'Ticket No.';
 
-    quantity_kg        @title: 'Quantity (kg)'       @Common.FieldControl: #Mandatory;
-    quantity_l         @title: 'Quantity (L)'        @readonly;
-    specific_gravity   @title: 'Specific Gravity'    @readonly;
+    quantity_kg         @title: 'Quantity (kg)'       @Common.FieldControl: #Mandatory;
+    quantity_l          @title: 'Quantity (L)'        @readonly;
+    specific_gravity    @title: 'Specific Gravity'    @readonly;
 
-    location_ID        @title: 'Storage Location'    @Common.FieldControl: #Mandatory;
-    location_code      @title: 'Storage Location'    @readonly;
-    location_name      @title: 'Location Name'       @readonly;
-    supplier_name      @title: 'Supplier'            @readonly;
+    location_code       @title: 'Storage Location'    @readonly;
+    location_name       @title: 'Location Name'       @readonly;
+    supplier_name       @title: 'Defuelling Agent'    @readonly;
 
-    defuel_charges_usd @title: 'Defuel Charges (USD)';
-    taxes_usd          @title: 'Taxes (USD)';
-    total_charges_usd  @title: 'Charges + Tax (USD)' @readonly;
-    fuel_value_usd     @title: 'Fuel Value (USD)'    @readonly;
+    defuel_charges_usd  @title: 'Defuel Charges (USD)';
+    taxes_usd           @title: 'Taxes (USD)';
+    total_charges_usd   @title: 'Charges + Tax (USD)' @readonly;
+    fuel_value_usd      @title: 'Fuel Value (USD)'    @readonly;
 
-    status             @title: 'Status'              @readonly;
-    notes              @title: 'Notes'               @UI.MultiLineText;
+    status              @title: 'Status'              @readonly;
+    notes               @title: 'Notes'               @UI.MultiLineText;
 };
 
-// ---- the pickers ------------------------------------------------------
-//
-// EVERY F4 SHOWS WHAT THE USER CHOOSES BY, not just the key. A flight list
-// of bare UUIDs would be unusable, which is what a value help without a text
-// arrangement amounts to.
+// ===========================================================================
+// The pickers — ON THE ASSOCIATION, which is what reaches the foreign key
+// ===========================================================================
 annotate DefuelService.Defuels with {
 
-    flight_ID @(Common: {
+    // TWO ROWS, SO IT IS A SELECT. ValueListWithFixedValues renders a
+    // dropdown inline rather than opening a dialog to choose between two.
+    defuel_type @(Common: {
+        ValueListWithFixedValues: true,
+        ValueList: {
+            CollectionPath: 'DefuelTypes',
+            Label: 'Defuel to',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: defuel_type, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+            ]
+        }
+    });
+
+    source_mode @(Common: {
+        ValueListWithFixedValues: true,
+        ValueList: {
+            CollectionPath: 'DefuelModes',
+            Label: 'Recorded against',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: source_mode, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+            ]
+        }
+    });
+
+    // SELECTING A FLIGHT FILLS SIX FIELDS, so the picker shows what the user
+    // chooses by: the number, the date, both airports and the tail.
+    flight @(Common: {
         Text: flight_number, TextArrangement: #TextOnly,
-        ValueListWithFixedValues: false,
         ValueList: {
             CollectionPath: 'Flights',
             Label: 'Flights',
@@ -201,22 +247,25 @@ annotate DefuelService.Defuels with {
         }
     });
 
-    tail_registration @(Common: {
-        ValueListWithFixedValues: false,
+    // THE TAILS THAT ACTUALLY FLY, from the schedule rather than the
+    // register, which carries every airframe the airline has ever held.
+    tail @(Common: {
         ValueList: {
-            CollectionPath: 'Tails',
+            CollectionPath: 'FlightTails',
             Label: 'Aircraft',
             Parameters: [
                 { $Type: 'Common.ValueListParameterInOut',
                   LocalDataProperty: tail_registration, ValueListProperty: 'registration' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_type_code' }
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'carrier_code' }
             ]
         }
     });
 
-    location_ID @(Common: {
+    // THE TANKS THE CONFIGURATION APP MAINTAINS. location_type is shown so a
+    // user picking a destination knows whether fuel can ever be re-uplifted
+    // out of it, rather than finding out when an uplift is refused weeks on.
+    location @(Common: {
         Text: location_code, TextArrangement: #TextOnly,
-        ValueListWithFixedValues: false,
         ValueList: {
             CollectionPath: 'Locations',
             Label: 'Storage Locations',
@@ -226,21 +275,16 @@ annotate DefuelService.Defuels with {
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'code' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'description' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'station_code' },
-                // THE TYPE IS SHOWN IN THE PICKER, so a user choosing a
-                // destination knows whether fuel can ever be re-uplifted out
-                // of it, rather than discovering it when an uplift is refused
-                // weeks later.
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'location_type' }
             ]
         }
     });
 
-    supplier_ID @(Common: {
+    supplier @(Common: {
         Text: supplier_name, TextArrangement: #TextOnly,
-        ValueListWithFixedValues: false,
         ValueList: {
             CollectionPath: 'Vendors',
-            Label: 'Suppliers',
+            Label: 'Defuelling Agents',
             Parameters: [
                 { $Type: 'Common.ValueListParameterInOut',
                   LocalDataProperty: supplier_ID, ValueListProperty: 'ID' },

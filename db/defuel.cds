@@ -159,6 +159,30 @@ type ValuationBasis : String(16) enum {
     CarriedForward = 'CARRIED';    // R3.5 — the value it entered the location at
 }
 
+// ===========================================================================
+// The two choices, as rows rather than as an enum alone
+// ===========================================================================
+//
+// A CDS ENUM RENDERS AS A TEXT BOX. Fiori Elements builds a dropdown from a
+// value list, and a value list needs rows to point at - so the two choices a
+// user makes on this screen are seeded here. The columns stay enum-typed and
+// @assert.range still enforces them; these tables exist to be PICKED FROM,
+// not to be the source of truth.
+//
+// NAME, NOT CODE, IS WHAT THE USER READS. "Defuel to a storage location"
+// says what TO_STORAGE means to somebody who has never seen the schema.
+entity DEFUEL_TYPE_CODE : db.AuditTrail {
+    key code : String(12);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
+entity DEFUEL_MODE_CODE : db.AuditTrail {
+    key code : String(16);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
 entity DEFUEL : cuid, db.AuditTrail {
 
         // DFL-<station>-YYYYMM-NNNNNN, stamped when the document is created
@@ -192,6 +216,13 @@ entity DEFUEL : cuid, db.AuditTrail {
         // one, typed by the user when there is not. It feeds the defuel id,
         // which is why it is needed either way.
         station_code     : String(3);
+
+        // BOTH ENDS OF THE LEG, filled from the schedule. Fuel comes off at
+        // the departure stand before pushback or at the arrival stand after
+        // a cancelled onward sector, and a reader of the document should be
+        // able to see which leg it was without opening the schedule.
+        origin_station      : String(3);
+        destination_station : String(3);
 
         // Context on a tail-only defuel: what the aircraft last flew as, and
         // what it is due to fly as next. Neither is a link - the point is to

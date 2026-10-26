@@ -79,6 +79,11 @@ service DefuelService {
     //
     // ALL READ-ONLY. A defuel screen that could edit the aircraft register
     // would be a master-data screen wearing an operations tile.
+    // THE TWO CHOICES, as rows for the dropdowns to read. Fixed-value lists:
+    // two rows each, so Fiori Elements renders a select rather than a dialog.
+    @readonly entity DefuelTypes as projection on db.DEFUEL_TYPE_CODE;
+    @readonly entity DefuelModes as projection on db.DEFUEL_MODE_CODE;
+
     @readonly entity Tails       as projection on core.AIRCRAFT_REGISTRATIONS;
     @readonly entity Carriers    as projection on core.CARRIER_MASTER;
     @readonly entity Vendors     as projection on core.MASTER_SUPPLIERS;
@@ -104,6 +109,24 @@ service DefuelService {
      * so those four cannot disagree with the schedule. Both airports are
      * carried because the fuel may come off at either end of the leg.
      */
+    /**
+     * The tails a defuel can be recorded against.
+     *
+     * FROM THE SCHEDULE, NOT THE REGISTER, as asked on 26 Oct. The register
+     * carries every airframe the airline has ever held; the schedule carries
+     * the ones flying this window, which is what a station user is choosing
+     * between. Distinct, because a tail flies many legs.
+     */
+    // GROUP BY, NOT DISTINCT: this compiler rejects `select distinct from`,
+    // and grouping gives the same one-row-per-tail with a usable key.
+    @readonly entity FlightTails as
+        select from core.FLIGHT_SCHEDULE {
+            key aircraft_reg as registration : String(10),
+                max(airline_code) as carrier_code : String(3)
+        }
+        where aircraft_reg is not null
+        group by aircraft_reg;
+
     @readonly entity Flights as projection on core.FLIGHT_SCHEDULE {
         ID, flight_number, flight_date, airline_code,
         aircraft_reg,

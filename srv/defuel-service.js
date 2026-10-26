@@ -77,9 +77,11 @@ module.exports = cds.service.impl(async function () {
 
             // THE SCHEDULE WINS on all four. A flight-referenced defuel that
             // disagreed with the schedule would be two records of one leg.
-            d.flight_number = f.flight_number;
-            d.flight_date   = f.flight_date;
-            d.carrier_code  = f.airline_code || d.carrier_code;
+            d.flight_number       = f.flight_number;
+            d.flight_date         = f.flight_date;
+            d.carrier_code        = f.airline_code || d.carrier_code;
+            d.origin_station      = f.origin_airport;
+            d.destination_station = f.destination_airport;
             // The ORIGIN — the airport that fuelled the leg — unless the user
             // already named a station, which is how fuel coming off at the
             // arrival end after a diversion gets recorded where it happened.
@@ -92,7 +94,11 @@ module.exports = cds.service.impl(async function () {
                 return req.error(400, 'DFL421: a station is required on a defuel recorded '
                     + 'without a flight — the defuel number is built from it.', 'station_code');
             }
+            // CLEARED, NOT LEFT BEHIND. A user who picks a flight, fills the
+            // form, then switches to a tail-only defuel would otherwise save
+            // a document carrying a flight it is no longer recorded against.
             d.flight_ID = null; d.flight_number = null; d.flight_date = null;
+            d.origin_station = null; d.destination_station = null;
         }
 
         // THE FOREIGN KEY IS THE REGISTRATION ITSELF. AIRCRAFT_REGISTRATIONS
