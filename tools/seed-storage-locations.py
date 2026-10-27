@@ -38,7 +38,10 @@ def main():
     by_iata = {a['iata_code']: a for a in airports}
     _, flights, _ = read('FLIGHT_SCHEDULE')
     stations = sorted({f[k] for f in flights for k in ('origin_airport', 'destination_airport') if f[k]})
-    head, rows, eol = read('STORAGE_LOCATION')
+    head, rows, _ = read('STORAGE_LOCATION')
+    # CRLF ALWAYS, whatever the file had. A bare LF in this file is what made
+    # HANA read is_active as "true\n" on an HDI deploy; defuel-wp-d3 EXIT-6.
+    eol = '\r\n'
     have = {(r['station_code'], r['location_type']) for r in rows}
     added, unknown = 0, []
     for st in stations:

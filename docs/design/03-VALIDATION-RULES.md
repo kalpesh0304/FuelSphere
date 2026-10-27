@@ -415,6 +415,28 @@ Three deserve flagging because implementing them as a field check would be wrong
 | `PRC450` | — | `PRICING_FORMULAS` | No ACTIVE formula in validity is in scope for the contract at the transaction date; a scope that cannot be verified does not match | Error |
 | `PRC451` | — | `PRICING_FORMULAS` | More than one ACTIVE formula resolves at the same scope tier; PRC401 resolves the source per contract, and two answers is not one | Error |
 
+
+## Defuel — `DFL4xx` / `DFL5xx`
+
+Carried from CLAUDE.md §8, where the defuel work documented them (27 Oct 2026); this file is what `test/harness/code-gate.js` reads, so a code documented only there fails the gate.
+
+| Code | Was | Applies to | Rule | Severity |
+|---|---|---|---|---|
+| `DFL420` | — | `DEFUEL` | A flight is required when the defuel references one | Error |
+| `DFL421` | — | `DEFUEL` | A station is required on a tail-only defuel | Error |
+| `DFL422` | — | `DEFUEL` | The aircraft is not in the register | Error |
+| `DFL423` | — | `STORAGE_LOCATION` | Storage location missing or not active | Error |
+| `DFL424` | — | `DEFUEL` | Quantity defuelled must be greater than zero | Error |
+| `DFL425` | — | `FUEL_STOCK_BALANCE` | The tail held no valued stock at the defuel instant | Error |
+| `DFL426` | — | `FUEL_STOCK_BALANCE` | The defuel draws more than the tail is carrying; refused, never drawn negative | Error |
+| `DFL427` | — | `DEFUEL` | Already reversed; cannot be reversed or posted again | Error |
+| `DFL428` | — | `DEFUEL` | No specific gravity on the tail, so litres cannot become kilograms | Error |
+| `DFL429` | — | `DEFUEL` | A defuel to storage has no vendor to claim from | Error |
+| `DFL430` | — | `DEFUEL` | Already posted, so it cannot be posted again | Error |
+| `DFL431` | — | `DEFUEL` | Expected credit is negative, or exceeds what the fuel was worth | Error |
+| `DFL520` | — | `DEFUEL` | The defuel no longer exists (technical) | Error |
+| `DFL407` | — | `DEFUEL` | **RETIRED 26 Oct 2026** — refused a defuel on a FIFO carrier. Named in `srv/defuel-service.js` only to record its removal; raised by nothing | — |
+
 ---
 
 ## Severity

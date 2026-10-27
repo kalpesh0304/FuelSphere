@@ -235,6 +235,17 @@ annotate InvoiceService.UnbilledTickets with @(
     ]
 );
 
+// ADDED 27 Oct 2026 with the defuel merge: age_days is filled after READ
+// (srv/invoice-service.js), the same pattern as UnbilledTickets above.
+annotate InvoiceService.ExpectedCredits with @(
+    Capabilities.FilterRestrictions.NonFilterableProperties: [
+        age_days
+    ],
+    Capabilities.SortRestrictions.NonSortableProperties: [
+        age_days
+    ]
+);
+
 // ==========================================================================
 // MasterDataService
 // ==========================================================================
