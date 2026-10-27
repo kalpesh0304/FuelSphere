@@ -127,6 +127,11 @@ const flights = flightsCsv.rows
     .filter(f => f.tail_registration && num(f.fob_at_out_kg) !== null && num(f.fob_at_in_kg) !== null)
     .sort((a, b) => legOrder(a).localeCompare(legOrder(b)));
 
+const varianceRung = (pct) => {
+    const v = Math.abs(pct);
+    return v <= 5 ? 'NORMAL' : v <= 10 ? 'WARNING' : v <= 20 ? 'EXCEPTION' : 'CRITICAL';
+};
+
 // ===========================================================================
 // 1. THE BURNS
 // ===========================================================================
@@ -162,7 +167,10 @@ for (const f of flights) {
         engine_burn_kg: '',
         variance_kg: varianceKg === null ? '' : varianceKg,
         variance_pct: variancePct === null ? '' : variancePct,
-        variance_status: variancePct === null ? '' : (Math.abs(variancePct) > 5 ? 'EXCEEDED' : 'NORMAL'),
+        // THE ENUM'S OWN LADDER (VarianceStatus, db/schema.cds). This wrote
+        // 'EXCEEDED' above 5%, which is not a member - and nothing refused it,
+        // because a CDS enum is not enforced (D25).
+        variance_status: variancePct === null ? '' : varianceRung(variancePct),
         data_source: 'ACARS',
         status: 'CONFIRMED',
         requires_review: 'false',
