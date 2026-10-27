@@ -278,6 +278,7 @@ were reported as codes until airline prefixes were excluded.
 | `ENR` | 4 | 3 | **PARTIAL** |
 | `MDM` | 3 | 3 | **BUILT** — the registration gate. Never listed here |
 | `STG` | 1 | 1 | **BUILT** — never listed here |
+| `CRD` | 19 | 19 | **BUILT** — supplier credit memo, 27 October 2026. New domain. `CRD401`–`CRD420` and `CRD501`, listed in `docs/design/Credit_Memo_Service.md` and in the header of `srv/credit-memo-service.js` |
 | `INT` | 10 | 1 | **DESIGNED** |
 | `CA` · `CMP` · `FPE` · `PLN` · `RA` · `SEC` | 10·12·12·10·10·12 | **0 each** | **DESIGNED** — declared in a `.cds` and executed by nothing |
 
