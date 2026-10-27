@@ -34,11 +34,37 @@ const cds = require('@sap/cds');
 
 const MOVEMENTS = 'fuelsphere.FUEL_STOCK_MOVEMENT_LEDGER';
 const BALANCES  = 'fuelsphere.FUEL_STOCK_BALANCE';
+const HEADERS   = 'fuelsphere.FUEL_BURN_HEADER';
+const LEDGER    = 'fuelsphere.ROB_LEDGER';
 const DEFUELS   = 'fuelsphere.DEFUEL';
 
-// A defuel sorts AFTER the burns of the same instant: fuel is burned by the
-// leg that was flown before what is left is taken off on stand.
-const DEFUEL_LINE_ORDER = 5;
+// ===========================================================================
+// A DEFUEL IS A MOVEMENT ON THE TAIL'S OWN LEDGER, since 27 Oct 2026.
+// ===========================================================================
+//
+// IT WAS WRITTEN ONLY TO THE VALUATION, and drew on the END STATE of the
+// replay. Two things followed. ROB_LEDGER - the FOB balance the burn and ROB
+// screens show - never learned that fuel had come off, so a defuelled tail
+// read as still carrying it. And a defuel taken off BEFORE DEPARTURE (fuel
+// tankered for the next leg, then a late cargo or passenger increase takes
+// the aircraft over MTOW) could never draw the fuel just uplifted: by the end
+// of the history the next burn had already consumed that layer.
+//
+// SO A DEFUEL IS NOW POSTED THE WAY THE LEDGER WORKS:
+//
+//   1. a DEFUEL row on ROB_LEDGER at the defuel's own instant - after the
+//      uplift it draws on, before the burn of the flight it came off -
+//      carrying -quantity in adjustment_kg and the document in defuel_ID;
+//   2. the tail's ROB chain recalculated (srv/lib/rob-recalculate.js), so
+//      every later balance and moving average knows the fuel is gone;
+//   3. the tail's stock valuation REPLAYED from that ledger
+//      (srv/lib/stock-replay.js, the same code that seeds it), so every later
+//      burn draws the layers it would really have drawn.
+//
+// The draw itself is made from the layers AS OF the defuel's position, not
+// from the end state - which is what makes a pre-departure defuel possible.
+const { recalculateTail } = require('./lib/rob-recalculate');
+const stock = require('./lib/stock-replay');
 
 // ===========================================================================
 // Volume units
@@ -309,14 +335,17 @@ module.exports = cds.service.impl(async function () {
         //
         // NULL AOBT IS AN OPENING BALANCE and predates everything, so it
         // qualifies whatever the defuel's instant.
-        const asOf = d.defuel_date
-            ? `${d.defuel_date}T${d.defuel_time || '23:59:59'}Z` : null;
-        const layers = (await db.run(SELECT.from(BALANCES)
-            .where({ valuation_method: 'FIFO', tail_number: d.tail_number,
-                     storage_location: null, balance_qty_kg: { '>': 0 } })
-            .orderBy('flight_aobt', 'flight_date', 'batch_ref')))
-            .filter((l) => !asOf || !l.flight_aobt
-                        || String(l.flight_aobt).slice(0, 19) <= String(asOf).slice(0, 19));
+        // ---- the layers that EXISTED WHEN THE FUEL CAME OFF -------------
+        //
+        // AS OF THE DEFUEL'S PLACE IN THE TAIL'S LEDGER, not the balance
+        // table. The balance table is the end of the history, so it both
+        // offered batches opened days AFTER the defuel and hid fuel that a
+        // later burn had used - which is what made a pre-departure defuel
+        // impossible. The ledger is replayed up to the defuel instead.
+        const pos = await ledgerPosition(db, d.tail_number, d.defuel_date, d.defuel_time);
+        const ctx = await replayContext(db, d.tail_number, pos.before);
+        const layers = stock.layersAsOf(stock.movementsOf(d.tail_number, pos.before, ctx), Infinity)
+            .filter((l) => l.left > 0);
 
         if (layers.length === 0) {
             return req.error(400, `DFL425: ${d.tail_number} held no valued stock on `
@@ -326,19 +355,9 @@ module.exports = cds.service.impl(async function () {
 
         // ---- litres to kilograms ----------------------------------------
         //
-        // THE TAIL'S WEIGHTED GRAVITY ACROSS ALL ITS OPEN LAYERS, and across
-        // all of them deliberately. There is a circularity here: the mass
-        // decides which layers are drawn, and the layers decide the gravity.
-        // Using every open layer breaks it - the conversion no longer depends
-        // on how much is taken, so it cannot chase its own tail.
-        //
-        // The figure reported on the document afterwards is the weighted
-        // gravity of the layers ACTUALLY drawn, which is the honest answer to
-        // "what was the density of the fuel that came off".
-        const gTop = layers.reduce((a, l) =>
-            a + Number(l.balance_qty_kg) * Number(l.specific_gravity || 0), 0);
-        const gQty = layers.reduce((a, l) =>
-            a + (l.specific_gravity ? Number(l.balance_qty_kg) : 0), 0);
+        // THE TAIL'S WEIGHTED GRAVITY ACROSS ALL ITS OPEN LAYERS.
+        const gTop = layers.reduce((a, l) => a + l.left * Number(l.specific_gravity || 0), 0);
+        const gQty = layers.reduce((a, l) => a + (l.specific_gravity ? l.left : 0), 0);
         const tailGravity = gQty > 0 ? gTop / gQty : null;
         if (!tailGravity) {
             return req.error(400, `DFL428: no specific gravity is recorded against the fuel `
@@ -347,44 +366,37 @@ module.exports = cds.service.impl(async function () {
         }
         const qty = r3(litres * tailGravity);
 
-
-        const onHand = r3(layers.reduce((s, l) => s + Number(l.balance_qty_kg || 0), 0));
+        const onHand = r3(layers.reduce((s, l) => s + l.left, 0));
         if (onHand < qty) {
-            // REFUSED, NOT DRAWN NEGATIVE. A defuel larger than the stock on
-            // hand would have to value fuel at a price no layer ever paid.
             return req.error(400, `DFL426: ${d.tail_number} holds ${onHand} kg and this defuel `
                 + `takes ${qty} kg. A defuel cannot draw more than the aircraft is carrying.`,
                 'quantity_kg');
         }
 
+        // OLDEST FIRST, which is the whole of FIFO - the same rule the replay
+        // applies when it restates the tail below.
         const taken = [];
         let left = qty;
         for (const l of layers) {
             if (left <= 0) break;
-            const t = r3(Math.min(left, Number(l.balance_qty_kg)));
+            const t = r3(Math.min(left, l.left));
             if (t <= 0) continue;
-            taken.push({ layer: l, qty: t, rate: Number(l.rate_usd_per_kg || 0) });
+            taken.push({ qty: t, rate: Number(l.rate_usd_per_kg || 0), sg: l.specific_gravity });
             left = r3(left - t);
         }
 
-        // ---- what the document reports ----------------------------------
         const fuelValue = r2(taken.reduce((s, t) => s + t.qty * t.rate, 0));
-        // WEIGHTED, not a plain mean: 900 kg drawn from one layer and 100 kg
-        // from another is not a 50/50 blend. Layers with no gravity recorded
-        // are left out of both sides rather than counted as zero.
-        const sgTop = taken.reduce((s, t) => s + t.qty * Number(t.layer.specific_gravity || 0), 0);
-        const sgQty = taken.reduce((s, t) => s + (t.layer.specific_gravity ? t.qty : 0), 0);
+        const sgTop = taken.reduce((s, t) => s + t.qty * Number(t.sg || 0), 0);
+        const sgQty = taken.reduce((s, t) => s + (t.sg ? t.qty : 0), 0);
 
         d.fuel_value_usd   = fuelValue;
         d.specific_gravity = sgQty > 0 ? Math.round((sgTop / sgQty) * 10000) / 10000
                                        : Math.round(tailGravity * 10000) / 10000;
-        // KILOGRAMS ARE THE DERIVED FIGURE NOW. Litres are what was typed.
         d.quantity_kg      = qty;
-        // PARKED, NOT POSTED. The fuel has moved; the money has not.
         d.status           = d.status || 'PARKED';
         d.defuel_id        = d.defuel_id || await nextDefuelId(db, d.station_code, d.defuel_date);
 
-        await postToLedger(db, d, taken, qty);
+        await postToLedger(db, d, qty, pos);
     });
 
     // =======================================================================
@@ -456,39 +468,30 @@ module.exports = cds.service.impl(async function () {
             return req.error(400, 'DFL427: this defuel has already been reversed.');
         }
 
-        // THE MIRROR OF WHAT WAS POSTED, read back from the ledger rather
-        // than recomputed. Recomputing would draw on today's layers, which
-        // are not the layers the original defuel actually took from.
-        const rows = await db.run(SELECT.from(MOVEMENTS).where({ reference: d.defuel_id }));
+        // THE FUEL NEVER CAME OFF, as far as the tail's ledger is concerned:
+        // a reversal corrects a mis-keyed entry. The ledger row is kept and
+        // zeroed, with the reason, and the chain recalculated. The valuation
+        // replay then shows the posting AND its mirror (reference -REV), and
+        // gives the layers back - the reversal stays part of the record.
         const now = new Date().toISOString();
-        const mirrored = rows.map((m, i) => ({
-            ...m,
-            ID: cds.utils.uuid(),
-            reference: `${d.defuel_id}-REV`,
-            qty_kg: -Number(m.qty_kg || 0),
-            qty_l: m.qty_l == null ? null : -Number(m.qty_l),
-            value_usd: m.value_usd == null ? null : -Number(m.value_usd),
-            sequence: (Number(m.sequence) || 0) + 1000 + i,
-            created_at: now, created_by: 'DEFUEL_SERVICE',
-            modified_at: now, modified_by: 'DEFUEL_SERVICE'
-        }));
-        if (mirrored.length) await db.run(INSERT.into(MOVEMENTS).entries(mirrored));
-
-        // Put the stock back where it came from.
-        for (const m of rows) {
-            const q = Number(m.qty_kg || 0);
-            if (m.storage_location) {
-                await addBalance(db, m.valuation_method, null, m.storage_location, m.batch_ref, -q, m);
-            } else {
-                await addBalance(db, m.valuation_method, m.tail_number, null, m.batch_ref, -q, m);
-            }
+        const reason = req.data.reason || 'no reason given';
+        const rob = await db.run(SELECT.one.from(LEDGER).where({ defuel_ID: d.ID }));
+        if (rob) {
+            await db.run(UPDATE(LEDGER).set({
+                adjustment_kg: 0, qty_kg: 0,
+                adjustment_reason: `${rob.adjustment_reason || ''} REVERSED ${now}: ${reason}`.trim(),
+                modified_at: now, modified_by: 'DEFUEL_SERVICE'
+            }).where({ ID: rob.ID }));
         }
 
         await db.run(UPDATE(DEFUELS).set({
             status: 'REVERSED',
-            notes: [d.notes, `Reversed ${now}: ${req.data.reason || 'no reason given'}`]
+            notes: [d.notes, `Reversed ${now}: ${reason}`]
                 .filter(Boolean).join('\n')
         }).where({ ID: d.ID }));
+
+        await recalculateTail(d.tail_number, 'DEFUEL_SERVICE', db);
+        await restateStock(db, d.tail_number);
 
         return await db.run(SELECT.one.from(DEFUELS).where({ ID: d.ID }));
     });
@@ -520,144 +523,142 @@ async function nextDefuelId(db, station, date) {
 }
 
 // ===========================================================================
-// The posting itself
+// Where a defuel sits in the tail's ledger
 // ===========================================================================
-async function postToLedger(db, d, taken, qty) {
-    const now = new Date().toISOString();
-    const base = {
-        carrier_code:  d.carrier_code || null,
-        flight_number: d.flight_number || null,
-        flight_date:   d.flight_date || null,
-        // THE DEFUEL'S OWN INSTANT, in the column the replay sorts on. A
-        // defuel that carried no time would sort against the burns of its
-        // day by whatever the database felt like.
-        flight_aobt:   d.defuel_date ? `${d.defuel_date}T${d.defuel_time || '00:00:00'}Z` : null,
-        station:       d.station_code || null,
-        reference:     d.defuel_id,
-        line_type:     'DEFUEL',
-        line_order:    DEFUEL_LINE_ORDER,
-        created_at: now, created_by: 'DEFUEL_SERVICE',
-        modified_at: now, modified_by: 'DEFUEL_SERVICE'
-    };
-    const rows = [];
-
-    // THE SEQUENCE CONTINUES THE TAIL'S RUN, it does not restart at 1.
-    // sequence is this tail's position in replay order - the seeded rows run
-    // 15, 20, 21, 23 - so a defuel numbering its own rows 1..6 sorts to the
-    // TOP of the tail whenever anyone orders by it, which is exactly the
-    // "cannot view the entries in sequence" that was reported.
-    const last = await db.run(SELECT.one.from(MOVEMENTS)
-        .columns('sequence').where({ tail_number: d.tail_number })
-        .orderBy({ sequence: 'desc' }));
-    let seq = Number((last || {}).sequence) || 0;
-
-    // ---- FIFO: one pair per layer touched ----------------------------
-    for (const t of taken) {
-        const sg = t.layer.specific_gravity ?? null;
-        const litres = sg ? r2(t.qty / Number(sg)) : null;
-        const value = r2(t.qty * t.rate);
-
-        rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'FIFO',
-            tail_number: d.tail_number, storage_location: null,
-            batch_ref: t.layer.batch_ref, specific_gravity: sg,
-            qty_kg: -t.qty, qty_l: litres == null ? null : -litres,
-            rate_usd_per_kg: t.rate, value_usd: -value, sequence: ++seq });
-
-        // FUEL IN A TANK IS ON NO FLIGHT. The inbound half carries the tank
-        // and drops the flight entirely - a storage row showing B6979 reads
-        // as though the tank flew somewhere.
-        rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'FIFO',
-            tail_number: null, storage_location: d.location_code,
-            flight_number: null, flight_date: null,
-            batch_ref: t.layer.batch_ref, specific_gravity: sg,
-            qty_kg: t.qty, qty_l: litres, rate_usd_per_kg: t.rate,
-            value_usd: value, sequence: ++seq });
-
-        await addBalance(db, 'FIFO', d.tail_number, null, t.layer.batch_ref, -t.qty, t.layer);
-        await addBalance(db, 'FIFO', null, d.location_code, t.layer.batch_ref, t.qty, t.layer);
+//
+// THE DAY'S ROWS IN SEQUENCE ORDER, and the defuel goes after the last row
+// that happened at or before it. Sequence is per day on ROB_LEDGER and is the
+// order the replay walks, so the defuel takes the next number and every later
+// row that day moves up by one. Walking stops at the first row timed after the
+// defuel, so a day whose times run out of sequence still keeps the defuel
+// before the movement that came after it.
+async function ledgerPosition(db, tail, date, time) {
+    const all = await db.run(SELECT.from(LEDGER).where({ tail_number: tail }));
+    const at = String(time || '23:59:59');
+    const day = all.filter((r) => String(r.record_date) === String(date))
+        .sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0));
+    let pred = null;
+    for (const r of day) {
+        if (String(r.record_time || '00:00:00') > at) break;
+        pred = r;
     }
+    const sequence = pred ? (Number(pred.sequence) || 0) + 1 : 1;
+    const next = day.find((r) => (Number(r.sequence) || 0) >= sequence) || null;
+    const before = all.filter((r) => String(r.record_date) < String(date)
+        || (String(r.record_date) === String(date) && (Number(r.sequence) || 0) < sequence));
+    return { sequence, pred, next, before };
+}
 
-    // ---- MAP: one pair, at the running rate --------------------------
-    //
-    // THE POOL HAS ONE PRICE, so a defuel takes the rate the tail is already
-    // carrying rather than any batch's. A tail with no MAP row still posts
-    // under FIFO: a missing MAP pool is a gap in the seeded data, not a
-    // reason to refuse an operational entry.
-    const pool = await db.run(SELECT.one.from(BALANCES).where({
-        valuation_method: 'MAP', tail_number: d.tail_number, storage_location: null }));
-    if (pool) {
-        const rate = Number(pool.rate_usd_per_kg || 0);
-        const sg = pool.specific_gravity ?? d.specific_gravity ?? null;
-        const litres = sg ? r2(qty / Number(sg)) : null;
-        const value = r2(qty * rate);
-
-        rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'MAP',
-            tail_number: d.tail_number, storage_location: null, batch_ref: null,
-            specific_gravity: sg, qty_kg: -qty, qty_l: litres == null ? null : -litres,
-            rate_usd_per_kg: rate, value_usd: -value, map_usd_per_kg: rate, sequence: ++seq });
-
-        rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'MAP',
-            tail_number: null, storage_location: d.location_code, batch_ref: null,
-            flight_number: null, flight_date: null,
-            specific_gravity: sg, qty_kg: qty, qty_l: litres,
-            rate_usd_per_kg: rate, value_usd: value, map_usd_per_kg: rate, sequence: ++seq });
-
-        await addBalance(db, 'MAP', d.tail_number, null, null, -qty, pool);
-        await addBalance(db, 'MAP', null, d.location_code, null, qty, pool);
+/** What the replay needs beyond the ledger rows: batch names, flights, defuels, carrier. */
+async function replayContext(db, tail, rows, extraDefuels = []) {
+    const ticketIds = [...new Set(rows.map((r) => r.fuel_ticket_ID).filter(Boolean))];
+    const flightIds = [...new Set(rows.map((r) => r.flight_ID).filter(Boolean))];
+    const tickets = ticketIds.length ? await db.run(SELECT.from('fuelsphere.FUEL_TICKETS')
+        .columns('ID', 'ticket_number', 'internal_number').where({ ID: { in: ticketIds } })) : [];
+    const flights = flightIds.length ? await db.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+        .columns('ID', 'flight_number').where({ ID: { in: flightIds } })) : [];
+    const defuels = await db.run(SELECT.from(DEFUELS).where({ tail_number: tail }));
+    for (const x of extraDefuels) {
+        const i = defuels.findIndex((y) => y.ID === x.ID);
+        if (i >= 0) defuels[i] = x; else defuels.push(x);
     }
-
-    if (rows.length) await db.run(INSERT.into(MOVEMENTS).entries(rows));
+    // THE CARRIER THE TAIL'S VALUATION ALREADY CARRIES, so a restated tail
+    // keeps the code the seed gave it; the ledger's own as the fallback.
+    const held = await db.run(SELECT.one.from(MOVEMENTS).columns('carrier_code')
+        .where({ tail_number: tail, carrier_code: { '!=': null } }));
+    const code = (held && held.carrier_code) || (rows.find((r) => r.carrier_code) || {}).carrier_code || null;
+    const stamp = new Date().toISOString();
+    return stock.makeContext({
+        flightById: new Map(flights.map((f) => [f.ID, f])),
+        ticketNumberById: new Map(tickets.map((t) => [t.ID, t.ticket_number || t.internal_number])),
+        carrierOf: () => code,
+        defuelById: new Map(defuels.map((x) => [x.ID, x])),
+        stamp, by: 'DEFUEL_SERVICE'
+    });
 }
 
 // ===========================================================================
-// Move a balance, creating the row if this tank has not held this batch yet
+// The posting itself
 // ===========================================================================
-//
-// VALUE FOLLOWS QUANTITY AT THE ROW'S OWN RATE, so a balance can never drift
-// from the quantity it states. Adding and subtracting value independently
-// would let rounding accumulate across a tank's whole history.
-async function addBalance(db, method, tail, location, batch, deltaKg, like) {
-    const where = {
-        valuation_method: method,
-        tail_number: tail || null,
-        storage_location: location || null,
-        batch_ref: batch || null
-    };
-    const existing = await db.run(SELECT.one.from(BALANCES).where(where));
-    const rate = Number((existing || like || {}).rate_usd_per_kg || 0);
+async function postToLedger(db, d, qty, pos) {
     const now = new Date().toISOString();
 
-    if (existing) {
-        const q = r3(Number(existing.balance_qty_kg || 0) + deltaKg);
-        const sg = existing.specific_gravity ?? (like || {}).specific_gravity ?? null;
-        await db.run(UPDATE(BALANCES).set({
-            balance_qty_kg: q,
-            balance_qty_l: sg ? r2(q / Number(sg)) : null,
-            value_usd: r2(q * rate),
-            modified_at: now, modified_by: 'DEFUEL_SERVICE'
-        }).where({ ID: existing.ID }));
-        return;
+    // Make room: every later row that day moves up one.
+    const later = await db.run(SELECT.from(LEDGER).columns('ID', 'sequence')
+        .where({ tail_number: d.tail_number, record_date: d.defuel_date, sequence: { '>=': pos.sequence } }));
+    for (const r of later) {
+        await db.run(UPDATE(LEDGER).set({ sequence: (Number(r.sequence) || 0) + 1 }).where({ ID: r.ID }));
     }
 
-    // A TANK THAT HAS NOT HELD THIS BATCH BEFORE. It opens carrying the
-    // batch's own rate and gravity, because that is the fuel that arrived.
-    const q = r3(deltaKg);
-    const sg = (like || {}).specific_gravity ?? null;
-    await db.run(INSERT.into(BALANCES).entries([{
+    const opening = pos.pred ? Number(pos.pred.closing_rob_kg) || 0 : 0;
+    // THE NEIGHBOUR'S OFF-BLOCK TIME, so the recalculation - which sorts on
+    // flight_aobt before sequence - keeps the defuel beside the movements it
+    // sits between rather than moving it to another leg of the day.
+    const aobt = (pos.pred && pos.pred.flight_aobt) || (pos.next && pos.next.flight_aobt)
+        || `${d.defuel_date}T${d.defuel_time || '00:00:00'}Z`;
+
+    await db.run(INSERT.into(LEDGER).entries([{
         ID: cds.utils.uuid(),
-        valuation_method: method,
-        tail_number: tail || null,
-        storage_location: location || null,
-        batch_ref: batch || null,
-        carrier_code: (like || {}).carrier_code || null,
-        line_type: 'DEFUEL',
-        station: (like || {}).station || null,
-        balance_qty_kg: q,
-        balance_qty_l: sg ? r2(q / Number(sg)) : null,
-        specific_gravity: sg,
-        rate_usd_per_kg: rate,
-        value_usd: r2(q * rate),
+        tail_number: d.tail_number,
+        tail_registration: d.tail_number,
+        carrier_code: d.carrier_code || null,
+        record_date: d.defuel_date,
+        record_time: d.defuel_time || '00:00:00',
+        sequence: pos.sequence,
+        airport_code: d.station_code || null,
+        flight_ID: d.flight_ID || null,
+        entry_type: 'DEFUEL',
+        opening_rob_kg: opening,
+        uplift_kg: 0,
+        burn_kg: 0,
+        adjustment_kg: -qty,
+        closing_rob_kg: r2(opening - qty),
+        adjustment_reason: `Defuel ${d.defuel_id} to ${d.location_code}`,
+        data_source: 'DEFUEL',
+        line_order: 2,
+        flight_aobt: aobt,
+        event_utc: `${d.defuel_date}T${d.defuel_time || '00:00:00'}Z`,
+        defuel_ID: d.ID,
         created_at: now, created_by: 'DEFUEL_SERVICE',
         modified_at: now, modified_by: 'DEFUEL_SERVICE'
     }]));
+
+    await recalculateTail(d.tail_number, 'DEFUEL_SERVICE', db);
+    await restateStock(db, d.tail_number, [d]);
+}
+
+// ===========================================================================
+// Replay the tail's valuation and write it back
+// ===========================================================================
+//
+// THE WHOLE TAIL, NOT A PATCH. A defuel changes what every later burn drew, so
+// the tail's movements, balances and burn headers are replaced by the replay,
+// and the tanks it put fuel into are re-summed from every row that reached
+// them. The rows come out of the same code that seeds them, with the same
+// deterministic keys.
+async function restateStock(db, tail, extraDefuels = []) {
+    const rows = await db.run(SELECT.from(LEDGER).where({ tail_number: tail }));
+    const ctx = await replayContext(db, tail, rows, extraDefuels);
+    const r = stock.replayTail(tail, stock.movementsOf(tail, rows, ctx), ctx);
+
+    const docs = [...ctx.defuelById.values()];
+    const refs = docs.flatMap((x) => [x.defuel_id, `${x.defuel_id}-REV`]).filter(Boolean);
+    const locations = [...new Set(docs.map((x) => x.location_code).filter(Boolean))];
+
+    await db.run(DELETE.from(MOVEMENTS).where({ tail_number: tail }));
+    if (refs.length) {
+        await db.run(DELETE.from(MOVEMENTS).where({ tail_number: null, reference: { in: refs } }));
+    }
+    await db.run(DELETE.from(BALANCES).where({ tail_number: tail }));
+    await db.run(DELETE.from(HEADERS).where({ tail_number: tail }));
+    if (r.movements.length) await db.run(INSERT.into(MOVEMENTS).entries(r.movements));
+    if (r.balances.length) await db.run(INSERT.into(BALANCES).entries(r.balances));
+    if (r.burnHeaders.length) await db.run(INSERT.into(HEADERS).entries(r.burnHeaders));
+
+    if (locations.length) {
+        const inTanks = await db.run(SELECT.from(MOVEMENTS).where({ storage_location: { in: locations } }));
+        await db.run(DELETE.from(BALANCES).where({ storage_location: { in: locations } }));
+        const tanks = stock.storageBalances(inTanks, ctx);
+        if (tanks.length) await db.run(INSERT.into(BALANCES).entries(tanks));
+    }
 }

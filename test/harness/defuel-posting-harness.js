@@ -443,6 +443,91 @@ describe('Defuel — posting into the valuation ledger', () => {
         out(`a defuel dated before the first uplift is refused with DFL425`);
     });
 
+    // --------------------------------------------------------- EXIT-12 --
+    it('EXIT-12  a defuel BEFORE DEPARTURE draws the fuel on board then, and the ledger restates', async function () {
+        this.timeout(180000);
+        // THE CASE THIS EXISTS FOR (27 Oct 2026): fuel tankered for the next
+        // leg comes off before departure because a late load takes the
+        // aircraft over MTOW. Before, every such defuel was refused - the
+        // draw read the END of the history, where the next burn had already
+        // used the fuel.
+        //
+        // THE EXPECTATIONS ARE READ FROM THE SEEDED LEDGER, not computed by
+        // the code under test: N4048J opens at 3,754.07 kg, takes uplift
+        // SHL-BOS-696789 at 01:45:57 on 23 Sep and burns at 02:20. A defuel
+        // at 02:00 sits between them, draws FIFO from the opening layer, and
+        // every balance after it falls by exactly what came off.
+        const TAIL = 'N4048J', DAY = '2026-09-23';
+        const LEDGER = 'fuelsphere.ROB_LEDGER';
+        const rows0 = await cds.db.run(SELECT.from(LEDGER).where({ tail_number: TAIL }));
+        const day0 = rows0.filter((r) => String(r.record_date) === DAY);
+        const uplift = day0.find((r) => r.entry_type === 'UPLIFT');
+        const burn = day0.find((r) => r.entry_type === 'BURN');
+        assert.ok(uplift && burn && String(uplift.record_time) < '02:00:00' && String(burn.record_time) > '02:00:00',
+            'instrument: the seeded uplift and burn no longer bracket 02:00 on 23 Sep');
+        const lastOf = (rows) => rows.slice().sort((a, b) =>
+            String(a.record_date).localeCompare(String(b.record_date)) || n(a.sequence) - n(b.sequence)).pop();
+        const endBefore = n(lastOf(rows0).closing_rob_kg);
+        const burnBefore = n(burn.closing_rob_kg);
+        const fifoBefore = r3((await layersOf(TAIL)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
+        const opening = await cds.db.run(SELECT.one.from(BALANCES)
+            .where({ valuation_method: 'FIFO', tail_number: TAIL, batch_ref: `OPENING-${TAIL}` }));
+
+        // 660 USG - B6 reads in US gallons - is about 2,000 kg, inside the
+        // 3,754 kg opening layer, so FIFO must take all of it from there.
+        const res = await createDefuel({
+            tail_registration: TAIL, station_code: 'BOS', location_code: 'BOS-DEFUEL',
+            defuel_type: 'TO_SUPPLIER', defuel_date: DAY, defuel_time: '02:00:00', quantity_vol: 660
+        });
+        assert.ok(res.status < 400, `the pre-departure defuel was refused: ${fullError(res)}`);
+        const q = r3(res.data.quantity_kg), ref = res.data.defuel_id;
+        out(`${TAIL} ${DAY} 02:00: ${q} kg off, between the 01:45 uplift and the 02:20 burn`);
+
+        // ---- the tail's ledger knows ----------------------------------
+        const rows1 = await cds.db.run(SELECT.from(LEDGER).where({ tail_number: TAIL }));
+        const dfl = rows1.find((r) => r.defuel_ID === res.data.ID);
+        assert.ok(dfl && dfl.entry_type === 'DEFUEL', 'no DEFUEL row reached ROB_LEDGER');
+        const burn1 = rows1.find((r) => r.ID === burn.ID), up1 = rows1.find((r) => r.ID === uplift.ID);
+        assert.ok(n(up1.sequence) < n(dfl.sequence) && n(dfl.sequence) < n(burn1.sequence),
+            'the defuel is not between the uplift and the burn');
+        // ROB_LEDGER KEEPS KILOGRAMS TO TWO PLACES and the valuation to three,
+        // so the ledger moves by the quantity rounded to 0.01 kg.
+        const near = (a, b) => Math.abs(a - b) <= 0.005;
+        assert.ok(near(burnBefore - n(burn1.closing_rob_kg), q),
+            `the burn after the defuel still closes as though the fuel were on board `
+          + `(${burnBefore} -> ${burn1.closing_rob_kg}, defuel ${q})`);
+        assert.ok(near(endBefore - n(lastOf(rows1).closing_rob_kg), q),
+            'the tail ends the history still carrying the defuelled fuel');
+
+        // ---- the valuation knows --------------------------------------
+        const outRows = (await cds.db.run(SELECT.from(MOVEMENTS).where({ reference: ref })))
+            .filter((m) => m.valuation_method === 'FIFO' && n(m.qty_kg) < 0);
+        assert.deepStrictEqual([...new Set(outRows.map((m) => m.batch_ref))], [`OPENING-${TAIL}`],
+            'FIFO did not take the defuel from the oldest layer on board at 02:00');
+        assert.strictEqual(n(outRows[0].rate_usd_per_kg), n(opening.rate_usd_per_kg),
+            'the defuel is not valued at the opening layer\'s own rate');
+        // THE DOCUMENT AND ITS LEDGER ROWS AGREE ON WHAT THE FUEL WAS WORTH.
+        // They come by two routes - the draw prices the document, the replay
+        // writes the rows - so a draw that read the wrong layers (the end of
+        // the history, as it did) prices the document at another batch's rate.
+        const rowsValue = Math.round(-outRows.reduce((s, m) => s + n(m.value_usd), 0) * 100) / 100;
+        assert.strictEqual(n(res.data.fuel_value_usd), rowsValue,
+            `the defuel is worth ${res.data.fuel_value_usd} on its document and ${rowsValue} on its ledger rows`);
+        const fifoAfter = r3((await layersOf(TAIL)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
+        assert.strictEqual(r3(fifoBefore - fifoAfter), q,
+            'the tail\'s FIFO stock did not fall by what came off');
+
+        // ---- and a reversal undoes all of it --------------------------
+        const rev = await test.POST(`${P}(ID=${res.data.ID},IsActiveEntity=true)/DefuelService.reverse`,
+            { reason: 'EXIT-12' });
+        assert.ok(rev.status < 400, `reverse failed: ${fullError(rev)}`);
+        const rows2 = await cds.db.run(SELECT.from(LEDGER).where({ tail_number: TAIL }));
+        assert.strictEqual(r3(lastOf(rows2).closing_rob_kg), r3(endBefore), 'ROB did not come back');
+        assert.strictEqual(r3((await layersOf(TAIL)).reduce((s, l) => s + n(l.balance_qty_kg), 0)), fifoBefore,
+            'FIFO stock did not come back');
+        out(`ROB end ${endBefore} -> ${r3(endBefore - q)} -> ${r3(lastOf(rows2).closing_rob_kg)}; FIFO likewise`);
+    });
+
     // ---------------------------------------------------------- EXIT-8 --
     it('EXIT-8  every DFL code in section 8 is raised by something in srv/', () => {
         const md = fs.readFileSync(`${PROJECT}/CLAUDE.md`, 'utf8');

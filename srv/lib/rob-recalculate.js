@@ -42,7 +42,7 @@ const ORDERS  = 'fuelsphere.FUEL_ORDERS';
  * consumed between the chocks, and the ground APU burn happens on stand after
  * it. Both deduct; neither moves the moving average price.
  */
-const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, TRANSFER: 2, APU_BURN: 3, ADJUSTMENT: 4 };
+const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BURN: 2, TRANSFER: 2, DEFUEL: 2, APU_BURN: 3, ADJUSTMENT: 4 };
 const lineOrderOf = (entryType) => (LINE_ORDER[entryType] !== undefined ? LINE_ORDER[entryType] : 3);
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
@@ -136,6 +136,11 @@ function movementOf(row) {
     // instead of as 'none' - the line exists because the APU ran, and a row
     // that classifies as nothing would be valued as nothing and sorted wrong.
     if (row.entry_type === 'APU_BURN') return { kind: 'burn', qty: burn };
+    // A DEFUEL TAKES FUEL OFF AT THE PREVAILING AVERAGE, like a burn, and
+    // never moves it. Its quantity is a negative adjustment_kg (written by
+    // srv/defuel-service.js), so the burn service's opening + uplift - burn +
+    // adjustment also deducts it; a reversed defuel is zeroed and moves nothing.
+    if (row.entry_type === 'DEFUEL') return adj ? { kind: 'burn', qty: Math.abs(adj) } : { kind: 'none', qty: 0 };
     // Adjustments are burn corrections and are valued like burns. An
     // adjustment recorded as a positive number still REDUCES the balance -
     // that is how the existing rows read: opening 1950, adjustment 52.5,
