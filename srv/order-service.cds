@@ -508,12 +508,23 @@ service FuelOrderService {
     left join db.MASTER_SUPPLIERS as Sup on Con.supplier.ID = Sup.ID
     left join db.CONTRACT_PRODUCTS as ConProd on ConProd.contract.ID = Con.ID
     left join db.MASTER_PRODUCTS as Prod on ConProd.product.ID = Prod.ID
+    // THE CARRIER, from the station map's contract line (27 Oct 2026). A
+    // contract has no carrier of its own, so once a second airline traded at
+    // a station (TAP at YYZ beside Air Canada) the value help offered an
+    // order both airlines' contracts. STATION_SUPPLIER_MAP names carrier,
+    // station and contract together, and each contract location measured to
+    // at most ONE carrier, so this adds a column and never a row. A location
+    // no map row names reads a null carrier and stays offered to every order
+    // (the PR baseline stations have no map).
+    left join db.STATION_SUPPLIER_MAP as Map on Map.contract.ID = Con.ID
+                                         and Map.airport.ID = Loc.airport.ID
     {
         key Air.iata_code as station_code, // User picks this
         key Prod.ID       as product_ID  @UI.Hidden,
         key Con.ID        as contract_ID @UI.Hidden,  // Pushes to FuelOrders.contract_ID
         Air.ID            as airport_ID  @UI.Hidden,   // Pushes to FuelOrders.airport_ID
         Sup.ID            as supplier_ID @UI.Hidden,  // Pushes to FuelOrders.supplier_ID       
+        Map.carrier.carrier_code as carrier_code @UI.Hidden,  // Filtered by FuelOrders.carrier_code
         Air.airport_name     @(title: 'Airport'),
         Sup.supplier_name   @(title: 'Supplier'),
         Sup.supplier_type,
