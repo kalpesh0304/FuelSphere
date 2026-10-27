@@ -434,6 +434,7 @@ Carried from CLAUDE.md §8, where the defuel work documented them (27 Oct 2026);
 | `DFL429` | — | `DEFUEL` | A defuel to storage has no vendor to claim from | Error |
 | `DFL430` | — | `DEFUEL` | Already posted, so it cannot be posted again | Error |
 | `DFL431` | — | `DEFUEL` | Expected credit is negative, or exceeds what the fuel was worth | Error |
+| `DFL432` | — | `ROB_LEDGER` | A back-dated defuel would take a later ledger balance on the tail below zero | Error |
 | `DFL520` | — | `DEFUEL` | The defuel no longer exists (technical) | Error |
 | `DFL407` | — | `DEFUEL` | **RETIRED 26 Oct 2026** — refused a defuel on a FIFO carrier. Named in `srv/defuel-service.js` only to record its removal; raised by nothing | — |
 

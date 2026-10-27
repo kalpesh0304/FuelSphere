@@ -373,6 +373,23 @@ module.exports = cds.service.impl(async function () {
                 'quantity_kg');
         }
 
+        // ---- and the fuel was not needed LATER ------------------------
+        //
+        // DFL432. A defuel placed before movements already on the ledger
+        // lowers every balance after it. If one of those would go below zero
+        // the aircraft could not have flown what it flew with that fuel gone:
+        // refused, never drawn negative, for the reason DFL426 is.
+        const low = pos.after.reduce((m, r) => {
+            const c = Number(r.closing_rob_kg);
+            return Number.isFinite(c) && (m === null || c < Number(m.closing_rob_kg)) ? r : m;
+        }, null);
+        if (low && Number(low.closing_rob_kg) - qty < 0) {
+            return req.error(400, `DFL432: taking ${qty} kg off ${d.tail_number} on ${d.defuel_date} `
+                + `would leave it ${r3(qty - Number(low.closing_rob_kg))} kg short at its `
+                + `${low.entry_type} on ${low.record_date}: the ledger carries ${r3(low.closing_rob_kg)} kg `
+                + 'there. A defuel cannot take fuel the aircraft went on to use.', 'quantity_vol');
+        }
+
         // OLDEST FIRST, which is the whole of FIFO - the same rule the replay
         // applies when it restates the tail below.
         const taken = [];
@@ -550,7 +567,8 @@ async function ledgerPosition(db, tail, date, time) {
     const next = day.find((r) => (Number(r.sequence) || 0) >= sequence) || null;
     const before = all.filter((r) => String(r.record_date) < String(date)
         || (String(r.record_date) === String(date) && (Number(r.sequence) || 0) < sequence));
-    return { sequence, pred, next, before };
+    const after = all.filter((r) => !before.includes(r));
+    return { sequence, pred, next, before, after };
 }
 
 /** What the replay needs beyond the ledger rows: batch names, flights, defuels, carrier. */

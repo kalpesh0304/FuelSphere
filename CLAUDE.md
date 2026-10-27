@@ -302,7 +302,7 @@ worth stating because a contiguous range is what a reader assumes and this one h
 it. That is one more prefix added without §8 moving, and it is added above rather than left
 for the next re-measurement.
 
-### Defuel — `DFL4xx` / `DFL5xx` — 13 codes, all executable
+### Defuel — `DFL4xx` / `DFL5xx` — 14 codes, all executable
 
 **Registered before its first validation exists**, which is the opposite of how the ten
 unlisted prefixes arrived. `4xx` for business rules, `5xx` for technical failures.
@@ -338,6 +338,7 @@ code is deleted rather than left to fire on what is now the normal path.
 | `DFL429` | A defuel to storage has no vendor to claim from | **BUILT** — fuel on the ground is still the airline's until it is returned or re-uplifted |
 | `DFL430` | Already posted, so it cannot be posted again | **BUILT** — reverse it if the credit was agreed wrongly |
 | `DFL431` | Expected credit is negative, or exceeds what the fuel was worth | **BUILT** — a credit above the original value books a profit on fuel handed back. A keying error every time |
+| `DFL432` | A defuel would leave a later ledger balance below zero | **BUILT, 27 Oct 2026** — a defuel now posts to `ROB_LEDGER` at its own instant, so one dated before later movements lowers every balance after it. Names the movement and the shortfall. Refused, never drawn negative, as DFL426 |
 | `DFL520` | The defuel no longer exists | **BUILT** — technical |
 
 **"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a

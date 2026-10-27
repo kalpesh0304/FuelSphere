@@ -50,7 +50,8 @@ const LINE_TYPE_TEXT = {
     BURN: 'Block burn',
     APU_BURN: 'APU burn',
     TRANSFER: 'Transfer',
-    ADJUSTMENT: 'Adjustment'
+    ADJUSTMENT: 'Adjustment',
+    DEFUEL: 'Defuel'
 };
 
 async function applyLedgerLitres(data) {

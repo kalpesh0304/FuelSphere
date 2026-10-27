@@ -473,11 +473,13 @@ describe('Defuel — posting into the valuation ledger', () => {
         const opening = await cds.db.run(SELECT.one.from(BALANCES)
             .where({ valuation_method: 'FIFO', tail_number: TAIL, batch_ref: `OPENING-${TAIL}` }));
 
-        // 660 USG - B6 reads in US gallons - is about 2,000 kg, inside the
-        // 3,754 kg opening layer, so FIFO must take all of it from there.
+        // 300 USG - B6 reads in US gallons - is about 910 kg. The seed's own
+        // scenario 11A defuel already took 1,835 kg of the 3,754 kg opening
+        // layer at 01:46, so about 1,919 kg of it is left at 02:00: FIFO must
+        // take all of this one from there.
         const res = await createDefuel({
             tail_registration: TAIL, station_code: 'BOS', location_code: 'BOS-DEFUEL',
-            defuel_type: 'TO_SUPPLIER', defuel_date: DAY, defuel_time: '02:00:00', quantity_vol: 660
+            defuel_type: 'TO_SUPPLIER', defuel_date: DAY, defuel_time: '02:00:00', quantity_vol: 300
         });
         assert.ok(res.status < 400, `the pre-departure defuel was refused: ${fullError(res)}`);
         const q = r3(res.data.quantity_kg), ref = res.data.defuel_id;
@@ -526,6 +528,30 @@ describe('Defuel — posting into the valuation ledger', () => {
         assert.strictEqual(r3((await layersOf(TAIL)).reduce((s, l) => s + n(l.balance_qty_kg), 0)), fifoBefore,
             'FIFO stock did not come back');
         out(`ROB end ${endBefore} -> ${r3(endBefore - q)} -> ${r3(lastOf(rows2).closing_rob_kg)}; FIFO likewise`);
+    });
+
+    // --------------------------------------------------------- EXIT-13 --
+    it('EXIT-13  a back-dated defuel cannot take fuel the aircraft went on to use', async function () {
+        this.timeout(120000);
+        // On board at 02:00 is far more than this defuel; what it may NOT do
+        // is leave a LATER balance below zero. The threshold is the lowest
+        // closing balance the seeded ledger carries after 02:00 on 23 Sep.
+        const TAIL = 'N4048J', DAY = '2026-09-23';
+        const rows = await cds.db.run(SELECT.from('fuelsphere.ROB_LEDGER').where({ tail_number: TAIL }));
+        const after = rows.filter((r) => String(r.record_date) > DAY
+            || (String(r.record_date) === DAY && String(r.record_time) > '02:00:00'));
+        const low = Math.min(...after.map((r) => n(r.closing_rob_kg)));
+        assert.ok(low > 0 && low < 10000, `instrument: the later low is ${low} kg`);
+        // 1.25 x the later low, in US gallons at about 0.8 kg/L.
+        const vol = Math.round((low * 1.25 / 0.8) / 3.785411784);
+        const res = await createDefuel({
+            tail_registration: TAIL, station_code: 'BOS', location_code: 'BOS-DEFUEL',
+            defuel_type: 'TO_SUPPLIER', defuel_date: DAY, defuel_time: '02:00:00', quantity_vol: vol
+        });
+        assert.ok(res.status >= 400, `a defuel larger than the later low (${low} kg) was accepted`);
+        const msg = fullError(res);
+        assert.ok(/DFL432/.test(msg), `refused, but not with DFL432: ${msg}`);
+        out(`${vol} USG at 02:00 refused with DFL432 - the tail later falls to ${low} kg`);
     });
 
     // ---------------------------------------------------------- EXIT-8 --
