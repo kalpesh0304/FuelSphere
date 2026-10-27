@@ -78,6 +78,7 @@ def build(D, upload_path):
     country = {k: v['country_code'] for k, v in airport.items()}
 
     T['CARRIER_MASTER'].add({'carrier_code': 'TP', 'carrier_name': 'TAP Air Portugal', 'company_code': COMPANY,
+                             'currency_code': 'EUR', 'volume_uom_code': 'LTR', 'mass_uom_code': 'KG',
                              'is_active': 'true',
                              'notes': 'COMPANY CODE IS A PLACEHOLDER (TP00) - set it before any posting is raised for this carrier.'})
     _, cur_rows = read_csv('CURRENCY_MASTER')
@@ -165,7 +166,7 @@ def build(D, upload_path):
                                    'incoterms': 'DAP' if ptype != 'FIXED' else '',
                                    'min_volume_kg': '1000000.00' if ptype != 'FIXED' else '',
                                    'max_volume_kg': '250000000.00' if ptype != 'FIXED' else '',
-                                   's4_contract_number': str(seq[0]), 'is_active': 'true',
+                                   's4_contract_number': str(seq[0]), 'uom_code': 'LTR', 'is_active': 'true',
                                    'created_at': STAMP, 'created_by': BY_C, 'modified_at': STAMP,
                                    'modified_by': BY_C})
         contract[key] = cid

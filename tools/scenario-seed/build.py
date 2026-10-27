@@ -23,6 +23,42 @@ TAP_UPLOAD, OUT = sys.argv[1], sys.argv[2]
 COLS = load_model_columns()
 
 
+CARRIER_ENTITIES = {
+    # entity: columns that name a carrier source, in the hook's order (srv/lib/carrier-units.js)
+    'FUEL_ORDERS': ['flight_ID'], 'FUEL_DELIVERIES': ['flight_ID', 'order_ID'],
+    'FUEL_TICKETS': ['flight_ID', 'order_ID', 'delivery_ID'],
+    'INVOICE_ITEMS': ['flight_ID', 'ticket_ID', 'fuel_order_ID', 'delivery_ID'],
+    'FUEL_BURNS': ['flight_ID'], 'ROB_LEDGER': ['flight_ID', 'fuel_ticket_ID', 'fuel_order_ID'],
+    'FLIGHT_DISPATCH': ['flight_schedule_ID'], 'APU_USAGE': ['flight_ID']}
+SOURCE_OF = {'flight_ID': 'FLIGHT_SCHEDULE', 'flight_schedule_ID': 'FLIGHT_SCHEDULE', 'order_ID': 'FUEL_ORDERS',
+             'fuel_order_ID': 'FUEL_ORDERS', 'ticket_ID': 'FUEL_TICKETS', 'fuel_ticket_ID': 'FUEL_TICKETS',
+             'delivery_ID': 'FUEL_DELIVERIES'}
+
+
+def fill_carrier(tables, only=None, fallback=None):
+    """carrier_code on the rows a workbook writes, by the same rules as the hook.
+
+    `only` limits it to rows whose key is in the set (the JetBlue diff fills only
+    rows it ADDS: existing rows are tools/backfill-carrier-units.py's job, and
+    touching them here would make every one an UPDATE)."""
+    def code(ent, r):
+        for col in CARRIER_ENTITIES[ent]:
+            src = SOURCE_OF[col]
+            hit = tables.get(src) and tables[src].get(r.get(col)) if r.get(col) else None
+            if hit:
+                c = hit.get('airline_code') if src == 'FLIGHT_SCHEDULE' else hit.get('carrier_code')
+                if c:
+                    return c
+        return fallback
+    for ent in CARRIER_ENTITIES:
+        tb = tables.get(ent)
+        if not tb:
+            continue
+        for r in tb.rows:
+            if (only is None or tb.key(r) in only) and not r.get('carrier_code'):
+                r['carrier_code'] = code(ent, r) or ''
+
+
 def make_ctx(D, code):
     T = D.t
     if code == 'TP':
@@ -260,6 +296,8 @@ def main():
     tg_b = Tagger()
     cb = make_ctx(B, 'B6')
     refs_b = Engine(B, cb, tg_b).run()
+    new_keys = {tb.key(r) for e, tb in B.t.items() for r in tb.rows if tb.key(r) not in B.snapshot[e]}
+    fill_carrier(B.t, only=new_keys)
     adds, updates = B.diff()
     for u in updates:
         if u['column'] not in COLS[u['entity']]:
@@ -296,6 +334,7 @@ def main():
     arithmetic('TP', P, problems)
     for ent, rows in derive_ledger(base_rows).items():
         P.t[ent] = Table(ent, list(rows[0].keys()), rows)
+    fill_carrier(P.t, fallback='TP')
     for tb in P.t.values():
         tb.sync_header()
     full = {e: tb.rows for e, tb in P.t.items() if tb.rows}
