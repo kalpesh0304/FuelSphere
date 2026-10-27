@@ -21,16 +21,27 @@ The build fails on any column that is not a CDS element, an empty mandatory fiel
 a dangling foreign key, an ID or number that collides with `db/data` or within the workbook, or an invoice
 header that does not equal its lines.
 
-## Load (when decided)
+## Load — done 27 Oct 2026, in this order
 
 ```bash
+python3 tools/backfill-carrier-units.py            # carrier currency/units, contract units, carrier_code on existing rows
 python3 tools/scenario-seed/apply.py docs/test-data/scenarios/JetBlue_B6_Scenario_Seed_2026-09-24_to_26.xlsx db/data db/data
 python3 tools/scenario-seed/apply.py docs/test-data/scenarios/TAP_TP_Scenario_Seed_2026-10-20_to_22.xlsx db/data db/data
+python3 tools/backfill-carrier-units.py            # idempotent; fills nothing the workbooks already carry
 ```
 
 JetBlue first. `PROPOSED_*` sheets are never loaded: they need the schema in `Proposed_Schema`.
-Then run `tools/seed-burns-and-ledger.js`, `tools/seed-fifo-valuation.js`, `tools/seed-idr-rule-status.js`
-and the harness suite, one process per harness.
+
+**The ledger tools are NOT re-run for JetBlue, deliberately.** JetBlue's ROB ledger, burns and
+valuation were built before its scenarios existed, so they carry each uplift exactly once.
+Rebuilding them from the scenario-edited tickets would post the scenario-15 duplicates (N4064J
+16,826 kg -> 33,653 kg) and drop the uplifts scenarios 8 and 14 detach (N3162J to -380 kg).
+TAP's ledger rows ship in its workbook, derived the same way: from the TAP data before the scenarios.
+
+**`tools/seed-idr-rule-status.js` is NOT run either.** It validates every invoice, posted ones
+included, and would mark the scenario-16 originals GATED as duplicates of their own copies. The
+invoices the scenarios touch read NOT_CHECKED; press Validate on them. `apply.py` purged their stale
+verdicts (9,072 rows) so no rule table contradicts its gate.
 
 ## Measured, not assumed
 

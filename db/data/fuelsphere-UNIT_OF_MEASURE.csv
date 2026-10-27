@@ -1,6 +1,7 @@
-uom_code;uom_name;uom_category;conversion_to_kg;is_active;sap_uom;sap_uom_iso
-KG;Kilogram;MASS;1.000000;true;KG;KGM
-LTR;Liter;VOLUME;0.800000;true;L;LTR
-GAL;US Gallon;VOLUME;3.028329;true;;
-USG;US Gallon (Aviation);VOLUME;3.028329;true;;
-MT;Metric Ton;MASS;1000.000000;true;TO;TNE
+uom_code;uom_name;uom_category;conversion_to_kg;conversion_to_ltr;is_active;sap_uom;sap_uom_iso
+KG;Kilogram;MASS;1.000000;;true;KG;KGM
+LTR;Liter;VOLUME;0.800000;1.000000000;true;L;LTR
+GAL;US Gallon;VOLUME;3.028329;3.785411784;true;;
+USG;US Gallon (Aviation);VOLUME;3.028329;3.785411784;true;;
+MT;Metric Ton;MASS;1000.000000;;true;TO;TNE
+LB;Pound;MASS;0.453592;;true;LB;LBR

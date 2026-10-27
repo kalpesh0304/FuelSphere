@@ -21,3 +21,19 @@ MX;Mexico;United Mexican States;MEX;LAM;MXN;E;true
 NL;Netherlands;Kingdom of the Netherlands;DUT;EUR;EUR;E;true
 PR;Puerto Rico;Commonwealth of Puerto Rico;PUE;NAM;USD;E;true
 TT;Trinidad and Tobago;Republic of Trinidad and Tobago;TRI;LAM;TTD;E;true
+AT;Austria;Austria;AUS;EUR;EUR;E;true
+BE;Belgium;Belgium;BEL;EUR;EUR;E;true
+BR;Brazil;Brazil;BRA;LAM;BRL;E;true
+CH;Switzerland;Switzerland;SWI;EUR;CHF;E;true
+CY;Cyprus;Cyprus;CYP;EUR;EUR;E;true
+CZ;Czech Republic;Czech Republic;CZE;EUR;CZK;E;true
+DE;Germany;Germany;GER;EUR;EUR;E;true
+DK;Denmark;Denmark;DEN;EUR;DKK;E;true
+GP;Guadeloupe;Guadeloupe;GUA;LAM;EUR;E;true
+GR;Greece;Greece;GRE;EUR;EUR;E;true
+LU;Luxembourg;Luxembourg;LUX;EUR;EUR;E;true
+NO;Norway;Norway;NOR;EUR;NOK;E;true
+PL;Poland;Poland;POL;EUR;PLN;E;true
+PT;Portugal;Portugal;POR;EUR;EUR;E;true
+SE;Sweden;Sweden;SWE;EUR;SEK;E;true
+SN;Senegal;Senegal;SEN;AFR;XOF;E;true

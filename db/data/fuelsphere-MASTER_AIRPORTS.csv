@@ -95,3 +95,55 @@ ef74a7ef-a7af-5a3a-a3ee-d24078db5049;SMF;KSMF;Sacramento International Airport;S
 3ed9e0ea-8d53-5708-b9aa-aa3bcec5208f;SWF;KSWF;Stewart International Airport;Newburgh;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
 b39e72a3-e01f-55c7-ae93-262772cef347;SYR;KSYR;Syracuse Hancock International Airport;Syracuse;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
 0d715146-0dd6-5ebf-8dc7-3a4efbe42124;TPA;KTPA;Tampa International Airport;Tampa;US;America/New_York;;true;2026-09-23T00:00:00Z;SEED_B6_ADSB;2026-09-23T00:00:00Z;SEED_B6_ADSB
+a64466cc-b381-590b-9313-e364a50d7b01;AGP;LEMG;Málaga-Costa del Sol Airport;Málaga;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+1966a933-24f2-5c8c-a31a-d7d2409c4db4;ALC;LEAL;Alicante-Elche Miguel Hernández Airport;Alicante;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+76246d96-3057-596b-ba66-f845f04ede58;ARN;ESSA;Stockholm-Arlanda Airport;Stockholm;SE;Europe/Stockholm;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+bd8a49b3-899e-5091-aa43-2a036171537b;ATH;LGAV;Athens Eleftherios Venizelos International Airport;Spata-Artemida;GR;Europe/Athens;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+95481487-9a3c-5f10-a88d-13104afe5795;BER;EDDB;Berlin Brandenburg Airport;Berlin;DE;Europe/Berlin;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+c5889b56-ef6f-5fb2-b1e7-1aed37927af6;BIO;LEBB;Bilbao Airport;Bilbao;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+b061a166-9e95-5004-9029-4ab53116ab58;BLQ;LIPE;Bologna Guglielmo Marconi Airport;Bologna;IT;Europe/Rome;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+9f0ed3c7-965a-5feb-a109-b093e6c074ac;BRU;EBBR;Brussels Airport;Zaventem;BE;Europe/Brussels;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+87d5facf-0775-5e82-bd8c-a0c6dde375c5;CPH;EKCH;Copenhagen Kastrup Airport;Copenhagen;DK;Europe/Copenhagen;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+5e731f3a-b167-58fe-bf88-f56d61c0c14e;DSS;GOBD;Blaise Diagne International Airport;Dakar;SN;Africa/Dakar;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+5209e05c-b7a3-564d-b6ab-cbde6166e5ec;DUS;EDDL;Düsseldorf Airport;Düsseldorf;DE;Europe/Berlin;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+1fdf8f05-33f2-5efb-89a0-40fdddf7c07e;FAO;LPFR;Faro - Gago Coutinho International Airport;Faro;PT;Europe/Lisbon;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+71874c4d-8559-52a5-91b7-2a52a8a85555;FCO;LIRF;Rome–Fiumicino Leonardo da Vinci International Airport;Rome;IT;Europe/Rome;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+77f7c1fd-d8b1-526e-a554-e27ff990d5de;FLN;SBFL;Hercílio Luz International Airport;Florianópolis;BR;America/Sao_Paulo;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+2e56b1bc-caba-5b3e-b5cc-da34ef9c80f6;FLR;LIRQ;Florence Airport, Peretola;Firenze (FI);IT;Europe/Rome;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+ff54da69-42ce-55fc-a3b2-771fa5965ed8;FNC;LPMA;Cristiano Ronaldo International Airport;Funchal;PT;Atlantic/Madeira;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+76d2ff6c-c897-5568-a991-df313665b98a;FOR;SBFZ;Pinto Martins International Airport;Fortaleza;BR;America/Fortaleza;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+9e05b685-43ca-5b87-a284-17a67d8d7c87;FRA;EDDF;Frankfurt Main Airport;Frankfurt am Main;DE;Europe/Berlin;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+7eebfc80-7ca2-5b28-be05-01d2274754f8;GIG;SBGL;Rio de Janeiro Galeão – Tom Jobim International Airport;Rio De Janeiro;BR;America/Sao_Paulo;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+5cf34d57-1850-5339-84d2-45f4fa14e8b5;GRU;SBGR;São Paulo/Guarulhos–Governor André Franco Montoro International Airport;São Paulo;BR;America/Sao_Paulo;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+0dc8117e-c913-5fe8-a95f-bc6329cb2625;GVA;LSGG;Geneva International Airport;Geneva;CH;Europe/Zurich;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+090a84ed-8b53-58b7-9fcf-b2c13734aa0e;HAM;EDDH;Hamburg Helmut Schmidt Airport;Hamburg;DE;Europe/Berlin;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+a78d1580-d352-51cb-9835-feab22553b59;IBZ;LEIB;Ibiza Airport;Ibiza (Eivissa);ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+4c5d757f-5a7e-5a95-8845-b82e38bc5c5e;LCA;LCLK;Larnaca International Airport;Larnaca;CY;Asia/Nicosia;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+63050e34-2c92-50ac-a54e-0ef1b8029db5;LGW;EGKK;London Gatwick Airport;London;GB;Europe/London;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+3c0c7465-7ec0-5592-b20e-5eda313421f0;LIS;LPPT;Lisbon Humberto Delgado Airport;Lisbon;PT;Europe/Lisbon;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+a607c2f4-eca0-5205-a2bf-bec948390c09;LUX;ELLX;Luxembourg-Findel International Airport;Luxembourg;LU;Europe/Luxembourg;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+7e84061c-c291-5043-addb-3b3b9d08c605;LYS;LFLL;Lyon Saint-Exupéry Airport;Colombier-Saugnieu, Rhône;FR;Europe/Paris;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+fb581eb5-247d-5b5b-8a5e-849a9b8640d6;MAN;EGCC;Manchester Airport;Manchester, Greater Manchester;GB;Europe/London;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+82037dd4-ac6c-51e4-aa2c-d7b4b1a012d1;MIA;KMIA;Miami International Airport;Miami;US;America/New_York;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+8b72ac98-cf07-5a23-954d-ceecd62c03ce;MRS;LFML;Marseille Provence Airport;Marignane, Bouches-du-Rhône;FR;Europe/Paris;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+085ad670-29ef-5673-8654-9dbffcdf5efc;MUC;EDDM;Munich Airport;Munich;DE;Europe/Berlin;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+f55fd5ab-3906-5974-b4c6-91bd0329b431;NAP;LIRN;Naples International Airport;Napoli;IT;Europe/Rome;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+7d8a14dd-7935-549b-a309-ca7139a33ab3;NAT;SBSG;Rio Grande do Norte/São Gonçalo do Amarante–Governador Aluízio Alves International Airport;Natal;BR;America/Fortaleza;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+68b17d5c-a3d3-5aa9-9bef-f26d3e4f584d;NCE;LFMN;Nice-Côte d'Azur Airport;Nice, Alpes-Maritimes;FR;Europe/Paris;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+85b4b409-abb5-57fe-acdc-8637ffd37a16;OPO;LPPR;Francisco de Sá Carneiro Airport;Porto;PT;Europe/Lisbon;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+b4aeed78-0d5d-524f-9f1b-2eccd065460d;ORY;LFPO;Paris-Orly Airport;Paris (Orly, Val-de-Marne);FR;Europe/Paris;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+c09d3109-4f46-56b2-bbce-8ab1c961520e;OSL;ENGM;Oslo-Gardermoen International Airport;Oslo (Gardermoen);NO;Europe/Oslo;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+b1641482-b9cf-513e-8307-b0acb8aac3b6;PDL;LPPD;João Paulo II Airport;Ponta Delgada;PT;Atlantic/Azores;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+73948114-4a55-5408-807f-5085a152802e;PMI;LEPA;Palma de Mallorca Airport;Palma de Mallorca;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+137d3999-097d-5d65-b8dd-3bd5afda21a0;POA;SBPA;Porto Alegre-Salgado Filho International Airport;Porto Alegre;BR;America/Sao_Paulo;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+cdb3333e-6e39-5ff5-9f76-016c8b1ae118;PRG;LKPR;Václav Havel Airport Prague;Prague;CZ;Europe/Prague;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+608cacbc-5f42-5f31-be13-2e5579fd86c5;PTP;TFFR;Maryse Condé International Airport;Pointe-à-Pitre;GP;America/Guadeloupe;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+7fd06fdf-389a-5183-963a-6bf10e49b703;SVQ;LEZL;Seville Airport;Seville;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+f2dd7ca7-9155-5125-b1b8-9f042407b873;TLS;LFBO;Toulouse-Blagnac Airport;Toulouse/Blagnac;FR;Europe/Paris;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+8f44f461-cab1-56f8-b8d1-663bfc7af14a;VCE;LIPZ;Venice Marco Polo Airport;Venezia (VE);IT;Europe/Rome;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+a325a4e0-5a72-5e34-86a7-fb5df15a1508;VIE;LOWW;Vienna International Airport;Vienna;AT;Europe/Vienna;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+810a336e-d3b9-543f-b9dd-66fca971e6d2;VLC;LEVC;Valencia Airport;Valencia;ES;Europe/Madrid;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+e8306add-1b72-5e7e-9f8b-8658ba8b2a19;WAW;EPWA;Warsaw Chopin Airport;Warsaw;PL;Europe/Warsaw;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+b48d37a9-0d79-5e3e-a8d3-1423017039d2;YUL;CYUL;Montreal / Pierre Elliott Trudeau International Airport;Montréal;CA;America/Toronto;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+d04caff6-5240-533a-8410-8057f0126d45;YYZ;CYYZ;Toronto Pearson International Airport;Toronto;CA;America/Toronto;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
+78b6eb30-7354-5223-b704-615458c04abe;ZRH;LSZH;Zürich Airport;Zurich;CH;Europe/Zurich;;true;2026-10-19T00:00:00Z;SEED_TP_ADSB;2026-10-19T00:00:00Z;SEED_TP_ADSB
