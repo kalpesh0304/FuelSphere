@@ -72,6 +72,26 @@ service DefuelService {
          * gone.
          */
         action reverse(reason : String(500) @title: 'Reason') returns Defuels;
+
+        /**
+         * Post a defuel to the supplier.
+         *
+         * ONE FIGURE IS TYPED, and only one. The original value of the fuel
+         * is what the layers it came from were bought at - FuelSphere already
+         * knows it, and offering it for editing would invite somebody to make
+         * the ledger and the claim disagree. The write-off is the difference
+         * and is likewise calculated.
+         *
+         * WHAT THE EXPECTED CREDIT IS: what the vendor has agreed to return
+         * for fuel they took back. It is a negotiation, not a calculation,
+         * which is why it is the one thing a human states.
+         *
+         * ONLY FOR A DEFUEL TO A SUPPLIER. Fuel sitting in a storage tank is
+         * still the airline's; there is nobody to claim from.
+         */
+        action postToSupplier(
+            expected_credit_usd : Decimal(15,2) @title: 'Expected Credit (USD)' @mandatory
+        ) returns Defuels;
     };
 
     // ---- the pickers --------------------------------------------------

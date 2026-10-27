@@ -106,6 +106,39 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
 
     const flightById = new Map(flights.map(f => [f.ID, f]));
 
+    // ---- what a batch is CALLED ------------------------------------------
+    //
+    // THE TICKET NUMBER, NOT THE LEDGER ROW ID. A batch is the parcel of fuel
+    // an uplift put on the aircraft, and the thing that identifies that
+    // parcel to everyone outside this system is the ticket: BPUK-LHR-
+    // 2026032501, not f30eb23b-77c1-5b2f-b7f2-b7bebe69f062.
+    //
+    // A UUID HERE IS A DEFECT, not a cosmetic one. The batch is shown on the
+    // stock valuation screen, it is what a defuel carries into a storage
+    // tank, and it is how somebody reconciles a layer back to the delivery it
+    // came from. None of that works with a generated key.
+    //
+    // 1,757 of the 1,763 uplift rows carry a ticket. The handful that do not
+    // keep the row id, because a batch must be unique and there is nothing
+    // else to call them.
+    const ticketNumberById = new Map(tickets.map(t => [t.ID, t.ticket_number || t.internal_number]));
+    const openingSeen = new Map();
+    const batchNameOf = (r, lineType, tail) => {
+        if (lineType === 'UPLIFT') {
+            return ticketNumberById.get(r.fuel_ticket_ID) || r.ID || '';
+        }
+        if (lineType === 'INITIAL') {
+            // AN OPENING BALANCE HAS NO TICKET - it is what was already on
+            // board when the window opened. It is named for the tail, and
+            // numbered only if a tail somehow opens twice.
+            const base = `OPENING-${tail}`;
+            const n = (openingSeen.get(base) || 0) + 1;
+            openingSeen.set(base, n);
+            return n === 1 ? base : `${base}-${n}`;
+        }
+        return null;
+    };
+
     // ---- whose fleet each tail belongs to --------------------------------
     //
     // FROM THE FLIGHTS, NOT FROM THE TAIL MASTER.
@@ -322,7 +355,7 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             push(tail, {
                 line_type: lineType,
                 reference: r.ID,
-                batch_ref: lineType === 'UPLIFT' || lineType === 'INITIAL' ? (r.ID || '') : null,
+                batch_ref: batchNameOf(r, lineType, tail),
                 qty_kg: qty === null ? null : kg(qty),
                 specific_gravity: num(r.specific_gravity) || num(r.wt_avg_specific_gravity),
                 rate_usd_per_kg: rate,

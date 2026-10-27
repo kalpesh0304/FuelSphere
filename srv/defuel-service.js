@@ -207,10 +207,10 @@ module.exports = cds.service.impl(async function () {
             if (v) { d.supplier_ID = v.ID; d.supplier_name = v.supplier_name; }
         }
 
-        const qty = r3(d.quantity_kg);
-        if (!(qty > 0)) {
+        const litres = Number(d.quantity_l) || 0;
+        if (!(litres > 0)) {
             return req.error(400, 'DFL424: the quantity defuelled must be greater than zero.',
-                'quantity_kg');
+                'quantity_l');
         }
 
         // ---- draw the FIFO layers ---------------------------------------
@@ -221,6 +221,29 @@ module.exports = cds.service.impl(async function () {
             .where({ valuation_method: 'FIFO', tail_number: d.tail_number,
                      storage_location: null, balance_qty_kg: { '>': 0 } })
             .orderBy('flight_aobt', 'flight_date', 'batch_ref'));
+
+        // ---- litres to kilograms ----------------------------------------
+        //
+        // THE TAIL'S WEIGHTED GRAVITY ACROSS ALL ITS OPEN LAYERS, and across
+        // all of them deliberately. There is a circularity here: the mass
+        // decides which layers are drawn, and the layers decide the gravity.
+        // Using every open layer breaks it - the conversion no longer depends
+        // on how much is taken, so it cannot chase its own tail.
+        //
+        // The figure reported on the document afterwards is the weighted
+        // gravity of the layers ACTUALLY drawn, which is the honest answer to
+        // "what was the density of the fuel that came off".
+        const gTop = layers.reduce((a, l) =>
+            a + Number(l.balance_qty_kg) * Number(l.specific_gravity || 0), 0);
+        const gQty = layers.reduce((a, l) =>
+            a + (l.specific_gravity ? Number(l.balance_qty_kg) : 0), 0);
+        const tailGravity = gQty > 0 ? gTop / gQty : null;
+        if (!tailGravity) {
+            return req.error(400, `DFL428: no specific gravity is recorded against the fuel `
+                + `on ${d.tail_number}, so ${litres} L cannot be converted to a mass. The `
+                + 'ledger values kilograms, not litres.', 'quantity_l');
+        }
+        const qty = r3(litres * tailGravity);
 
         if (layers.length === 0) {
             return req.error(400, `DFL425: ${d.tail_number} holds no valued stock, so there is `
@@ -255,9 +278,12 @@ module.exports = cds.service.impl(async function () {
         const sgQty = taken.reduce((s, t) => s + (t.layer.specific_gravity ? t.qty : 0), 0);
 
         d.fuel_value_usd   = fuelValue;
-        d.specific_gravity = sgQty > 0 ? Math.round((sgTop / sgQty) * 10000) / 10000 : null;
-        d.quantity_l       = d.specific_gravity ? r2(qty / d.specific_gravity) : null;
-        d.status           = d.status || 'POSTED';
+        d.specific_gravity = sgQty > 0 ? Math.round((sgTop / sgQty) * 10000) / 10000
+                                       : Math.round(tailGravity * 10000) / 10000;
+        // KILOGRAMS ARE THE DERIVED FIGURE NOW. Litres are what was typed.
+        d.quantity_kg      = qty;
+        // PARKED, NOT POSTED. The fuel has moved; the money has not.
+        d.status           = d.status || 'PARKED';
         d.defuel_id        = d.defuel_id || await nextDefuelId(db, d.station_code, d.defuel_date);
 
         await postToLedger(db, d, taken, qty);
@@ -266,6 +292,63 @@ module.exports = cds.service.impl(async function () {
     // =======================================================================
     // REVERSE — the one correction a station user cannot make by editing
     // =======================================================================
+    // =======================================================================
+    // POST TO SUPPLIER — agree the credit, and book the rest as a loss
+    // =======================================================================
+    //
+    // THE FUEL HAS ALREADY MOVED. This does not touch the valuation ledger:
+    // the stock left the wing when the defuel was recorded. What happens here
+    // is the MONEY - what the vendor will return, and what the airline is
+    // eating.
+    //
+    // IT DOES NOT SET POSTED. Nothing in FuelSphere knows whether S/4 has
+    // accepted the document, and a status this system can set on its own
+    // would be a claim about another system. It waits at POSTING_PENDING.
+    this.on('postToSupplier', Defuels, async (req) => {
+        const db = cds.transaction(req);
+        const key = req.params[req.params.length - 1];
+        const d = await db.run(SELECT.one.from(DEFUELS).where({ ID: key.ID || key }));
+        if (!d) return req.error(404, 'DFL520: that defuel no longer exists.');
+
+        if (d.defuel_type !== 'TO_SUPPLIER') {
+            return req.error(400, 'DFL429: this defuel put fuel into a storage location, so '
+                + 'there is no vendor to claim a credit from. Fuel on the ground is still the '
+                + 'airline’s until it is returned or re-uplifted.');
+        }
+        if (d.status === 'REVERSED') {
+            return req.error(400, 'DFL427: this defuel has been reversed and cannot be posted.');
+        }
+        if (d.status !== 'PARKED') {
+            return req.error(400, `DFL430: this defuel is already ${d.status} and cannot be `
+                + 'posted again. Reverse it if the credit was agreed wrongly.');
+        }
+
+        const original = r2(d.fuel_value_usd);
+        const credit   = r2(req.data.expected_credit_usd);
+        if (!(credit >= 0)) {
+            return req.error(400, 'DFL431: the expected credit cannot be negative.',
+                'expected_credit_usd');
+        }
+        if (credit > original) {
+            // REFUSED, because the write-off would be negative - the airline
+            // would be booking a PROFIT on fuel it handed back. That is a
+            // keying error every time.
+            return req.error(400, `DFL431: the expected credit of ${credit.toFixed(2)} exceeds `
+                + `the ${original.toFixed(2)} this fuel was worth. The credit cannot be more `
+                + 'than the fuel was bought for.', 'expected_credit_usd');
+        }
+
+        await db.run(UPDATE(DEFUELS).set({
+            expected_credit_usd: credit,
+            write_off_usd:       r2(original - credit),
+            status:              'POSTING_PENDING',
+            modified_at:         new Date().toISOString(),
+            modified_by:         'DEFUEL_SERVICE'
+        }).where({ ID: d.ID }));
+
+        return await db.run(SELECT.one.from(DEFUELS).where({ ID: d.ID }));
+    });
+
     this.on('reverse', Defuels, async (req) => {
         const db = cds.transaction(req);
         const key = req.params[req.params.length - 1];
@@ -359,7 +442,16 @@ async function postToLedger(db, d, taken, qty) {
         modified_at: now, modified_by: 'DEFUEL_SERVICE'
     };
     const rows = [];
-    let seq = 0;
+
+    // THE SEQUENCE CONTINUES THE TAIL'S RUN, it does not restart at 1.
+    // sequence is this tail's position in replay order - the seeded rows run
+    // 15, 20, 21, 23 - so a defuel numbering its own rows 1..6 sorts to the
+    // TOP of the tail whenever anyone orders by it, which is exactly the
+    // "cannot view the entries in sequence" that was reported.
+    const last = await db.run(SELECT.one.from(MOVEMENTS)
+        .columns('sequence').where({ tail_number: d.tail_number })
+        .orderBy({ sequence: 'desc' }));
+    let seq = Number((last || {}).sequence) || 0;
 
     // ---- FIFO: one pair per layer touched ----------------------------
     for (const t of taken) {

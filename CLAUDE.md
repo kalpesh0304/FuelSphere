@@ -302,7 +302,7 @@ worth stating because a contiguous range is what a reader assumes and this one h
 it. That is one more prefix added without §8 moving, and it is added above rather than left
 for the next re-measurement.
 
-### Defuel — `DFL4xx` / `DFL5xx` — 9 codes, all executable
+### Defuel — `DFL4xx` / `DFL5xx` — 13 codes, all executable
 
 **Registered before its first validation exists**, which is the opposite of how the ten
 unlisted prefixes arrived. `4xx` for business rules, `5xx` for technical failures.
@@ -334,6 +334,10 @@ code is deleted rather than left to fire on what is now the normal path.
 | `DFL425` | The tail holds no valued stock | **BUILT** — nothing to draw from; distinct from holding too little |
 | `DFL426` | The defuel draws more than the tail is carrying | **BUILT** — supersedes DFL403. Quotes both figures. Refused, never drawn negative — a clamped balance hides fuel that went missing |
 | `DFL427` | Already reversed | **BUILT** — kept and marked, never deleted, never reversed twice |
+| `DFL428` | No specific gravity on the tail, so litres cannot become kilograms | **BUILT** — litres are what the meter reads; the ledger values mass, and without a density the two cannot be bridged |
+| `DFL429` | A defuel to storage has no vendor to claim from | **BUILT** — fuel on the ground is still the airline's until it is returned or re-uplifted |
+| `DFL430` | Already posted, so it cannot be posted again | **BUILT** — reverse it if the credit was agreed wrongly |
+| `DFL431` | Expected credit is negative, or exceeds what the fuel was worth | **BUILT** — a credit above the original value books a profit on fuel handed back. A keying error every time |
 | `DFL520` | The defuel no longer exists | **BUILT** — technical |
 
 **"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a

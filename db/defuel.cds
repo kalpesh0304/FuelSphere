@@ -143,9 +143,26 @@ type DefuelSourceMode : String(16) enum {
 // and a DRAFT status beside it would be a second answer to the same question
 // - the d39 fixture harness exists because that exact duplication was built
 // once already.
-type DefuelStatus : String(10) enum {
-    Posted   = 'POSTED';
-    Reversed = 'REVERSED';
+type DefuelStatus : String(16) enum {
+    // PARKED IS WHERE EVERY DEFUEL STARTS. The fuel has moved and the ledger
+    // says so; what has not happened is the money. A defuel to a storage
+    // location stays here - the airline still owns that fuel and nobody owes
+    // anybody anything until it is sold, returned or re-uplifted.
+    Parked         = 'PARKED';
+
+    // ONLY A DEFUEL TO A SUPPLIER REACHES THIS. The expected credit has been
+    // agreed and entered, the write-off is known, and the document is
+    // waiting on S/4. It is NOT posted: nothing has reached the general
+    // ledger yet, and saying POSTED here would be a claim about another
+    // system.
+    PostingPending = 'POSTING_PENDING';
+
+    // Set when S/4 confirms. Nothing in FuelSphere sets it today - that
+    // integration is not built, and a status the system can set without the
+    // posting having happened is worse than one that waits.
+    Posted         = 'POSTED';
+
+    Reversed       = 'REVERSED';
 }
 
 // KEPT, BECAUSE ROB_LEDGER CARRIES IT. The FOB ledger was extended with a
@@ -227,8 +244,15 @@ entity DEFUEL : cuid, db.AuditTrail {
         // Context on a tail-only defuel: what the aircraft last flew as, and
         // what it is due to fly as next. Neither is a link - the point is to
         // record what the user knew at the time.
+        // WITH THEIR DATES. A flight number alone does not place the defuel
+        // between two legs: the same number flies every day, so AC410 before
+        // and AC411 after says nothing about WHEN without the dates beside
+        // them. The sequence of a tail-only defuel cannot be determined
+        // otherwise.
         pre_flight_number  : String(10);
+        pre_flight_date    : Date;
         post_flight_number : String(10);
+        post_flight_date   : Date;
 
         defuel_date      : Date @mandatory;
         defuel_time      : Time;
@@ -250,8 +274,13 @@ entity DEFUEL : cuid, db.AuditTrail {
         // section shows this same figure rather than carrying its own. A
         // handling loss would need an account to absorb it, and FuelSphere
         // does not pick accounts.
-        quantity_kg      : Decimal(15,3) @mandatory;
-        quantity_l       : Decimal(15,2);
+        //
+        // LITRES ARE WHAT THE USER ENTERS, because litres are what the truck
+        // meter reads. Kilograms are what the ledger values, and they are
+        // CALCULATED - litres times the gravity of the fuel actually coming
+        // off the aircraft.
+        quantity_l       : Decimal(15,2) @mandatory;
+        quantity_kg      : Decimal(15,3);
 
         // DERIVED AND DISPLAY-ONLY: the quantity-weighted average of the
         // specific gravity on the FIFO layers this defuel actually drew from.
@@ -280,8 +309,19 @@ entity DEFUEL : cuid, db.AuditTrail {
         // it - they are what the handling cost, not what the fuel is worth.
         fuel_value_usd   : Decimal(15,2);
 
+        // ---- settling a defuel to a supplier ------------------------------
+        //
+        // THREE FIGURES, AND ONLY ONE IS TYPED. The original value is what
+        // the fuel was worth at the rates of the layers it came from, which
+        // FuelSphere already knows. The expected credit is what the vendor
+        // has agreed to return and is the ONLY thing a human states. The
+        // write-off is the difference, and is calculated - a defuel where
+        // somebody can type all three is a defuel where they disagree.
+        expected_credit_usd : Decimal(15,2);
+        write_off_usd       : Decimal(15,2);
+
         @assert.range
-        status           : DefuelStatus default 'POSTED';
+        status           : DefuelStatus default 'PARKED';
 
         notes            : String(1000);
 }

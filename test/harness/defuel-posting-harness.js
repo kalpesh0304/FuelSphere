@@ -47,6 +47,17 @@ const fullError = (r) => {
         .filter(Boolean).join(' | ');
 };
 
+// LITRES FOR A WANTED MASS. The screen takes litres and the ledger values
+// kilograms, so a criterion that wants to straddle a layer boundary has to
+// say so in litres - at the same weighted gravity the service converts with.
+const litresFor = async (tailNumber, wantKg) => {
+    const ls = await layersOf(tailNumber);
+    const top = ls.reduce((a, l) => a + n(l.balance_qty_kg) * n(l.specific_gravity), 0);
+    const qty = ls.reduce((a, l) => a + (l.specific_gravity ? n(l.balance_qty_kg) : 0), 0);
+    const g = qty > 0 ? top / qty : 0.8;
+    return Math.round((wantKg / g) * 100) / 100;
+};
+
 const layersOf = (tailNumber) => cds.db.run(SELECT.from(BALANCES)
     .where({ valuation_method: 'FIFO', tail_number: tailNumber,
              storage_location: null, balance_qty_kg: { '>': 0 } })
@@ -101,7 +112,7 @@ describe('Defuel — posting into the valuation ledger', () => {
             location_code: location.code,
             defuel_date: '2026-09-24',
             defuel_time: '14:30:00',
-            quantity_kg: 100,
+            quantity_l: 100,
             ...over
         });
         if (draft.status >= 400) return draft;
@@ -118,12 +129,15 @@ describe('Defuel — posting into the valuation ledger', () => {
     // ---------------------------------------------------------- EXIT-1 --
     it('EXIT-1  a defuel draws the oldest layer first, one pair of rows per layer', async function () {
         this.timeout(120000);
-        const first = startLayers[0];
+        const first = (await layersOf(tail))[0];
         // STRADDLE THE FIRST LAYER DELIBERATELY: take all of it and a little
-        // of the next, so the draw has to cross a boundary.
-        const qty = r3(n(first.balance_qty_kg) + 10);
+        // of the next, so the draw has to cross a boundary. Expressed in
+        // LITRES, because that is what the screen sends - a kilogram figure
+        // passed as litres converts to less mass than intended and quietly
+        // stops crossing the boundary this criterion exists to test.
+        const qty = await litresFor(tail, n(first.balance_qty_kg) + 50);
 
-        const res = await createDefuel({ quantity_kg: qty });
+        const res = await createDefuel({ quantity_l: qty });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const ref = res.data.defuel_id;
         assert.ok(ref, 'no defuel_id was stamped');
@@ -156,9 +170,14 @@ describe('Defuel — posting into the valuation ledger', () => {
     it('EXIT-2  stock is moved, not created: the halves cancel', async function () {
         this.timeout(120000);
         const before = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        const res = await createDefuel({ quantity_kg: 50 });
+        const res = await createDefuel({ quantity_l: 50 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const ref = res.data.defuel_id;
+        // THE MASS IS DERIVED NOW. Litres are what was entered; kilograms are
+        // litres times the gravity of the fuel on the wing, so the harness
+        // reads back what the service worked out instead of assuming 50.
+        const movedKg = r3(res.data.quantity_kg);
+        assert.ok(movedKg > 0, 'no mass was derived from the litres entered');
 
         const fifo = (await rowsFor(ref)).filter((r) => r.valuation_method === 'FIFO');
         const netQty = r3(fifo.reduce((s, r) => s + n(r.qty_kg), 0));
@@ -171,15 +190,16 @@ describe('Defuel — posting into the valuation ledger', () => {
 
         // And the tail itself is lighter by exactly what was taken.
         const after = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        assert.strictEqual(r3(before - after), 50,
-            `the tail fell by ${r3(before - after)} kg, not the 50 kg defuelled`);
-        out(`net 0 kg and 0.00 USD across the pair; tail down exactly 50 kg`);
+        assert.strictEqual(r3(before - after), movedKg,
+            `the tail fell by ${r3(before - after)} kg, not the ${movedKg} kg defuelled`);
+        out(`net 0 kg and 0.00 USD across the pair; tail down exactly ${movedKg} kg `
+          + `(50 L at the tail gravity)`);
     });
 
     // ---------------------------------------------------------- EXIT-3 --
     it('EXIT-3  the tank holds the batch at the batch rate, not a blend', async function () {
         this.timeout(120000);
-        const res = await createDefuel({ quantity_kg: 25 });
+        const res = await createDefuel({ quantity_l: 25 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const inRows = (await rowsFor(res.data.defuel_id))
             .filter((r) => r.valuation_method === 'FIFO' && n(r.qty_kg) > 0);
@@ -211,7 +231,7 @@ describe('Defuel — posting into the valuation ledger', () => {
         if (!pool) return this.skip();   // a seed gap, not a behaviour to assert
 
         const rate = n(pool.rate_usd_per_kg);
-        const res = await createDefuel({ quantity_kg: 30 });
+        const res = await createDefuel({ quantity_l: 30 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
 
         const map = (await rowsFor(res.data.defuel_id)).filter((r) => r.valuation_method === 'MAP');
@@ -230,8 +250,8 @@ describe('Defuel — posting into the valuation ledger', () => {
     // ---------------------------------------------------------- EXIT-5 --
     it('EXIT-5  the number is DFL-<station>-YYYYMM-NNNNNN and increments', async function () {
         this.timeout(120000);
-        const a = await createDefuel({ quantity_kg: 10, station_code: 'BOS' });
-        const b = await createDefuel({ quantity_kg: 10, station_code: 'BOS' });
+        const a = await createDefuel({ quantity_l: 10, station_code: 'BOS' });
+        const b = await createDefuel({ quantity_l: 10, station_code: 'BOS' });
         assert.ok(a.status < 400 && b.status < 400, 'posting failed');
 
         const re = /^DFL-BOS-202609-(\d{6})$/;
@@ -243,7 +263,7 @@ describe('Defuel — posting into the valuation ledger', () => {
 
         // PER STATION: a different station restarts its own run rather than
         // continuing a shared one.
-        const c = await createDefuel({ quantity_kg: 10, station_code: 'LAX' });
+        const c = await createDefuel({ quantity_l: 10, station_code: 'LAX' });
         assert.ok(/^DFL-LAX-202609-000001$/.test(c.data.defuel_id),
             `a new station started at ${c.data.defuel_id}, not 000001`);
         out(`${a.data.defuel_id} -> ${b.data.defuel_id}, and LAX restarts at ${c.data.defuel_id}`);
@@ -253,7 +273,9 @@ describe('Defuel — posting into the valuation ledger', () => {
     it('EXIT-6  a defuel larger than the tail is carrying is refused', async function () {
         this.timeout(120000);
         const onHand = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        const res = await createDefuel({ quantity_kg: r3(onHand + 1000) });
+        // TWO DECIMALS: quantity_l is Decimal(15,2), and a third is refused by
+        // the type before the rule under test is ever reached.
+        const res = await createDefuel({ quantity_l: await litresFor(tail, onHand + 1000) });
 
         assert.ok(res.status >= 400, 'a defuel drew more fuel than the aircraft was carrying');
         const msg = fullError(res);
@@ -268,12 +290,14 @@ describe('Defuel — posting into the valuation ledger', () => {
     it('EXIT-7  reversing puts the stock back where it came from', async function () {
         this.timeout(120000);
         const before = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        const res = await createDefuel({ quantity_kg: 40 });
+        const res = await createDefuel({ quantity_l: 40 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const id = res.data.ID;
 
+        const movedKg = r3(res.data.quantity_kg);
         const during = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        assert.strictEqual(r3(before - during), 40, 'the defuel did not take 40 kg off');
+        assert.strictEqual(r3(before - during), movedKg,
+            `the defuel did not take the derived ${movedKg} kg off`);
 
         const rev = await test.POST(`${P}(ID=${id},IsActiveEntity=true)/DefuelService.reverse`,
             { reason: 'keyed against the wrong tail' });
@@ -287,7 +311,66 @@ describe('Defuel — posting into the valuation ledger', () => {
         assert.strictEqual(d.status, 'REVERSED', 'the defuel is not marked reversed');
         // KEPT AND MARKED, never deleted: the reversal is part of the record.
         assert.ok(/wrong tail/.test(d.notes || ''), 'the reason was not recorded');
-        out(`40 kg off and back again; defuel marked REVERSED with its reason`);
+        out(`${movedKg} kg off and back again; defuel marked REVERSED with its reason`);
+    });
+
+    // ---------------------------------------------------------- EXIT-9 --
+    it('EXIT-9  a defuel is PARKED, and only a supplier one can be posted', async function () {
+        this.timeout(120000);
+        const res = await createDefuel({ quantity_l: 20 });
+        assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
+        assert.strictEqual(res.data.status, 'PARKED',
+            'a new defuel is not PARKED - the fuel has moved but the money has not');
+
+        // A DEFUEL INTO A TANK HAS NO VENDOR TO CLAIM FROM.
+        const bad = await test.POST(
+            `${P}(ID=${res.data.ID},IsActiveEntity=true)/DefuelService.postToSupplier`,
+            { expected_credit_usd: 1 }).catch((e) => e.response || e);
+        assert.ok(bad.status >= 400, 'a defuel to storage was posted to a supplier');
+        assert.ok(/DFL429/.test(fullError(bad)), `refused, but not with DFL429: ${fullError(bad)}`);
+        out(`new defuel is PARKED; posting a storage defuel refused with DFL429`);
+    });
+
+    // --------------------------------------------------------- EXIT-10 --
+    it('EXIT-10  the credit is typed, the write-off is the difference', async function () {
+        this.timeout(120000);
+        const res = await createDefuel({ quantity_l: 30, defuel_type: 'TO_SUPPLIER' });
+        assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
+        const id = res.data.ID;
+        const original = n(res.data.fuel_value_usd);
+        assert.ok(original > 0, 'the defuel has no original value to claim against');
+
+        // A CREDIT ABOVE THE ORIGINAL VALUE WOULD BOOK A PROFIT on fuel
+        // handed back, which is a keying error every time.
+        const over = await test.POST(`${P}(ID=${id},IsActiveEntity=true)/DefuelService.postToSupplier`,
+            { expected_credit_usd: Math.round((original + 100) * 100) / 100 })
+            .catch((e) => e.response || e);
+        assert.ok(over.status >= 400 && /DFL431/.test(fullError(over)),
+            `a credit above the fuel value was accepted: ${fullError(over)}`);
+
+        const credit = Math.round((original * 0.6) * 100) / 100;
+        const ok = await test.POST(`${P}(ID=${id},IsActiveEntity=true)/DefuelService.postToSupplier`,
+            { expected_credit_usd: credit }).catch((e) => e.response || e);
+        assert.ok(ok.status < 400, `posting the credit failed: ${fullError(ok)}`);
+
+        const d = await cds.db.run(SELECT.one.from('fuelsphere.DEFUEL').where({ ID: id }));
+        assert.strictEqual(d.status, 'POSTING_PENDING',
+            `status is ${d.status} - it must wait on S/4 rather than claim to be posted`);
+        assert.strictEqual(Math.round(n(d.write_off_usd) * 100) / 100,
+            Math.round((original - credit) * 100) / 100,
+            'the write-off is not the original value less the credit');
+
+        // POSTED IS NOT SET BY THIS SYSTEM. Nothing here knows what S/4 did.
+        assert.notStrictEqual(d.status, 'POSTED',
+            'FuelSphere marked a document POSTED without S/4 having said so');
+
+        // And it cannot be posted twice.
+        const again = await test.POST(`${P}(ID=${id},IsActiveEntity=true)/DefuelService.postToSupplier`,
+            { expected_credit_usd: credit }).catch((e) => e.response || e);
+        assert.ok(again.status >= 400 && /DFL430/.test(fullError(again)),
+            `a defuel was posted twice: ${fullError(again)}`);
+        out(`original ${original.toFixed(2)}, credit ${credit.toFixed(2)}, `
+          + `write-off ${n(d.write_off_usd).toFixed(2)}, status POSTING_PENDING`);
     });
 
     // ---------------------------------------------------------- EXIT-8 --

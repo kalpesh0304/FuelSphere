@@ -50,6 +50,8 @@ annotate DefuelService.Defuels with @(
             { Value: fuel_value_usd,    Label: 'Fuel Value (USD)', ![@UI.Importance]: #Medium },
             { Value: total_charges_usd, Label: 'Charges + Tax (USD)', ![@UI.Importance]: #Low },
             { Value: status,            Label: 'Status',           ![@UI.Importance]: #Medium },
+            { $Type: 'UI.DataFieldForAction', Action: 'DefuelService.postToSupplier',
+              Label: 'Post to Supplier' },
             { $Type: 'UI.DataFieldForAction', Action: 'DefuelService.reverse',
               Label: 'Reverse' }
         ],
@@ -86,8 +88,23 @@ annotate DefuelService.Defuels with @(
             { $Type: 'UI.ReferenceFacet', ID: 'SourceFacet',
               Target: '@UI.FieldGroup#Source',      Label: 'Source - the aircraft' },
             { $Type: 'UI.ReferenceFacet', ID: 'DestFacet',
-              Target: '@UI.FieldGroup#Destination', Label: 'Destination - the storage location' }
+              Target: '@UI.FieldGroup#Destination', Label: 'Destination - the storage location' },
+            // ONLY WHERE THERE IS A VENDOR TO CLAIM FROM. A defuel into a
+            // storage tank has no credit and no write-off, so the section
+            // would be three empty fields inviting somebody to fill them.
+            { $Type: 'UI.ReferenceFacet', ID: 'CreditFacet',
+              Target: '@UI.FieldGroup#Credit', Label: 'Credit and write-off',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'defuel_type' }, 'TO_SUPPLIER'] } } }
         ],
+
+        // THE ONLY TYPED FIGURE IS THE CREDIT. The original value is what the
+        // layers were bought at and the write-off is the difference; a screen
+        // where all three can be typed is a screen where they disagree.
+        FieldGroup#Credit: { Data: [
+            { Value: fuel_value_usd,      Label: 'Original Value of Fuel (USD)' },
+            { Value: expected_credit_usd, Label: 'Expected Credit (USD)' },
+            { Value: write_off_usd,       Label: 'Fuel Write-off (USD)' }
+        ]},
 
         FieldGroup#Type: { Data: [
             { Value: defuel_type, Label: 'Defuel to' },
@@ -120,13 +137,18 @@ annotate DefuelService.Defuels with @(
 
             { Value: pre_flight_number, Label: 'Pre-flight No.',
               ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
+            { Value: pre_flight_date, Label: 'Pre-flight Date',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
             { Value: post_flight_number, Label: 'Post-flight No.',
+              ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
+            { Value: post_flight_date, Label: 'Post-flight Date',
               ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'source_mode' }, 'WITHOUT_FLIGHT'] } } },
 
             { Value: station_code,     Label: 'Station' },
             { Value: defuel_date,      Label: 'Defuel Date' },
             { Value: defuel_time,      Label: 'Defuel Time' },
             { Value: ticket_number,    Label: 'Ticket No.' },
+            { Value: quantity_l,       Label: 'Quantity (L)' },
             { Value: quantity_kg,      Label: 'Quantity (kg)' },
             // DERIVED, AND IT BELONGS WITH THE SOURCE: it is the weighted
             // average gravity of the FIFO layers this defuel drew from, so it
@@ -171,14 +193,16 @@ annotate DefuelService.Defuels with {
     station_code        @title: 'Station';
 
     pre_flight_number   @title: 'Pre-flight No.';
+    pre_flight_date     @title: 'Pre-flight Date';
     post_flight_number  @title: 'Post-flight No.';
+    post_flight_date    @title: 'Post-flight Date';
 
     defuel_date         @title: 'Defuel Date'         @Common.FieldControl: #Mandatory;
     defuel_time         @title: 'Defuel Time';
     ticket_number       @title: 'Ticket No.';
 
-    quantity_kg         @title: 'Quantity (kg)'       @Common.FieldControl: #Mandatory;
-    quantity_l          @title: 'Quantity (L)'        @readonly;
+    quantity_l          @title: 'Quantity (L)'        @Common.FieldControl: #Mandatory;
+    quantity_kg         @title: 'Quantity (kg)'       @readonly;
     specific_gravity    @title: 'Specific Gravity'    @readonly;
 
     location_code       @title: 'Storage Location'    @Common.FieldControl: #Mandatory;
@@ -188,7 +212,9 @@ annotate DefuelService.Defuels with {
     defuel_charges_usd  @title: 'Defuel Charges (USD)';
     taxes_usd           @title: 'Taxes (USD)';
     total_charges_usd   @title: 'Charges + Tax (USD)' @readonly;
-    fuel_value_usd      @title: 'Fuel Value (USD)'    @readonly;
+    fuel_value_usd      @title: 'Original Value of Fuel (USD)' @readonly;
+    expected_credit_usd @title: 'Expected Credit (USD)'        @readonly;
+    write_off_usd       @title: 'Fuel Write-off (USD)'         @readonly;
 
     status              @title: 'Status'              @readonly;
     notes               @title: 'Notes'               @UI.MultiLineText;
