@@ -250,7 +250,7 @@ function field(v) {
             if (h) {
                 for (const c of columns) {
                     const at = cols.indexOf(c);
-                    if (at >= 0) f[at] = h[c];
+                    if (at >= 0 && c in h) f[at] = h[c];
                 }
                 touched++;
             }
@@ -276,12 +276,13 @@ function field(v) {
     const RESOLUTION = ['ticket_ID', 'resolved_po_number', 'resolved_gr_number', 'resolution_source',
                         'ticket_quantity_kg', 'ticket_amount', 'ticket_rate'];
     const ITM = path.join(PROJECT, 'db', 'data', 'fuelsphere-INVOICE_ITEMS.csv');
-    // ONLY ON LINES THE SEED NEVER RESOLVED. A line that already carries a
-    // resolution keeps it: re-running rewrites resolution_source from
-    // TICKET_NUMBER to TICKET_ID (D49), so exporting it again would erase
-    // how the link was FIRST made - the record fim-reconcile EXIT-6 pins.
+    // resolution_source ONLY WHERE THE SEED HAD NONE. Re-running rewrites it
+    // from TICKET_NUMBER to TICKET_ID (D49), so exporting it again would erase
+    // how the link was FIRST made - the record fim-reconcile EXIT-6 pins. What
+    // the line resolved TO is exported everywhere: a ticket that is no longer
+    // posted no longer carries a GR, and the seed must say so.
     const lineRows = await cds.db.run(SELECT.from('fuelsphere.INVOICE_ITEMS').columns('ID', ...RESOLUTION));
-    const fresh = lineRows.filter(r => !resolvedInSeed.has(r.ID));
-    updateInPlace(ITM, new Map(fresh.map(r => [r.ID, r])), RESOLUTION, 'resolution');
+    for (const r of lineRows) if (resolvedInSeed.has(r.ID)) delete r.resolution_source;
+    updateInPlace(ITM, new Map(lineRows.map(r => [r.ID, r])), RESOLUTION, 'resolution');
     process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

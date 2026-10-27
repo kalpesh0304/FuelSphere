@@ -50,18 +50,43 @@ async function laterCounterparts(db, SELECT) {
     return later;
 }
 
-/** Run fn() with the given invoices (header and lines) out of the database. */
+/**
+ * The children an invoice's DELETE takes with it. CAP cascades a delete to
+ * every composition - lines, matches, approvals, exceptions and rule
+ * statuses - so hiding only the header and lines would destroy the hidden
+ * invoice's own verdicts and exceptions. Read from the model, not listed, so
+ * a composition added later is restored too.
+ */
+function childrenOf(model) {
+    const head = model.definitions['fuelsphere.INVOICES'];
+    const out = [];
+    for (const el of Object.values(head.elements)) {
+        if (el.type !== 'cds.Composition') continue;
+        const target = model.definitions[el.target];
+        const back = Object.values(target.elements).find(e =>
+            e.type === 'cds.Association' && e.target === 'fuelsphere.INVOICES');
+        if (back) out.push({ entity: el.target, fk: `${back.name}_ID` });
+    }
+    return out;
+}
+
+/** Run fn() with the given invoices, and everything they compose, out of the database. */
 async function withoutInvoices(db, { SELECT, INSERT, DELETE }, ids, fn) {
     ids = [...ids];
+    const kids = childrenOf(db.model);
+    if (!kids.length) throw new Error('INVOICES composes nothing in this model - the restore would be partial');
     const heads = await db.run(SELECT.from('fuelsphere.INVOICES').where({ ID: { in: ids } }));
-    const items = await db.run(SELECT.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: { in: ids } }));
-    await db.run(DELETE.from('fuelsphere.INVOICE_ITEMS').where({ invoice_ID: { in: ids } }));
+    const saved = [];
+    for (const k of kids) {
+        saved.push([k.entity, await db.run(SELECT.from(k.entity).where({ [k.fk]: { in: ids } }))]);
+    }
+    for (const k of kids) await db.run(DELETE.from(k.entity).where({ [k.fk]: { in: ids } }));
     await db.run(DELETE.from('fuelsphere.INVOICES').where({ ID: { in: ids } }));
     try {
         return await fn();
     } finally {
         if (heads.length) await db.run(INSERT.into('fuelsphere.INVOICES').entries(heads));
-        if (items.length) await db.run(INSERT.into('fuelsphere.INVOICE_ITEMS').entries(items));
+        for (const [entity, rows] of saved) if (rows.length) await db.run(INSERT.into(entity).entries(rows));
     }
 }
 
