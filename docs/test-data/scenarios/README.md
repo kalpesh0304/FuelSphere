@@ -1,7 +1,7 @@
 # Demo scenario seed — JetBlue (B6) and TAP (TP)
 
 Two workbooks, one per airline, covering the 17 demo scenarios with three references each.
-**Not loaded.** Nothing in `db/data` was changed.
+**Loaded into `db/data`** on 27 Oct 2026; see Load below.
 
 | Workbook | What it is |
 |---|---|
@@ -38,10 +38,21 @@ Rebuilding them from the scenario-edited tickets would post the scenario-15 dupl
 16,826 kg -> 33,653 kg) and drop the uplifts scenarios 8 and 14 detach (N3162J to -380 kg).
 TAP's ledger rows ship in its workbook, derived the same way: from the TAP data before the scenarios.
 
-**`tools/seed-idr-rule-status.js` is NOT run either.** It validates every invoice, posted ones
-included, and would mark the scenario-16 originals GATED as duplicates of their own copies. The
-invoices the scenarios touch read NOT_CHECKED; press Validate on them. `apply.py` purged their stale
-verdicts (9,072 rows) so no rule table contradicts its gate.
+**`tools/seed-idr-rule-status.js` IS run, after both workbooks.** It validates every invoice
+**in arrival order where a duplicate came later** (`tools/lib/arrival-order.js`): each scenario-16
+original is validated with its later duplicate out of the database, as it was when it arrived, so it
+stays CLEAR and the duplicate is GATED. A plain run would gate both, because INV473 and INV455 are
+symmetric (Finding F6). The tool writes the verdicts, the exceptions, the invoice counters, and the
+resolution of every line the seed had not yet resolved.
+
+```bash
+node tools/seed-idr-rule-status.js --write
+```
+
+**Nothing in the seed is posted to S/4.** The PO/GR step and the invoice step call S/4 for real, so
+a seeded document number would claim a posting that never happened. The scenario-16 originals are
+`VERIFIED`, gate `CLEAR`, approved: **posting pending**. The scenario-7 tickets were captured after the
+close and carry no posting fields; posting them is part of the demo.
 
 ## Measured, not assumed
 

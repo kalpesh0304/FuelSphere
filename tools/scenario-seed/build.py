@@ -86,7 +86,7 @@ def make_ctx(D, code):
                 index_code='SAMPLE-JETA1-NWE-EUR-L', index_name='Jet A-1 CIF NWE, EUR per litre (SAMPLE)',
                 index_type='PLATTS_CIF_NWE', index_region='NWE', formula_id='FRM-TP-CMP',
                 cmp_s4_contract='4600409001', maint_station='LIS', evening_hour=21, inv_tag='261023',
-                dup_numbers=('90012345', '90012346'), dup_docs=('5105600001', '5105600002'), defuel_rate=0.0300,
+                dup_numbers=('90012345', '90012346'), defuel_rate=0.0300,
                 s07_note='The late invoice is dated 2026-11-05: until that date INV461 (invoice date in the future) '
                          'fires as SOFT. TAP has no movement-ledger rows yet - run tools/seed-burns-and-ledger.js '
                          'after loading so the reconciliation can see these uplifts.',
@@ -102,7 +102,7 @@ def make_ctx(D, code):
                 index_code='SAMPLE-JETA-USGC-USD-L', index_name='Jet A USGC, USD per litre (SAMPLE)',
                 index_type='PLATTS_USGC', index_region='USGC', formula_id='FRM-B6-CMP',
                 cmp_s4_contract='4600309001', maint_station='JFK', evening_hour=23, inv_tag='260927',
-                dup_numbers=('77004512', '77004513'), dup_docs=('5105500001', '5105500002'), defuel_rate=0.0320,
+                dup_numbers=('77004512', '77004513'), defuel_rate=0.0320,
                 s07_note='JetBlue already has movement-ledger rows for these tickets, so the shift shows as soon '
                          'as the changed ticket fields load.',
                 gl_line='400000')

@@ -47,6 +47,7 @@ const path = require('path');
 
 const PROJECT = path.resolve(__dirname, '..');
 const cds = require(path.join(PROJECT, 'node_modules', '@sap', 'cds'));
+const { laterCounterparts, withoutInvoices } = require('./lib/arrival-order');
 
 const WRITE = process.argv.includes('--write');
 const OUT = path.join(PROJECT, 'db', 'data', 'fuelsphere-IDR_RULE_STATUS.csv');
@@ -80,28 +81,44 @@ function field(v) {
     const model = await cds.load('*');
     await cds.deploy(model).to('sqlite::memory:');
     const srv = await cds.serve('InvoiceService').from(model);
-    const { SELECT } = cds.ql;
+    const { SELECT, INSERT, DELETE } = cds.ql;
 
     const invoices = await cds.db.run(SELECT.from('fuelsphere.INVOICES')
         .columns('ID', 'invoice_number').orderBy('invoice_number'));
     const before = await cds.db.run(SELECT.from('fuelsphere.IDR_RULE_STATUS').columns('ID'));
     console.log(`${invoices.length} invoice(s); ${before.length} verdict row(s) seeded today`);
 
+    // IN ARRIVAL ORDER, WHERE A DUPLICATE CAME LATER - see tools/lib/
+    // arrival-order.js. An original is validated as it was when it arrived,
+    // before its duplicate existed, so the duplicate does not gate it (F6).
+    const later = await laterCounterparts(cds.db, SELECT);
+    // Read BEFORE the run: which lines the seed had already resolved.
+    const resolvedInSeed = new Set((await cds.db.run(SELECT.from('fuelsphere.INVOICE_ITEMS')
+        .columns('ID').where('resolution_source is not null'))).map(r => r.ID));
+    const validate = (inv) => srv.send({
+        event: 'validateForPosting',
+        entity: 'Invoices',
+        params: [{ ID: inv.ID, IsActiveEntity: true }]
+    });
+
     let ok = 0;
     const failures = [];
+    const early = [];
     for (const inv of invoices) {
         try {
-            await srv.send({
-                event: 'validateForPosting',
-                entity: 'Invoices',
-                params: [{ ID: inv.ID, IsActiveEntity: true }]
-            });
+            if (later.has(inv.ID)) {
+                await withoutInvoices(cds.db, cds.ql, later.get(inv.ID), () => validate(inv));
+                early.push(inv.invoice_number);
+            } else {
+                await validate(inv);
+            }
             ok++;
             if (ok % 20 === 0) console.log(`  ...${ok} validated`);
         } catch (e) {
             failures.push(`${inv.invoice_number}: ${e.message}`);
         }
     }
+    console.log(`validated before a later-arriving duplicate: ${early.length ? early.join(', ') : 'none'}`);
     console.log(`${ok} validated, ${failures.length} failed`);
     for (const f of failures.slice(0, 10)) console.log('  FAIL ' + f);
 
@@ -213,34 +230,58 @@ function field(v) {
         return fields;
     };
 
-    const invCols = headerOf(INV);
-    const invText = fs.readFileSync(INV, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
-    const idAt = invCols.indexOf('ID');
-    const out = [invCols.join(';')];
-    let touched = 0;
-    let misaligned = 0;
-    for (const line of invText.slice(1)) {
-        if (!line.trim()) continue;
-        const f = splitRow(line);
-        // A ROW WHOSE SHAPE WE STILL MISREAD IS COUNTED, NOT WRITTEN BLIND.
-        // Rewriting by index into a row of the wrong length is precisely how
-        // this corrupted nine invoices without saying a word.
-        if (f.length !== invCols.length) misaligned += 1;
-        const h = headById.get(f[idAt]);
-        if (h) {
-            for (const c of COUNTERS) {
-                const at = invCols.indexOf(c);
-                if (at >= 0) f[at] = h[c];
+    const updateInPlace = (file, byId, columns, what) => {
+        const cols = headerOf(file);
+        const raw = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+        const eol = raw.includes('\r\n') ? '\r\n' : '\n';   // keep the file's own line endings
+        const text = raw.split(/\r?\n/);
+        const idAt = cols.indexOf('ID');
+        const lines = [cols.join(';')];
+        let touched = 0;
+        let misaligned = 0;
+        for (const line of text.slice(1)) {
+            if (!line.trim()) continue;
+            const f = splitRow(line);
+            // A ROW WHOSE SHAPE WE STILL MISREAD IS COUNTED, NOT WRITTEN BLIND.
+            // Rewriting by index into a row of the wrong length is precisely how
+            // this corrupted nine invoices without saying a word.
+            if (f.length !== cols.length) misaligned += 1;
+            const h = byId.get(f[idAt]);
+            if (h) {
+                for (const c of columns) {
+                    const at = cols.indexOf(c);
+                    if (at >= 0) f[at] = h[c];
+                }
+                touched++;
             }
-            touched++;
+            lines.push(f.map(field).join(';'));
         }
-        out.push(f.map(field).join(';'));
-    }
-    fs.writeFileSync(INV, out.join('\r\n') + '\r\n', 'utf8');
-    console.log(`updated the counters on ${touched} of ${invText.length - 2} invoice rows`);
-    if (misaligned) {
-        console.log(`  WARNING: ${misaligned} row(s) did not have ${invCols.length} fields even after `
-                  + 'a quote-aware parse; their counters may be in the wrong columns.');
-    }
+        fs.writeFileSync(file, lines.join(eol) + eol, 'utf8');
+        console.log(`updated the ${what} on ${touched} of ${lines.length - 1} rows of ${path.relative(PROJECT, file)}`);
+        if (misaligned) {
+            console.log(`  WARNING: ${misaligned} row(s) did not have ${cols.length} fields even after `
+                      + 'a quote-aware parse; their values may be in the wrong columns.');
+        }
+    };
+
+    updateInPlace(INV, headById, COUNTERS, 'counters');
+
+    // THE LINE'S RESOLUTION IS THE FOURTH THING THE RUN PRODUCES. Validate
+    // writes which ticket, PO and GR each line resolved to, and how it found
+    // them (persistResolution in srv/invoice-service.js). A seeded line that
+    // lacks them is a line nobody validated beside a header that says it was,
+    // and fim-reconcile EXIT-2 compares exactly these. The flight is NOT
+    // exported: it is authored (scenario 8 puts a line on a flight dated
+    // apart from its fuelling) and the run's own choice is Finding F12.
+    const RESOLUTION = ['ticket_ID', 'resolved_po_number', 'resolved_gr_number', 'resolution_source',
+                        'ticket_quantity_kg', 'ticket_amount', 'ticket_rate'];
+    const ITM = path.join(PROJECT, 'db', 'data', 'fuelsphere-INVOICE_ITEMS.csv');
+    // ONLY ON LINES THE SEED NEVER RESOLVED. A line that already carries a
+    // resolution keeps it: re-running rewrites resolution_source from
+    // TICKET_NUMBER to TICKET_ID (D49), so exporting it again would erase
+    // how the link was FIRST made - the record fim-reconcile EXIT-6 pins.
+    const lineRows = await cds.db.run(SELECT.from('fuelsphere.INVOICE_ITEMS').columns('ID', ...RESOLUTION));
+    const fresh = lineRows.filter(r => !resolvedInSeed.has(r.ID));
+    updateInPlace(ITM, new Map(fresh.map(r => [r.ID, r])), RESOLUTION, 'resolution');
     process.exit(0);
 })().catch(e => { console.error(e); process.exit(1); });

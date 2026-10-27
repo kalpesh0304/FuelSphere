@@ -417,14 +417,14 @@ class Engine:
             dl = self.T['FUEL_DELIVERIES'].get(t['delivery_ID'])
             con = self.T['MASTER_CONTRACTS'].get(o['contract_ID'])
             when = f"{c.late_date}T{9 + n:02d}:{15 + 7 * n:02d}:00Z"
-            t.update({'created_at': when, 'modified_at': when, 'verified_at': when,
-                      's4_posting_status': 'S', 's4_posting_message': 'PO and GR created (mock posting).',
-                      's4_posted_at': when, 's4_contract_number': con['s4_contract_number'],
-                      's4_po_number': o['s4_po_number'], 's4_po_item': '00010', 's4_po_quantity': t['quantity'],
-                      's4_po_unit': 'L', 's4_gr_number': dl['s4_gr_number'], 's4_gr_year': '2026',
-                      's4_fi_posting_date': c.late_date})
+            # CAPTURED LATE, NOT POSTED. Nothing in this seed has been sent to
+            # S/4 - the PO/GR step calls it for real - so the ticket carries no
+            # posting fields. At the close it is unposted uplift (JV pending in
+            # its own period); pressing Post on it now dates the GR in the
+            # next period, which is the shift the reconciliation reports.
+            t.update({'created_at': when, 'modified_at': when, 'verified_at': when})
             dl.update({'created_at': when, 'modified_at': when})
-            self.tag(7, 'FUEL_TICKETS', t['ID'], f'captured and posted {c.late_date}, after the {c.close_period} close')
+            self.tag(7, 'FUEL_TICKETS', t['ID'], f'captured {c.late_date}, after the {c.close_period} close; not yet posted')
             self.tag(7, 'FUEL_DELIVERIES', dl['ID'], 'captured late')
         new = self.carve(7, inv, lines, 'L1', f'SCENARIO 7 - uplifts flown on {c.window[1]} and captured on '
                                               f'{c.late_date}, after the {c.close_period} close. Invoiced late.',
@@ -432,11 +432,12 @@ class Engine:
         for it, label in zip(lines, 'ABC'):
             t = self.ticket(it)
             refs.append(self.ref(label, t, new,
-                                 extra=f"flown {t['delivery_timestamp'][:10]}, captured and FI-posted {c.late_date}",
-                                 seeded=f'Ticket created {c.late_date}; s4_posting_status S; s4_fi_posting_date {c.late_date} '
-                                        f'(period {c.late_date[:7]}) against a {c.close_period} uplift.',
-                                 expected=f'FS-to-Finance reconciliation: the value moves out of {c.close_period} and into '
-                                          f'{c.late_date[:7]} under "Posting to subsequent period" (signed both ways). '
+                                 extra=f"flown {t['delivery_timestamp'][:10]}, captured {c.late_date}, posting pending",
+                                 seeded=f'Ticket created {c.late_date} against a {c.close_period} uplift; not posted to S/4 '
+                                        f'(no PO/GR, no FI posting date).',
+                                 expected=f'FS-to-Finance reconciliation for {c.close_period}: the uplift sits in JV pending. '
+                                          f'Post it from the ticket: the GR is dated in the later period and the value moves '
+                                          f'out of {c.close_period} under "Posting to subsequent period" (signed both ways). '
                                           + c.s07_note))
         self.refs[7] = refs
         return refs
@@ -802,14 +803,20 @@ class Engine:
         refs = []
         (ia, la), (ib, lb), (ic, lc) = self.pick_sources(3, 2)
 
-        def posted(inv, docno):
-            inv.update({'status': 'POSTED', 'approval_status': 'APPROVED', 'posting_gate': 'CLEAR',
+        # READY TO POST, NOT POSTED. postToS4HANA calls S/4 for real since
+        # 13 Oct 2026, so a seeded POSTED with a document number would claim a
+        # posting that never happened. The original is what the supplier sent
+        # first: validated CLEAR and approved before its duplicate arrived, and
+        # waiting for someone to press Post. Its verdicts are the ones computed
+        # at that point (tools/seed-idr-rule-status.js validates in ARRIVAL
+        # order), so the duplicate does not gate it retroactively (F6).
+        def ready_to_post(inv):
+            inv.update({'status': 'VERIFIED', 'approval_status': 'APPROVED', 'posting_gate': 'CLEAR',
                         'match_status': 'MATCHED', 'tolerance_status': 'WITHIN',
                         'first_approver': 'ap.clerk@airline.com', 'first_approved_at': f"{inv['invoice_date']}T16:00:00Z",
                         'final_approver': 'ap.clerk@airline.com', 'final_approved_at': f"{inv['invoice_date']}T16:00:00Z",
-                        'posting_date': (dt.date.fromisoformat(inv['invoice_date']) + dt.timedelta(days=2)).isoformat(),
-                        's4_document_number': docno, 's4_fiscal_year': '2026', 'sap_invoice_number': docno,
-                        'fi_posting_status': 'SUCCESS', 'gate_evaluated_at': f"{inv['invoice_date']}T16:00:00Z"})
+                        'posting_date': '', 's4_document_number': '', 's4_fiscal_year': '', 'sap_invoice_number': '',
+                        'fi_posting_status': '', 'gate_evaluated_at': f"{inv['invoice_date']}T16:00:00Z"})
 
         def copy_of(orig, number, received_days, notes):
             dup = dict(orig)
@@ -831,25 +838,26 @@ class Engine:
             return dup
 
         n1, n2 = c.dup_numbers
-        A = self.carve(16, ia, la, 'X', 'SCENARIO 16 - original invoice, ALREADY POSTED (simulated S/4 document, mock mode).')
+        A = self.carve(16, ia, la, 'X', 'SCENARIO 16 - original invoice, validated CLEAR and approved, POSTING PENDING: nothing has been posted to S/4.')
         A['invoice_number'] = n1
-        posted(A, c.dup_docs[0])
+        ready_to_post(A)
         B = copy_of(A, n1, 3, f'SCENARIO 16A - the supplier sent invoice {n1} again three days later. Same number, same vendor, same lines.')
         refs.append(self.ref('A', self.ticket(self.D.items_of(B['ID'])[0]), B,
-                             extra=f"original {n1} POSTED as {c.dup_docs[0]}; duplicate received {B['received_date']}",
+                             extra=f"original {n1} ready to post (VERIFIED, gate CLEAR); duplicate received {B['received_date']}",
                              seeded='Criterion 1 - same invoice number + same vendor.',
                              expected='Validate the duplicate: INV473 HARD (same number, same vendor) and INV455 HARD on '
                                       'every line (ticket already billed for fuel). Gate GATED - stays in exception; the '
-                                      'original remains the only posted document. Do NOT re-validate the posted original.'))
-        A2 = self.carve(16, ib, lb, 'Y', 'SCENARIO 16 - original invoice, ALREADY POSTED (simulated S/4 document, mock mode).')
+                                      'original stays CLEAR and is the one to post. Do NOT re-validate the original: INV473/INV455 are '
+                                      'symmetric (F6), so a second run would gate it too.'))
+        A2 = self.carve(16, ib, lb, 'Y', 'SCENARIO 16 - original invoice, validated CLEAR and approved, POSTING PENDING: nothing has been posted to S/4.')
         A2['invoice_number'] = n2
-        posted(A2, c.dup_docs[1])
+        ready_to_post(A2)
         B2 = copy_of(A2, f'{n2}-R', 5, f'SCENARIO 16B - the supplier re-issued {n2} under a NEW number {n2}-R, billing the same tickets.')
         refs.append(self.ref('B', self.ticket(self.D.items_of(B2['ID'])[0]), B2,
-                             extra=f"original {n2} POSTED as {c.dup_docs[1]}; re-issue {n2}-R",
+                             extra=f"original {n2} ready to post (VERIFIED, gate CLEAR); re-issue {n2}-R",
                              seeded='Criterion 2 - different invoice number, same tickets and same charge.',
                              expected='INV473 PASSES (number differs). INV455 HARD on every line: the tickets are already '
-                                      'billed for fuel on the posted original. Gate GATED.'))
+                                      'billed for fuel on the original. Gate GATED.'))
         C = self.carve(16, ic, lc, 'Z', f'SCENARIO 16C - CONTROL. Another vendor happens to use invoice number {n1}.')
         C['invoice_number'] = n1
         refs.append(self.ref('C', self.ticket(self.D.items_of(C['ID'])[0]), C,
