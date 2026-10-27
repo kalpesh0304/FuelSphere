@@ -121,13 +121,27 @@ function conversionFields(c) {
 // ===========================================================================
 
 /**
- * Density units, IATA VUOMBase. The value is kg per one of these.
+ * Density units, as kilograms per litre per one unit of each.
  * Kept in step with type DensityUom in db/schema.cds.
+ *
+ * A FACTOR TO KG/L, NOT LITRES PER UNIT, since LBG arrived (27 Oct 2026): a
+ * pound-per-gallon density has a pound numerator, so "kg per N litres" cannot
+ * express it. Both LBG constants are exact by definition - 1 lb is
+ * 0.45359237 kg and 1 US gallon is 3.785411784 L - so 1 lb/USG is
+ * 0.119826427... kg/L, written as the quotient rather than rounded.
  */
-const DENSITY_UOM_LITRES_PER_UNIT = {
-    KGL: 1,        // kg per litre
-    KGM: 1000      // kg per cubic metre = kg per 1000 litres
+const KGL_PER_DENSITY_UNIT = {
+    KGL: 1,                          // kg per litre
+    KGM: 0.001,                      // kg per cubic metre = kg per 1000 litres
+    LBG: 0.45359237 / 3.785411784    // pound per US gallon
 };
+
+/** A density in kg/L, or null where the value or its unit is unusable. */
+function densityToKgl(value, unit) {
+    const v = Number(value);
+    const f = KGL_PER_DENSITY_UNIT[unit];
+    return v > 0 && f ? v * f : null;
+}
 
 /**
  * Litres per one unit of a metered volume unit.
@@ -220,8 +234,8 @@ async function deriveTicketMassKg({ quantity_metered, uom_code, density_value, d
     if (!(density > 0)) return { quantity_kg: null, reason: 'no density_value on the ticket' };
     if (!density_uom) return { quantity_kg: null, reason: 'no density_uom, so density_value has no meaning' };
 
-    const litresPerDensityUnit = DENSITY_UOM_LITRES_PER_UNIT[density_uom];
-    if (!litresPerDensityUnit) return { quantity_kg: null, reason: `density unit ${density_uom} is not recognised` };
+    const kgl = densityToKgl(density, density_uom);
+    if (!kgl) return { quantity_kg: null, reason: `density unit ${density_uom} is not recognised` };
 
     // THE LITRE RATIO IS MASTER DATA NOW (UNIT_OF_MEASURE.conversion_to_ltr,
     // db/carrier-units.cds), which closes F19: a gallon ticket derives its
@@ -235,7 +249,7 @@ async function deriveTicketMassKg({ quantity_metered, uom_code, density_value, d
     const litres = metered * ratio;
 
     return {
-        quantity_kg: Number((litres * density / litresPerDensityUnit).toFixed(2)),
+        quantity_kg: Number((litres * kgl).toFixed(2)),
         basis: `${litres} L x ${density} ${density_uom}`
     };
 }
@@ -303,7 +317,7 @@ function deriveGaugeFigures({ fob_at_arrival_kg, fob_before_kg, fob_after_kg }) 
 }
 
 module.exports = {
-    litreRatio, toCommonLitres,
+    litreRatio, toCommonLitres, densityToKgl,
     DEFAULT_VOLUME_UOM,
     DEFAULT_VOLUME_UOM_SOURCE,
     resolveDefaultVolumeUom,

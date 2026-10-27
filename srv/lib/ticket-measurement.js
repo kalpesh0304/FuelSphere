@@ -19,7 +19,7 @@
 
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
-const { deriveTicketMassKg } = require('./fuel-uom');
+const { deriveTicketMassKg, densityToKgl } = require('./fuel-uom');
 const { currencyForFlight, contractTerms } = require('./carrier-units');
 
 async function flightOfOrder(orderId) {
@@ -93,8 +93,15 @@ async function deriveTicketMeasurement(at) {
     // figure that can only be kg/m3 (above 10 - no fuel is 10 kg per litre)
     // is converted rather than misread as KGL - whatever unit is stored, since
     // the draft may already have been stamped KGL before the value arrived.
+    //
+    // A POUND-PER-US-GALLON DENSITY IS CONVERTED BY ITS UNIT, not by size
+    // (27 Oct 2026). A US vendor's 6.69 lb/USG is below 10, so the size test
+    // would stamp it KGL and the mass would come out 8.3 times too high. The
+    // unit arrives only when the caller sends it - a stored row is always KGL.
     const rawDensity = at('density_value');
-    if (rawDensity !== null && rawDensity !== undefined && Number(rawDensity) > 10) {
+    if (Number(rawDensity) > 0 && at('density_uom') === 'LBG') {
+        values.density_value = Number(densityToKgl(rawDensity, 'LBG').toFixed(4));
+    } else if (rawDensity !== null && rawDensity !== undefined && Number(rawDensity) > 10) {
         values.density_value = Number((Number(rawDensity) / 1000).toFixed(4));
     }
     values.density_uom = 'KGL';

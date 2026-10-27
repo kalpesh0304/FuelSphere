@@ -74,6 +74,29 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
             'a kg/m3 ticket and a kg/L ticket for the same fuel must be summable');
     });
 
+    it('EXIT-1b2 — LBG (lb per US gallon) derives the same mass, and is stored as KGL', async () => {
+        // THE FACTOR COMES FROM THE DEFINITIONS, not from the code: 1 lb is
+        // 0.45359237 kg and 1 US gallon is 3.785411784 L, both exact. 6.693
+        // lb/USG is therefore 0.8020 kg/L to four places - the same fuel as
+        // EXIT-1 - so the mass must be the same 12030 kg. Read as KGL by
+        // mistake it would be 15000 x 6.693 = 100395 kg.
+        const kgl = Number((6.693 * 0.45359237 / 3.785411784).toFixed(4));
+        assert.strictEqual(kgl, 0.802, 'instrument: the hand conversion itself');
+        const r = await createTicket({
+            ticket_number: 'WP12-H-002L',
+            quantity: 15000, uom_code: 'LTR',
+            meter_start: 0, meter_end: 15000,
+            density_value: 6.693, density_uom: 'LBG',
+            delivery_timestamp: '2026-04-06T06:15:00Z'
+        });
+        assert.ok(ok2xx(r.status), JSON.stringify(r.data));
+        out(`same 15000 LTR at 6.693 LBG -> density ${r.data.density_value} ${r.data.density_uom}, quantity_kg=${r.data.quantity_kg}`);
+        assert.strictEqual(Number(r.data.density_value), kgl, 'the density is stored in kg/L');
+        assert.strictEqual(r.data.density_uom, 'KGL', 'one unit for every stored density');
+        assert.strictEqual(Number(r.data.quantity_kg), 12030,
+            'a lb/USG ticket and a kg/L ticket for the same fuel must be summable');
+    });
+
     it('EXIT-1c — a missing density yields null, never zero', async () => {
         const r = await createTicket({
             ticket_number: 'WP12-H-003',

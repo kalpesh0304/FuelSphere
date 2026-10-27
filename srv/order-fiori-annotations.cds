@@ -1863,7 +1863,13 @@ annotate FuelOrderService.FuelTickets with {
     // screen, same per-row control.
     density_value    @Measures.Unit: density_uom  @title: 'Density'
                      @Common.FieldControl: densityFieldControl;
-    density_uom      @title: 'Density Unit' @Common.FieldControl: #ReadOnly;   // always KGL
+    density_uom      @title: 'Density Unit'
+        // EDITABLE SINCE 27 Oct 2026. It was read-only ("always KGL"), and CAP
+        // drops a read-only field from the request - so a vendor's lb/USG
+        // figure arrived unitless and was stored as kg/L, 8.3 times too
+        // dense. The operator states the unit the ticket is printed in;
+        // ticket-measurement.js converts and the row is still stored as KGL.
+        @Common.QuickInfo: 'The unit the ticket states: KGL (kg/L), KGM (kg/m3) or LBG (lb per US gallon). Saved as KGL.';
     density_basis    @title: 'Density Basis';
     density_temp_c   @title: 'Density Temperature (°C)';
     quantity_flag    @title: 'Quantity Basis';
