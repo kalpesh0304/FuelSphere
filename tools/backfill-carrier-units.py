@@ -30,7 +30,7 @@ CARRIERS = {
 }
 # Litres per unit, exact by definition; null on mass units.
 LTR = {'LTR': '1.000000000', 'GAL': '3.785411784', 'USG': '3.785411784'}
-LB_ROW = {'uom_code': 'LB', 'uom_name': 'Pound', 'uom_category': 'MASS', 'conversion_to_kg': '0.453592',
+LB_ROW = {'uom_code': 'LB', 'uom_name': 'Pound', 'uom_category': 'MASS', 'conversion_to_kg': '0.45359237',
           'is_active': 'true', 'sap_uom': 'LB', 'sap_uom_iso': 'LBR', 'conversion_to_ltr': ''}
 
 # entity: [(column, source entity)] in resolution order, and the tail column.
