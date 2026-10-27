@@ -141,6 +141,7 @@ annotate DeliveryService.FuelDeliveries with @(
             { Value: flight_date,        Label: 'Flight Date',     ![@UI.Importance]: #Medium },
             { Value: delivery_date,      Label: 'Date',            ![@UI.Importance]: #High },
             { Value: delivered_quantity, Label: 'Delivered',       ![@UI.Importance]: #High },
+            { Value: delivered_quantity_cv, Label: 'Delivered (carrier)',       ![@UI.Importance]: #High },
             { Value: uom_code,           Label: 'UoM',             ![@UI.Importance]: #Medium },
             {
                 Value: status,
@@ -150,7 +151,7 @@ annotate DeliveryService.FuelDeliveries with @(
                     { $If: [ { $In: [{ $Path: 'status' }, ['Verified', 'Posted']] }, 3, 2 ] } ] } },
                 ![@UI.Importance]: #High
             },
-            { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
+            { Value: flight_variance_cm, Label: 'Flight Variance', ![@UI.Importance]: #High },
             {
                 Value: flight_variance_status,
                 Label: 'Flight Variance Status',
@@ -199,6 +200,7 @@ annotate DeliveryService.FuelDeliveries with @(
                 { Value: delivery_date },
                 { Value: delivery_time },
                 { Value: delivered_quantity },
+            { Value: delivered_quantity_cv, Label: 'Delivered quantity (carrier)' },
                 { Value: uom_code },
                 { Value: delivery_method },
                 { Value: vehicle_id },
@@ -211,7 +213,8 @@ annotate DeliveryService.FuelDeliveries with @(
             Data: [
                 { Value: temperature },
                 { Value: density },
-                { Value: temperature_corrected_qty }
+                { Value: temperature_corrected_qty },
+            { Value: temperature_corrected_qty_cv, Label: 'Temperature corrected qty (carrier)' }
             ]
         },
 
@@ -222,9 +225,9 @@ annotate DeliveryService.FuelDeliveries with @(
         FieldGroup #AircraftGauge: {
             Data: [
                 { Value: fob_source },
-                { Value: fob_before_kg },
-                { Value: fob_after_kg },
-                { Value: fob_delta_kg }
+                { Value: fob_before_cm },
+                { Value: fob_after_cm },
+                { Value: fob_delta_cm }
             ]
         },
 
@@ -253,10 +256,10 @@ annotate DeliveryService.FuelDeliveries with @(
                         { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
                         { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
                 },
-                { Value: flight_variance_kg },
-                { Value: flight_delivered_kg },
-                { Value: flight_metered_kg },
-                { Value: flight_tolerance_kg }
+                { Value: flight_variance_cm },
+                { Value: flight_delivered_cm },
+                { Value: flight_metered_cm },
+                { Value: flight_tolerance_cm }
             ]
         }
     }

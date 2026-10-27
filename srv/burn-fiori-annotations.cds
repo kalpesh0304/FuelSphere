@@ -56,14 +56,14 @@ annotate BurnService.FuelBurns with @(
             { Value: tail_number, Label: 'Tail', ![@UI.Importance]: #High },
 
             // ---- captured quantities --------------------------------------
-            { Value: dispatch_kg, Label: 'Dispatch kg', ![@UI.Importance]: #Medium },
-            { Value: fqis_out_kg, Label: 'FOB out kg', ![@UI.Importance]: #Medium },
-            { Value: fqis_in_kg, Label: 'FOB in kg', ![@UI.Importance]: #Medium },
-            { Value: uplift_l, Label: 'Uplift L', ![@UI.Importance]: #Medium },
+            { Value: dispatch_cm, Label: 'Dispatch', ![@UI.Importance]: #Medium },
+            { Value: fqis_out_cm, Label: 'FOB out', ![@UI.Importance]: #Medium },
+            { Value: fqis_in_cm, Label: 'FOB in', ![@UI.Importance]: #Medium },
+            { Value: uplift_cv, Label: 'Uplift', ![@UI.Importance]: #Medium },
             { Value: specific_gravity, Label: 'Sp. gravity', ![@UI.Importance]: #Low },
-            { Value: expected_delta_kg, Label: 'Expected delta kg', ![@UI.Importance]: #Low },
-            { Value: actual_delta_kg, Label: 'Actual delta kg', ![@UI.Importance]: #Medium },
-            { Value: uplift_value_usd, Label: 'Uplift value USD', ![@UI.Importance]: #Medium },
+            { Value: expected_delta_cm, Label: 'Expected delta', ![@UI.Importance]: #Low },
+            { Value: actual_delta_cm, Label: 'Actual delta', ![@UI.Importance]: #Medium },
+            { Value: uplift_value_usd, Label: 'Uplift value', ![@UI.Importance]: #Medium },
             // CARBON, per leg: (FOB out - FOB in) x the combustion factor.
             // The basis column says which pair the figure came from, because a
             // leg missing a gauge reading falls back to the recorded burn.
@@ -71,19 +71,19 @@ annotate BurnService.FuelBurns with @(
             { Value: carbon_basis_v, Label: 'Emission basis', ![@UI.Importance]: #Low },
 
             // ---- consumption, APU and engine split ------------------------
-            { Value: block_burn_kg, Label: 'Block burn kg', ![@UI.Importance]: #High },
-            { Value: block_burn_value_usd, Label: 'Block burn value USD', ![@UI.Importance]: #High },
+            { Value: block_burn_cm, Label: 'Block burn', ![@UI.Importance]: #High },
+            { Value: block_burn_value_usd, Label: 'Block burn value', ![@UI.Importance]: #High },
             { Value: apu_hours, Label: 'APU hours', ![@UI.Importance]: #Low },
-            { Value: apu_rate_kg_hr, Label: 'APU rate kg/h', ![@UI.Importance]: #Low },
-            { Value: apu_burn_sum_kg, Label: 'APU burn kg', ![@UI.Importance]: #Medium },
-            { Value: apu_burn_value_usd, Label: 'APU burn value USD', ![@UI.Importance]: #Low },
-            { Value: total_burn_kg, Label: 'Total burn kg', ![@UI.Importance]: #High },
-            { Value: unallocated_fuel_kg, Label: 'Unallocated fuel usage (kg)', ![@UI.Importance]: #Medium },
-            { Value: total_burn_value_usd, Label: 'Total burn value USD', ![@UI.Importance]: #High },
-            { Value: engine_burn_split_kg, Label: 'Engine burn kg', ![@UI.Importance]: #Medium },
-            { Value: engine_burn_value_usd, Label: 'Engine burn value USD', ![@UI.Importance]: #Low },
-            { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #Medium },
-            { Value: arrival_rob_kg, Label: 'Arrival FOB kg', ![@UI.Importance]: #Medium },
+            { Value: apu_rate_cm_hr, Label: 'APU rate per hour', ![@UI.Importance]: #Low },
+            { Value: apu_burn_sum_cm, Label: 'APU burn', ![@UI.Importance]: #Medium },
+            { Value: apu_burn_value_usd, Label: 'APU burn value', ![@UI.Importance]: #Low },
+            { Value: total_burn_cm, Label: 'Total burn', ![@UI.Importance]: #High },
+            { Value: unallocated_fuel_cm, Label: 'Unallocated fuel usage', ![@UI.Importance]: #Medium },
+            { Value: total_burn_value_usd, Label: 'Total burn value', ![@UI.Importance]: #High },
+            { Value: engine_burn_split_cm, Label: 'Engine burn', ![@UI.Importance]: #Medium },
+            { Value: engine_burn_value_usd, Label: 'Engine burn value', ![@UI.Importance]: #Low },
+            { Value: map_per_cm, Label: 'MAP per unit', ![@UI.Importance]: #Medium },
+            { Value: arrival_rob_cm, Label: 'Arrival FOB', ![@UI.Importance]: #Medium },
 
             // ---- the burn record's own columns ----------------------------
             // PLANNED BLOCK BURN, and the variance against it (5 Oct 2026).
@@ -93,8 +93,8 @@ annotate BurnService.FuelBurns with @(
             // variances under one heading is how a reader ends up arguing
             // with the wrong number. The columns and their data are untouched
             // on FUEL_BURNS for anything that still reads them.
-            { Value: planned_block_burn_kg, Label: 'Planned Block Burn (kg)', ![@UI.Importance]: #Medium },
-            { Value: block_burn_variance_kg, Label: 'Variance (Block burn) kg', ![@UI.Importance]: #Medium },
+            { Value: planned_block_burn_cm, Label: 'Planned Block Burn', ![@UI.Importance]: #Medium },
+            { Value: block_burn_variance_cm, Label: 'Variance (Block burn)', ![@UI.Importance]: #Medium },
             { Value: block_burn_variance_pct, Label: 'Variance (Block burn) %', ![@UI.Importance]: #Medium },
             { Value: block_burn_variance_status, Label: 'Variance (Block burn) status', ![@UI.Importance]: #Medium },
             { Value: data_source, Label: 'Source', ![@UI.Importance]: #Low },
@@ -137,16 +137,16 @@ annotate BurnService.FuelBurns with @(
 
         FieldGroup #BurnQuantities: {
             Data: [
-                { Value: actual_burn_kg, Label: 'Actual Burn (kg)' },
-                { Value: planned_burn_kg, Label: 'Planned Burn (kg)' },
-                { Value: apu_burn_kg, Label: 'APU burn (kg)' },
-                { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
+                { Value: actual_burn_cm, Label: 'Actual Burn' },
+                { Value: planned_burn_cm, Label: 'Planned Burn' },
+                { Value: apu_burn_cm, Label: 'APU burn' },
+                { Value: engine_burn_cm, Label: 'Engine Burn' }
             ]
         },
 
         FieldGroup #BurnVariance: {
             Data: [
-                { Value: variance_kg, Label: 'Variance (kg)' },
+                { Value: variance_cm, Label: 'Variance' },
                 { Value: variance_pct, Label: 'Variance %' },
                 { Value: variance_status, Label: 'Status' }
             ]
@@ -212,9 +212,9 @@ annotate BurnService.FuelBurns with @(
 
         FieldGroup #BurnSplit: {
             Data: [
-                { Value: actual_burn_kg,  Label: 'Block Burn (kg)' },
-                { Value: apu_burn_kg,     Label: 'APU burn (kg)' },
-                { Value: engine_burn_kg,  Label: 'Engine Burn (kg)' },
+                { Value: actual_burn_cm,  Label: 'Block Burn' },
+                { Value: apu_burn_cm,     Label: 'APU burn' },
+                { Value: engine_burn_cm,  Label: 'Engine Burn' },
                 { Value: burn_time,       Label: 'Burn Time' },
                 { Value: finance_posted,  Label: 'Posted to Finance' },
                 { Value: finance_post_date, Label: 'Finance Post Date' }
@@ -247,12 +247,12 @@ annotate BurnService.FuelBurns with @(
 
         FieldGroup #VarianceDetails: {
             Data: [
-                { Value: actual_burn_kg, Label: 'Actual Burn (kg)' },
-                { Value: planned_burn_kg, Label: 'Planned Burn (kg)' },
-                { Value: taxi_out_kg, Label: 'Taxi Out (kg)' },
-                { Value: taxi_in_kg, Label: 'Taxi In (kg)' },
-                { Value: trip_fuel_kg, Label: 'Trip Fuel (kg)' },
-                { Value: variance_kg, Label: 'Variance (kg)' },
+                { Value: actual_burn_cm, Label: 'Actual Burn' },
+                { Value: planned_burn_cm, Label: 'Planned Burn' },
+                { Value: taxi_out_cm, Label: 'Taxi Out' },
+                { Value: taxi_in_cm, Label: 'Taxi In' },
+                { Value: trip_fuel_cm, Label: 'Trip Fuel' },
+                { Value: variance_cm, Label: 'Variance' },
                 { Value: variance_pct, Label: 'Variance %' },
                 { Value: variance_status, Label: 'Variance Status' }
             ]
@@ -299,19 +299,19 @@ annotate BurnService.FuelBurns with {
     specific_gravity              @title: 'Sp. gravity'            @Common.FieldControl: #ReadOnly;
     expected_delta_kg             @title: 'Expected delta kg'      @Common.FieldControl: #ReadOnly;
     actual_delta_kg               @title: 'Actual delta kg'        @Common.FieldControl: #ReadOnly;
-    uplift_value_usd              @title: 'Uplift value USD'       @Common.FieldControl: #ReadOnly;
+    uplift_value_usd              @title: 'Uplift value'       @Common.FieldControl: #ReadOnly;
     carbon_emission_kg            @title: 'Carbon emission (kg CO2)' @Common.FieldControl: #ReadOnly;
     co2_factor_v                  @title: 'Combustion factor'       @Common.FieldControl: #ReadOnly;
     carbon_basis_v                @title: 'Emission basis'          @Common.FieldControl: #ReadOnly;
     block_burn_kg                 @title: 'Block burn kg'          @Common.FieldControl: #ReadOnly;
-    block_burn_value_usd          @title: 'Block burn value USD'   @Common.FieldControl: #ReadOnly;
+    block_burn_value_usd          @title: 'Block burn value'   @Common.FieldControl: #ReadOnly;
     apu_hours                     @title: 'APU hours'              @Common.FieldControl: #ReadOnly;
     apu_rate_kg_hr                @title: 'APU rate kg/h'          @Common.FieldControl: #ReadOnly;
     apu_burn_sum_kg               @title: 'APU burn kg'            @Common.FieldControl: #ReadOnly;
-    apu_burn_value_usd            @title: 'APU burn value USD'     @Common.FieldControl: #ReadOnly;
+    apu_burn_value_usd            @title: 'APU burn value'     @Common.FieldControl: #ReadOnly;
     engine_burn_split_kg          @title: 'Engine burn kg'         @Common.FieldControl: #ReadOnly;
-    engine_burn_value_usd         @title: 'Engine burn value USD'  @Common.FieldControl: #ReadOnly;
-    map_usd_per_kg                @title: 'MAP USD/kg'             @Common.FieldControl: #ReadOnly;
+    engine_burn_value_usd         @title: 'Engine burn value'  @Common.FieldControl: #ReadOnly;
+    map_usd_per_kg                @title: 'MAP per unit'             @Common.FieldControl: #ReadOnly;
     arrival_rob_kg                @title: 'Arrival FOB kg'         @Common.FieldControl: #ReadOnly;
 
     ID                            @UI.Hidden;
@@ -420,20 +420,20 @@ annotate BurnService.ROBLedger with @(
             { Value: line_type_v, Label: 'Line type', ![@UI.Importance]: #High },
             { Value: wt_avg_specific_gravity, Label: 'Wt avg sp. gravity', ![@UI.Importance]: #Medium },
             { Value: specific_gravity, Label: 'Sp. gravity (uplift)', ![@UI.Importance]: #Low },
-            { Value: unallocated_fuel_kg, Label: 'Unallocated fuel kg', ![@UI.Importance]: #Medium },
+            { Value: unallocated_fuel_cm, Label: 'Unallocated fuel', ![@UI.Importance]: #Medium },
             { Value: flight_aobt, Label: 'Flight AOBT (UTC)', ![@UI.Importance]: #High },
             { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket', ![@UI.Importance]: #High },
             { Value: fuel_order.order_number, Label: 'Fuel Order', ![@UI.Importance]: #High },
-            { Value: qty_kg, Label: 'Qty kg', ![@UI.Importance]: #High },
-            { Value: qty_l, Label: 'Qty L', ![@UI.Importance]: #High },
-            { Value: rate_usd_per_kg, Label: 'Rate USD/kg', ![@UI.Importance]: #High },
-            { Value: rate_usd_per_l, Label: 'Rate USD/L', ![@UI.Importance]: #High },
-            { Value: value_usd, Label: 'Value USD', ![@UI.Importance]: #High },
-            { Value: closing_rob_kg, Label: 'Balance qty kg', ![@UI.Importance]: #High },
-            { Value: closing_rob_l, Label: 'Balance qty L', ![@UI.Importance]: #High },
-            { Value: balance_value_usd, Label: 'Balance value USD', ![@UI.Importance]: #High },
-            { Value: map_usd_per_kg, Label: 'MAP USD/kg', ![@UI.Importance]: #High },
-            { Value: map_usd_per_l, Label: 'MAP USD/L', ![@UI.Importance]: #High },
+            { Value: qty_cm, Label: 'Qty', ![@UI.Importance]: #High },
+            { Value: qty_cv, Label: 'Qty', ![@UI.Importance]: #High },
+            { Value: rate_per_cm, Label: 'Rate per unit', ![@UI.Importance]: #High },
+            { Value: rate_per_cv, Label: 'Rate per unit', ![@UI.Importance]: #High },
+            { Value: value_usd, Label: 'Value', ![@UI.Importance]: #High },
+            { Value: closing_rob_cm, Label: 'Balance qty', ![@UI.Importance]: #High },
+            { Value: closing_rob_cv, Label: 'Balance qty', ![@UI.Importance]: #High },
+            { Value: balance_value_usd, Label: 'Balance value', ![@UI.Importance]: #High },
+            { Value: map_per_cm, Label: 'MAP per unit', ![@UI.Importance]: #High },
+            { Value: map_per_cv, Label: 'MAP per unit', ![@UI.Importance]: #High },
             { Value: airport_code, Label: 'Airport', ![@UI.Importance]: #Low },
             { Value: rob_percentage, Label: 'FOB %', ![@UI.Importance]: #Low },
             // UPLOAD FOB DATA CAME OFF THIS TOOLBAR on 2 Oct 2026 with the two
@@ -498,14 +498,14 @@ annotate BurnService.ROBLedger with @(
 
         FieldGroup #ROBSummary: {
             Data: [
-                { Value: closing_rob_kg, Label: 'Balance qty kg' },
-                { Value: closing_rob_l, Label: 'Balance qty L' },
-                { Value: balance_value_usd, Label: 'Balance value USD' },
-                { Value: map_usd_per_kg, Label: 'MAP USD/kg' },
-                { Value: map_usd_per_l, Label: 'MAP USD/L' },
+                { Value: closing_rob_cm, Label: 'Balance qty' },
+                { Value: closing_rob_cv, Label: 'Balance qty' },
+                { Value: balance_value_usd, Label: 'Balance value' },
+                { Value: map_per_cm, Label: 'MAP per unit' },
+                { Value: map_per_cv, Label: 'MAP per unit' },
                 { Value: rob_percentage, Label: 'FOB %' },
-                { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
-                { Value: max_capacity_l, Label: 'Max Capacity (L)' },
+                { Value: max_capacity_cm, Label: 'Max Capacity' },
+                { Value: max_capacity_cv, Label: 'Max Capacity' },
                 { Value: recalculated_by, Label: 'Last Recalculated By' },
                 { Value: recalculated_at, Label: 'Last Recalculated On' }
             ]
@@ -517,17 +517,17 @@ annotate BurnService.ROBLedger with @(
                 { Value: sector, Label: 'Sector' },
                 { Value: fuel_ticket.ticket_number, Label: 'Fuel Ticket' },
                 { Value: fuel_order.order_number, Label: 'Fuel Order' },
-                { Value: qty_kg, Label: 'Qty kg' },
-                { Value: qty_l, Label: 'Qty L' },
-                { Value: rate_usd_per_kg, Label: 'Rate USD/kg' },
-                { Value: rate_usd_per_l, Label: 'Rate USD/L' },
-                { Value: value_usd, Label: 'Value USD' },
-                { Value: uplift_kg, Label: 'Uplift (kg)' },
-                { Value: uplift_l, Label: 'Uplift (L)' },
-                { Value: burn_kg, Label: 'Burn (kg)' },
-                { Value: burn_l, Label: 'Burn (L)' },
-                { Value: adjustment_kg, Label: 'Adjustment (kg)' },
-                { Value: adjustment_l, Label: 'Adjustment (L)' }
+                { Value: qty_cm, Label: 'Qty' },
+                { Value: qty_cv, Label: 'Qty' },
+                { Value: rate_per_cm, Label: 'Rate per unit' },
+                { Value: rate_per_cv, Label: 'Rate per unit' },
+                { Value: value_usd, Label: 'Value' },
+                { Value: uplift_cm, Label: 'Uplift' },
+                { Value: uplift_cv, Label: 'Uplift' },
+                { Value: burn_cm, Label: 'Burn' },
+                { Value: burn_cv, Label: 'Burn' },
+                { Value: adjustment_cm, Label: 'Adjustment' },
+                { Value: adjustment_cv, Label: 'Adjustment' }
             ]
         },
 
@@ -625,19 +625,19 @@ annotate BurnService.ROBLedger with @(
 
         FieldGroup #ROBQuantityDetails: {
             Data: [
-                { Value: opening_rob_kg, Label: 'Opening FOB (kg)' },
-                { Value: opening_rob_l, Label: 'Opening FOB (L)' },
-                { Value: uplift_kg, Label: 'Uplift (kg)' },
-                { Value: uplift_l, Label: 'Uplift (L)' },
-                { Value: burn_kg, Label: 'Burn (kg)' },
-                { Value: burn_l, Label: 'Burn (L)' },
-                { Value: adjustment_kg, Label: 'Adjustment (kg)' },
-                { Value: adjustment_l, Label: 'Adjustment (L)' },
-                { Value: closing_rob_kg, Label: 'Closing FOB (kg)' },
-                { Value: closing_rob_l, Label: 'Closing FOB (L)' },
+                { Value: opening_rob_cm, Label: 'Opening FOB' },
+                { Value: opening_rob_cv, Label: 'Opening FOB' },
+                { Value: uplift_cm, Label: 'Uplift' },
+                { Value: uplift_cv, Label: 'Uplift' },
+                { Value: burn_cm, Label: 'Burn' },
+                { Value: burn_cv, Label: 'Burn' },
+                { Value: adjustment_cm, Label: 'Adjustment' },
+                { Value: adjustment_cv, Label: 'Adjustment' },
+                { Value: closing_rob_cm, Label: 'Closing FOB' },
+                { Value: closing_rob_cv, Label: 'Closing FOB' },
                 { Value: density_kgl, Label: 'Density used for litres (kg/L)' },
-                { Value: max_capacity_kg, Label: 'Max Capacity (kg)' },
-                { Value: max_capacity_l, Label: 'Max Capacity (L)' },
+                { Value: max_capacity_cm, Label: 'Max Capacity' },
+                { Value: max_capacity_cv, Label: 'Max Capacity' },
                 { Value: rob_percentage, Label: 'FOB %' }
             ]
         },
@@ -693,10 +693,10 @@ annotate BurnService.ROBLedger with {
     // not a ledger.
     sector                 @title: 'Sector'            @Common.FieldControl: #ReadOnly;
     qty_kg                 @title: 'Qty kg'            @Common.FieldControl: #ReadOnly;
-    rate_usd_per_kg        @title: 'Rate USD/kg'       @Common.FieldControl: #ReadOnly;
-    value_usd              @title: 'Value USD'         @Common.FieldControl: #ReadOnly;
-    balance_value_usd      @title: 'Balance value USD' @Common.FieldControl: #ReadOnly;
-    map_usd_per_kg         @title: 'MAP USD/kg'        @Common.FieldControl: #ReadOnly;
+    rate_usd_per_kg        @title: 'Rate per unit'       @Common.FieldControl: #ReadOnly;
+    value_usd              @title: 'Value'         @Common.FieldControl: #ReadOnly;
+    balance_value_usd      @title: 'Balance value' @Common.FieldControl: #ReadOnly;
+    map_usd_per_kg         @title: 'MAP per unit'        @Common.FieldControl: #ReadOnly;
     volume_l               @title: 'Volume (L)'        @Common.FieldControl: #ReadOnly;
     flight_aobt            @title: 'Flight AOBT (UTC)' @Common.FieldControl: #ReadOnly
                            @Common.QuickInfo: 'Actual off-block time of the leg this line belongs to. The ledger reads, sorts and replays in this order.';
@@ -798,8 +798,8 @@ annotate BurnService.ApuUsage with @(
             // The burn sits beside the rate that produced it and the source
             // that produced the cycle — a derived figure with neither beside
             // it cannot be judged.
-            { Value: apu_burn_kg, Label: 'APU Burn (kg)', ![@UI.Importance]: #High },
-            { Value: burn_rate_kg_hr, Label: 'Rate (kg/h)', ![@UI.Importance]: #Medium },
+            { Value: apu_burn_cm, Label: 'APU Burn', ![@UI.Importance]: #High },
+            { Value: burn_rate_cm_hr, Label: 'Rate (per hour)', ![@UI.Importance]: #Medium },
             {
                 Value: apu_source,
                 Label: 'Source',
@@ -846,9 +846,9 @@ annotate BurnService.ApuUsage with @(
             Label: 'Derivation',
             Data: [
                 { Value: running_minutes, Label: 'Running Minutes' },
-                { Value: burn_rate_kg_hr, Label: 'Burn Rate (kg/h)' },
+                { Value: burn_rate_cm_hr, Label: 'Burn Rate (per hour)' },
                 { Value: rate_source, Label: 'Rate Source' },
-                { Value: apu_burn_kg, Label: 'APU Burn (kg)' },
+                { Value: apu_burn_cm, Label: 'APU Burn' },
                 { Value: apu_source, Label: 'Cycle Source' }
             ]
         },
@@ -954,9 +954,9 @@ annotate BurnService.FuelDeliveries with @(
         FieldGroup #BurnDeliveryReconciliation: {
             Data: [
                 { Value: recon_status,      Label: 'Reconciliation' },
-                { Value: recon_variance_kg, Label: 'Variance (kg)' },
+                { Value: recon_variance_cm, Label: 'Variance' },
                 { Value: fob_source,        Label: 'Gauge Source' },
-                { Value: fob_delta_kg,      Label: 'Gauge Delta (kg)' },
+                { Value: fob_delta_cm,      Label: 'Gauge Delta' },
                 { Value: supplier_count,    Label: 'Suppliers' }
             ]
         },
@@ -965,6 +965,7 @@ annotate BurnService.FuelDeliveries with @(
                 { Value: delivery_number,    Label: 'Delivery' },
                 { Value: delivery_date,      Label: 'Date' },
                 { Value: delivered_quantity, Label: 'Delivered' },
+            { Value: delivered_quantity_cv, Label: 'Delivered (carrier)' },
                 { Value: uom_code,           Label: 'Unit' }
             ]
         }
@@ -1019,6 +1020,6 @@ annotate BurnService.ROBLedger with {
     adjustment_l   @title: 'Adjustment (L)';
     closing_rob_l  @title: 'Balance qty L';
     max_capacity_l @title: 'Max Capacity (L)';
-    rate_usd_per_l @title: 'Rate USD/L';
-    map_usd_per_l  @title: 'MAP USD/L';
+    rate_usd_per_l @title: 'Rate per unit';
+    map_usd_per_l  @title: 'MAP per unit';
 };

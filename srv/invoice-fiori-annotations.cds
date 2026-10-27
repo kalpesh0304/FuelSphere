@@ -697,6 +697,7 @@ annotate InvoiceService.InvoiceItems with @(
             // ---- the existing columns --------------------------------------
             { Value: description, Label: 'Description', ![@UI.Importance]: #Medium },
             { Value: quantity,    Label: 'Quantity (as billed)',   ![@UI.Importance]: #Medium },
+            { Value: quantity_cv,    Label: 'Quantity (as billed) (carrier)',   ![@UI.Importance]: #Medium },
             { Value: unit_price,  Label: 'Unit price (as billed)', ![@UI.Importance]: #Medium },
             {
                 Value: resolution_source,
@@ -784,6 +785,7 @@ annotate InvoiceService.InvoiceItems with @(
                 { Value: description, Label: 'Description' },
                 { Value: product_ID, Label: 'Product' },
                 { Value: quantity, Label: 'Quantity' },
+            { Value: quantity_cv, Label: 'Quantity (carrier)' },
                 { Value: uom_code, Label: 'UoM' },
                 { Value: unit_price, Label: 'Unit Price' },
                 { Value: net_amount, Label: 'Net Amount' },
@@ -1207,7 +1209,8 @@ annotate InvoiceService.FuelTickets with @(
         LineItem: [
             { Value: ticket_number,      Label: 'Ticket',     ![@UI.Importance]: #High },
             { Value: quantity_metered,   Label: 'Metered',    ![@UI.Importance]: #High },
-            { Value: quantity_kg,        Label: 'Mass (kg)',  ![@UI.Importance]: #High },
+            { Value: quantity_metered_cv,   Label: 'Metered (carrier)',    ![@UI.Importance]: #High },
+            { Value: quantity_cm,        Label: 'Mass',  ![@UI.Importance]: #High },
             { Value: density_value,      Label: 'Density',    ![@UI.Importance]: #Medium },
             { Value: aircraft_reg,       Label: 'Aircraft',   ![@UI.Importance]: #High },
             { Value: flight_number,      Label: 'Flight',     ![@UI.Importance]: #High },
@@ -1220,11 +1223,12 @@ annotate InvoiceService.FuelTickets with @(
         FieldGroup #TicketFuel: {
             Data: [
                 { Value: quantity_metered,   Label: 'Metered' },
+            { Value: quantity_metered_cv,   Label: 'Metered (carrier)' },
                 { Value: uom_code,           Label: 'Unit' },
                 // The conversion, so the mass is explainable rather than
                 // asserted: metered x density = kg.
                 { Value: density_value,      Label: 'Density' },
-                { Value: quantity_kg,        Label: 'Mass (kg)' },
+                { Value: quantity_cm,        Label: 'Mass' },
                 { Value: aircraft_reg,       Label: 'Aircraft' },
                 { Value: flight_number,      Label: 'Flight' },
                 { Value: delivery_timestamp, Label: 'Delivered at' }
@@ -1637,7 +1641,7 @@ annotate InvoiceService.UnbilledTickets with @(
             { Value: ticket_number,   Label: 'Ticket',        ![@UI.Importance]: #High },
             // THE MASS FIRST. It is the exposure regardless of how many
             // pieces of paper it arrived on.
-            { Value: quantity_kg,     Label: 'Mass (kg)',     ![@UI.Importance]: #High },
+            { Value: quantity_cm,     Label: 'Mass',     ![@UI.Importance]: #High },
             { Value: est_value,       Label: 'Est. value',    ![@UI.Importance]: #High },
             { Value: est_basis,       Label: 'Estimated from', ![@UI.Importance]: #High },
             { Value: age_days,        Label: 'Age (days)',    ![@UI.Importance]: #High },
@@ -1676,7 +1680,7 @@ annotate InvoiceService.UnbilledTickets with @(
         FieldGroup#Exposure: {
             Data: [
                 { Value: billing_state, Label: 'State', Criticality: stateCriticality },
-                { Value: quantity_kg,   Label: 'Mass (kg)' },
+                { Value: quantity_cm,   Label: 'Mass' },
                 { Value: est_value,     Label: 'Estimated value' },
                 { Value: est_unit_price, Label: 'Estimated unit price' },
                 { Value: est_currency,  Label: 'Currency' },
@@ -1697,6 +1701,7 @@ annotate InvoiceService.UnbilledTickets with @(
                 { Value: flight_number,       Label: 'Flight' },
                 { Value: aircraft_reg,        Label: 'Tail' },
                 { Value: quantity_metered,    Label: 'Metered' },
+            { Value: quantity_metered_cv,    Label: 'Metered (carrier)' },
                 { Value: uom_code,            Label: 'UoM' },
                 { Value: match_status,        Label: 'Order match' }
             ]

@@ -56,9 +56,10 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
         LineItem: [
             { Value: delivery_number,    Label: 'Delivery',        ![@UI.Importance]: #High },
             { Value: delivered_quantity, Label: 'Delivered',       ![@UI.Importance]: #High },
-            { Value: fob_delta_kg,       Label: 'Gauge Delta (kg)',![@UI.Importance]: #High },
+            { Value: delivered_quantity_cv, Label: 'Delivered (carrier)',       ![@UI.Importance]: #High },
+            { Value: fob_delta_cm,       Label: 'Gauge Delta',![@UI.Importance]: #High },
             // NOT_RECONCILED must never read as a pass. Unknown is not agreement.
-            { Value: recon_variance_kg,  Label: 'Variance (kg)',   ![@UI.Importance]: #High },
+            { Value: recon_variance_cm,  Label: 'Variance',   ![@UI.Importance]: #High },
             { Value: recon_status,       Label: 'Reconciliation',  ![@UI.Importance]: #High },
             { Value: fob_source,         Label: 'Gauge Source',    ![@UI.Importance]: #Medium },
             { Value: supplier_count,     Label: 'Suppliers',       ![@UI.Importance]: #Medium }
@@ -89,8 +90,8 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
         // ------------------------------------------------------------------
         LineItem #FuelStatusCard: [
             { Value: recon_status,      Label: 'Reconciliation',   ![@UI.Importance]: #High },
-            { Value: fob_delta_kg,      Label: 'By gauge (kg)',    ![@UI.Importance]: #High },
-            { Value: recon_variance_kg, Label: 'Variance (kg)',    ![@UI.Importance]: #High },
+            { Value: fob_delta_cm,      Label: 'By gauge',    ![@UI.Importance]: #High },
+            { Value: recon_variance_cm, Label: 'Variance',    ![@UI.Importance]: #High },
             { Value: delivery_number,   Label: 'Delivery',         ![@UI.Importance]: #Medium },
             { Value: fob_source,        Label: 'Gauge source',     ![@UI.Importance]: #Medium }
         ]
@@ -120,7 +121,8 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
         LineItem: [
             { Value: ticket_number,      Label: 'Ticket',          ![@UI.Importance]: #High },
             { Value: quantity_metered,   Label: 'Metered',         ![@UI.Importance]: #High },
-            { Value: quantity_kg,        Label: 'Mass (kg)',       ![@UI.Importance]: #High },
+            { Value: quantity_metered_cv,   Label: 'Metered (carrier)',         ![@UI.Importance]: #High },
+            { Value: quantity_cm,        Label: 'Mass',       ![@UI.Importance]: #High },
             // Resolves TRANSITIVELY through the order. Blank means unmatched,
             // and unknown is not the same as none.
             { Value: supplier_name,      Label: 'Supplier',        ![@UI.Importance]: #High },
@@ -236,9 +238,9 @@ annotate PlanningService.FlightDispatches with @(
         LineItem: [
             { Value: plan_version,       Label: 'Version',        ![@UI.Importance]: #High },
             { Value: plan_status,        Label: 'Status',         ![@UI.Importance]: #High },
-            { Value: block_fuel_kg,      Label: 'Total Fuel Requirement (kg)',     ![@UI.Importance]: #High },
-            { Value: required_uplift_kg, Label: 'Uplift (kg)',    ![@UI.Importance]: #High },
-            { Value: rob_departure_kg,   Label: 'FOB Dep (kg)',   ![@UI.Importance]: #Medium },
+            { Value: block_fuel_cm,      Label: 'Total Fuel Requirement',     ![@UI.Importance]: #High },
+            { Value: required_uplift_cm, Label: 'Uplift',    ![@UI.Importance]: #High },
+            { Value: rob_departure_cm,   Label: 'FOB Dep',   ![@UI.Importance]: #Medium },
             { Value: alternate_airport,  Label: 'Alternate',      ![@UI.Importance]: #Medium },
             { Value: tail_number,        Label: 'Tail',           ![@UI.Importance]: #Medium },
             { Value: dispatch_source,    Label: 'Source',         ![@UI.Importance]: #Low },
@@ -292,6 +294,7 @@ annotate PlanningService.FuelOrders with @(
             { Value: order_number,     Label: 'Order Number',  ![@UI.Importance]: #High },
             { Value: station_code,     Label: 'Station',       ![@UI.Importance]: #High },
             { Value: ordered_quantity, Label: 'Quantity',      ![@UI.Importance]: #High },
+            { Value: ordered_quantity_cv, Label: 'Quantity (carrier)',      ![@UI.Importance]: #High },
             { Value: currency_code,    Label: 'Currency',      ![@UI.Importance]: #Low },
             { Value: status,           Label: 'Status',        ![@UI.Importance]: #High },
             { Value: requested_date,   Label: 'Requested',     ![@UI.Importance]: #Medium },
@@ -830,10 +833,10 @@ annotate PlanningService.FlightSchedule with @(
         // they were obtained. WP-19 defines trip burn as OFF minus ON.
         FieldGroup #FuelOnBoard: {
             Data: [
-                { Value: fob_at_out_kg, Label: 'FOB at OUT (kg)' },
-                { Value: fob_at_off_kg, Label: 'FOB at OFF (kg)' },
-                { Value: fob_at_on_kg,  Label: 'FOB at ON (kg)' },
-                { Value: fob_at_in_kg,  Label: 'FOB at IN (kg)' },
+                { Value: fob_at_out_cm, Label: 'FOB at OUT' },
+                { Value: fob_at_off_cm, Label: 'FOB at OFF' },
+                { Value: fob_at_on_cm,  Label: 'FOB at ON' },
+                { Value: fob_at_in_cm,  Label: 'FOB at IN' },
                 { Value: fob_source,    Label: 'Reading Source' },
                 // THE APU'S HOURS WITH THE FOUR GAUGES, because this is the
                 // panel that has to add up. The block burn is OUT minus IN;
@@ -1245,12 +1248,12 @@ annotate PlanningService.FlightDispatches with @(
     UI.LineItem #DispatchCard: [
         { Value: plan_version,        Label: 'Version' },
         { Value: plan_status,         Label: 'Status' },
-        { Value: trip_fuel_kg,        Label: 'Trip (kg)' },
-        { Value: contingency_fuel_kg, Label: 'Contingency (kg)' },
+        { Value: trip_fuel_cm,        Label: 'Trip' },
+        { Value: contingency_fuel_cm, Label: 'Contingency' },
         { Value: contingency_pct_of_trip, Label: '% of trip' },
-        { Value: block_fuel_kg,       Label: 'Total Fuel Requirement (kg)' },
-        { Value: dispatch_qty_kg,     Label: 'Dispatch (kg)' },
-        { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' },
+        { Value: block_fuel_cm,       Label: 'Total Fuel Requirement' },
+        { Value: dispatch_qty_cm,     Label: 'Dispatch' },
+        { Value: rob_departure_cm,    Label: 'FOB at departure' },
         // Row-level cross-app navigation: standard UI.LineItem pattern, not
         // an OVP-specific mechanism. Renders as a link within the row,
         // resolved via the shared ID (same underlying table row on
@@ -1338,6 +1341,7 @@ annotate PlanningService.FuelOrders with @(
         { Value: status,           Label: 'Status' },
         { Value: station_code,     Label: 'Station' },
         { Value: ordered_quantity, Label: 'Ordered' },
+            { Value: ordered_quantity_cv, Label: 'Ordered (carrier)' },
         { Value: unit_price,       Label: 'Unit price' },
         { Value: total_amount,     Label: 'Total' },
         {
@@ -1360,8 +1364,9 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
         { Value: ticket_number,      Label: 'Ticket' },
         { Value: supplier_name,      Label: 'Supplier' },
         { Value: quantity_metered,   Label: 'Metered' },
+            { Value: quantity_metered_cv,   Label: 'Metered (carrier)' },
         { Value: uom_code,           Label: 'UoM' },
-        { Value: quantity_kg,        Label: 'Mass (kg)' },
+        { Value: quantity_cm,        Label: 'Mass' },
         { Value: match_status,       Label: 'Match' },
         { Value: delivery_timestamp, Label: 'Delivered' },
         {
@@ -1386,8 +1391,8 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
 annotate PlanningService.FuelDeliveries with @(
     UI.LineItem #DeliveryCard: [
         { Value: delivery_number,  Label: 'Delivery' },
-        { Value: fob_before_kg,    Label: 'FOB before (kg)' },
-        { Value: fob_after_kg,     Label: 'FOB after (kg)' },
+        { Value: fob_before_cm,    Label: 'FOB before' },
+        { Value: fob_after_cm,     Label: 'FOB after' },
         { Value: refuel_start_utc, Label: 'Refuel start' },
         { Value: refuel_end_utc,   Label: 'Refuel end' },
         { Value: supplier_count,   Label: 'Suppliers' },
@@ -1418,12 +1423,12 @@ annotate PlanningService.FuelDeliveries with @(
 annotate PlanningService.FuelBurns with @(
     UI.LineItem #BurnCard: [
         { Value: burn_date,       Label: 'Burn date' },
-        { Value: planned_burn_kg, Label: 'Planned (kg)' },
-        { Value: actual_burn_kg,  Label: 'Actual (kg)' },
-        { Value: variance_kg,     Label: 'Variance (kg)' },
+        { Value: planned_burn_cm, Label: 'Planned' },
+        { Value: actual_burn_cm,  Label: 'Actual' },
+        { Value: variance_cm,     Label: 'Variance' },
         { Value: variance_status, Label: 'Verdict' },
-        { Value: engine_burn_kg,  Label: 'Engine (kg)' },
-        { Value: apu_burn_kg,     Label: 'APU (kg)' },
+        { Value: engine_burn_cm,  Label: 'Engine' },
+        { Value: apu_burn_cm,     Label: 'APU' },
         {
             $Type          : 'UI.DataFieldForIntentBasedNavigation',
             Label          : 'Open in Fuel Burns',
@@ -1673,6 +1678,7 @@ annotate PlanningService.FuelOrders with @(
         FieldGroup#OrderQty: {
             Data: [
                 { Value: ordered_quantity, Label: 'Ordered quantity' },
+            { Value: ordered_quantity_cv, Label: 'Ordered quantity (carrier)' },
                 { Value: unit_price,       Label: 'Unit price' },
                 { Value: total_amount,     Label: 'Total amount' },
                 { Value: currency_code,    Label: 'Currency' }
@@ -1722,9 +1728,10 @@ annotate PlanningService.FLIGHT_FUEL_TICKETS with @(
         FieldGroup#TicketQty: {
             Data: [
                 { Value: quantity_metered, Label: 'Metered quantity' },
+            { Value: quantity_metered_cv, Label: 'Metered quantity (carrier)' },
                 { Value: uom_code,         Label: 'Metered in' },
                 { Value: density_value,    Label: 'Density' },
-                { Value: quantity_kg,      Label: 'Mass (kg)' }
+                { Value: quantity_cm,      Label: 'Mass' }
             ]
         },
         FieldGroup#TicketWhere: {
@@ -1796,17 +1803,17 @@ annotate PlanningService.FlightDispatches with @(
         // it lands.
         FieldGroup#DispatchQty: {
             Data: [
-                { Value: trip_fuel_kg,        Label: 'Trip (kg)' },
-                { Value: contingency_fuel_kg, Label: 'Contingency (kg)' },
+                { Value: trip_fuel_cm,        Label: 'Trip' },
+                { Value: contingency_fuel_cm, Label: 'Contingency' },
                 { Value: contingency_pct_of_trip, Label: 'Contingency (% of trip, rule: 5.00)' },
-                { Value: alternate_fuel_kg,   Label: 'Alternate (kg)' },
-                { Value: final_reserve_kg,    Label: 'Final reserve (kg)' },
-                { Value: additional_fuel_kg,  Label: 'Additional — planned (kg)' },
-                { Value: taxi_fuel_kg,        Label: 'Taxi (kg)' },
-                { Value: extra_fuel_kg,       Label: 'Extra — commander (kg)' },
-                { Value: block_fuel_kg,       Label: 'Total fuel requirement = sum of the seven (kg)' },
-                { Value: dispatch_qty_kg,     Label: 'Dispatch quantity, confirmed (kg)' },
-                { Value: rob_departure_kg,    Label: 'FOB at departure (kg)' }
+                { Value: alternate_fuel_cm,   Label: 'Alternate' },
+                { Value: final_reserve_cm,    Label: 'Final reserve' },
+                { Value: additional_fuel_cm,  Label: 'Additional — planned' },
+                { Value: taxi_fuel_cm,        Label: 'Taxi' },
+                { Value: extra_fuel_cm,       Label: 'Extra — commander' },
+                { Value: block_fuel_cm,       Label: 'Total fuel requirement = sum of the seven' },
+                { Value: dispatch_qty_cm,     Label: 'Dispatch quantity, confirmed' },
+                { Value: rob_departure_cm,    Label: 'FOB at departure' }
             ]
         },
         FieldGroup#DispatchWhere: {
@@ -1840,6 +1847,7 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
                 { Value: delivery_number,    Label: 'Delivery number' },
                 { Value: delivery_date,      Label: 'Delivery date' },
                 { Value: delivered_quantity, Label: 'Delivered quantity' },
+            { Value: delivered_quantity_cv, Label: 'Delivered quantity (carrier)' },
                 { Value: uom_code,           Label: 'Delivered in' },
                 { Value: supplier_count,     Label: 'Suppliers' },
                 { Value: order.order_number, Label: 'Order' }
@@ -1869,11 +1877,11 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
         // ------------------------------------------------------------------
         FieldGroup#AircraftGauge: {
             Data: [
-                { Value: fob_at_arrival_kg, Label: 'FOB at arrival (kg)' },
-                { Value: ground_burn_kg,    Label: 'Ground burn (kg)' },
-                { Value: fob_before_kg,     Label: 'FOB before uplift (kg)' },
-                { Value: fob_after_kg,      Label: 'FOB after uplift (kg)' },
-                { Value: fob_delta_kg,      Label: 'Uplift by gauge (kg)' },
+                { Value: fob_at_arrival_cm, Label: 'FOB at arrival' },
+                { Value: ground_burn_cm,    Label: 'Ground burn' },
+                { Value: fob_before_cm,     Label: 'FOB before uplift' },
+                { Value: fob_after_cm,      Label: 'FOB after uplift' },
+                { Value: fob_delta_cm,      Label: 'Uplift by gauge' },
                 { Value: fob_source,        Label: 'Gauge source' }
             ]
         },
@@ -1903,7 +1911,7 @@ annotate PlanningService.FLIGHT_FUEL_DELIVERIES with @(
         // than by repeating the field.
         FieldGroup#DeliveryRecon: {
             Data: [
-                { Value: recon_variance_kg, Label: 'Reconciliation variance (kg)' },
+                { Value: recon_variance_cm, Label: 'Reconciliation variance' },
                 { Value: recon_status,      Label: 'Reconciliation status' }
             ]
         },
@@ -2214,8 +2222,8 @@ annotate PlanningService.ApuUsage with @(
             { Value: apu_start_utc,      Label: 'Start (UTC)',      ![@UI.Importance]: #High },
             { Value: apu_stop_utc,       Label: 'Stop (UTC)',       ![@UI.Importance]: #High },
             { Value: running_minutes,    Label: 'Minutes',          ![@UI.Importance]: #High },
-            { Value: burn_rate_kg_hr,    Label: 'Rate (kg/h)',      ![@UI.Importance]: #High },
-            { Value: apu_burn_kg,        Label: 'APU Burn (kg)',    ![@UI.Importance]: #High },
+            { Value: burn_rate_cm_hr,    Label: 'Rate (per hour)',      ![@UI.Importance]: #High },
+            { Value: apu_burn_cm,        Label: 'APU Burn',    ![@UI.Importance]: #High },
             { Value: allocated_flight_ID, Label: 'Allocated Flight', ![@UI.Importance]: #High },
             {
                 Value: apu_source,
@@ -2275,9 +2283,9 @@ annotate PlanningService.FuelBurns with @(
         FieldGroup#BurnSplit: {
             Label: 'Burn Split',
             Data: [
-                { Value: actual_burn_kg, Label: 'Block Burn (kg)' },
-                { Value: apu_burn_kg,    Label: 'APU burn (kg)' },
-                { Value: engine_burn_kg, Label: 'Engine Burn (kg)' }
+                { Value: actual_burn_cm, Label: 'Block Burn' },
+                { Value: apu_burn_cm,    Label: 'APU burn' },
+                { Value: engine_burn_cm, Label: 'Engine Burn' }
             ]
         }
     }

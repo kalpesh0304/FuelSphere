@@ -48,16 +48,16 @@ annotate ValuationService.StockMovements with @(
             { Value: station,           Label: 'Station',       ![@UI.Importance]: #Medium },
             { Value: reference,         Label: 'Reference',     ![@UI.Importance]: #High },
             { Value: line_type,         Label: 'Line type',     ![@UI.Importance]: #High },
-            { Value: qty_kg,            Label: 'Qty (kg)',      ![@UI.Importance]: #High },
-            { Value: qty_l,             Label: 'Qty (L)',       ![@UI.Importance]: #Medium },
+            { Value: qty_cm,            Label: 'Qty',      ![@UI.Importance]: #High },
+            { Value: qty_cv,             Label: 'Qty',       ![@UI.Importance]: #Medium },
             { Value: specific_gravity,  Label: 'Sp. gravity',   ![@UI.Importance]: #Low },
-            { Value: rate_usd_per_kg,   Label: 'Rate USD/kg',   ![@UI.Importance]: #High },
-            { Value: value_usd,         Label: 'Value USD',     ![@UI.Importance]: #High },
+            { Value: rate_per_cm,   Label: 'Rate per unit',   ![@UI.Importance]: #High },
+            { Value: value_usd,         Label: 'Value',     ![@UI.Importance]: #High },
             // MAP only. Blank on a FIFO row because FIFO has no single running
             // balance - its balance is the open layers, on the Balances view.
-            { Value: balance_qty_kg,    Label: 'Balance qty (kg)', ![@UI.Importance]: #Medium },
-            { Value: balance_value_usd, Label: 'Balance value USD', ![@UI.Importance]: #Medium },
-            { Value: map_usd_per_kg,    Label: 'MAP USD/kg',    ![@UI.Importance]: #Medium }
+            { Value: balance_qty_cm,    Label: 'Balance qty', ![@UI.Importance]: #Medium },
+            { Value: balance_value_usd, Label: 'Balance value', ![@UI.Importance]: #Medium },
+            { Value: map_per_cm,    Label: 'MAP per unit',    ![@UI.Importance]: #Medium }
         ],
 
         PresentationVariant: {
@@ -98,11 +98,11 @@ annotate ValuationService.StockMovements with {
                       @Common.QuickInfo: 'Signed: positive in, negative out, so the column sums to the net movement.';
     qty_l             @title: 'Qty (L)';
     specific_gravity  @title: 'Sp. gravity';
-    rate_usd_per_kg   @title: 'Rate USD/kg';
-    value_usd         @title: 'Value USD';
+    rate_usd_per_kg   @title: 'Rate per unit';
+    value_usd         @title: 'Value';
     balance_qty_kg    @title: 'Balance qty (kg)';
-    balance_value_usd @title: 'Balance value USD';
-    map_usd_per_kg    @title: 'MAP USD/kg';
+    balance_value_usd @title: 'Balance value';
+    map_usd_per_kg    @title: 'MAP per unit';
     line_order        @title: 'Line order';
     sequence          @title: 'Sequence';
 }
@@ -123,13 +123,13 @@ annotate ValuationService.StockBalances with @(
             { Value: station,          Label: 'Opened at',         ![@UI.Importance]: #Medium },
             { Value: flight_number,    Label: 'Flight',            ![@UI.Importance]: #Medium },
             { Value: flight_date,      Label: 'Flight date',       ![@UI.Importance]: #Medium },
-            { Value: uplift_qty_kg,    Label: 'Uplift qty (kg)',   ![@UI.Importance]: #High },
-            { Value: uplift_qty_l,     Label: 'Uplift qty (L)',    ![@UI.Importance]: #Low },
-            { Value: balance_qty_kg,   Label: 'Balance qty (kg)',  ![@UI.Importance]: #High },
-            { Value: balance_qty_l,    Label: 'Balance qty (L)',   ![@UI.Importance]: #Low },
+            { Value: uplift_qty_cm,    Label: 'Uplift qty',   ![@UI.Importance]: #High },
+            { Value: uplift_qty_cv,     Label: 'Uplift qty',    ![@UI.Importance]: #Low },
+            { Value: balance_qty_cm,   Label: 'Balance qty',  ![@UI.Importance]: #High },
+            { Value: balance_qty_cv,    Label: 'Balance qty',   ![@UI.Importance]: #Low },
             { Value: specific_gravity, Label: 'Sp. gravity',       ![@UI.Importance]: #Low },
-            { Value: rate_usd_per_kg,  Label: 'Rate USD/kg',       ![@UI.Importance]: #High },
-            { Value: value_usd,        Label: 'Value USD',         ![@UI.Importance]: #High }
+            { Value: rate_per_cm,  Label: 'Rate per unit',       ![@UI.Importance]: #High },
+            { Value: value_usd,        Label: 'Value',         ![@UI.Importance]: #High }
         ],
 
         PresentationVariant: {
@@ -165,8 +165,8 @@ annotate ValuationService.StockBalances with {
                      @Common.QuickInfo: 'What is left of this layer. A fully consumed batch keeps its row at zero - that it is exhausted is a fact worth being able to read.';
     balance_qty_l    @title: 'Balance qty (L)';
     specific_gravity @title: 'Sp. gravity';
-    rate_usd_per_kg  @title: 'Rate USD/kg';
-    value_usd        @title: 'Value USD';
+    rate_usd_per_kg  @title: 'Rate per unit';
+    value_usd        @title: 'Value';
 }
 
 // ===========================================================================
@@ -185,10 +185,10 @@ annotate ValuationService.BurnValuations with @(
             { Value: station,              Label: 'Station',       ![@UI.Importance]: #Medium },
             { Value: line_type,            Label: 'Line type',     ![@UI.Importance]: #High },
             { Value: burn_ref,             Label: 'Burn',          ![@UI.Importance]: #High },
-            { Value: burn_qty_kg,          Label: 'Burn qty (kg)', ![@UI.Importance]: #High },
-            { Value: burn_qty_l,           Label: 'Burn qty (L)',  ![@UI.Importance]: #Low },
-            { Value: burn_rate_usd_per_kg, Label: 'Burn rate USD/kg', ![@UI.Importance]: #High },
-            { Value: burn_value_usd,       Label: 'Burn value USD', ![@UI.Importance]: #High },
+            { Value: burn_qty_cm,          Label: 'Burn qty', ![@UI.Importance]: #High },
+            { Value: burn_qty_cv,           Label: 'Burn qty',  ![@UI.Importance]: #Low },
+            { Value: burn_rate_per_cm, Label: 'Burn rate per unit', ![@UI.Importance]: #High },
+            { Value: burn_value_usd,       Label: 'Burn value', ![@UI.Importance]: #High },
             { Value: layers_consumed,      Label: 'Layers',        ![@UI.Importance]: #Medium },
             { Value: qty_basis,            Label: 'Qty basis',     ![@UI.Importance]: #Low }
         ],
@@ -220,9 +220,9 @@ annotate ValuationService.BurnValuations with {
     burn_ref             @title: 'Burn';
     burn_qty_kg          @title: 'Burn qty (kg)';
     burn_qty_l           @title: 'Burn qty (L)';
-    burn_rate_usd_per_kg @title: 'Burn rate USD/kg'
+    burn_rate_usd_per_kg @title: 'Burn rate per unit'
                          @Common.QuickInfo: 'Derived, never entered: value divided by quantity. Under FIFO it lands between the prices of the layers consumed and belongs to none of them.';
-    burn_value_usd       @title: 'Burn value USD';
+    burn_value_usd       @title: 'Burn value';
     layers_consumed      @title: 'Layers'
                          @Common.QuickInfo: 'How many batches the burn spanned. Always 1 under MAP; under FIFO, more than 1 means the burn crossed a price change.';
     qty_basis            @title: 'Qty basis'

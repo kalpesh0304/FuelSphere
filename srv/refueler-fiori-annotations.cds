@@ -393,7 +393,8 @@ annotate RefuelerService.DeliveryRecords with @(
             { Value: delivery_number, Label: 'Delivery #', ![@UI.Importance]: #High },
             { Value: delivery_date, Label: 'Date', ![@UI.Importance]: #High },
             { Value: delivery_time, Label: 'Time', ![@UI.Importance]: #Medium },
-            { Value: delivered_quantity, Label: 'Quantity (kg)', ![@UI.Importance]: #High },
+            { Value: delivered_quantity, Label: 'Quantity', ![@UI.Importance]: #High },
+            { Value: delivered_quantity_cv, Label: 'Quantity (carrier)', ![@UI.Importance]: #High },
             { Value: temperature, Label: 'Temp (C)', ![@UI.Importance]: #Medium },
             { Value: density, Label: 'Density (kg/L)', ![@UI.Importance]: #Medium },
             {
@@ -437,7 +438,8 @@ annotate RefuelerService.DeliveryRecords with @(
                 { Value: delivery_number, Label: 'Delivery Number' },
                 { Value: delivery_date, Label: 'Delivery Date' },
                 { Value: delivery_time, Label: 'Delivery Time' },
-                { Value: delivered_quantity, Label: 'Delivered Quantity (kg)' },
+                { Value: delivered_quantity, Label: 'Delivered Quantity' },
+            { Value: delivered_quantity_cv, Label: 'Delivered Quantity (carrier)' },
                 { Value: vehicle_id, Label: 'Vehicle ID' },
                 { Value: driver_name, Label: 'Driver Name' },
                 { Value: status, Label: 'Status' }
@@ -449,7 +451,8 @@ annotate RefuelerService.DeliveryRecords with @(
             Data: [
                 { Value: temperature, Label: 'Temperature (C)' },
                 { Value: density, Label: 'Density (kg/L)' },
-                { Value: temperature_corrected_qty, Label: 'Temperature Corrected Qty (kg)' }
+                { Value: temperature_corrected_qty, Label: 'Temperature Corrected Qty' },
+            { Value: temperature_corrected_qty_cv, Label: 'Temperature Corrected Qty (carrier)' }
             ]
         },
 
@@ -469,6 +472,7 @@ annotate RefuelerService.DeliveryRecords with @(
             Label: 'Variance',
             Data: [
                 { Value: quantity_variance, Label: 'Quantity Variance' },
+            { Value: quantity_variance_cv, Label: 'Quantity Variance (carrier)' },
                 { Value: variance_percentage, Label: 'Variance %' },
                 { Value: variance_flag, Label: 'Variance Flag' },
                 { Value: variance_reason, Label: 'Variance Reason' }

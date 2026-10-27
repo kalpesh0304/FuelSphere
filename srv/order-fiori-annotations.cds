@@ -56,7 +56,8 @@ annotate FuelOrderService.FuelOrders with @(
             { Value: supplier.supplier_code, Label: 'Supplier code', ![@UI.Importance]: #Medium },
             { Value: supplier.s4_vendor_no,  Label: 'SAP supplier no', ![@UI.Importance]: #Medium },
             { Value: product.product_name, Label: 'Fuel Type', ![@UI.Importance]: #Medium },
-            { Value: ordered_quantity, Label: 'Quantity (kg)', ![@UI.Importance]: #High },
+            { Value: ordered_quantity, Label: 'Quantity', ![@UI.Importance]: #High },
+            { Value: ordered_quantity_cv, Label: 'Quantity (carrier)', ![@UI.Importance]: #High },
             {
                 Value: status,
                 Label: 'Status',
@@ -127,6 +128,7 @@ annotate FuelOrderService.FuelOrders with @(
                 // and a header that hardcodes one is wrong the moment an
                 // order is placed in litres.
                 { Value: ordered_quantity, Label: 'Ordered' },
+            { Value: ordered_quantity_cv, Label: 'Ordered (carrier)' },
                 { Value: uom_code, Label: 'UoM' }
             ]
         },
@@ -243,7 +245,8 @@ annotate FuelOrderService.FuelOrders with @(
             Data: [
                 { Value: product.product_name, Label: 'Fuel Product' },
                 { Value: product.specification, Label: 'Specification' },
-                { Value: ordered_quantity, Label: 'Ordered Quantity (LTR)' },
+                { Value: ordered_quantity, Label: 'Ordered Quantity' },
+            { Value: ordered_quantity_cv, Label: 'Ordered Quantity (carrier)' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 // WP-11 / decision A2. Planning is in kilograms and the order
                 // is in volume, so the order carries the mass it was
@@ -251,7 +254,7 @@ annotate FuelOrderService.FuelOrders with @(
                 // row supplied it. Shown together because the three only mean
                 // anything as a set: they exist so the conversion can be
                 // reproduced from the order alone.
-                { Value: ordered_quantity_kg, Label: 'Ordered Quantity (kg)' },
+                { Value: ordered_quantity_cm, Label: 'Ordered Quantity' },
                 { Value: conversion_density, Label: 'Conversion Density' },
                 { Value: conversion_source, Label: 'Density Source' },
 
@@ -278,7 +281,8 @@ annotate FuelOrderService.FuelOrders with @(
                 { Value: crew_review_status, Label: 'Review Status' },
                 { Value: crew_reviewed_by, Label: 'Reviewed By (Captain)' },
                 { Value: crew_reviewed_at, Label: 'Reviewed At' },
-                { Value: crew_adjusted_quantity, Label: 'Crew Adjusted Quantity (kg)' },
+                { Value: crew_adjusted_quantity, Label: 'Crew Adjusted Quantity' },
+            { Value: crew_adjusted_quantity_cv, Label: 'Crew Adjusted Quantity (carrier)' },
                 { Value: crew_adjustment_reason, Label: 'Adjustment Reason' },
                 { Value: crew_notes, Label: 'Crew Notes' }
             ]
@@ -701,7 +705,8 @@ annotate FuelOrderService.FuelDeliveries with @(
             { Value: flight_date, Label: 'Flight Date', ![@UI.Importance]: #Medium },
             { Value: delivery_date, Label: 'Date', ![@UI.Importance]: #High },
             { Value: delivery_time, Label: 'Time', ![@UI.Importance]: #Medium },
-            { Value: delivered_quantity, Label: 'Delivered (kg)', ![@UI.Importance]: #High },
+            { Value: delivered_quantity, Label: 'Delivered', ![@UI.Importance]: #High },
+            { Value: delivered_quantity_cv, Label: 'Delivered (carrier)', ![@UI.Importance]: #High },
             { Value: temperature, Label: 'Temp (C)', ![@UI.Importance]: #Low },
             { Value: density, Label: 'Density', ![@UI.Importance]: #Low },
             {
@@ -718,7 +723,7 @@ annotate FuelOrderService.FuelDeliveries with @(
             // fob_source belongs with them because it is what set the
             // threshold - the same variance is a pass on a crew reading and a
             // failure on an ACARS one.
-            { Value: flight_variance_kg, Label: 'Flight Variance (kg)', ![@UI.Importance]: #High },
+            { Value: flight_variance_cm, Label: 'Flight Variance', ![@UI.Importance]: #High },
             {
                 Value: flight_variance_status,
                 Label: 'Flight Variance Status',
@@ -814,6 +819,7 @@ annotate FuelOrderService.FuelDeliveries with @(
                 { Value: delivery_date, Label: 'Delivery Date' },
                 { Value: delivery_time, Label: 'Delivery Time' },
                 { Value: delivered_quantity, Label: 'Delivered Quantity' },
+            { Value: delivered_quantity_cv, Label: 'Delivered Quantity (carrier)' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_method, Label: 'Delivery Method' },
                 { Value: vehicle_id, Label: 'Vehicle ID' },
@@ -831,7 +837,8 @@ annotate FuelOrderService.FuelDeliveries with @(
             Data: [
                 { Value: temperature, Label: 'Temperature (C)' },
                 { Value: density, Label: 'Density (kg/L)' },
-                { Value: temperature_corrected_qty, Label: 'Temperature Corrected Qty (kg)' }
+                { Value: temperature_corrected_qty, Label: 'Temperature Corrected Qty' },
+            { Value: temperature_corrected_qty_cv, Label: 'Temperature Corrected Qty (carrier)' }
             ]
         },
 
@@ -845,9 +852,9 @@ annotate FuelOrderService.FuelDeliveries with @(
                 // Two arrival readings, not one. Ground time sits between
                 // them, so they are shown together or the difference between
                 // them looks like an error rather than a measurement.
-                { Value: fob_before_kg, Label: 'FOB Before Uplift (kg)' },
-                { Value: fob_after_kg, Label: 'FOB After Uplift (kg)' },
-                { Value: fob_delta_kg, Label: 'FOB Uplift (kg)' }
+                { Value: fob_before_cm, Label: 'FOB Before Uplift' },
+                { Value: fob_after_cm, Label: 'FOB After Uplift' },
+                { Value: fob_delta_cm, Label: 'FOB Uplift' }
             ]
         },
 
@@ -865,10 +872,10 @@ annotate FuelOrderService.FuelDeliveries with @(
                         { $Eq: [{ $Path: 'flight_variance_status' }, 'RECONCILED'] }, 3,
                         { $If: [ { $Eq: [{ $Path: 'flight_variance_status' }, 'VARIANCE'] }, 1, 2 ] } ] } }
                 },
-                { Value: flight_variance_kg,  Label: 'Flight Variance (kg)' },
-                { Value: flight_delivered_kg, Label: 'Total Delivered, Flight (kg)' },
-                { Value: flight_metered_kg,   Label: 'Total Metered, Flight (kg)' },
-                { Value: flight_tolerance_kg, Label: 'Tolerance (kg)' }
+                { Value: flight_variance_cm,  Label: 'Flight Variance' },
+                { Value: flight_delivered_cm, Label: 'Total Delivered, Flight' },
+                { Value: flight_metered_cm,   Label: 'Total Metered, Flight' },
+                { Value: flight_tolerance_cm, Label: 'Tolerance' }
             ]
         },
 
@@ -1008,8 +1015,10 @@ annotate FuelOrderService.FuelTickets with @(
             // uom_code against each rather than in a column of its own,
             // several positions away.
             { Value: quantity, Label: 'Claimed Quantity', ![@UI.Importance]: #High },
+            { Value: quantity_cv, Label: 'Claimed Quantity (carrier)', ![@UI.Importance]: #High },
             { Value: quantity_metered, Label: 'Metered', ![@UI.Importance]: #High },
-            { Value: quantity_kg, Label: 'Mass (kg)', ![@UI.Importance]: #High },
+            { Value: quantity_metered_cv, Label: 'Metered (carrier)', ![@UI.Importance]: #High },
+            { Value: quantity_cm, Label: 'Mass', ![@UI.Importance]: #High },
             { Value: delivery_timestamp, Label: 'Delivery Time', ![@UI.Importance]: #Medium },
             {
                 Value: status,
@@ -1122,6 +1131,7 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: ticket_number, Label: 'Ticket Number' },
                 { Value: internal_number, Label: 'Internal Number' },
                 { Value: quantity, Label: 'Claimed Quantity' },
+            { Value: quantity_cv, Label: 'Claimed Quantity (carrier)' },
                 { Value: uom_code, Label: 'Unit of Measure' },
                 { Value: delivery_timestamp, Label: 'Delivery Time' },
                 // WHICH DELIVERY THIS TICKET BELONGS TO. The first ticket of a
@@ -1151,13 +1161,14 @@ annotate FuelOrderService.FuelTickets with @(
                 { Value: meter_start, Label: 'Meter Start' },
                 { Value: meter_end, Label: 'Meter End' },
                 { Value: quantity_metered, Label: 'Metered Quantity' },
+            { Value: quantity_metered_cv, Label: 'Metered Quantity (carrier)' },
                 { Value: quantity_flag, Label: 'Gross or Net' },
                 // Density is per uom_code, which is why density_uom sits
                 // beside it: 0.8020 KGL and 802.0 KGM are the same fuel.
                 { Value: density_value, Label: 'Density' },
                 { Value: density_basis, Label: 'Density Basis' },
                 { Value: density_temp_c, Label: 'Density Temperature (C)' },
-                { Value: quantity_kg, Label: 'Canonical Mass (kg)' },
+                { Value: quantity_cm, Label: 'Canonical Mass' },
                 { Value: batch_coa_ref, Label: 'Certificate of Analysis' },
                 // WP-33
                 { Value: vehicle_id, Label: 'Vehicle' },
@@ -1495,13 +1506,13 @@ annotate FuelOrderService.FlightDispatches with @(
             { Value: tail_number, Label: 'Tail Number', ![@UI.Importance]: #High },
             { Value: atd, Label: 'ATD', ![@UI.Importance]: #Medium },
             { Value: ata, Label: 'ATA', ![@UI.Importance]: #Low },
-            { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)', ![@UI.Importance]: #High },
+            { Value: dispatch_qty_cm, Label: 'Dispatch Qty', ![@UI.Importance]: #High },
             // UI-B-03: the two figures the whole plan resolves to, in the list
             // rather than one level down.
-            { Value: block_fuel_kg, Label: 'Total Fuel Requirement (kg)', ![@UI.Importance]: #High },
-            { Value: required_uplift_kg, Label: 'Required Uplift (kg)', ![@UI.Importance]: #High },
-            { Value: rob_departure_kg, Label: 'Plan FOB (Pre-fueling)', ![@UI.Importance]: #Medium },
-            { Value: payload_kg, Label: 'Payload (kg)', ![@UI.Importance]: #Medium },
+            { Value: block_fuel_cm, Label: 'Total Fuel Requirement', ![@UI.Importance]: #High },
+            { Value: required_uplift_cm, Label: 'Required Uplift', ![@UI.Importance]: #High },
+            { Value: rob_departure_cm, Label: 'Plan FOB (Pre-fueling)', ![@UI.Importance]: #Medium },
+            { Value: payload_cm, Label: 'Payload', ![@UI.Importance]: #Medium },
             { Value: dispatch_source, Label: 'Source', ![@UI.Importance]: #Medium },
             { Value: dispatch_timestamp, Label: 'Dispatch Time', ![@UI.Importance]: #Low },
             // THE ROUTE THE PLAN IS FOR. Read through the flight rather than
@@ -1541,9 +1552,9 @@ annotate FuelOrderService.FlightDispatches with @(
 
         FieldGroup #DispatchQuantities: {
             Data: [
-                { Value: dispatch_qty_kg, Label: 'Dispatch Qty (kg)' },
-                { Value: rob_departure_kg, Label: 'Plan FOB (Pre-fueling)' },
-                { Value: payload_kg, Label: 'Payload (kg)' }
+                { Value: dispatch_qty_cm, Label: 'Dispatch Qty' },
+                { Value: rob_departure_cm, Label: 'Plan FOB (Pre-fueling)' },
+                { Value: payload_cm, Label: 'Payload' }
             ]
         },
 
@@ -1634,17 +1645,17 @@ annotate FuelOrderService.FlightDispatches with @(
                 // The two figures the required uplift is the difference of. On the
                 // fuel order page this section is the whole of the plan a
                 // person sees, and an uplift without them is an assertion.
-                { Value: dispatch_qty_kg,     Label: 'Dispatch Quantity (kg)', ![@UI.Importance]: #High },
-                { Value: rob_departure_kg,    Label: 'FOB at Departure (kg)',  ![@UI.Importance]: #High },
-                { Value: trip_fuel_kg,        Label: 'Trip Fuel (kg)',        ![@UI.Importance]: #High },
-                { Value: contingency_fuel_kg, Label: 'Contingency (kg)',      ![@UI.Importance]: #High },
-                { Value: alternate_fuel_kg,   Label: 'Alternate (kg)',        ![@UI.Importance]: #High },
-                { Value: final_reserve_kg,    Label: 'Final Reserve (kg)',    ![@UI.Importance]: #High },
-                { Value: taxi_fuel_kg,        Label: 'Taxi (kg)',             ![@UI.Importance]: #Medium },
-                { Value: additional_fuel_kg,  Label: 'Additional (kg)',       ![@UI.Importance]: #Medium },
-                { Value: extra_fuel_kg,       Label: 'Extra (kg)',            ![@UI.Importance]: #Medium },
-                { Value: block_fuel_kg,       Label: 'Total Fuel Requirement (kg)',       ![@UI.Importance]: #High },
-                { Value: required_uplift_kg,  Label: 'Required Uplift (kg)',  ![@UI.Importance]: #High }
+                { Value: dispatch_qty_cm,     Label: 'Dispatch Quantity', ![@UI.Importance]: #High },
+                { Value: rob_departure_cm,    Label: 'FOB at Departure',  ![@UI.Importance]: #High },
+                { Value: trip_fuel_cm,        Label: 'Trip Fuel',        ![@UI.Importance]: #High },
+                { Value: contingency_fuel_cm, Label: 'Contingency',      ![@UI.Importance]: #High },
+                { Value: alternate_fuel_cm,   Label: 'Alternate',        ![@UI.Importance]: #High },
+                { Value: final_reserve_cm,    Label: 'Final Reserve',    ![@UI.Importance]: #High },
+                { Value: taxi_fuel_cm,        Label: 'Taxi',             ![@UI.Importance]: #Medium },
+                { Value: additional_fuel_cm,  Label: 'Additional',       ![@UI.Importance]: #Medium },
+                { Value: extra_fuel_cm,       Label: 'Extra',            ![@UI.Importance]: #Medium },
+                { Value: block_fuel_cm,       Label: 'Total Fuel Requirement',       ![@UI.Importance]: #High },
+                { Value: required_uplift_cm,  Label: 'Required Uplift',  ![@UI.Importance]: #High }
             ]
         },
 
@@ -1697,9 +1708,9 @@ annotate FuelOrderService.FlightDispatches with @(
 
         FieldGroup #DispatchQty: {
             Data: [
-                { Value: dispatch_qty_kg, Label: 'Dispatch Quantity (kg)' },
-                { Value: rob_departure_kg, Label: 'FOB at Departure (kg)' },
-                { Value: payload_kg, Label: 'Payload Weight (kg)' }
+                { Value: dispatch_qty_cm, Label: 'Dispatch Quantity' },
+                { Value: rob_departure_cm, Label: 'FOB at Departure' },
+                { Value: payload_cm, Label: 'Payload Weight' }
             ]
         },
 
