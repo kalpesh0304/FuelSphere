@@ -124,19 +124,24 @@ def build(D, upload_path):
             return 'WFS001'
         return 'ATINT01'
 
+    # TAP BOOKS IN EUR, so every TAP contract, order, ticket and invoice is in
+    # EUR - including the UK, Swiss, Nordic, Americas and African stations a
+    # real supplier might bill in local currency or USD. Nothing in FuelSphere
+    # converts currency, so a carrier must buy in the one its ledger is kept
+    # in (CARRIER_MASTER.currency_code).
     def currency_for(stn):
-        return 'EUR' if country.get(stn) in EURO else 'USD'
+        return 'EUR'
 
     # ---- price per litre: ASSUMED, by region, rising a little each day ------
     BASE = {'PT': 1.0820, 'ES': 1.0760, 'FR': 1.0950, 'BE': 1.0950, 'LU': 1.0950, 'DE': 1.0900,
             'NL': 1.0880, 'AT': 1.0920, 'IT': 1.0910, 'IE': 1.0880, 'GR': 1.1050, 'CY': 1.1100,
-            'GP': 1.1600, 'GB': 1.2350, 'CH': 1.2600, 'DK': 1.2400, 'SE': 1.2450, 'NO': 1.2500,
-            'PL': 1.2300, 'CZ': 1.2350, 'US': 1.2650, 'CA': 1.2800, 'BR': 1.3600, 'SN': 1.4200}
+            'GP': 1.1600, 'GB': 1.1000, 'CH': 1.1200, 'DK': 1.1100, 'SE': 1.1150, 'NO': 1.1200,
+            'PL': 1.1000, 'CZ': 1.1050, 'US': 1.0200, 'CA': 1.0600, 'BR': 1.1600, 'SN': 1.2200}
 
     def price(stn, day):
-        base = BASE.get(country.get(stn), 1.30)
+        base = BASE.get(country.get(stn), 1.12)
         d = (dt.date.fromisoformat(day) - dt.date(2026, 10, 19)).days
-        return round(base + 0.004 * d + (frac('price', stn) - 0.5) * 0.03, 4)
+        return round(base + 0.004 * d + (frac('price', stn) - 0.5) * 0.03, 4)   # EUR per litre, ASSUMED
 
     D.price = price
 

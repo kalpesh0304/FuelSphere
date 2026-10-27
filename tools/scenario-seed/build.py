@@ -13,7 +13,7 @@ NOTHING IS WRITTEN TO db/data.
 import sys, os, datetime as dt
 from collections import defaultdict, Counter
 sys.path.insert(0, os.path.dirname(__file__))
-from common import Tagger, uid, f2, f3, f4, num, read_csv, load_model_columns
+from common import Tagger, Table, uid, f2, f3, f4, num, read_csv, load_model_columns
 from dataset import Dataset
 import tap_base
 from scenarios import Engine, Ctx
@@ -167,6 +167,65 @@ def validate(code, tables, existing, problems):
                     problems.append(f'{code} {ent} {r.get("ID", "")}: {col}={v} resolves to nothing in {target}')
 
 
+LEDGER = ['FUEL_BURNS', 'ROB_LEDGER', 'FUEL_STOCK_MOVEMENT_LEDGER', 'FUEL_STOCK_BALANCE', 'FUEL_BURN_HEADER']
+
+
+def derive_ledger(base_rows):
+    """TAP's burns, ROB ledger and valuation, derived by the project's own tools.
+
+    FROM THE TAP DATA BEFORE THE SCENARIOS. The ledger records what the
+    aircraft took on and burnt; the scenarios then change paperwork about it
+    (a ticket left off an invoice, detached from its order, captured twice).
+    Derived after them, the ledger would drop the uplifts scenarios 8 and 14
+    detach - measured on JetBlue: N3162J to -380 kg - and post the duplicates
+    scenario 15 says must not be posted. JetBlue's ledger was built the same
+    way, before its scenarios existed.
+
+    Run in a scratch copy, so db/data is never touched; only rows for TAP's own
+    tails are kept, and the JetBlue rows the tools also regenerate are dropped.
+    """
+    import tempfile, shutil, subprocess, csv
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    tmp = tempfile.mkdtemp(prefix='tp-ledger-')
+    shutil.copytree(os.path.join(root, 'db'), os.path.join(tmp, 'db'))
+    shutil.copytree(os.path.join(root, 'tools'), os.path.join(tmp, 'tools'))
+    os.symlink(os.path.join(root, 'node_modules'), os.path.join(tmp, 'node_modules'))
+    shutil.copy(os.path.join(root, 'package.json'), tmp)
+    data = os.path.join(tmp, 'db', 'data')
+    for ent, rows in base_rows.items():
+        path = os.path.join(data, f'fuelsphere-{ent}.csv')
+        with open(path, encoding='utf-8-sig', newline='') as f:
+            r = csv.reader(f, delimiter=';')
+            head = next(r)
+            old = [dict(zip(head, x)) for x in r if any(x)]
+        key = next((k for k in ('ID', 'registration', 'carrier_code', 'code', 'currency_code', 'land1', 'type_code')
+                    if k in head), None)
+        have = {o[key] for o in old} if key else set()
+        for c in rows[0]:
+            if c not in head:
+                head.append(c)
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            w = csv.writer(f, delimiter=';', lineterminator='\n')
+            w.writerow(head)
+            for o in old + [x for x in rows if not key or x.get(key) not in have]:
+                w.writerow([o.get(h, '') for h in head])
+    for tool in (['node', 'tools/seed-burns-and-ledger.js'], ['node', 'tools/seed-fifo-valuation.js', '--write']):
+        res = subprocess.run(tool, cwd=tmp, capture_output=True, text=True, timeout=1200)
+        if res.returncode:
+            raise RuntimeError(f'{tool[1]} failed: {res.stderr[-800:]}')
+    tails = {r['registration'] for r in base_rows['AIRCRAFT_REGISTRATIONS']}
+    out = {}
+    for ent in LEDGER:
+        with open(os.path.join(data, f'fuelsphere-{ent}.csv'), encoding='utf-8-sig', newline='') as f:
+            r = csv.reader(f, delimiter=';')
+            head = next(r)
+            out[ent] = [dict(zip(head, x + [''] * (len(head) - len(x)))) for x in r
+                        if any(x) and dict(zip(head, x)).get('tail_number') in tails]
+    shutil.rmtree(tmp)
+    print('TP ledger derived:', {e: len(v) for e, v in out.items()})
+    return {e: v for e, v in out.items() if v}
+
+
 def existing_rows():
     out = {}
     for e in COLS:
@@ -230,10 +289,13 @@ def main():
     # ---------------- TAP: everything, built from the upload -----------------
     P = Dataset('TP', load_existing=False)
     tap_base.build(P, TAP_UPLOAD)
+    base_rows = {e: [dict(r) for r in tb.rows] for e, tb in P.t.items() if tb.rows}
     tg_p = Tagger()
     cp = make_ctx(P, 'TP')
     refs_p = Engine(P, cp, tg_p).run()
     arithmetic('TP', P, problems)
+    for ent, rows in derive_ledger(base_rows).items():
+        P.t[ent] = Table(ent, list(rows[0].keys()), rows)
     for tb in P.t.values():
         tb.sync_header()
     full = {e: tb.rows for e, tb in P.t.items() if tb.rows}
@@ -287,7 +349,12 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     write_workbook(os.path.join(OUT, 'JetBlue_B6_Scenario_Seed_2026-09-24_to_26.xlsx'), 'B6', *results['B6'], COLS)
     write_workbook(os.path.join(OUT, 'TAP_TP_Scenario_Seed_2026-10-20_to_22.xlsx'), 'TP', *results['TP'], COLS)
+    import re
+    kinds = Counter(re.sub(r'[0-9a-f]{8}-[0-9a-f-]{27}', '<id>', p).split(':')[0] + ':' +
+                    re.sub(r'[0-9a-f]{8}-[0-9a-f-]{27}', '<id>', ':'.join(p.split(':')[1:]))[:90] for p in problems)
     print('problems:', len(problems))
+    for k, n in kinds.most_common(15):
+        print(f'  x{n}  {k}')
     for p in problems[:80]:
         print('  ', p)
     for code, (D, refs, tg, rows, upd) in results.items():
