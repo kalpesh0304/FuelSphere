@@ -49,6 +49,21 @@ resolution of every line the seed had not yet resolved.
 node tools/seed-idr-rule-status.js --write
 ```
 
+### Defuel scenarios 11-13 — after the defuel branch merged (27 Oct 2026)
+
+```bash
+python3 tools/seed-storage-locations.py           # a DEFUEL and a TEMP tank at every station
+node tools/seed-defuel-scenarios.js --write       # posts the 15 defuels through DefuelService
+node tools/seed-fifo-valuation.js --write         # regenerates the stock valuation from ROB_LEDGER
+```
+
+The specs are `tools/scenario-seed/defuel-scenarios.json`, from the workbooks' `PROPOSED_DEFUEL_TICKETS`.
+**Every defuel is pre-departure**: 30 seconds after the uplift it draws on, before that flight's burn
+(fuel tankered for the next leg, then a late load takes the aircraft over MTOW). The defuel service posts
+a `DEFUEL` row on `ROB_LEDGER` there, recalculates the tail and replays its valuation; the tool exports
+the documents and the ledger, and checks that nothing before a defuel moved and that the service's stock
+rows equal the replay's. Scenario 12 is JetBlue only (expected credits are USD-only in the credit memo R1).
+
 **Nothing in the seed is posted to S/4.** The PO/GR step and the invoice step call S/4 for real, so
 a seeded document number would claim a posting that never happened. The scenario-16 originals are
 `VERIFIED`, gate `CLEAR`, approved: **posting pending**. The scenario-7 tickets were captured after the
