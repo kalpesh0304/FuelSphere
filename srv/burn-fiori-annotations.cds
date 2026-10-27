@@ -1003,12 +1003,17 @@ annotate BurnService.ROBLedger with @(
         // ADDED 2 Oct 2026 with the line type itself. entry_type is the
         // stored code and stays the filter; this is the words beside it,
         // filled on read, so it cannot be one.
-        line_type_v
+        line_type_v,
+        // ADDED 27 Oct 2026: the litre columns in the carrier's volume unit.
+        qty_cv, opening_rob_cv, uplift_cv, burn_cv, adjustment_cv,
+        closing_rob_cv, max_capacity_cv, rate_per_cv, map_per_cv
     ],
     Capabilities.SortRestrictions.NonSortableProperties: [
         density_kgl, qty_l, opening_rob_l, uplift_l, burn_l, adjustment_l,
         closing_rob_l, max_capacity_l, rate_usd_per_l, map_usd_per_l,
-        line_type_v
+        line_type_v,
+        qty_cv, opening_rob_cv, uplift_cv, burn_cv, adjustment_cv,
+        closing_rob_cv, max_capacity_cv, rate_per_cv, map_per_cv
     ]
 );
 annotate BurnService.ROBLedger with {

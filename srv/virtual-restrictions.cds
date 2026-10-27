@@ -57,7 +57,14 @@ annotate BurnService.FuelBurns with @(
         flight_date_v, fqis_in_kg, fqis_out_kg, map_usd_per_kg,
         planned_block_burn_kg, sector, specific_gravity, total_burn_kg,
         total_burn_value_usd, unallocated_fuel_kg, uplift_l,
-        uplift_value_usd
+        uplift_value_usd,
+        // ADDED 27 Oct 2026: the same figures in the carrier's units
+        // (srv/lib/carrier-units.js applyCarrierUnits), filled on read.
+        dispatch_cm, fqis_out_cm, fqis_in_cm, expected_delta_cm,
+        actual_delta_cm, block_burn_cm, apu_burn_sum_cm, total_burn_cm,
+        engine_burn_split_cm, arrival_rob_cm, unallocated_fuel_cm,
+        planned_block_burn_cm, block_burn_variance_cm, uplift_cv, map_per_cm,
+        apu_rate_cm_hr
     ],
     Capabilities.SortRestrictions.NonSortableProperties: [
         actual_delta_kg, apu_burn_sum_kg, apu_burn_value_usd, apu_hours,
@@ -69,7 +76,14 @@ annotate BurnService.FuelBurns with @(
         flight_date_v, fqis_in_kg, fqis_out_kg, map_usd_per_kg,
         planned_block_burn_kg, sector, specific_gravity, total_burn_kg,
         total_burn_value_usd, unallocated_fuel_kg, uplift_l,
-        uplift_value_usd
+        uplift_value_usd,
+        // ADDED 27 Oct 2026: the same figures in the carrier's units
+        // (srv/lib/carrier-units.js applyCarrierUnits), filled on read.
+        dispatch_cm, fqis_out_cm, fqis_in_cm, expected_delta_cm,
+        actual_delta_cm, block_burn_cm, apu_burn_sum_cm, total_burn_cm,
+        engine_burn_split_cm, arrival_rob_cm, unallocated_fuel_cm,
+        planned_block_burn_cm, block_burn_variance_cm, uplift_cv, map_per_cm,
+        apu_rate_cm_hr
     ]
 );
 
