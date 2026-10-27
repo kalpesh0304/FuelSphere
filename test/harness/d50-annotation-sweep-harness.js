@@ -153,8 +153,13 @@ describe('D50 — no annotation on any service points at nothing', () => {
   //
   // It fires BEFORE the sweep, which is why a stale constant is worse than it
   // looks: the whole dangling check was skipped for as long as it was wrong.
-  it('EXIT-3  ALL TWENTY-TWO SERVICES, zero dangling', () => {
+  it('EXIT-3  ALL TWENTY-THREE SERVICES, zero dangling', () => {
     const names = Object.keys(edmx).sort();
+    // Twenty-three since 27 Oct 2026: CreditMemoService records supplier credit
+    // memos (FS-SPEC-CM-001). Its own service because it is the backend for an
+    // independent UI5 app, and because a credit memo is a payable document with
+    // its own lifecycle, not a variant of an invoice.
+    //
     // Twenty-two since 25 Oct 2026: DefuelService records and settles a defuel.
     // Separate from DefuelConfigService by AUDIENCE — the masters are maintained
     // by operations and finance before any defuel happens; this is what a station
@@ -177,7 +182,7 @@ describe('D50 — no annotation on any service points at nothing', () => {
     // Eighteen since 30 Sep 2026: MappingService carries the S/4 posting maps
     // (carrier master, station-plant, station-supplier, flight-supplier).
     // Raised deliberately, as the note above says, never loosened.
-    assert.strictEqual(names.length, 22, `expected 22 services, compiled ${names.length}`);
+    assert.strictEqual(names.length, 23, `expected 23 services, compiled ${names.length}`);
 
     let TP = 0, TF = 0; const bad = [];
     const rows = [];
