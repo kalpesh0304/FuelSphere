@@ -8,28 +8,45 @@
 | Service | `srv/credit-memo-service.cds` → `/odata/v4/credit-memo` |
 | Handlers | `srv/credit-memo-service.js` |
 | Authorisation | `srv/authorization.cds` (CreditMemoService block) |
-| Seed | `CREDIT_MEMO_REASONS`, `EXPECTED_CREDITS`, `CREDIT_MEMOS`, `CREDIT_MEMO_LINES`, `NUMBER_RANGES`, two rows in `TOLERANCE_RULES` |
-| Criteria | `test/harness/credit-memo-harness.js` (7), `test/harness/credit-memo-auth-harness.js` (3) |
+| Seed | `CREDIT_MEMO_REASONS`, `CREDIT_MEMOS`, `CREDIT_MEMO_LINES`, `NUMBER_RANGES`, two rows in `TOLERANCE_RULES` |
+| Criteria | `test/harness/credit-memo-harness.js` (9), `test/harness/credit-memo-auth-harness.js` (3) |
+| **Depends on** | **`origin/claude/defuel-redesign`** (Jagdeep Singh, unmerged), merged into this branch. Expected credits are its `DEFUEL` rows. **Merge that branch first** |
 
 ---
 
 ## 1. Review of the spec
 
-The spec is sound and maps cleanly onto MIRO. Measured against this repository, eleven points need a decision or change what R1 can do. **Points 1 to 4 are gaps in the repository, not in the spec.**
+The spec is sound and maps cleanly onto MIRO. Measured against this repository and the defuel branch it depends on, the points below need a decision or change what R1 can do.
 
-| # | Spec says | What the repository has | What R1 does | Needs |
+### Where the spec's references live
+
+| Spec term | Stored in | Vendor | Number shown |
+|---|---|---|---|
+| **Expected Credit** | **`DEFUEL`** with `defuel_type = TO_SUPPLIER`, after `postToSupplier` states `expected_credit_usd` and moves it to `POSTING_PENDING` (`db/defuel.cds`, defuel branch) | `DEFUEL.supplier` | `defuel_id` / `ticket_number` |
+| **Defuel Ticket** | `DEFUEL.ticket_number` — the same row as the expected credit, so it is **not a separate reference type** | `DEFUEL.supplier` | `ticket_number` |
+| **Fuel (uplift) Ticket** | `FUEL_TICKETS.ticket_number` | the ticket's **order** — `FUEL_ORDERS.supplier`. The ticket carries no vendor of its own | `ticket_number` |
+| **Supplier Invoice line** | `INVOICE_ITEMS`, invoice `POSTED`/`PAID` | `INVOICES.supplier` | `invoice_number/line` |
+
+**Vendor check (`CRD404`)** on every line: the vendor on the defuel, the uplift ticket's order or the invoice must be the credit memo's vendor. The message names both, e.g. *"vendor on uplift ticket WFS-YYZ-2026032401 is WFS001 World Fuel Services Canada; the credit memo is from PETAV01 Petron Aviation Philippines"*. A reference with no vendor at all (an uplift ticket with no order, a defuel with no supplier) is refused for the same code. **The invoice line is the strongest reference** — it is priced, posted and PO-linked — and is what the seeded demo memo uses.
+
+**The credit memo never writes to `DEFUEL`.** How far a defuel has been credited is held in `DEFUEL_CREDIT_CLEARING`, one row per defuel, rewritten from posted credit memo lines. Its `shortfall_written_off` is **not** `DEFUEL.write_off_usd`: the defuel's write-off is the fuel's value less the *agreed* credit; the clearing's is the agreed credit less what the supplier *actually* credited.
+
+**The S/4 entry the expected credit should trigger** is on hold with the integration, as on the defuel side — `DEFUEL.status` stays `POSTING_PENDING` and this service leaves it there.
+
+### Gaps and assumptions
+
+| # | Spec says | Repository | R1 does | Needs |
 |---|---|---|---|---|
-| 1 | Reference an **Expected Credit**, clear it (§4, §7) | **No such entity exists.** Nothing models a receivable from a supplier | `EXPECTED_CREDITS` added. Clearing state is derived from posted lines | Who **raises** an expected credit. R1: entered through the service or seeded. Automatic creation from a defuel needs point 2 |
-| 2 | Reference a **Defuel Ticket** (§4) | Nothing on `FUEL_TICKETS` marks a defuel — `00-DECISIONS` **F26** | `DEFUEL_TICKET` **not offered**. A defuel is credited through its expected credit | F26 resolved: an event type on the ticket |
-| 3 | Data model `FuelEvent(UPLIFT/DEFUEL)` (§12) | No such entity. `FUEL_TICKETS` is the equivalent | Lines reference `FUEL_TICKETS` | — |
-| 4 | Fuel Ticket proposes billed qty / price / amount | A ticket has **no supplier** (it comes through its order) and `total_amount` is **often null** | Ticket with no order → `CRD404`; ticket with no amount → `CRD414`. Never treated as zero | Crediting through the **invoice line** is the reliable path. Consider dropping ticket references until tickets carry amounts |
-| 5 | §6 cumulative credit > referenced value is an error; §7 tolerance clears the difference | The two overlap when a supplier credits **slightly more** than expected | On an expected credit, overage **within tolerance** is accepted and lands as negative variance; beyond it, `CRD402`. Invoice and ticket references are strict | Confirm |
-| 6 | "Calculate tax" | FuelSphere calculates no tax amount — SAP does from the tax code (`02-BEHAVIOUR` §8) | Tax is **entered**. No calculate option | Re-add with S/4 |
-| 7 | Posting date in **open period** | No posting-period master at BTP | **Not checked** | S/4 or a period table |
-| 8 | Qty in **L** | Invoice lines are in **KG** on the seeded posted invoice | Line UoM follows its reference | Confirm the unit is the reference's, not always litres |
-| 9 | Status `POSTING_ATTEMPTED`, `PAID` | No S/4 call, no clearing feed | In the enum; **no R1 path writes either**. `reprocess` exists and accepts only `POSTING_ATTEMPTED` | S/4 integration |
-| 10 | Reverse like **MR8M** | MR8M creates a reversal document | Reversal is held **on the memo** (date, reason, user) and status `REVERSED` | Whether a separate reversal document is wanted at BTP level |
-| 11 | Original invoice F4 on **posted** invoices | **1 of 104** seeded invoices is `POSTED` (77 `VERIFIED`) | Only `POSTED`/`PAID` are referenceable (`CRD406`) | Demo data is thin, not the rule wrong |
+| 1 | Expected credit in the memo currency | `expected_credit_usd` — **USD only** | Memo must be USD to credit a defuel (`CRD405`) | Currency on `DEFUEL` if non-USD vendors credit defuels |
+| 2 | Credit a defuel's expected credit | A `PARKED` defuel has no agreed credit | Refused, `CRD406` *"no expected credit has been agreed"* | — |
+| 3 | Fuel Ticket proposes billed qty / price / amount | Ticket `total_amount` is **often null** | No amount → `CRD414`, never treated as zero | Prefer the invoice line |
+| 4 | §6 cumulative credit > referenced value is an error; §7 tolerance clears the difference | Overlap when a supplier credits slightly **more** than expected | Overage within tolerance accepted on an expected credit, as negative variance; strict elsewhere | Confirm |
+| 5 | "Calculate tax" | FuelSphere calculates no tax amount — SAP does from the tax code | Tax is **entered** | Re-add with S/4 |
+| 6 | Posting date in **open period** | No period master at BTP | **Not checked** | S/4 or a period table |
+| 7 | Qty in **L** | Invoice lines are in **KG** on the posted seed invoice; defuels store litres | Line UoM follows its reference | Confirm |
+| 8 | Status `POSTING_ATTEMPTED`, `PAID` | No S/4 call, no clearing feed | In the enum; **no R1 path writes either** | S/4 integration |
+| 9 | Reverse like **MR8M** | MR8M creates a reversal document | Reversal held **on the memo** | Whether a separate reversal document is wanted |
+| 10 | Original invoice F4 on **posted** invoices | **1 of 104** seeded invoices is `POSTED` | Only `POSTED`/`PAID` referenceable | Demo data is thin, not the rule wrong |
 
 ### Open points from the spec
 
@@ -76,13 +93,13 @@ Edit and delete are allowed only in `DRAFT` and `PARKED`.
 
 ### Expected credit clearing (spec §7)
 
-On every post or reversal touching an expected credit, with `open = expected − credited` from posted lines:
+On every post or reversal touching a defuel, with `open = expected_credit_usd − credited` from posted lines, `DEFUEL_CREDIT_CLEARING` is rewritten:
 
-| Condition | Status | Booked to |
+| Condition | `credit_status` | Booked to |
 |---|---|---|
 | nothing credited | `OPEN` | — |
 | `|open| ≤ tolerance` | `CLEARED` | `variance_amount` — Defuel Credit Variance |
-| a posted line has `final_clearing = true` | `WRITTEN_OFF` | `written_off_amount` + worklist `CRD420` |
+| a posted line has `final_clearing = true` | `WRITTEN_OFF` | `shortfall_written_off` + worklist `CRD420` |
 | otherwise | `PARTIALLY_CLEARED` | worklist `CRD413` — **posting continues** |
 
 ---
@@ -100,7 +117,7 @@ OData V4. All writes need a CSRF token through the approuter; the UI5 V4 model f
 | `Attachments` | Supplier PDF. Media stream on `content` | Yes |
 | `Log` | Document log — every state change and message | Read only |
 | `Exceptions` | Worklist. Action `resolve(note)` | Resolve only |
-| `ExpectedCredits` | Receivables awaiting a credit. `open_amount` is calculated and filterable | Create, update |
+| `ExpectedCredits` | Defuels to a supplier with an agreed credit (`POSTING_PENDING`/`POSTED`), joined to their clearing. Shows `defuel_id`, `ticket_number`, vendor, `expected_amount`, `credit_status`, `open_amount` (filterable). **Owned by the defuel app** | Read only |
 | `Reasons` | Reason codes, a code list | Read only |
 | `Suppliers` · `Currencies` · `PostedInvoices` · `InvoiceLines` · `FuelTickets` · `Flights` | Value helps | Read only |
 
@@ -134,7 +151,7 @@ OData V4. All writes need a CSRF token through the approuter; the UI5 V4 model f
 |---|---|---|
 | `memo_ID` | **in*** | When posting a line on its own |
 | `reference_type` | **in*** | `EXPECTED_CREDIT` · `FUEL_TICKET` · `INVOICE_LINE` |
-| `expected_credit_ID` / `ticket_ID` / `invoice_item_ID` | **in*** | The one matching `reference_type` |
+| `defuel_ID` / `ticket_ID` / `invoice_item_ID` | **in*** | The one matching `reference_type`: `EXPECTED_CREDIT` → `defuel_ID` (value help `ExpectedCredits`), `FUEL_TICKET` → `ticket_ID` (uplift ticket, value help `FuelTickets`), `INVOICE_LINE` → `invoice_item_ID` |
 | `amount` | **in*** | Positive |
 | `quantity` · `uom_code` | in | Ignored when `value_only`. UoM defaults from the reference |
 | `value_only` | in | |
@@ -161,7 +178,7 @@ OData V4. All writes need a CSRF token through the approuter; the UI5 V4 model f
 
 `CheckResult` = `{ status, balance, canPost, messages: [{ severity, code, message, line }] }`.
 
-`proposeLines` takes `referenceType` of `INVOICE` (an invoice ID — proposes all its lines as `INVOICE_LINE`), `INVOICE_LINE`, `FUEL_TICKET` or `EXPECTED_CREDIT`. It is how "Create Credit Memo" from another screen pre-fills: navigate with the reference type and ID, call `proposeLines`, let the user tick, then `POST` the memo with the ticked lines.
+`proposeLines` takes `referenceType` of `INVOICE` (an invoice ID — proposes all its lines as `INVOICE_LINE`), `INVOICE_LINE`, `FUEL_TICKET` or `EXPECTED_CREDIT` (a defuel ID). It is how "Create Credit Memo" from another screen pre-fills: navigate with the reference type and ID, call `proposeLines`, let the user tick, then `POST` the memo with the ticked lines.
 
 ### Typical calls
 
@@ -185,9 +202,9 @@ GET  /odata/v4/credit-memo/Exceptions?$filter=status eq 'OPEN'&$expand=memo
 | CRD401 | Error | Mandatory field or reference missing, or not found |
 | CRD402 | Error | Cumulative credit exceeds the referenced value, net of earlier posted credits |
 | CRD403 | Error | Cumulative quantity exceeds the referenced quantity (not value-only) |
-| CRD404 | Error | Supplier mismatch, or no supplier attributable (ticket without an order) |
+| CRD404 | Error | Vendor on the defuel, uplift ticket (via its order) or invoice is not the credit memo's vendor — names both; or the reference records no vendor |
 | CRD405 | Error | Currency mismatch |
-| CRD406 | Error | Reference in an invalid status |
+| CRD406 | Error | Reference in an invalid status — invoice not posted; defuel not to a supplier, still `PARKED` (no agreed credit), or already cleared |
 | CRD407 | Error | Duplicate: supplier + credit memo number + date + amount |
 | CRD408 | Warning | Credit memo number reused with a different date or amount |
 | CRD409 | Warning | Ticket not yet invoiced |
@@ -206,7 +223,7 @@ GET  /odata/v4/credit-memo/Exceptions?$filter=status eq 'OPEN'&$expand=memo
 
 | Scope | Can |
 |---|---|
-| `InvoiceVerify` | Create, edit, delete, park, simulate, propose; maintain expected credits |
+| `InvoiceVerify` | Create, edit, delete, park, simulate, propose |
 | `FinancePost` | Simulate, park, post, reverse, reprocess, mass post; resolve exceptions |
 | `InvoiceApprove` | Read; resolve exceptions |
 | `ReportView` | Read |
@@ -232,6 +249,6 @@ No annotation file is shipped for this service. Annotations in this repository r
 ## 5. Deferred to S/4 integration
 
 - The posting call. It goes in `postCore()` at the marked line: success → `s4_document_number`; failure → `POSTING_ATTEMPTED` plus a log entry, and `reprocess` re-sends.
-- PO-referenced lines credit the PO item; expected-credit lines clear the receivable; variance and write-off post to the Write-off (Defueling) account by S/4 account determination.
+- PO-referenced lines credit the PO item; expected-credit lines clear the receivable the defuel raised. That receivable's own S/4 entry is on hold on the defuel side (`POSTING_PENDING`). Variance and shortfall post to Write-off (Defueling) — the defuel branch's `DEFUEL_GL_ACCOUNT` already carries `EXPECTED_CREDIT` and `WRITE_OFF_DEFUEL` roles, which is where the accounts should come from.
 - Tax calculation, withholding tax, open-period check, `PAID` from clearing.
 - D19 applies: the destination the code would use is not the one `mta.yaml` provisions.

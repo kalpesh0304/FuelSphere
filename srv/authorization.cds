@@ -665,9 +665,9 @@ annotate CreditMemoService.Exceptions with @(restrict: [
     { grant: 'READ',    to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
     { grant: 'resolve', to: ['InvoiceApprove', 'FinancePost', 'AdminAccess'] }
 ]);
+// Read only: an expected credit is a defuel to a supplier, owned by DefuelService.
 annotate CreditMemoService.ExpectedCredits with @(restrict: [
-    { grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
-    { grant: ['CREATE', 'UPDATE'], to: ['InvoiceVerify', 'FinancePost', 'AdminAccess'] }
+    { grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }
 ]);
 annotate CreditMemoService.Log            with @(restrict: [{ grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }]);
 annotate CreditMemoService.Reasons        with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);

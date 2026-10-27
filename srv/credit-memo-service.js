@@ -31,7 +31,7 @@ const { resolveToleranceRule, resolveParameter, effectiveTolerance } = require('
 const T = {
     MEMO: 'fuelsphere.CREDIT_MEMOS', LINE: 'fuelsphere.CREDIT_MEMO_LINES',
     LOG: 'fuelsphere.CREDIT_MEMO_LOG', EXC: 'fuelsphere.CREDIT_MEMO_EXCEPTIONS',
-    EC: 'fuelsphere.EXPECTED_CREDITS', TICKET: 'fuelsphere.FUEL_TICKETS',
+    DEFUEL: 'fuelsphere.DEFUEL', CLR: 'fuelsphere.DEFUEL_CREDIT_CLEARING', TICKET: 'fuelsphere.FUEL_TICKETS',
     ORDER: 'fuelsphere.FUEL_ORDERS', ITEM: 'fuelsphere.INVOICE_ITEMS',
     INVOICE: 'fuelsphere.INVOICES', SUPPLIER: 'fuelsphere.MASTER_SUPPLIERS'
 };
@@ -39,17 +39,18 @@ const T = {
 const EDITABLE = ['DRAFT', 'PARKED'];
 const COUNTED = ['POSTED', 'PAID', 'POSTING_ATTEMPTED'];   // statuses whose lines consume a reference
 const INVOICE_OK = ['POSTED', 'PAID'];
-const EC_OK = ['OPEN', 'PARTIALLY_CLEARED'];
+const DEFUEL_OK = ['POSTING_PENDING', 'POSTED'];     // credit agreed by postToSupplier
+const CLEARING_OPEN = ['OPEN', 'PARTIALLY_CLEARED'];
 const DEFUEL_TOLERANCE = 'TOL-CM-DEFUEL';
 const FOUR_EYES = 'CM_POST_FOUR_EYES';
 
 const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
 const r2 = v => Math.round(v * 100) / 100;
 const msg = (severity, code, message, line = null) => ({ severity, code, message: `${code}: ${message}`, line });
-const refIdOf = l => l.reference_type === 'EXPECTED_CREDIT' ? l.expected_credit_ID
+const refIdOf = l => l.reference_type === 'EXPECTED_CREDIT' ? l.defuel_ID
     : l.reference_type === 'FUEL_TICKET' ? l.ticket_ID
     : l.reference_type === 'INVOICE_LINE' ? l.invoice_item_ID : null;
-const refColumn = { EXPECTED_CREDIT: 'expected_credit_ID', FUEL_TICKET: 'ticket_ID', INVOICE_LINE: 'invoice_item_ID' };
+const refColumn = { EXPECTED_CREDIT: 'defuel_ID', FUEL_TICKET: 'ticket_ID', INVOICE_LINE: 'invoice_item_ID' };
 
 // ===========================================================================
 // REFERENCES — one shape whatever the reference is
@@ -62,12 +63,21 @@ const refColumn = { EXPECTED_CREDIT: 'expected_credit_ID', FUEL_TICKET: 'ticket_
 async function loadReference(type, id) {
     if (!id) return null;
     if (type === 'EXPECTED_CREDIT') {
-        const ec = await SELECT.one.from(T.EC).where({ ID: id });
-        if (!ec) return null;
-        return { type, id, display: ec.credit_number || ec.ID, supplier_ID: ec.supplier_ID,
-            currency_code: ec.currency_code, status: ec.status, statusOk: EC_OK.includes(ec.status),
-            amount: num(ec.expected_amount), quantity: num(ec.quantity), uom_code: ec.uom_code,
-            flight_ID: ec.flight_ID, aircraft_reg: ec.aircraft_reg, station_code: ec.station_code };
+        // The expected credit IS the defuel to a supplier (db/defuel.cds).
+        const d = await SELECT.one.from(T.DEFUEL).where({ ID: id });
+        if (!d) return null;
+        const clr = await SELECT.one.from(T.CLR).columns('status').where({ defuel_ID: id });
+        const clearing = clr ? clr.status : 'OPEN';
+        let statusOk = true, status = d.status;
+        if (d.defuel_type !== 'TO_SUPPLIER') { statusOk = false; status = `${d.defuel_type}, not a defuel to a supplier`; }
+        else if (!DEFUEL_OK.includes(d.status)) {
+            statusOk = false;
+            status = d.status === 'PARKED' ? 'PARKED - no expected credit has been agreed (postToSupplier)' : d.status;
+        } else if (!CLEARING_OPEN.includes(clearing)) { statusOk = false; status = `already ${clearing}`; }
+        return { type, id, display: d.ticket_number ? `${d.defuel_id} / ticket ${d.ticket_number}` : d.defuel_id,
+            supplier_ID: d.supplier_ID, vendorLabel: 'defuel', currency_code: 'USD', status, statusOk,
+            amount: num(d.expected_credit_usd), quantity: num(d.quantity_l), uom_code: 'LTR',
+            flight_ID: d.flight_ID, aircraft_reg: d.tail_number, station_code: d.station_code };
     }
     if (type === 'FUEL_TICKET') {
         const t = await SELECT.one.from(T.TICKET).where({ ID: id });
@@ -75,7 +85,7 @@ async function loadReference(type, id) {
         const o = t.order_ID ? await SELECT.one.from(T.ORDER)
             .columns('supplier_ID', 'station_code', 'currency_code', 's4_po_number', 's4_po_item')
             .where({ ID: t.order_ID }) : null;
-        return { type, id, display: t.ticket_number, supplier_ID: o ? o.supplier_ID : null,
+        return { type, id, display: t.ticket_number, supplier_ID: o ? o.supplier_ID : null, vendorLabel: 'uplift ticket',
             currency_code: t.currency_code || (o && o.currency_code) || null, status: t.status,
             statusOk: true, amount: num(t.total_amount), quantity: num(t.quantity), uom_code: t.uom_code,
             flight_ID: t.flight_ID, aircraft_reg: t.aircraft_reg, station_code: o ? o.station_code : null,
@@ -86,7 +96,7 @@ async function loadReference(type, id) {
         if (!i) return null;
         const inv = await SELECT.one.from(T.INVOICE)
             .columns('invoice_number', 'supplier_ID', 'currency_code', 'status').where({ ID: i.invoice_ID });
-        return { type, id, display: `${inv.invoice_number}/${i.line_number}`, supplier_ID: inv.supplier_ID,
+        return { type, id, display: `${inv.invoice_number}/${i.line_number}`, supplier_ID: inv.supplier_ID, vendorLabel: 'invoice',
             currency_code: inv.currency_code, status: inv.status, statusOk: INVOICE_OK.includes(inv.status),
             amount: num(i.net_amount), quantity: num(i.quantity), uom_code: i.uom_code, tax_code: i.tax_code,
             flight_ID: i.flight_ID, po_number: i.po_number, po_item: i.po_item, cost_center: i.cost_center };
@@ -118,6 +128,11 @@ async function creditedSoFar(type, id, excludeMemo) {
         amount: r2(counted.reduce((s, r) => s + Number(r.amount || 0), 0)),
         quantity: counted.filter(r => !r.value_only).reduce((s, r) => s + Number(r.quantity || 0), 0)
     };
+}
+
+async function vendorName(id) {
+    const v = id && await SELECT.one.from(T.SUPPLIER).columns('supplier_code', 'supplier_name').where({ ID: id });
+    return v ? `${v.supplier_code} ${v.supplier_name}` : 'no vendor';
 }
 
 async function defuelTolerance(memo, expected) {
@@ -191,8 +206,12 @@ async function check(memoId) {
         const amount = num(l.amount);
         if (!(amount > 0)) add('ERROR', 'CRD419', 'line amount must be greater than zero', n);
 
-        if (!ref.supplier_ID) add('ERROR', 'CRD404', `${ref.display} has no order, so no supplier can be attributed to it`, n);
-        else if (ref.supplier_ID !== memo.supplier_ID) add('ERROR', 'CRD404', `${ref.display} belongs to another supplier`, n);
+        if (!ref.supplier_ID) add('ERROR', 'CRD404', l.reference_type === 'FUEL_TICKET'
+            ? `uplift ticket ${ref.display} has no order, so it has no vendor to compare`
+            : `${ref.vendorLabel} ${ref.display} records no vendor`, n);
+        else if (ref.supplier_ID !== memo.supplier_ID)
+            add('ERROR', 'CRD404', `vendor on ${ref.vendorLabel} ${ref.display} is ${await vendorName(ref.supplier_ID)}; `
+                + `the credit memo is from ${await vendorName(memo.supplier_ID)}`, n);
         if (ref.currency_code && memo.currency_code && ref.currency_code !== memo.currency_code)
             add('ERROR', 'CRD405', `${ref.display} is in ${ref.currency_code}, the memo in ${memo.currency_code}`, n);
         if (!ref.statusOk) add('ERROR', 'CRD406', `${ref.display} is ${ref.status}`, n);
@@ -241,22 +260,25 @@ async function check(memoId) {
 // EXPECTED CREDIT CLEARING — derived, so reversal needs no undo
 // ===========================================================================
 
-async function refreshExpectedCredit(ecId, memo) {
-    const ec = await SELECT.one.from(T.EC).where({ ID: ecId });
+async function refreshExpectedCredit(defuelId, memo) {
+    const d = await SELECT.one.from(T.DEFUEL).columns('defuel_id', 'expected_credit_usd').where({ ID: defuelId });
     const rows = await SELECT.from(T.LINE).columns('amount', 'final_clearing')
-        .where({ expected_credit_ID: ecId, memo_ID: { in: countedMemos() } });
-    const expected = Number(ec.expected_amount);
+        .where({ defuel_ID: defuelId, memo_ID: { in: countedMemos() } });
+    const expected = Number(d.expected_credit_usd);
     const credited = r2(rows.reduce((s, r) => s + Number(r.amount || 0), 0));
     const open = r2(expected - credited);
     const { tol, evidence } = await defuelTolerance(memo, expected);
 
     let upd;
-    if (!rows.length) upd = { status: 'OPEN', credited_amount: 0, variance_amount: 0, written_off_amount: 0 };
-    else if (Math.abs(open) <= tol) upd = { status: 'CLEARED', credited_amount: credited, variance_amount: open, written_off_amount: 0 };
-    else if (rows.some(r => r.final_clearing)) upd = { status: 'WRITTEN_OFF', credited_amount: credited, variance_amount: 0, written_off_amount: open };
-    else upd = { status: 'PARTIALLY_CLEARED', credited_amount: credited, variance_amount: 0, written_off_amount: 0 };
-    await UPDATE(T.EC).set(upd).where({ ID: ecId });
-    return { ...upd, open, tol, evidence, credit_number: ec.credit_number || ec.ID };
+    if (!rows.length) upd = { status: 'OPEN', credited_amount: 0, variance_amount: 0, shortfall_written_off: 0 };
+    else if (Math.abs(open) <= tol) upd = { status: 'CLEARED', credited_amount: credited, variance_amount: open, shortfall_written_off: 0 };
+    else if (rows.some(r => r.final_clearing)) upd = { status: 'WRITTEN_OFF', credited_amount: credited, variance_amount: 0, shortfall_written_off: open };
+    else upd = { status: 'PARTIALLY_CLEARED', credited_amount: credited, variance_amount: 0, shortfall_written_off: 0 };
+    upd.refreshed_at = new Date().toISOString();
+    if (await SELECT.one.from(T.CLR).columns('defuel_ID').where({ defuel_ID: defuelId }))
+        await UPDATE(T.CLR).set(upd).where({ defuel_ID: defuelId });
+    else await INSERT.into(T.CLR).entries({ defuel_ID: defuelId, ...upd });
+    return { ...upd, open, tol, evidence, credit_number: d.defuel_id };
 }
 
 async function refreshTotals(memoId) {
@@ -398,17 +420,17 @@ module.exports = class CreditMemoService extends cds.ApplicationService {
             for (const m of c.messages) await log(id, 'MESSAGE', m.severity, m.code, m.message);
 
             // Clear expected credits. Never held: what falls short goes to the worklist.
-            const ecIds = [...new Set(c.lines.filter(l => l.reference_type === 'EXPECTED_CREDIT').map(l => l.expected_credit_ID))];
+            const ecIds = [...new Set(c.lines.filter(l => l.reference_type === 'EXPECTED_CREDIT').map(l => l.defuel_ID))];
             for (const ecId of ecIds) {
                 const r = await refreshExpectedCredit(ecId, c.memo);
-                const line = c.lines.find(l => l.expected_credit_ID === ecId);
+                const line = c.lines.find(l => l.defuel_ID === ecId);
                 if (r.status === 'PARTIALLY_CLEARED' || r.status === 'WRITTEN_OFF') {
                     const code = r.status === 'WRITTEN_OFF' ? 'CRD420' : 'CRD413';
                     const text = r.status === 'WRITTEN_OFF'
-                        ? `expected credit ${r.credit_number} closed and ${r.written_off_amount.toFixed(2)} written off (Write-off Defueling)`
+                        ? `expected credit ${r.credit_number} closed and ${r.shortfall_written_off.toFixed(2)} written off (Write-off Defueling)`
                         : `expected credit ${r.credit_number} short by ${r.open.toFixed(2)}, beyond tolerance ${r.tol.toFixed(2)}`;
-                    await INSERT.into(T.EXC).entries({ memo_ID: id, line_ID: line && line.ID, expected_credit_ID: ecId,
-                        code, message: `${code}: ${text}`, amount: r.status === 'WRITTEN_OFF' ? r.written_off_amount : r.open });
+                    await INSERT.into(T.EXC).entries({ memo_ID: id, line_ID: line && line.ID, defuel_ID: ecId,
+                        code, message: `${code}: ${text}`, amount: r.status === 'WRITTEN_OFF' ? r.shortfall_written_off : r.open });
                     c.messages.push(msg('WARNING', code, text));
                 } else if (r.status === 'CLEARED' && r.variance_amount !== 0) {
                     c.messages.push(msg('INFO', 'CRD413', `expected credit ${r.credit_number} cleared with variance ${r.variance_amount.toFixed(2)} to Defuel Credit Variance`));
@@ -458,9 +480,9 @@ module.exports = class CreditMemoService extends cds.ApplicationService {
 
             // Undo every FuelSphere update: expected credits re-derive without
             // this memo's lines, and its open exceptions close.
-            const ecs = await SELECT.from(T.LINE).columns('expected_credit_ID')
+            const ecs = await SELECT.from(T.LINE).columns('defuel_ID')
                 .where({ memo_ID: id, reference_type: 'EXPECTED_CREDIT' });
-            for (const ecId of new Set(ecs.map(r => r.expected_credit_ID))) await refreshExpectedCredit(ecId, memo);
+            for (const ecId of new Set(ecs.map(r => r.defuel_ID))) await refreshExpectedCredit(ecId, memo);
             await UPDATE(T.EXC).set({ status: 'RESOLVED', resolution_note: `credit memo reversed: ${reason}` })
                 .where({ memo_ID: id, status: 'OPEN' });
             await log(id, 'REVERSED', 'INFO', null, `reversed on ${reversalDate}: ${reason}`);

@@ -1,5 +1,6 @@
 using { fuelsphere as db } from '../db/schema';
 using { fuelsphere as cm } from '../db/credit-memo';
+using { fuelsphere as dfl } from '../db/defuel';
 
 /**
  * FuelSphere — Supplier Credit Memo service (FS-SPEC-CM-001).
@@ -60,10 +61,36 @@ service CreditMemoService {
         action resolve(note : String @mandatory) returns Exceptions;
     };
 
-    entity ExpectedCredits as projection on cm.EXPECTED_CREDITS {
-        *,
-        expected_amount - credited_amount - written_off_amount - variance_amount as open_amount : Decimal(15,2)
-    };
+    /**
+     * EXPECTED CREDITS ARE DEFUELS TO A SUPPLIER with a credit stated by
+     * postToSupplier (DefuelService). Read-only here: the defuel app owns
+     * them. Clearing comes from DEFUEL_CREDIT_CLEARING, OPEN where no posted
+     * credit memo has touched the defuel yet.
+     */
+    @readonly entity ExpectedCredits as select from dfl.DEFUEL {
+        key ID,
+            defuel_id,
+            ticket_number,                          // the defuel ticket
+            supplier,
+            supplier_name,
+            station_code,
+            tail_number,
+            flight_number,
+            defuel_date,
+            quantity_l,
+            expected_credit_usd                                     as expected_amount       : Decimal(15,2),
+            'USD'                                                   as currency_code         : String(3),
+            status                                                  as defuel_status         : String(16),
+            coalesce(credit_clearing.status, 'OPEN')                as credit_status         : String(20),
+            coalesce(credit_clearing.credited_amount, 0)            as credited_amount       : Decimal(15,2),
+            coalesce(credit_clearing.variance_amount, 0)            as variance_amount       : Decimal(15,2),
+            coalesce(credit_clearing.shortfall_written_off, 0)      as shortfall_written_off : Decimal(15,2),
+            // ROUND because SQLite holds decimals as floats: 448.55 less its
+            // three parts reads 4e-14, not 0, and a UI shows that.
+            round(expected_credit_usd - coalesce(credit_clearing.credited_amount, 0)
+                - coalesce(credit_clearing.variance_amount, 0)
+                - coalesce(credit_clearing.shortfall_written_off, 0), 2) as open_amount      : Decimal(15,2)
+    } where defuel_type = 'TO_SUPPLIER' and status in ('POSTING_PENDING', 'POSTED');
 
     @readonly entity Reasons as projection on cm.CREDIT_MEMO_REASONS;
 
