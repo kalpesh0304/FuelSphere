@@ -132,6 +132,28 @@ const plus30s = (t) => {
     const posted = [];
     let failed = 0;
 
+    // ---- ONE TAIL'S HEADROOM, SHARED -------------------------------------
+    //
+    // Two defuels on one tail (N804JB carries 11B and 12B) both lower the same
+    // later balances. Capping them one at a time gives the whole headroom to
+    // the first and leaves the second nothing, so where a tail's proposals do
+    // not fit together they are scaled down together, to leave the 500 kg
+    // reserve at the tail's lowest point after the first of them.
+    const scale = new Map();
+    for (const tail of new Set(SPECS.map((s) => s.tail))) {
+        const mine = SPECS.filter((s) => s.tail === tail);
+        if (mine.length < 2) continue;
+        const ups = await db.run(SELECT.from(LEDGER).where({ fuel_ticket_ID: { in: mine.map((s) => s.uplift_ticket_ID) } }));
+        const first = ups.sort((a, b) => String(a.record_date).localeCompare(String(b.record_date)) || a.sequence - b.sequence)[0];
+        const rows = await db.run(SELECT.from(LEDGER).where({ tail_number: tail }));
+        const low = Math.min(...rows.filter((r) => String(r.record_date) > String(first.record_date)
+            || (String(r.record_date) === String(first.record_date) && Number(r.sequence) > Number(first.sequence)))
+            .map((r) => Number(r.closing_rob_kg)));
+        const sg = Number(first.wt_avg_specific_gravity) || Number(first.specific_gravity) || 0.8;
+        const want = mine.reduce((t, s) => t + s.litres * sg, 0);
+        if (want > low - 500) scale.set(tail, (low - 500) / want);
+    }
+
     for (const s of SPECS) {
         const label = `S${s.scenario}${s.ref} ${s.carrier} ${s.defuel_ticket}`;
         const up = await db.run(SELECT.one.from(LEDGER).where({ fuel_ticket_ID: s.uplift_ticket_ID }));
@@ -144,6 +166,28 @@ const plus30s = (t) => {
             .columns('reporting_volume_uom').where({ carrier_code: s.carrier }));
         const uom = (carrier && carrier.reporting_volume_uom) || 'LTR';
         const station = up.airport_code;
+
+        // ---- AS MUCH AS THE TAIL CAN SPARE -------------------------------
+        //
+        // A pre-departure defuel lowers every later balance on the tail, and
+        // the service refuses one that would take any of them below zero
+        // (DFL432). The proposed litres were written before the ledger
+        // posting existed; where a later balance cannot carry them, the
+        // defuel is cut to leave a 500 kg reserve at the tail's lowest point,
+        // and the note says so.
+        const tailRows = await db.run(SELECT.from(LEDGER).where({ tail_number: s.tail }));
+        const laterRows = tailRows.filter((r) => String(r.record_date) > String(up.record_date)
+            || (String(r.record_date) === String(up.record_date) && Number(r.sequence) > Number(up.sequence)));
+        const low = Math.min(...laterRows.map((r) => Number(r.closing_rob_kg)));
+        const sg = Number(up.wt_avg_specific_gravity) || Number(up.specific_gravity) || 0.8;
+        let litres = scale.has(s.tail) ? Math.floor(s.litres * scale.get(s.tail) / 10) * 10 : s.litres;
+        let cut = litres < s.litres
+            ? ` Reduced from ${s.litres} L to ${litres} L: this tail's defuels share what it can spare.` : '';
+        if (Number.isFinite(low) && low - litres * sg < 500) {
+            litres = Math.floor(((low - 500) / sg) / 10) * 10;
+            cut = ` Reduced from ${s.litres} L to ${litres} L: the tail later falls to ${low} kg.`;
+        }
+        if (!(litres > 0)) { console.log(`  SKIP ${label}: the tail cannot spare any fuel`); failed++; continue; }
         const data = {
             // DETERMINISTIC, so a re-run on the same base writes the same seed.
             ID: stockLib.uuid5(`DEFUEL:${s.defuel_ticket}`),
@@ -157,11 +201,11 @@ const plus30s = (t) => {
             defuel_time: plus30s(up.record_time || '00:00:00'),
             // IN THE CARRIER'S VOLUME UNIT, which is what the screen takes:
             // US gallons for JetBlue, litres for TAP.
-            quantity_vol: Number((s.litres / (LITRES_PER[uom] || 1)).toFixed(2)),
+            quantity_vol: Number((litres / (LITRES_PER[uom] || 1)).toFixed(2)),
             ticket_number: s.defuel_ticket,
             supplier_ID: s.type === 'TO_SUPPLIER' && order ? order.supplier_ID : null,
-            defuel_charges_usd: s.charge_rate_per_litre ? Number((s.litres * s.charge_rate_per_litre).toFixed(2)) : 0,
-            notes: `SCENARIO ${s.scenario}${s.ref} - ${s.story} Pre-departure: after uplift ${s.uplift_ticket}, before the flight's burn.`
+            defuel_charges_usd: s.charge_rate_per_litre ? Number((litres * s.charge_rate_per_litre).toFixed(2)) : 0,
+            notes: `SCENARIO ${s.scenario}${s.ref} - ${s.story} Pre-departure: after uplift ${s.uplift_ticket}, before the flight's burn.${cut}`
         };
         try {
             const draft = await srv.tx({ user }, (tx) => tx.new(Defuels.drafts, data));
@@ -171,7 +215,7 @@ const plus30s = (t) => {
                 // THE CREDIT THE VENDOR AGREED: the litres credited over the
                 // litres defuelled, of what the fuel was worth. 12C credits
                 // 300 L less - contaminated, disposed, written off.
-                const credit = Number((Number(d.fuel_value_usd) * s.credited_litres / s.litres).toFixed(2));
+                const credit = Number((Number(d.fuel_value_usd) * s.credited_litres / s.litres).toFixed(2));   // the scenario's share, on the litres actually defuelled
                 doc = await srv.tx({ user }, (tx) => tx.send({
                     event: 'postToSupplier', entity: 'Defuels',
                     params: [{ ID: d.ID, IsActiveEntity: true }], data: { expected_credit_usd: credit }
