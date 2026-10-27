@@ -96,6 +96,20 @@ def main(book, src, dst):
             stats[f'UPDATES {e}'] = (len(ups), stale)
             if stale:
                 print(f'  WARNING {e}: {stale} updates found a value other than the one the workbook expected')
+        # A HEADER RESET TO NOT_CHECKED HAS NO VERDICT, so the verdicts stored
+        # for it must go too - otherwise the rule table shows passes for lines
+        # that have since moved to another invoice, beside a gate that says
+        # nothing was checked. Validate regenerates them.
+        reset = {k for k, col, old, new in by_ent.get('INVOICES', []) if col == 'posting_gate' and new == 'NOT_CHECKED'}
+        moved = {k for k, col, old, new in by_ent.get('INVOICE_ITEMS', [])}
+        for ent in ('IDR_RULE_STATUS', 'INVOICE_EXCEPTIONS'):
+            path = os.path.join(dst, f'fuelsphere-{ent}.csv')
+            if not os.path.exists(path) or not reset:
+                continue
+            head, rows = read(path)
+            keep = [r for r in rows if r.get('invoice_ID') not in reset and r.get('invoice_item_ID') not in moved]
+            write(path, head, keep)
+            stats[f'PURGED {ent}'] = (len(rows) - len(keep), 0)
     for k, v in stats.items():
         print(f'  {k}: {v[0]} applied, {v[1]} skipped/stale')
 
