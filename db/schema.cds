@@ -91,7 +91,10 @@ entity UNIT_OF_MEASURE : ActiveStatus {
         // phantom variance in stock reconciliation on top of the real density
         // variance. Use this for the plan-to-order estimate and for nothing
         // that has to agree with SAP.
-        conversion_to_kg: Decimal(15,6);  // Planning estimate factor. NOT for settlement or reconciliation
+        // Scale 9 since 27 Oct 2026: the pound is EXACTLY 0.45359237 kg by
+        // definition, and scale 6 stored it as 0.453592. Widening changes no
+        // existing value.
+        conversion_to_kg: Decimal(15,9);  // Planning estimate factor. NOT for settlement or reconciliation
 
         // WP-11: SAP T006 mapping. The unit travels on the PO, the GR and the
         // invoice. This list is a mixture — LTR is ISO, KG is internal, MT is
