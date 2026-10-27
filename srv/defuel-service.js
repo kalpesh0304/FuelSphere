@@ -526,12 +526,15 @@ async function nextDefuelId(db, station, date) {
 // Where a defuel sits in the tail's ledger
 // ===========================================================================
 //
-// THE DAY'S ROWS IN SEQUENCE ORDER, and the defuel goes after the last row
-// that happened at or before it. Sequence is per day on ROB_LEDGER and is the
-// order the replay walks, so the defuel takes the next number and every later
-// row that day moves up by one. Walking stops at the first row timed after the
-// defuel, so a day whose times run out of sequence still keeps the defuel
-// before the movement that came after it.
+// AFTER THE LATEST ROW TIMED AT OR BEFORE THE DEFUEL, on the defuel's date.
+// Sequence is per day on ROB_LEDGER and is the order the replay walks, so the
+// defuel takes the next number and every later row that day moves up by one.
+//
+// BY THE CLOCK, NOT BY WALKING THE SEQUENCE. A day's times do not always rise
+// with its sequence: a burn recorded on its departure date can carry 00:15
+// after a 23:49 uplift, and some seeded rows are simply out of order. Walking
+// the sequence and stopping at the first later time would put a defuel taken
+// at 23:59 after the 00:15 burn it came before.
 async function ledgerPosition(db, tail, date, time) {
     const all = await db.run(SELECT.from(LEDGER).where({ tail_number: tail }));
     const at = String(time || '23:59:59');
@@ -539,8 +542,9 @@ async function ledgerPosition(db, tail, date, time) {
         .sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0));
     let pred = null;
     for (const r of day) {
-        if (String(r.record_time || '00:00:00') > at) break;
-        pred = r;
+        const t = String(r.record_time || '00:00:00');
+        if (t > at) continue;
+        if (!pred || t >= String(pred.record_time || '00:00:00')) pred = r;
     }
     const sequence = pred ? (Number(pred.sequence) || 0) + 1 : 1;
     const next = day.find((r) => (Number(r.sequence) || 0) >= sequence) || null;
