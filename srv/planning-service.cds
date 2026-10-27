@@ -345,7 +345,17 @@ service PlanningService {
         // SUMMED ON READ rather than stored: cycles arrive after the leg has
         // flown, so a stored total would be wrong between the flight landing
         // and its last cycle being downlinked.
-        virtual null as apu_usage_hours : Decimal(8,2)
+        virtual null as apu_usage_hours : Decimal(8,2),
+
+        // HOW MUCH CAME BACK OFF, summed on read for the same reason the APU
+        // hours are: a defuel is recorded after the leg, so a stored total
+        // would be wrong between the flight landing and the defuel being
+        // keyed. It sums POSTED defuels only - a reversed one did not happen.
+        //
+        // NULL, NOT ZERO, when no defuel exists. Zero would assert that the
+        // aircraft was checked and nothing came off; the truth is that
+        // nothing was recorded.
+        virtual null as defuelled_qty_kg : Decimal(15,3)
     } excluding { fuel_order }
     actions {
         /**

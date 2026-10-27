@@ -106,6 +106,39 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
 
     const flightById = new Map(flights.map(f => [f.ID, f]));
 
+    // ---- what a batch is CALLED ------------------------------------------
+    //
+    // THE TICKET NUMBER, NOT THE LEDGER ROW ID. A batch is the parcel of fuel
+    // an uplift put on the aircraft, and the thing that identifies that
+    // parcel to everyone outside this system is the ticket: BPUK-LHR-
+    // 2026032501, not f30eb23b-77c1-5b2f-b7f2-b7bebe69f062.
+    //
+    // A UUID HERE IS A DEFECT, not a cosmetic one. The batch is shown on the
+    // stock valuation screen, it is what a defuel carries into a storage
+    // tank, and it is how somebody reconciles a layer back to the delivery it
+    // came from. None of that works with a generated key.
+    //
+    // 1,757 of the 1,763 uplift rows carry a ticket. The handful that do not
+    // keep the row id, because a batch must be unique and there is nothing
+    // else to call them.
+    const ticketNumberById = new Map(tickets.map(t => [t.ID, t.ticket_number || t.internal_number]));
+    const openingSeen = new Map();
+    const batchNameOf = (r, lineType, tail) => {
+        if (lineType === 'UPLIFT') {
+            return ticketNumberById.get(r.fuel_ticket_ID) || r.ID || '';
+        }
+        if (lineType === 'INITIAL') {
+            // AN OPENING BALANCE HAS NO TICKET - it is what was already on
+            // board when the window opened. It is named for the tail, and
+            // numbered only if a tail somehow opens twice.
+            const base = `OPENING-${tail}`;
+            const n = (openingSeen.get(base) || 0) + 1;
+            openingSeen.set(base, n);
+            return n === 1 ? base : `${base}-${n}`;
+        }
+        return null;
+    };
+
     // ---- whose fleet each tail belongs to --------------------------------
     //
     // FROM THE FLIGHTS, NOT FROM THE TAIL MASTER.
@@ -322,12 +355,30 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             push(tail, {
                 line_type: lineType,
                 reference: r.ID,
-                batch_ref: lineType === 'UPLIFT' || lineType === 'INITIAL' ? (r.ID || '') : null,
+                batch_ref: batchNameOf(r, lineType, tail),
                 qty_kg: qty === null ? null : kg(qty),
                 specific_gravity: num(r.specific_gravity) || num(r.wt_avg_specific_gravity),
                 rate_usd_per_kg: rate,
                 value_usd: num(r.value_usd),
-                flight_number: null,
+                // WHICH LEG THIS MOVEMENT BELONGS TO, resolved rather than
+                // left empty. ROB_LEDGER already names the flight on 5,306 of
+                // its 5,580 rows and FLIGHT_SCHEDULE.flight_number holds the
+                // IATA designator every other FuelSphere screen prints, so the
+                // column was never missing a source - only a lookup. The map
+                // is the one built above for the carrier vote.
+                //
+                // AN OPENING BALANCE NEVER CARRIES ONE, whatever the ledger
+                // says. An INITIAL row states what was already on board when
+                // the window opened - it is a starting position, not a leg
+                // that was flown - so a flight number against it would read as
+                // a claim that the fuel arrived on that flight.
+                //
+                // THIS OVERRIDES THE SOURCE ON 3 ROWS, deliberately. 270 of
+                // the 273 INITIAL ledger rows carry no flight_ID anyway; the
+                // remaining 3 do, and that link is suppressed here rather than
+                // shown, so the column means one thing on every row.
+                flight_number: lineType === 'INITIAL' ? null
+                    : (flightById.get(r.flight_ID) || {}).flight_number || null,
                 flight_date: r.record_date || null,
                 flight_aobt: r.record_date ? `${r.record_date}T${r.record_time || '00:00:00'}Z` : null,
                 station: r.airport_code || null,
@@ -475,6 +526,12 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             batch_ref: over.batch_ref || '',
             flight_number: mv.flight_number || '', flight_date: mv.flight_date || '',
             flight_aobt: mv.flight_aobt || '', station: mv.station || '',
+            // EMPTY ON EVERY SEEDED ROW, and it should be. A storage location
+            // is only ever written by a defuel posted through DefuelService;
+            // nothing in the historical replay put fuel into a tank on the
+            // ground. The column exists here so the seeded rows and the
+            // posted ones have the same shape.
+            storage_location: mv.storage_location || '',
             reference: mv.reference, line_type: mv.line_type,
             qty_kg: q, qty_l: litres(q, sg), specific_gravity: sg ?? '',
             rate_usd_per_kg: over.rate_usd_per_kg ?? '', value_usd: over.value_usd ?? '',
@@ -494,6 +551,7 @@ const LINE_ORDER = { INITIAL: 0, UPLIFT: 1, BLOCK_BURN: 2, APU_BURN: 3, ADJUSTME
             ID: uuid5(`BAL:${method}:${tail}:${L.batch_ref || '-'}:${L.layer_no ?? 0}`),
             valuation_method: method, tail_number: tail, carrier_code: carrierOf(tail),
             batch_ref: L.batch_ref || '',
+            storage_location: L.storage_location || '',
             // Empty under MAP, whose pool no single movement opened.
             line_type: L.line_type || '',
             station: L.station || '', flight_number: L.flight_number || '',

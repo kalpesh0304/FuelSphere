@@ -1,4 +1,5 @@
 using { fuelsphere as db } from '../db/fifo-valuation';
+using { fuelsphere as dfl } from '../db/defuel';
 
 /**
  * FuelSphere - fuel stock valuation, FIFO beside moving average.
@@ -37,4 +38,25 @@ service ValuationService {
      */
     @readonly
     entity BurnValuations as projection on db.FUEL_BURN_HEADER;
+
+    /**
+     * The defuels that produced the DEFUEL rows above.
+     *
+     * READ-ONLY HERE, AND WRITEABLE IN THE DEFUELING APP. This is the same
+     * document, shown beside the ledger rows it wrote so a reader asking
+     * "where did that movement come from" does not have to leave the screen.
+     * Recording and correcting a defuel stays in the app that owns it.
+     *
+     * IMPORTANT COLUMNS ONLY, per the 26 Oct instruction. The full document
+     * has thirty-odd fields; this view carries what identifies the movement
+     * and what it was worth.
+     */
+    @readonly
+    entity Defuels as projection on dfl.DEFUEL {
+        ID, defuel_id, defuel_type, source_mode, status,
+        tail_number, carrier_code, flight_number, flight_date,
+        station_code, defuel_date, defuel_time,
+        location_code, quantity_kg, specific_gravity, fuel_value_usd,
+        defuel_charges_usd, taxes_usd
+    };
 }
