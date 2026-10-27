@@ -83,6 +83,25 @@ entity CARRIER_MASTER : db.ActiveStatus, db.AuditTrail {
         // history — which is why the basis is recorded on every valued row.
         valuation_method : String(4);              // FIFO | MAP; null = FIFO
 
+        // ---- HOW THIS CARRIER WANTS TO BE REPORTED TO ---------------------
+        //
+        // THE DATABASE KEEPS ONE UNIT; THESE DECIDE WHAT IS SHOWN. Mass is
+        // stored in kilograms and volume in litres on every row in the
+        // system, because a ledger with mixed units is a ledger nobody can
+        // sum. These three say what a reader of THIS carrier's figures
+        // expects to see, and conversion happens at the edge.
+        //
+        // B6 READS IN GALLONS. That is the whole reason this exists: the same
+        // 150 litres is 39.63 US gallons to JetBlue and 150 litres to Air
+        // Canada, and it is the same fuel.
+        //
+        // CODES FROM UNIT_OF_MEASURE, not free text: KG, LTR, GAL, USG and MT
+        // are already mastered, and a typo here would silently stop every
+        // conversion that looks the unit up.
+        reporting_volume_uom : String(3);
+        reporting_mass_uom   : String(3);
+        reporting_currency   : String(3);
+
         notes         : String(500);
 
         // ---- TOLERANCE LIMITS, PER CARRIER ------------------------------

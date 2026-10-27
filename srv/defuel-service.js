@@ -40,6 +40,26 @@ const DEFUELS   = 'fuelsphere.DEFUEL';
 // leg that was flown before what is left is taken off on stand.
 const DEFUEL_LINE_ORDER = 5;
 
+// ===========================================================================
+// Volume units
+// ===========================================================================
+//
+// ONE TABLE, ONE PLACE. A conversion factor copied into two files is a
+// conversion factor that disagrees with itself the first time somebody
+// corrects one of them.
+//
+// 3.785411784 IS EXACT - it is the definition of the US gallon, not an
+// approximation - so it is written in full rather than rounded to 3.785.
+const LITRES_PER = {
+    LTR: 1,
+    L:   1,
+    GAL: 3.785411784,   // US gallon
+    USG: 3.785411784,   // US gallon, aviation spelling. The same unit.
+    IMP: 4.54609        // Imperial gallon, should it ever be configured
+};
+const toLitres = (v, uom) => Number(v || 0) * (LITRES_PER[String(uom || 'LTR').toUpperCase()] || 1);
+const fromLitres = (l, uom) => Number(l || 0) / (LITRES_PER[String(uom || 'LTR').toUpperCase()] || 1);
+
 const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -181,6 +201,21 @@ module.exports = cds.service.impl(async function () {
         }
         d.tail_number = tail.registration;
 
+        // THE CARRIER, EVEN WITHOUT A FLIGHT. It decides which unit the
+        // quantity was typed in, so a tail-only defuel cannot be left without
+        // one. The schedule knows who flies this tail; the majority answer is
+        // taken, the same rule the valuation seeder uses for a wet-leased
+        // airframe that flew under two codes.
+        if (!d.carrier_code) {
+            const flown = await db.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('airline_code')
+                .where({ aircraft_reg: d.tail_number, airline_code: { '!=': null } }));
+            const votes = new Map();
+            for (const f of flown) votes.set(f.airline_code, (votes.get(f.airline_code) || 0) + 1);
+            const ranked = [...votes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+            if (ranked.length) d.carrier_code = ranked[0][0];
+        }
+
         // BY KEY IF THERE IS ONE, BY CODE OTHERWISE. The picker binds to the
         // readable code so the user never sees a GUID, which means the code
         // can be the only thing that arrived.
@@ -207,11 +242,24 @@ module.exports = cds.service.impl(async function () {
             if (v) { d.supplier_ID = v.ID; d.supplier_name = v.supplier_name; }
         }
 
-        const litres = Number(d.quantity_l) || 0;
-        if (!(litres > 0)) {
+        // WHAT UNIT DID THE USER JUST TYPE IN? The carrier decides, and the
+        // carrier is known by now - from the flight, or from the tail. A
+        // carrier with nothing configured reads in litres, which is what the
+        // database stores, so an unconfigured airline is merely unconverted
+        // rather than wrong.
+        const carrier = d.carrier_code && await db.run(
+            SELECT.one.from('fuelsphere.CARRIER_MASTER')
+                .columns('reporting_volume_uom')
+                .where({ carrier_code: d.carrier_code }));
+        d.volume_uom = (carrier && carrier.reporting_volume_uom) || 'LTR';
+
+        const entered = Number(d.quantity_vol) || 0;
+        if (!(entered > 0)) {
             return req.error(400, 'DFL424: the quantity defuelled must be greater than zero.',
-                'quantity_l');
+                'quantity_vol');
         }
+        const litres = Math.round(toLitres(entered, d.volume_uom) * 100) / 100;
+        d.quantity_l = litres;
 
         // ---- draw the FIFO layers ---------------------------------------
         //

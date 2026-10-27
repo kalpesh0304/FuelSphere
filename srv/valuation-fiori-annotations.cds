@@ -363,3 +363,48 @@ annotate ValuationService.Defuels with @(
         }
     }
 );
+
+
+// ===========================================================================
+// Defuel Movements — the ledger lines a defuel wrote
+// ===========================================================================
+//
+// A FIFTH VIEW, AND THE ONLY ONE THAT PRE-FILTERS. The three valuation views
+// deliberately open unfiltered, because a view that silently narrowed would
+// make the same query return different totals depending on which tab the
+// reader was on. This one is different in kind: it is not another way of
+// reading the valuation, it is a worklist for the handful of rows a defuel
+// produced among twelve thousand burns and uplifts.
+//
+// WITHOUT IT THE LINES ARE EFFECTIVELY INVISIBLE. Six rows in 12,882, in a
+// table that shows fifteen at a time, reachable only by knowing to filter on
+// a line type - which is the reported "defuel entries not appearing".
+//
+// NEWEST FIRST, unlike the replay views: somebody checking a defuel they just
+// recorded wants it at the top, not buried under a year of history.
+annotate ValuationService.StockMovements with @(
+    UI.SelectionPresentationVariant #DefuelMovements: {
+        $Type: 'UI.SelectionPresentationVariantType',
+        Text: 'Defuel Movements',
+        SelectionVariant: {
+            $Type: 'UI.SelectionVariantType',
+            SelectOptions: [{
+                $Type: 'UI.SelectOptionType',
+                PropertyName: line_type,
+                Ranges: [{
+                    $Type: 'UI.SelectionRangeType',
+                    Sign: #I, Option: #EQ, Low: 'DEFUEL'
+                }]
+            }]
+        },
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [
+                { Property: flight_aobt, Descending: true },
+                { Property: reference },
+                { Property: sequence }
+            ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);

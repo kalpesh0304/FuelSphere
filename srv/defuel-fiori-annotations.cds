@@ -148,6 +148,7 @@ annotate DefuelService.Defuels with @(
             { Value: defuel_date,      Label: 'Defuel Date' },
             { Value: defuel_time,      Label: 'Defuel Time' },
             { Value: ticket_number,    Label: 'Ticket No.' },
+            { Value: quantity_vol,     Label: 'Quantity' },
             { Value: quantity_l,       Label: 'Quantity (L)' },
             { Value: quantity_kg,      Label: 'Quantity (kg)' },
             // DERIVED, AND IT BELONGS WITH THE SOURCE: it is the weighted
@@ -201,7 +202,12 @@ annotate DefuelService.Defuels with {
     defuel_time         @title: 'Defuel Time';
     ticket_number       @title: 'Ticket No.';
 
-    quantity_l          @title: 'Quantity (L)'        @Common.FieldControl: #Mandatory;
+    // THE UNIT TRAVELS WITH THE FIGURE. @Measures.Unit makes Fiori print
+    // it beside the number, so a B6 user sees 40 GAL and not a bare 40.
+    quantity_vol        @title: 'Quantity'            @Common.FieldControl: #Mandatory
+                        @Measures.Unit: volume_uom;
+    volume_uom          @title: 'Volume UOM'          @readonly;
+    quantity_l          @title: 'Quantity (L)'        @readonly;
     quantity_kg         @title: 'Quantity (kg)'       @readonly;
     specific_gravity    @title: 'Specific Gravity'    @readonly;
 

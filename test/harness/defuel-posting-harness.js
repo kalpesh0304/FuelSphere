@@ -50,6 +50,26 @@ const fullError = (r) => {
 // LITRES FOR A WANTED MASS. The screen takes litres and the ledger values
 // kilograms, so a criterion that wants to straddle a layer boundary has to
 // say so in litres - at the same weighted gravity the service converts with.
+const uomOf = async (tailNumber) => {
+    const f = await cds.db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
+        .columns('airline_code').where({ aircraft_reg: tailNumber, airline_code: { '!=': null } }));
+    if (!f) return 'LTR';
+    const c = await cds.db.run(SELECT.one.from('fuelsphere.CARRIER_MASTER')
+        .columns('reporting_volume_uom').where({ carrier_code: f.airline_code }));
+    return (c && c.reporting_volume_uom) || 'LTR';
+};
+const PER = { LTR: 1, L: 1, GAL: 3.785411784, USG: 3.785411784, IMP: 4.54609 };
+
+// VOLUME FOR A WANTED MASS, IN THE CARRIER'S OWN UNIT. The screen sends
+// gallons for B6 and litres for everyone else, so a criterion that wants to
+// straddle a layer boundary has to say so in whatever unit this tail's
+// airline reads - otherwise it asks for 3.79 times the fuel it meant.
+const volumeFor = async (tailNumber, wantKg) => {
+    const litres = await litresFor(tailNumber, wantKg);
+    const uom = await uomOf(tailNumber);
+    return Math.round((litres / (PER[uom] || 1)) * 100) / 100;
+};
+
 const litresFor = async (tailNumber, wantKg) => {
     const ls = await layersOf(tailNumber);
     const top = ls.reduce((a, l) => a + n(l.balance_qty_kg) * n(l.specific_gravity), 0);
@@ -112,7 +132,7 @@ describe('Defuel — posting into the valuation ledger', () => {
             location_code: location.code,
             defuel_date: '2026-09-24',
             defuel_time: '14:30:00',
-            quantity_l: 100,
+            quantity_vol: 100,
             ...over
         });
         if (draft.status >= 400) return draft;
@@ -135,9 +155,9 @@ describe('Defuel — posting into the valuation ledger', () => {
         // LITRES, because that is what the screen sends - a kilogram figure
         // passed as litres converts to less mass than intended and quietly
         // stops crossing the boundary this criterion exists to test.
-        const qty = await litresFor(tail, n(first.balance_qty_kg) + 50);
+        const qty = await volumeFor(tail, n(first.balance_qty_kg) + 50);
 
-        const res = await createDefuel({ quantity_l: qty });
+        const res = await createDefuel({ quantity_vol: qty });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const ref = res.data.defuel_id;
         assert.ok(ref, 'no defuel_id was stamped');
@@ -170,7 +190,7 @@ describe('Defuel — posting into the valuation ledger', () => {
     it('EXIT-2  stock is moved, not created: the halves cancel', async function () {
         this.timeout(120000);
         const before = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        const res = await createDefuel({ quantity_l: 50 });
+        const res = await createDefuel({ quantity_vol: 50 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const ref = res.data.defuel_id;
         // THE MASS IS DERIVED NOW. Litres are what was entered; kilograms are
@@ -199,7 +219,7 @@ describe('Defuel — posting into the valuation ledger', () => {
     // ---------------------------------------------------------- EXIT-3 --
     it('EXIT-3  the tank holds the batch at the batch rate, not a blend', async function () {
         this.timeout(120000);
-        const res = await createDefuel({ quantity_l: 25 });
+        const res = await createDefuel({ quantity_vol: 25 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const inRows = (await rowsFor(res.data.defuel_id))
             .filter((r) => r.valuation_method === 'FIFO' && n(r.qty_kg) > 0);
@@ -231,7 +251,7 @@ describe('Defuel — posting into the valuation ledger', () => {
         if (!pool) return this.skip();   // a seed gap, not a behaviour to assert
 
         const rate = n(pool.rate_usd_per_kg);
-        const res = await createDefuel({ quantity_l: 30 });
+        const res = await createDefuel({ quantity_vol: 30 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
 
         const map = (await rowsFor(res.data.defuel_id)).filter((r) => r.valuation_method === 'MAP');
@@ -250,8 +270,8 @@ describe('Defuel — posting into the valuation ledger', () => {
     // ---------------------------------------------------------- EXIT-5 --
     it('EXIT-5  the number is DFL-<station>-YYYYMM-NNNNNN and increments', async function () {
         this.timeout(120000);
-        const a = await createDefuel({ quantity_l: 10, station_code: 'BOS' });
-        const b = await createDefuel({ quantity_l: 10, station_code: 'BOS' });
+        const a = await createDefuel({ quantity_vol: 10, station_code: 'BOS' });
+        const b = await createDefuel({ quantity_vol: 10, station_code: 'BOS' });
         assert.ok(a.status < 400 && b.status < 400, 'posting failed');
 
         const re = /^DFL-BOS-202609-(\d{6})$/;
@@ -263,7 +283,7 @@ describe('Defuel — posting into the valuation ledger', () => {
 
         // PER STATION: a different station restarts its own run rather than
         // continuing a shared one.
-        const c = await createDefuel({ quantity_l: 10, station_code: 'LAX' });
+        const c = await createDefuel({ quantity_vol: 10, station_code: 'LAX' });
         assert.ok(/^DFL-LAX-202609-000001$/.test(c.data.defuel_id),
             `a new station started at ${c.data.defuel_id}, not 000001`);
         out(`${a.data.defuel_id} -> ${b.data.defuel_id}, and LAX restarts at ${c.data.defuel_id}`);
@@ -275,7 +295,7 @@ describe('Defuel — posting into the valuation ledger', () => {
         const onHand = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
         // TWO DECIMALS: quantity_l is Decimal(15,2), and a third is refused by
         // the type before the rule under test is ever reached.
-        const res = await createDefuel({ quantity_l: await litresFor(tail, onHand + 1000) });
+        const res = await createDefuel({ quantity_vol: await volumeFor(tail, onHand + 1000) });
 
         assert.ok(res.status >= 400, 'a defuel drew more fuel than the aircraft was carrying');
         const msg = fullError(res);
@@ -290,7 +310,7 @@ describe('Defuel — posting into the valuation ledger', () => {
     it('EXIT-7  reversing puts the stock back where it came from', async function () {
         this.timeout(120000);
         const before = r3((await layersOf(tail)).reduce((s, l) => s + n(l.balance_qty_kg), 0));
-        const res = await createDefuel({ quantity_l: 40 });
+        const res = await createDefuel({ quantity_vol: 40 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const id = res.data.ID;
 
@@ -317,7 +337,7 @@ describe('Defuel — posting into the valuation ledger', () => {
     // ---------------------------------------------------------- EXIT-9 --
     it('EXIT-9  a defuel is PARKED, and only a supplier one can be posted', async function () {
         this.timeout(120000);
-        const res = await createDefuel({ quantity_l: 20 });
+        const res = await createDefuel({ quantity_vol: 20 });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         assert.strictEqual(res.data.status, 'PARKED',
             'a new defuel is not PARKED - the fuel has moved but the money has not');
@@ -334,7 +354,7 @@ describe('Defuel — posting into the valuation ledger', () => {
     // --------------------------------------------------------- EXIT-10 --
     it('EXIT-10  the credit is typed, the write-off is the difference', async function () {
         this.timeout(120000);
-        const res = await createDefuel({ quantity_l: 30, defuel_type: 'TO_SUPPLIER' });
+        const res = await createDefuel({ quantity_vol: 30, defuel_type: 'TO_SUPPLIER' });
         assert.ok(res.status < 400, `posting failed: ${fullError(res)}`);
         const id = res.data.ID;
         const original = n(res.data.fuel_value_usd);

@@ -275,11 +275,22 @@ entity DEFUEL : cuid, db.AuditTrail {
         // handling loss would need an account to absorb it, and FuelSphere
         // does not pick accounts.
         //
-        // LITRES ARE WHAT THE USER ENTERS, because litres are what the truck
-        // meter reads. Kilograms are what the ledger values, and they are
-        // CALCULATED - litres times the gravity of the fuel actually coming
-        // off the aircraft.
-        quantity_l       : Decimal(15,2) @mandatory;
+        // THE USER ENTERS VOLUME IN THEIR OWN CARRIER'S UNIT, because that is
+        // what their meter and their paperwork read. JetBlue works in US
+        // gallons; Air Canada works in litres. The same 150 litres is 39.63
+        // gallons, and asking a B6 operator to convert in their head before
+        // typing is how a defuel ends up wrong by a factor of 3.79.
+        //
+        // volume_uom IS STAMPED FROM THE CARRIER, not chosen here - it is a
+        // reporting decision made once per airline, not per defuel.
+        quantity_vol     : Decimal(15,2) @mandatory;
+        volume_uom       : String(3);
+
+        // LITRES AND KILOGRAMS ARE BOTH DERIVED, and both are stored. The
+        // database keeps ONE unit per measure - a ledger with mixed units is
+        // a ledger nobody can sum - so litres is the canonical volume and
+        // kilograms the canonical mass, whatever the screen showed.
+        quantity_l       : Decimal(15,2);
         quantity_kg      : Decimal(15,3);
 
         // DERIVED AND DISPLAY-ONLY: the quantity-weighted average of the
@@ -393,6 +404,53 @@ type GlAccountRole : String(24) enum {
 // Writing a defuel's time into flight_aobt would be the two-meanings defect
 // this codebase has recorded several instances of. So a general instant is
 // added beside it rather than overloading it.
+// ===========================================================================
+// INVOICE_ITEMS — what a defuelling agent billed for
+// ===========================================================================
+//
+// AN EXTEND, NOT A COLUMN IN schema.cds, because the dependency only runs one
+// way: this file imports the core schema, so the core schema cannot import
+// this one. ROB_LEDGER was extended from here for the same reason.
+//
+// A defuel costs money to perform - pump time, truck, disposal - and that
+// charge arrives on an invoice like any other payable line. It sits BESIDE
+// delivery, fuel_order and ticket rather than replacing them: one invoice
+// routinely carries uplift lines and defuel lines together.
+//
+// THIS IS MONEY OWED, NOT MONEY OWED TO. The credit a vendor returns for the
+// fuel itself is a RECEIVABLE and is deliberately not modelled here - netting
+// the two through one association is how a credit quietly reduces a payable.
+// ===========================================================================
+// INVOICES — what this vendor still owes the airline
+// ===========================================================================
+//
+// "A TAB IN INVOICING THAT SHOWS EXPECTED CREDITS FROM THAT VENDOR", asked
+// 27 Oct. On the INVOICE, not on the invoice LIST, and the reason is
+// concrete rather than stylistic.
+//
+// A Fiori multi-view list shares ONE filter bar across its views, so a field
+// missing from any view is a field the bar cannot offer. The invoice list
+// filters on invoice_number, sap_invoice_number, invoice_date,
+// approval_status, match_status and posting_gate - an expected credit has
+// none of those, because it is not an invoice. Adding it as a view would
+// strip the main invoicing screen's filter bar down to what the two have in
+// common.
+//
+// On the invoice it reads better anyway: you are looking at what a vendor
+// billed, and beside it is what that vendor still owes you.
+//
+// UNMANAGED, so it adds no column to INVOICES - it is a join, evaluated on
+// read, not a stored key.
+extend db.INVOICES with {
+        vendor_expected_credits : Association to many DEFUEL
+            on  vendor_expected_credits.supplier    = supplier
+            and vendor_expected_credits.defuel_type = 'TO_SUPPLIER';
+}
+
+extend db.INVOICE_ITEMS with {
+        defuel : Association to DEFUEL;
+}
+
 extend db.ROB_LEDGER with {
         // The movement's own instant. For a flight-bound row this equals
         // flight_aobt; for a defuel or a tail-only uplift it is the only

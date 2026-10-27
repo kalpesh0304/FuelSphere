@@ -26,6 +26,8 @@ using { fuelsphere as db } from '../db/schema';
 using { fuelsphere as idr } from '../db/idr-rule-status';
 using { fuelsphere as ub } from '../db/unbilled-tickets';
 
+using { fuelsphere as dfl } from '../db/defuel';
+
 @path: '/odata/v4/invoice'
 service InvoiceService {
 
@@ -302,6 +304,11 @@ service InvoiceService {
         uom         : redirected to UnitsOfMeasure,
         delivery    : redirected to FuelDeliveries,
         fuel_order  : redirected to FuelOrders,
+
+        // THE READABLE DEFUEL NUMBER, flattened. defuel_ID is a generated
+        // key and a column showing one tells a reader nothing - the same
+        // reason the batch references were renamed off their UUIDs.
+        defuel.defuel_id as defuel_number : String(30),
         flight      : redirected to FlightSchedule,
 
         // A line that resolved to a ticket is green whichever key got it
@@ -1091,4 +1098,60 @@ service InvoiceService {
     // INV408 - Posting period closed
     // INV409 - Approval limit exceeded
     // INV410 - Currency conversion error
+
+    /**
+     * Expected credits — money a vendor owes the airline for fuel handed back.
+     *
+     * ===================================================================
+     * THIS IS A RECEIVABLE ON A PAYABLES SCREEN, and that is the whole
+     * reason it is its own entity set rather than another view over
+     * Invoices. An expected credit has no invoice number, no payment terms
+     * and no document in the vendor's system - it is the airline's own
+     * assertion that it is owed. Folding it into the invoice list would
+     * mix money owed with money owed TO in every count and total on that
+     * screen.
+     *
+     * READ-ONLY. A credit is agreed in the Defueling app, where the fuel
+     * and its value are; this is where it is CHASED.
+     *
+     * OLDEST FIRST, because an expected credit nobody chases becomes a
+     * write-off by default. The stalest belongs at the top.
+     * ===================================================================
+     */
+    @readonly
+    entity ExpectedCredits as projection on dfl.DEFUEL {
+        ID,
+        defuel_id,
+        // CARRIED ONLY TO SATISFY THE ON-CONDITION of the association from
+        // Invoices. Every row here is TO_SUPPLIER by the WHERE clause below,
+        // so the column says nothing new - but CAP redirects the association
+        // to this projection and needs the element to exist on it.
+        defuel_type,
+        defuel_date,
+        station_code,
+        tail_number,
+        carrier_code,
+        supplier,
+        supplier_name,
+        location_code,
+        quantity_vol,
+        volume_uom,
+        quantity_l,
+        quantity_kg,
+        fuel_value_usd      as original_value_usd : Decimal(15,2),
+        expected_credit_usd,
+        write_off_usd,
+        status,
+
+        // HOW LONG IT HAS BEEN WAITING. The point of the screen: a credit
+        // agreed four months ago and never received is the one to ring
+        // about, and a list sorted by date alone does not say so.
+        //
+        // COMPUTED ON READ, NOT IN SQL. A date subtraction that works on
+        // SQLite and fails on HANA is this codebase's most expensive
+        // recurring defect - the CASE-without-predicate incident cost a
+        // deploy. The handler fills it, exactly as apu_usage_hours is
+        // filled on PlanningService.FlightSchedule.
+        virtual null as age_days : Integer
+    } where defuel_type = 'TO_SUPPLIER' and status <> 'REVERSED';
 }

@@ -293,6 +293,20 @@ annotate InvoiceService.Invoices with @(
                 Label  : 'General Information',
                 Target : '@UI.FieldGroup#InvoiceGeneral'
             },
+            // WHAT THIS VENDOR STILL OWES THE AIRLINE.
+            //
+            // A RECEIVABLE ON A PAYABLES DOCUMENT, and it is labelled so
+            // nobody reads it as part of what is being paid. It is here
+            // rather than as a view on the invoice LIST because a Fiori
+            // multi-view list shares one filter bar, and an expected credit
+            // has no invoice number, no invoice date and no match status -
+            // adding it there would strip those from the main screen.
+            {
+                $Type  : 'UI.ReferenceFacet',
+                ID     : 'VendorExpectedCredits',
+                Label  : 'Expected Credits from this Vendor',
+                Target : 'vendor_expected_credits/@UI.LineItem#OnInvoice'
+            },
             {
                 $Type  : 'UI.ReferenceFacet',
                 ID     : 'SupplierInfo',
@@ -2309,3 +2323,99 @@ annotate InvoiceService.InvoiceItems with @(
 annotate InvoiceService.Invoices with {
     gross_amount @Common.FieldControl: #ReadOnly;
 };
+
+
+// ===========================================================================
+// Expected credits — money the airline is OWED
+// ===========================================================================
+//
+// A TAB ON THE INVOICE LIST, as asked on 27 Oct, AND A WARNING WITH IT: every
+// other view on this screen is a PAYABLE. This one is a RECEIVABLE. The
+// counts and totals of this tab must never be added to the others, because
+// money owed and money owed TO do not sum to anything meaningful.
+//
+// It is kept as its own entity set rather than a filter over Invoices for
+// exactly that reason - an expected credit has no invoice number, no payment
+// terms and no document in the vendor's system.
+//
+// OLDEST FIRST. A credit nobody chases becomes a write-off by default, so the
+// stalest belongs at the top - the same reasoning the defueling app's own
+// open-credits view used before the redesign.
+annotate InvoiceService.ExpectedCredits with @(
+    UI: {
+        SelectionFields: [ supplier_name, carrier_code, station_code, status, defuel_date ],
+
+        LineItem: [
+            { Value: supplier_name,       Label: 'Vendor',            ![@UI.Importance]: #High },
+            { Value: defuel_id,           Label: 'Defuel No.',        ![@UI.Importance]: #High },
+            { Value: defuel_date,         Label: 'Defuel Date',       ![@UI.Importance]: #High },
+            { Value: age_days,            Label: 'Age (days)',        ![@UI.Importance]: #High },
+            { Value: station_code,        Label: 'Station',           ![@UI.Importance]: #Medium },
+            { Value: tail_number,         Label: 'Tail',              ![@UI.Importance]: #Medium },
+            { Value: quantity_vol,        Label: 'Quantity',          ![@UI.Importance]: #Medium },
+            { Value: original_value_usd,  Label: 'Original Value',    ![@UI.Importance]: #High },
+            { Value: expected_credit_usd, Label: 'Expected Credit',   ![@UI.Importance]: #High },
+            { Value: write_off_usd,       Label: 'Write-off',         ![@UI.Importance]: #High },
+            { Value: status,              Label: 'Status',            ![@UI.Importance]: #Medium }
+        ],
+
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [ { Property: defuel_date } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+annotate InvoiceService.ExpectedCredits with {
+    supplier_name       @title: 'Vendor';
+    defuel_id           @title: 'Defuel No.';
+    defuel_date         @title: 'Defuel Date';
+    age_days            @title: 'Age (days)'
+                        @Common.QuickInfo: 'Days since the fuel came off the aircraft. A credit nobody chases becomes a write-off.';
+    station_code        @title: 'Station';
+    tail_number         @title: 'Tail';
+    carrier_code        @title: 'Carrier';
+    quantity_vol        @title: 'Quantity' @Measures.Unit: volume_uom;
+    volume_uom          @title: 'Volume UOM';
+    original_value_usd  @title: 'Original Value (USD)';
+    expected_credit_usd @title: 'Expected Credit (USD)';
+    write_off_usd       @title: 'Write-off (USD)';
+    status              @title: 'Status';
+};
+
+// A DISTINCT QUALIFIER, because Fiori Elements keys a multi-view list by
+// annotation path and two views sharing one collide into no table at all.
+annotate InvoiceService.ExpectedCredits with @(
+    UI.SelectionPresentationVariant #ExpectedCredits: {
+        $Type: 'UI.SelectionPresentationVariantType',
+        Text: 'Expected Credits',
+        SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [ { Property: defuel_date } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+annotate InvoiceService.InvoiceItems with {
+    defuel_number @title: 'Defuel No.'
+                  @Common.QuickInfo: 'The defuel this charge was billed for, if any. A defuelling agent charges for the work; the credit for the fuel itself is a receivable and is tracked separately.';
+};
+
+// The facet's own columns. The vendor is the document's, so it is not
+// repeated; what matters here is age and money.
+annotate InvoiceService.ExpectedCredits with @(
+    UI.LineItem #OnInvoice: [
+        { Value: defuel_id,           Label: 'Defuel No.',      ![@UI.Importance]: #High },
+        { Value: defuel_date,         Label: 'Defuel Date',     ![@UI.Importance]: #High },
+        { Value: age_days,            Label: 'Age (days)',      ![@UI.Importance]: #High },
+        { Value: station_code,        Label: 'Station',         ![@UI.Importance]: #Medium },
+        { Value: tail_number,         Label: 'Tail',            ![@UI.Importance]: #Medium },
+        { Value: original_value_usd,  Label: 'Original Value',  ![@UI.Importance]: #High },
+        { Value: expected_credit_usd, Label: 'Expected Credit', ![@UI.Importance]: #High },
+        { Value: write_off_usd,       Label: 'Write-off',       ![@UI.Importance]: #Medium },
+        { Value: status,              Label: 'Status',          ![@UI.Importance]: #Medium }
+    ]
+);
