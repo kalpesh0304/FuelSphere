@@ -541,11 +541,27 @@ module.exports = class InvoiceService extends cds.ApplicationService {
         // PATCH and UPDATE both: under lean draft a draft edit arrives as UPDATE
         // on the .drafts entity - a PATCH-only hook never fires (the order
         // screens hook both for the same reason).
-        // A NEW INVOICE PRICES IN USD until told otherwise. Every seeded
-        // contract does, and the line amounts read their currency from here -
-        // a header with none left the whole document's money unlabelled.
-        this.before(['NEW', 'CREATE'], Invoices.drafts, (req) => {
-            if (!req.data.currency_code) req.data.currency_code = 'USD';
+        // A NEW INVOICE TAKES ITS SUPPLIER'S CONTRACT CURRENCY. It used to
+        // default to a literal USD, which labelled every TAP invoice in
+        // dollars. The vendor issues the document, so its currency is the
+        // contract's; the line amounts read their currency from here.
+        const supplierCurrency = async (supplierId) => {
+            if (!supplierId) return null;
+            const c = await SELECT.one.from('fuelsphere.MASTER_CONTRACTS').columns('currency_code')
+                .where({ supplier_ID: supplierId, is_active: true });
+            return (c && c.currency_code) || null;
+        };
+        this.before(['NEW', 'CREATE'], Invoices.drafts, async (req) => {
+            if (!req.data.currency_code) {
+                const cur = await supplierCurrency(req.data.supplier_ID);
+                if (cur) req.data.currency_code = cur;
+            }
+        });
+        this.before(['PATCH', 'UPDATE'], Invoices.drafts, async (req) => {
+            if (req.data.supplier_ID && !req.data.currency_code) {
+                const cur = await supplierCurrency(req.data.supplier_ID);
+                if (cur) req.data.currency_code = cur;
+            }
         });
 
         this.before(['PATCH', 'UPDATE'], Invoices.drafts, async (req) => {

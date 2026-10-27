@@ -77,6 +77,43 @@ const C = {
 };
 
 // ===========================================================================
+// QUANTITIES IN DIFFERENT UNITS
+//
+// A line is in the CONTRACT's unit (the vendor issued it), a goods receipt may
+// be in KG (gauge-derived) and an order in the carrier's volume unit. Compared
+// only after both sides are in litres; a mass side needs a density, taken from
+// the delivery or the ticket - measured, never assumed.
+// ===========================================================================
+const { toCommonLitres } = require('./fuel-uom');
+
+const densityOf = (res) => num(res.delivery && res.delivery.density) || num(res.ticket && res.ticket.density_value);
+
+async function normalised(it, res, grUom) {
+    const d = densityOf(res);
+    const a = await toCommonLitres(it.quantity, it.uom_code, num(res.ticket && res.ticket.density_value) || d);
+    const b = await toCommonLitres(res.delivery && res.delivery.delivered_quantity, grUom, d);
+    return { line: a.litres, gr: b.litres,
+             why: a.litres === null ? `the line ${a.reason}` : b.litres === null ? `the receipt ${b.reason}` : 'both convert' };
+}
+
+async function convertible(it, res, grUom) {
+    const n = await normalised(it, res, grUom);
+    return n.line !== null && n.gr !== null;
+}
+
+/** INV467 in one unit: the line's where the order agrees, litres where it does not. */
+async function exceedsOrder(it, res, qty, orderedV) {
+    const ou = res.order.uom_code;
+    if (!ou || !it.uom_code || ou === it.uom_code) {
+        return qty > orderedV ? { line: qty, order: orderedV, unit: it.uom_code || '' } : null;
+    }
+    const a = await toCommonLitres(qty, it.uom_code, num(res.ticket && res.ticket.density_value) || densityOf(res));
+    const b = await toCommonLitres(orderedV, ou, num(res.order.conversion_density) || densityOf(res));
+    if (a.litres === null || b.litres === null) return null;   // not comparable is not exceeded
+    return a.litres > b.litres ? { line: a.litres, order: b.litres, unit: 'L' } : null;
+}
+
+// ===========================================================================
 // 1. THE REGISTRY
 // ===========================================================================
 
@@ -733,12 +770,17 @@ async function runChecks(invoice, items, opts, tx) {
                  `A unit of measure is missing (line: ${it.uom_code || 'absent'}, goods receipt: ${grUomV || 'absent'}), so the two cannot be compared.`);
             note(C.QTY_VS_GR, at, 'NOT_APPLICABLE',
                  'A unit of measure is missing, so a quantity comparison would compare unlike figures.');
-        } else if (grUomV !== it.uom_code) {
+        } else if (grUomV !== it.uom_code && !(await convertible(it, res, grUomV))) {
+            // DIFFERENT UNITS WITH NO CONVERSION BETWEEN THEM - the only case
+            // this rule now fires on. Until carrier units existed it fired on
+            // ANY difference, so every gauge-derived delivery (KG) against a
+            // litre invoice line raised it and suspended INV451.
+            const why = (await normalised(it, res, grUomV)).why;
             push(raise(registry, C.UOM_MISMATCH, { ...at,
-                message: `Line is in ${it.uom_code}; the goods receipt is in ${grUomV}. `
+                message: `Line is in ${it.uom_code}; the goods receipt is in ${grUomV}, and ${why}. `
                        + `Comparing the numbers would compare different things.` }));
             note(C.QTY_VS_GR, at, 'NOT_APPLICABLE',
-                 `The units differ (${it.uom_code} against ${grUomV}), so the quantity comparison was suspended rather than passed (INV468).`);
+                 `The units differ (${it.uom_code} against ${grUomV}) and do not convert, so the quantity comparison was suspended rather than passed (INV468).`);
         } else if (!num(res.delivery.delivered_quantity)) {
             note(C.UOM_MISMATCH, at, 'PASSED');
             note(C.QTY_VS_GR, at, 'NOT_APPLICABLE',
@@ -746,9 +788,15 @@ async function runChecks(invoice, items, opts, tx) {
         } else {
             note(C.UOM_MISMATCH, at, 'PASSED');
             {
-                const grQty = num(res.delivery.delivered_quantity);
+                // In the line's own unit where the two agree - unchanged from
+                // before - and in litres where they differ but convert.
+                const same = grUomV === it.uom_code;
+                const n = same ? null : await normalised(it, res, grUomV);
+                const lineQ = same ? qty : n.line;
+                const grQty = same ? num(res.delivery.delivered_quantity) : n.gr;
+                const unit = same ? it.uom_code : 'L';
                 if (grQty) {
-                    const variance = r4(qty - grQty);
+                    const variance = r4(lineQ - grQty);
                     const pct = r4((variance / grQty) * 100);
                     const t = await resolveTolerance('INVOICE_LINE', 'QUANTITY', scope, asOf, tx);
                     const reg = registry.get(C.QTY_VS_GR);
@@ -756,10 +804,11 @@ async function runChecks(invoice, items, opts, tx) {
                     if (rung.severity) {
                         push(raise(registry, C.QTY_VS_GR, { ...at,
                             severity: rung.severity, rung: rung.rung,
-                            message: `Invoiced ${qty} ${it.uom_code} against goods receipt ${grQty} `
+                            message: `Invoiced ${lineQ} ${unit} against goods receipt ${grQty} ${unit}`
+                                   + (same ? ' ' : ` (converted: line ${qty} ${it.uom_code}, receipt in ${grUomV}) `)
                                    + `(${pct > 0 ? '+' : ''}${pct}%), which is the ${rung.rung} rung `
                                    + `of ${t.rule ? t.rule.rule_code : 'no tolerance rule'}.`,
-                            observed: qty, expected: grQty, variance, variancePct: pct,
+                            observed: lineQ, expected: grQty, variance, variancePct: pct,
                             threshold: rung.threshold, toleranceRuleId: t.rule && t.rule.ID }));
                     } else {
                         // THE LADDER RESOLVED AND NO RUNG FIRED. That is a
@@ -768,7 +817,7 @@ async function runChecks(invoice, items, opts, tx) {
                         // was measured and found inside tolerance.
                         note(C.QTY_VS_GR, at, 'PASSED', null,
                              { severity: null, severity_source: null,
-                               message: `Invoiced ${qty} against goods receipt ${grQty} `
+                               message: `Invoiced ${lineQ} ${unit} against goods receipt ${grQty} ${unit} `
                                       + `(${pct > 0 ? '+' : ''}${pct}%), inside `
                                       + `${t.rule ? t.rule.rule_code : 'the registry default'}.` });
                     }
@@ -785,11 +834,12 @@ async function runChecks(invoice, items, opts, tx) {
         } else if (!orderedV) {
             note(C.QTY_EXCEEDS_ORDER, at, 'NOT_APPLICABLE',
                  `Order ${res.order.order_number} records no ordered quantity, so there is no figure to exceed.`);
-        } else if (qty > orderedV) {
+        } else if (await exceedsOrder(it, res, qty, orderedV)) {
+            const cmp = await exceedsOrder(it, res, qty, orderedV);
             push(raise(registry, C.QTY_EXCEEDS_ORDER, { ...at,
-                message: `Invoiced ${qty} exceeds the ordered ${orderedV} on `
+                message: `Invoiced ${cmp.line} ${cmp.unit} exceeds the ordered ${cmp.order} ${cmp.unit} on `
                        + `${res.order.order_number}.`,
-                observed: qty, expected: orderedV, variance: r4(qty - orderedV) }));
+                observed: cmp.line, expected: cmp.order, variance: r4(cmp.line - cmp.order) }));
         } else {
             note(C.QTY_EXCEEDS_ORDER, at, 'PASSED');
         }

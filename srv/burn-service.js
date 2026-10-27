@@ -14,6 +14,15 @@ const { applyLedgerLitres } = require('./lib/rob-litres');
 const { resolveTail } = require('./lib/tail-resolver');
 const { recalculateTail, lineOrderOf } = require('./lib/rob-recalculate');
 const { applyFlightSummary } = require('./lib/burn-summary');
+const { applyCarrierUnits } = require('./lib/carrier-units');
+const BURN_CARRIER_UNITS = {
+    mass: ['dispatch_kg', 'fqis_out_kg', 'fqis_in_kg', 'expected_delta_kg', 'actual_delta_kg', 'block_burn_kg',
+           'apu_burn_sum_kg', 'total_burn_kg', 'engine_burn_split_kg', 'arrival_rob_kg', 'unallocated_fuel_kg',
+           'planned_block_burn_kg', 'block_burn_variance_kg'].map(k => [k, k.replace(/_kg$/, '_cm')])
+          .concat([['apu_rate_kg_hr', 'apu_rate_cm_hr']]),
+    volume: [['uplift_l', 'uplift_cv']],
+    rate: [['map_usd_per_kg', 'map_per_cm']]
+};
 const { applyBurnEmissions } = require('./lib/carbon-emissions');
 const {
     PHASE, SOURCE, BASIS,
@@ -71,6 +80,8 @@ module.exports = class BurnService extends cds.ApplicationService {
             // and fqis_in_kg, and those are what applyFlightSummary has just
             // put on the row from the flight's gauges.
             await applyBurnEmissions(data);
+            // Last: every figure above in the carrier's units.
+            await applyCarrierUnits(data, 'fuelsphere.FUEL_BURNS', BURN_CARRIER_UNITS);
         });
 
         // ====================================================================

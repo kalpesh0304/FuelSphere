@@ -1,4 +1,9 @@
 using { fuelsphere as db } from '../db/fifo-valuation';
+// The carrier's currency and units, joined in THIS service only. The valuation
+// entities themselves carry no association - fifo-valuation-harness EXIT-6 -
+// so the mixin lives on the projection, and is not exposed.
+using { fuelsphere as map } from '../db/mapping-tables';
+using from '../db/carrier-units';
 
 /**
  * FuelSphere - fuel stock valuation, FIFO beside moving average.
@@ -22,19 +27,53 @@ service ValuationService {
      * burn under MAP is one.
      */
     @readonly
-    entity StockMovements as projection on db.FUEL_STOCK_MOVEMENT_LEDGER;
+    entity StockMovements as select from db.FUEL_STOCK_MOVEMENT_LEDGER as m
+        mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
+        into {
+            *,
+            carrier.currency_code   as carrier_currency   : String(3),
+            carrier.volume_uom_code as carrier_volume_uom : String(3),
+            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            cast(m.qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as qty_cm : Decimal(15,2),
+            cast(m.balance_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as balance_qty_cm : Decimal(15,2),
+            cast(m.qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as qty_cv : Decimal(15,2),
+            cast(m.rate_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as rate_per_cm : Decimal(15,4),
+            cast(m.map_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as map_per_cm : Decimal(15,4)
+        };
 
     /**
      * What is left on board. One row per open batch under FIFO; one row per
      * tail under MAP, because MAP has a single pool.
      */
     @readonly
-    entity StockBalances as projection on db.FUEL_STOCK_BALANCE;
+    entity StockBalances as select from db.FUEL_STOCK_BALANCE as b
+        mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
+        into {
+            *,
+            carrier.currency_code   as carrier_currency   : String(3),
+            carrier.volume_uom_code as carrier_volume_uom : String(3),
+            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            cast(b.uplift_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as uplift_qty_cm : Decimal(15,2),
+            cast(b.balance_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as balance_qty_cm : Decimal(15,2),
+            cast(b.uplift_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as uplift_qty_cv : Decimal(15,2),
+            cast(b.balance_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as balance_qty_cv : Decimal(15,2),
+            cast(b.rate_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as rate_per_cm : Decimal(15,4)
+        };
 
     /**
      * One burn, priced both ways. The two rows for a burn are the comparison
      * this whole service exists to show.
      */
     @readonly
-    entity BurnValuations as projection on db.FUEL_BURN_HEADER;
+    entity BurnValuations as select from db.FUEL_BURN_HEADER as h
+        mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
+        into {
+            *,
+            carrier.currency_code   as carrier_currency   : String(3),
+            carrier.volume_uom_code as carrier_volume_uom : String(3),
+            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            cast(h.burn_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as burn_qty_cm : Decimal(15,2),
+            cast(h.burn_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as burn_qty_cv : Decimal(15,2),
+            cast(h.burn_rate_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as burn_rate_per_cm : Decimal(15,4)
+        };
 }

@@ -114,6 +114,27 @@ service BurnService {
         // nothing can be compared against a reading that does not exist.
         virtual null as unallocated_fuel_kg    : Decimal(12,2),
 
+        // ---- THE SAME FIGURES IN THE CARRIER'S UNITS ----------------------
+        // Filled after the summary by srv/lib/carrier-units.js applyCarrierUnits:
+        // every virtual kg figure above in the carrier's mass unit, the uplift in
+        // its volume unit, the moving average per carrier mass unit.
+        virtual null as dispatch_cm           : Decimal(12,2),
+        virtual null as fqis_out_cm           : Decimal(12,2),
+        virtual null as fqis_in_cm            : Decimal(12,2),
+        virtual null as expected_delta_cm     : Decimal(12,2),
+        virtual null as actual_delta_cm       : Decimal(12,2),
+        virtual null as block_burn_cm         : Decimal(12,2),
+        virtual null as apu_burn_sum_cm       : Decimal(12,2),
+        virtual null as total_burn_cm         : Decimal(12,2),
+        virtual null as engine_burn_split_cm  : Decimal(12,2),
+        virtual null as arrival_rob_cm        : Decimal(12,2),
+        virtual null as unallocated_fuel_cm   : Decimal(12,2),
+        virtual null as planned_block_burn_cm : Decimal(12,2),
+        virtual null as block_burn_variance_cm : Decimal(12,2),
+        virtual null as uplift_cv              : Decimal(15,2),
+        virtual null as map_per_cm             : Decimal(15,4),
+        virtual null as apu_rate_cm_hr         : Decimal(8,2),
+
         // ---- PLANNED BLOCK BURN, AND THE VARIANCE AGAINST IT ------------
         //
         // Asked for 5 Oct 2026: the planned figure is TRIP FUEL PLUS TAXI
@@ -214,7 +235,18 @@ service BurnService {
         virtual null as closing_rob_l  : Decimal(15,2),
         virtual null as max_capacity_l : Decimal(15,2),
         virtual null as rate_usd_per_l : Decimal(15,4),
-        virtual null as map_usd_per_l  : Decimal(15,4)
+        virtual null as map_usd_per_l  : Decimal(15,4),
+        // The litre figures above in the carrier's volume unit (USG for B6),
+        // filled by the same handler - srv/lib/rob-litres.js.
+        virtual null as qty_cv          : Decimal(15,2),
+        virtual null as opening_rob_cv  : Decimal(15,2),
+        virtual null as uplift_cv       : Decimal(15,2),
+        virtual null as burn_cv         : Decimal(15,2),
+        virtual null as adjustment_cv   : Decimal(15,2),
+        virtual null as closing_rob_cv  : Decimal(15,2),
+        virtual null as max_capacity_cv : Decimal(15,2),
+        virtual null as rate_per_cv     : Decimal(15,4),
+        virtual null as map_per_cv      : Decimal(15,4)
     } actions {
         /**
          * Re-Calculate - replay THIS ROW'S AIRCRAFT and restate its ledger.

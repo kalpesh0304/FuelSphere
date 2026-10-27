@@ -200,7 +200,7 @@ async function deriveTicketMassKg({ quantity_metered, uom_code, density_value, d
     if (!uom_code) return { quantity_kg: null, reason: 'no uom_code on the ticket' };
 
     const row = await SELECT.one.from(UOM)
-        .columns('uom_code', 'uom_category', 'conversion_to_kg')
+        .columns('uom_code', 'uom_category', 'conversion_to_kg', 'conversion_to_ltr')
         .where({ uom_code });
     if (!row) return { quantity_kg: null, reason: `unit ${uom_code} is not in UNIT_OF_MEASURE` };
 
@@ -223,15 +223,57 @@ async function deriveTicketMassKg({ quantity_metered, uom_code, density_value, d
     const litresPerDensityUnit = DENSITY_UOM_LITRES_PER_UNIT[density_uom];
     if (!litresPerDensityUnit) return { quantity_kg: null, reason: `density unit ${density_uom} is not recognised` };
 
-    if (!isConvertibleVolumeUom(uom_code)) {
-        return { quantity_kg: null, reason: `no litre factor for ${uom_code} — see open point F19` };
+    // THE LITRE RATIO IS MASTER DATA NOW (UNIT_OF_MEASURE.conversion_to_ltr,
+    // db/carrier-units.cds), which closes F19: a gallon ticket derives its
+    // mass from an exact volume ratio rather than from a density-coupled kg
+    // factor. The in-code table stays as the fallback for a row not yet given
+    // a ratio.
+    const ratio = await litreRatio(uom_code, row);
+    if (!ratio) {
+        return { quantity_kg: null, reason: `no litre factor for ${uom_code} — set UNIT_OF_MEASURE.conversion_to_ltr` };
     }
-    const litres = metered * LITRES_PER_VOLUME_UNIT[uom_code];
+    const litres = metered * ratio;
 
     return {
         quantity_kg: Number((litres * density / litresPerDensityUnit).toFixed(2)),
         basis: `${litres} L x ${density} ${density_uom}`
     };
+}
+
+/** Litres per one unit of a volume unit: master data first, the in-code table second. */
+async function litreRatio(uomCode, row = null) {
+    if (!uomCode) return null;
+    const r = row || await SELECT.one.from(UOM).columns('uom_code', 'uom_category', 'conversion_to_ltr')
+        .where({ uom_code: uomCode });
+    const v = r && r.conversion_to_ltr !== null && r.conversion_to_ltr !== undefined ? Number(r.conversion_to_ltr) : null;
+    return v > 0 ? v : (LITRES_PER_VOLUME_UNIT[uomCode] || null);
+}
+
+/**
+ * A quantity in LITRES, whatever unit it was captured in - or null and why.
+ *
+ * Two quantities in different units are compared by bringing both here. A
+ * volume unit converts by its litre ratio; a mass unit needs a density, in kg
+ * per litre, and returns null without one rather than assuming a density
+ * (CLAUDE.md section 13: a derived value with a missing input is null).
+ */
+async function toCommonLitres(quantity, uomCode, densityKgl) {
+    const qty = Number(quantity);
+    if (quantity === null || quantity === undefined || Number.isNaN(qty)) return { litres: null, reason: 'no quantity' };
+    if (!uomCode) return { litres: null, reason: 'no unit of measure' };
+    const row = await SELECT.one.from(UOM).columns('uom_code', 'uom_category', 'conversion_to_kg', 'conversion_to_ltr')
+        .where({ uom_code: uomCode });
+    if (!row) return { litres: null, reason: `unit ${uomCode} is not in UNIT_OF_MEASURE` };
+    if (row.uom_category === 'MASS') {
+        const toKg = Number(row.conversion_to_kg);
+        const d = Number(densityKgl);
+        if (!(toKg > 0)) return { litres: null, reason: `no kg factor on ${uomCode}` };
+        if (!(d > 0)) return { litres: null, reason: `${uomCode} is a mass and no density was recorded` };
+        return { litres: Number((qty * toKg / d).toFixed(3)), basis: `${qty} ${uomCode} x ${toKg} kg / ${d} kg/L` };
+    }
+    const ratio = await litreRatio(uomCode, row);
+    if (!ratio) return { litres: null, reason: `no litre ratio for ${uomCode}` };
+    return { litres: Number((qty * ratio).toFixed(3)), basis: `${qty} ${uomCode} x ${ratio} L` };
 }
 
 /**
@@ -261,6 +303,7 @@ function deriveGaugeFigures({ fob_at_arrival_kg, fob_before_kg, fob_after_kg }) 
 }
 
 module.exports = {
+    litreRatio, toCommonLitres,
     DEFAULT_VOLUME_UOM,
     DEFAULT_VOLUME_UOM_SOURCE,
     resolveDefaultVolumeUom,

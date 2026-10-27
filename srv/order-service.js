@@ -1143,7 +1143,13 @@ module.exports = class FuelOrderService extends cds.ApplicationService {
                 } : {}),
                 unit_price: unitPrice,
                 total_amount: totalAmount,
-                currency_code: currencyCode || 'USD',
+                // The contract's currency, else the carrier's. Never a
+                // literal USD: a TAP order in euros labelled dollars is wrong
+                // in the one column nobody re-checks.
+                currency_code: currencyCode
+                    || (await require('./lib/carrier-units').contractTerms(contractId)).currency_code
+                    || (await require('./lib/carrier-units').currencyForFlight(flightId))
+                    || null,
                 requested_date: flight.flight_date,
                 priority: priority || 'Normal',
                 status: 'Draft',

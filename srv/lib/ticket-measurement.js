@@ -20,6 +20,19 @@
 const cds = require('@sap/cds');
 const { SELECT } = cds.ql;
 const { deriveTicketMassKg } = require('./fuel-uom');
+const { currencyForFlight, contractTerms } = require('./carrier-units');
+
+async function flightOfOrder(orderId) {
+    if (!orderId) return null;
+    const o = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS').columns('flight_ID').where({ ID: orderId }));
+    return o ? o.flight_ID : null;
+}
+
+async function contractOfOrder(orderId) {
+    if (!orderId) return null;
+    const o = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS').columns('contract_ID').where({ ID: orderId }));
+    return o ? o.contract_ID : null;
+}
 
 /**
  * The currency a ticket's rate is in, by default: the contract on its order,
@@ -87,12 +100,22 @@ async function deriveTicketMeasurement(at) {
     values.density_uom = 'KGL';
 
     // Rate currency from the contract, only while the ticket has none - a
-    // currency the operator set is never overwritten. USD where there is no
-    // contract to take one from: a rate with no currency beside it is a number
-    // nobody can add up, and USD is what every seeded contract prices in.
+    // currency the operator set is never overwritten. Where there is no
+    // contract, the carrier's company-code currency; never a literal USD,
+    // which labelled every TAP rate in dollars.
     if (!at('currency_code')) {
         const cur = at('order_ID') ? await defaultTicketCurrency(at('order_ID')) : null;
-        values.currency_code = cur || 'USD';
+        values.currency_code = cur
+            || await currencyForFlight(at('flight_ID') || await flightOfOrder(at('order_ID')))
+            || null;
+    }
+
+    // THE TICKET IS IN THE CONTRACT'S UNIT, because the vendor issues it. Set
+    // while nothing has been measured yet, so a unit the operator chose after
+    // entering a quantity is never changed under them.
+    if (at('order_ID') && (at('quantity') === null || at('quantity') === undefined)) {
+        const terms = await contractTerms(await contractOfOrder(at('order_ID')));
+        if (terms.uom_code && terms.uom_code !== at('uom_code')) values.uom_code = terms.uom_code;
     }
 
     // THE QUANTITY THE TICKET IS PRICED AND WEIGHED ON. The METERED figure

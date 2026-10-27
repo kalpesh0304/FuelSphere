@@ -227,7 +227,7 @@ async function buildRows(filters) {
         cds.db.run(SELECT.from(MOVEMENT_BY_DAY).where(dateWindow)),
         cds.db.run(SELECT.from(UPLIFT_BY_DAY).where(dateWindow)),
         cds.db.run(SELECT.from(UPLIFT_FI_BY_DAY).where(dateWindow)),
-        cds.db.run(SELECT.from(CARRIER_MASTER).columns('carrier_code', 'carrier_name', 'company_code')),
+        cds.db.run(SELECT.from(CARRIER_MASTER).columns('carrier_code', 'carrier_name', 'company_code', 'currency_code', 'mass_uom_code')),
         cds.db.run(SELECT.from(GL_ACCOUNTS).columns(
             'ID', 'carrier_carrier_code', 'company_code', 'gl_account',
             'account_role', 'description', 'valid_from', 'valid_to', 'is_active'))
@@ -465,7 +465,11 @@ function finish(a, carrierById, glAccounts) {
         remaining_stock: closing,
         unallocated_burn: unallocated,
         finance_variance: variance,
-        currency_code: 'USD',
+        // THE CARRIER'S COMPANY-CODE CURRENCY. This read 'USD' for every
+        // carrier, so a TAP period in euros was labelled dollars. Null where
+        // the carrier is not mapped - an unknown currency is not a dollar.
+        currency_code: c.currency_code || null,
+        _massUom: c.mass_uom_code || null,
 
         uplift_count: a.n_uplift,
         posted_count: a.n_posted,
@@ -525,6 +529,7 @@ function page(rows, q) {
         const copy = { ...r };
         delete copy._glAccounts;
         delete copy._netUplift;
+        delete copy._massUom;
         return copy;
     });
     out.$count = total;
@@ -564,7 +569,7 @@ function glLinesFor(row) {
         expected_value: share,
         booked_value: null,      // not zero - see the model
         variance: null,
-        currency_code: 'USD'
+        currency_code: row.currency_code || null
     }));
 }
 
@@ -611,6 +616,11 @@ async function upliftLinesFor(row) {
         .where({ ID: { in: ticketIds } })) : [];
     const ticketById = new Map(tickets.map(t => [t.ID, t]));
 
+    // kg per one unit of the carrier's mass unit, for the drill-down quantity.
+    const massRow = row._massUom ? await cds.db.run(SELECT.one.from('fuelsphere.UNIT_OF_MEASURE')
+        .columns('conversion_to_kg').where({ uom_code: row._massUom })) : null;
+    const toKg = massRow ? num(massRow.conversion_to_kg) : null;
+
     return lines.map(l => {
         const t = ticketById.get(ticketOf.get(l.reference)) || {};
         const st = t.s4_posting_status;
@@ -628,6 +638,8 @@ async function upliftLinesFor(row) {
             flight_number: l.flight_number,
             flight_date: l.flight_date,
             qty_kg: num(l.qty_kg),
+            qty_cm: toKg && l.qty_kg !== null ? Number((num(l.qty_kg) / toKg).toFixed(3)) : null,
+            mass_uom_code: row._massUom || null,
             value_usd: round2(l.value_usd),
             posting_status: status,
             s4_po_number: t.s4_po_number || null,
@@ -637,7 +649,7 @@ async function upliftLinesFor(row) {
             statusCriticality: status === 'POSTED' ? 3
                              : status === 'PARTIAL' ? 2
                              : status === 'ERROR' ? 1 : 0,
-            currency_code: 'USD'
+            currency_code: row.currency_code || null
         };
     });
 }

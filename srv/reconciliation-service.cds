@@ -234,6 +234,8 @@ service ReconciliationService {
             flight_number      : String(10);
             flight_date        : Date;
             qty_kg             : Decimal(15,3);
+            qty_cm             : Decimal(15,3);   // the same mass in the carrier's mass unit
+            mass_uom_code      : String(3);       // that unit (LB for B6)
             value_usd          : Decimal(15,2);
             posting_status     : String(16);   // POSTED | ERROR | NOT_SENT
             s4_po_number       : String(10);

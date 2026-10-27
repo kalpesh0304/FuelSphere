@@ -20,4 +20,10 @@ cds.on('bootstrap', (app) => {
     console.log('[server.js] Static middleware registered: /admin, /operations, /planning, /fulfillment, /invoicing');
 });
 
+// The carrier every fuel record belongs to, filled at write on the database
+// itself so no writer can forget it (srv/lib/carrier-units.js).
+cds.on('connect', (srv) => {
+    if (srv.name === 'db') require('./lib/carrier-units').registerCarrierHook(srv);
+});
+
 module.exports = cds.server;

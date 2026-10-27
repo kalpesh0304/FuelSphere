@@ -27,7 +27,7 @@ const BASE = ['ID', 'tail_number', 'record_date', 'record_time', 'sequence', 'li
               'adjustment_kg', 'closing_rob_kg', 'max_capacity_kg', 'rate_usd_per_kg', 'map_usd_per_kg',
               // THE STORED BLEND, which is now what every litre figure is
               // converted at. See the note on densityFor below.
-              'specific_gravity', 'wt_avg_specific_gravity'];
+              'specific_gravity', 'wt_avg_specific_gravity', 'carrier_code'];
 
 /** The uplift's own density, or null where it has no volume. */
 function upliftDensity(r) {
@@ -98,6 +98,17 @@ async function applyLedgerLitres(data) {
     // entry_type, so the code is in hand and costs no extra query.
     const typeById = new Map(all.map(r => [r.ID, r.entry_type]));
 
+    // Litres per one unit of each carrier's volume unit.
+    const codes = [...new Set(all.map(r => r.carrier_code).filter(Boolean))];
+    const ratioOf = new Map();
+    if (codes.length) {
+        const cs = await cds.db.run(SELECT.from('fuelsphere.CARRIER_MASTER')
+            .columns('carrier_code', 'volume_uom_code').where({ carrier_code: { in: codes } }));
+        const us = await cds.db.run(SELECT.from('fuelsphere.UNIT_OF_MEASURE').columns('uom_code', 'conversion_to_ltr'));
+        const lt = new Map(us.map(u => [u.uom_code, num(u.conversion_to_ltr)]));
+        for (const c of cs) ratioOf.set(c.carrier_code, lt.get(c.volume_uom_code) || null);
+    }
+
     for (const row of rows) {
         const entryType = typeById.has(row.ID) ? typeById.get(row.ID) : row.entry_type;
         row.line_type_v = LINE_TYPE_TEXT[entryType] || entryType || null;
@@ -114,6 +125,21 @@ async function applyLedgerLitres(data) {
         row.max_capacity_l     = litres(num(r.max_capacity_kg), d);
         row.rate_usd_per_l     = perLitre(num(r.rate_usd_per_kg), d);
         row.map_usd_per_l      = perLitre(num(r.map_usd_per_kg), d);
+
+        // THE SAME FIGURES IN THE CARRIER'S VOLUME UNIT - litres divided by
+        // that unit's litre ratio, rates multiplied by it. Null where the
+        // carrier is not mapped: a figure in an unknown unit is not litres.
+        const k = ratioOf.get(r.carrier_code);
+        const cv = (l) => (l === null || !k ? null : Number((l / k).toFixed(2)));
+        row.qty_cv          = cv(row.qty_l);
+        row.opening_rob_cv  = cv(row.opening_rob_l);
+        row.uplift_cv       = cv(row.uplift_l);
+        row.burn_cv         = cv(row.burn_l);
+        row.adjustment_cv   = cv(row.adjustment_l);
+        row.closing_rob_cv  = cv(row.closing_rob_l);
+        row.max_capacity_cv = cv(row.max_capacity_l);
+        row.rate_per_cv     = row.rate_usd_per_l === null || !k ? null : Number((row.rate_usd_per_l * k).toFixed(4));
+        row.map_per_cv      = row.map_usd_per_l === null || !k ? null : Number((row.map_usd_per_l * k).toFixed(4));
     }
 }
 
