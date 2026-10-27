@@ -1,6 +1,7 @@
 namespace fuelsphere;
 
 using { fuelsphere as db } from './schema';
+using { fuelsphere as dfl } from './defuel';
 using { cuid } from '@sap/cds/common';
 
 /**
@@ -40,12 +41,12 @@ type CreditMemoStatus : String(20) enum {
 }
 
 type CreditMemoRefType : String(20) enum {
-    ExpectedCredit = 'EXPECTED_CREDIT';
-    FuelTicket     = 'FUEL_TICKET';
-    InvoiceLine    = 'INVOICE_LINE';
-    // DEFUEL_TICKET is in the spec and NOT here: nothing on FUEL_TICKETS marks
-    // a defuel (00-DECISIONS F26). A defuel is credited through the expected
-    // credit it raises until that marker exists.
+    ExpectedCredit = 'EXPECTED_CREDIT';   // a DEFUEL to a supplier, carrying expected_credit_usd
+    FuelTicket     = 'FUEL_TICKET';       // an uplift ticket
+    InvoiceLine    = 'INVOICE_LINE';      // the strongest reference: priced, posted, PO-linked
+    // There is no separate DEFUEL_TICKET type. A defuel's ticket number is
+    // DEFUEL.ticket_number, and the defuel IS the expected credit, so
+    // referencing the defuel references its ticket too.
 }
 
 type CreditPriceComponent : String(20) enum {
@@ -76,30 +77,33 @@ entity CREDIT_MEMO_REASONS {
 }
 
 /**
- * Money the airline expects a supplier to credit — a defuel, a known price
- * correction. A receivable in waiting. Cleared by credit memo lines.
+ * EXPECTED CREDITS ARE NOT MODELLED HERE. They already exist: a DEFUEL of type
+ * TO_SUPPLIER, once postToSupplier has stated `expected_credit_usd`, IS the
+ * expected credit (db/defuel.cds). The vendor is DEFUEL.supplier and the
+ * defuel ticket number is DEFUEL.ticket_number.
  *
- * credited / variance / written_off and status are a CACHE of the posted
- * lines, rewritten by refresh on every post and reversal, never edited.
+ * What the defuel does not hold is how far a supplier credit memo has
+ * cleared it. That is this table: one row per defuel, a CACHE rewritten from
+ * posted credit memo lines on every post and reversal, never edited. It sits
+ * beside DEFUEL rather than adding columns to it, because the defuel is
+ * another work package's entity.
+ *
+ * NOT TO BE CONFUSED WITH DEFUEL.write_off_usd. That is the fuel's value
+ * less the AGREED credit - what the airline lost on the defuel. This
+ * table's shortfall_written_off is the agreed credit less what the supplier
+ * ACTUALLY credited, closed off by "Close & write off".
  */
-entity EXPECTED_CREDITS : cuid, db.AuditTrail {
-        credit_number      : String(30);
-        supplier           : Association to db.MASTER_SUPPLIERS @mandatory;
-        currency_code      : String(3) @mandatory;
-        station_code       : String(3);
-        company_code       : String(4);
-        source_type        : String(20) default 'DEFUEL';   // DEFUEL, PRICE_ADJUSTMENT, OTHER
-        ticket             : Association to db.FUEL_TICKETS;
-        flight             : Association to db.FLIGHT_SCHEDULE;
-        aircraft_reg       : String(10);
-        quantity           : Decimal(15,3);
-        uom_code           : String(3);
-        expected_amount    : Decimal(15,2) @mandatory;
-        credited_amount    : Decimal(15,2) default 0;
-        variance_amount    : Decimal(15,2) default 0;       // "Defuel Credit Variance" — Write-off (Defueling)
-        written_off_amount : Decimal(15,2) default 0;
-        status             : ExpectedCreditStatus default 'OPEN';
-        notes              : String(500);
+entity DEFUEL_CREDIT_CLEARING {
+    key defuel                : Association to dfl.DEFUEL;
+        credited_amount       : Decimal(15,2) default 0;
+        variance_amount       : Decimal(15,2) default 0;   // within tolerance -> Defuel Credit Variance
+        shortfall_written_off : Decimal(15,2) default 0;   // "Close & write off" -> Write-off (Defueling)
+        status                : ExpectedCreditStatus default 'OPEN';
+        refreshed_at          : Timestamp;
+}
+
+extend dfl.DEFUEL with {
+        credit_clearing : Association to one DEFUEL_CREDIT_CLEARING on credit_clearing.defuel = $self;
 }
 
 entity CREDIT_MEMOS : cuid, db.AuditTrail {
@@ -146,7 +150,7 @@ entity CREDIT_MEMO_LINES : cuid {
         line_number         : Integer;
 
         reference_type      : CreditMemoRefType @mandatory;
-        expected_credit     : Association to EXPECTED_CREDITS;
+        defuel              : Association to dfl.DEFUEL;          // EXPECTED_CREDIT
         ticket              : Association to db.FUEL_TICKETS;
         invoice_item        : Association to db.INVOICE_ITEMS;
         reference_display   : String(80);                   // DERIVED: the reference's own number
@@ -197,7 +201,7 @@ entity CREDIT_MEMO_LOG : cuid {
 entity CREDIT_MEMO_EXCEPTIONS : cuid, db.AuditTrail {
         memo                : Association to CREDIT_MEMOS @mandatory;
         line                : Association to CREDIT_MEMO_LINES;
-        expected_credit     : Association to EXPECTED_CREDITS;
+        defuel              : Association to dfl.DEFUEL;
         code                : String(10) @mandatory;
         message             : String(500);
         amount              : Decimal(15,2);
