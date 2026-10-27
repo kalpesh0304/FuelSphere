@@ -41,6 +41,27 @@ const today = () => new Date().toISOString().slice(0, 10);
 module.exports = class InvoiceService extends cds.ApplicationService {
     async init() {
 
+    // =======================================================================
+    // HOW LONG AN EXPECTED CREDIT HAS BEEN WAITING
+    // =======================================================================
+    //
+    // ON READ, because a date subtraction in SQL that works on SQLite and
+    // fails on HANA is the most expensive recurring defect in this codebase.
+    //
+    // WHOLE DAYS, floored. "87 days" is what somebody says on the phone to a
+    // vendor; 87.4 is not.
+    this.after('READ', 'ExpectedCredits', (rows) => {
+        const list = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+        const today = Date.now();
+        for (const r of list) {
+            if (!r || !r.defuel_date) continue;
+            const t = Date.parse(r.defuel_date);
+            r.age_days = Number.isFinite(t)
+                ? Math.max(0, Math.floor((today - t) / 86400000)) : null;
+        }
+    });
+
+
         const { Invoices, InvoiceExceptions, InvoiceItems, IdrRuleStatus } = this.entities;
 
         // ================================================================

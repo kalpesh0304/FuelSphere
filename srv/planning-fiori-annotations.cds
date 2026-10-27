@@ -499,6 +499,18 @@ annotate PlanningService.FlightSchedule with @(
                 Label: 'APU Usage (Hours)',
                 ![@UI.Importance]: #Medium
             },
+            // HOW MUCH CAME BACK OFF. Beside the APU hours because it is the
+            // other reason the gauges and the burn do not reconcile on their
+            // own: fuel that left the wing on the ground is neither burned
+            // nor still on board.
+            //
+            // BLANK ON ALMOST EVERY LEG, and that is the point - a figure
+            // here is the exception worth looking at.
+            {
+                Value: defuelled_qty_kg,
+                Label: 'Defuelled (kg)',
+                ![@UI.Importance]: #Medium
+            },
             // WHICH AXIS ANSWERED, beside the name rather than resolved away.
             // "Air Total" means something different when it is an arrangement
             // for THIS FLIGHT than when it is what LHR does by default, and a
@@ -842,7 +854,11 @@ annotate PlanningService.FlightSchedule with @(
                 // panel that has to add up. The block burn is OUT minus IN;
                 // the ground APU burn is additional to it and is the usual
                 // reason those two readings do not reconcile on their own.
-                { Value: apu_usage_hours, Label: 'APU Usage (Hours)' }
+                { Value: apu_usage_hours, Label: 'APU Usage (Hours)' },
+                // THE THIRD WAY THE PANEL FAILS TO ADD UP. Block burn is OUT
+                // minus IN, the APU burn is additional to it, and a defuel
+                // removes fuel that was never burned at all.
+                { Value: defuelled_qty_kg, Label: 'Defuelled (kg)' }
             ]
         },
 
@@ -945,6 +961,8 @@ annotate PlanningService.FlightSchedule with {
     fob_at_on_kg                  @title: 'FOB at ON (kg)';
     fob_at_in_kg                  @title: 'FOB at IN (kg)';
     fob_source                    @title: 'Gauge Reading Source';
+    defuelled_qty_kg              @title: 'Defuelled (kg)'
+                   @Common.QuickInfo: 'Fuel taken off this flight and moved to a storage location, summed from posted defuels. Blank where none was recorded.';
     apu_usage_hours               @title: 'APU Usage (Hours)'
                                   @Common.QuickInfo: 'How long the APU ran on this leg, summed from the recorded APU cycles this flight bears the cost of. Hours x the rate on the aircraft register is the APU''s fuel. BLANK MEANS NO CYCLE WAS RECORDED, not that the APU stood idle - an overnight or maintenance cycle belongs to no leg and is counted against none.';
     // WP-31. On the association so the label reaches closure_document_ID.
@@ -2315,6 +2333,6 @@ annotate PlanningService.FuelBurns with {
 // carries the same declaration for the other 23 entities; this one stays here
 // because CDS refuses a second assignment of the term on one entity.
 annotate PlanningService.FlightSchedule with @(
-    Capabilities.FilterRestrictions.NonFilterableProperties: [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours ],
-    Capabilities.SortRestrictions.NonSortableProperties:     [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours ]
+    Capabilities.FilterRestrictions.NonFilterableProperties: [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours, defuelled_qty_kg ],
+    Capabilities.SortRestrictions.NonSortableProperties:     [ scheduled_departure_lt, scheduled_arrival_lt, apu_usage_hours, defuelled_qty_kg ]
 );

@@ -202,7 +202,15 @@ describe('FIM — Reconcile Invoice', () => {
       assert.strictEqual(r.severityCriticality, {HARD_ERROR:1, SOFT_ERROR:2}[r.severity] ?? 0);
       assert.strictEqual(r.lifecycleCriticality, {CLEARED:3, BYPASSED:2}[r.status] ?? 0);
     }
-    const warn = ex.filter(r => r.severity === 'WARNING');
+    // ASKED FOR BY NAME, NOT FISHED OUT OF THE PAGE ABOVE. There are two
+    // WARNING rows among 756+ exceptions, and that page is an unordered
+    // $top=500 over a table that grows every run - reconcile() inserts its
+    // rows under cds.utils.uuid(), so which 500 come back is drawn fresh each
+    // time. Filtering the page caught 2, then 1, then 0 warnings on identical
+    // code, and at 0 this assertion failed on a build that was perfectly fine.
+    // A criterion that depends on the draw tests the draw, not the criticality.
+    const warn = (await test.GET(`${O}/InvoiceExceptions`
+      + `?$select=severity,severityCriticality&$filter=severity eq 'WARNING'`)).data.value;
     assert.ok(warn.length > 0 && warn.every(r => r.severityCriticality === 0),
       'WARNING must be neutral - green would read as "checked and fine"');
     out(`${inv.length} invoices x4, ${it_.length} lines x2, ${ex.length} exceptions x2; `

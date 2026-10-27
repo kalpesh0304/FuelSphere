@@ -1,5 +1,5 @@
-carrier_code;carrier_name;company_code;is_active;notes;reporting_currency;reporting_volume_uom;reporting_mass_uom
-B6;JetBlue Airways;B600;true;From the mapping sheet of 30 Sep 2026.;USD;USG;LB
-B7;JetBlue (second company code);B601;true;From the mapping sheet of 30 Sep 2026.;USD;USG;LB
-AC;Air Canada;AC00;true;Added by the designation migration (4 Oct 2026). COMPANY CODE IS A PLACEHOLDER - set it before any posting is raised for this carrier.;CAD;LTR;KG
-TP;TAP Air Portugal;TP00;true;COMPANY CODE IS A PLACEHOLDER (TP00) - set it before any posting is raised for this carrier.;EUR;LTR;KG
+carrier_code;carrier_name;company_code;is_active;notes;valuation_method;reporting_volume_uom;reporting_mass_uom;reporting_currency
+B6;JetBlue Airways;B600;true;From the mapping sheet of 30 Sep 2026.;MAP;USG;LB;USD
+B7;JetBlue (second company code);B601;true;From the mapping sheet of 30 Sep 2026.;;USG;LB;USD
+AC;Air Canada;AC00;true;Added by the designation migration (4 Oct 2026). COMPANY CODE IS A PLACEHOLDER - set it before any posting is raised for this carrier.;;LTR;KG;CAD
+TP;TAP Air Portugal;TP00;true;COMPANY CODE IS A PLACEHOLDER (TP00) - set it before any posting is raised for this carrier.;;LTR;KG;EUR

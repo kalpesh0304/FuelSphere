@@ -3604,6 +3604,20 @@ type ROBEntryType : String(20) enum {
     Adjustment  = 'ADJUSTMENT';  // Manual adjustment
     Initial     = 'INITIAL';     // Initial load/setup
     Transfer    = 'TRANSFER';    // Inter-tank transfer (if applicable)
+    // DEFUEL, added 23 Oct 2026. Fuel taken OFF the aircraft after uplift —
+    // the only movement type that removes fuel without consuming it.
+    //
+    // IT IS NOT AN ADJUSTMENT, and the distinction is the reason this member
+    // exists rather than reusing one. An adjustment corrects what the ledger
+    // says; a defuel records something that physically happened and leaves
+    // fuel sitting in a storage location that must still be settled with a
+    // vendor. Folding it into ADJUSTMENT would make the two indistinguishable
+    // on the ledger, and a reader asking "what came off this aircraft" would
+    // have no way to answer.
+    //
+    // ValuationLineType (db/fifo-valuation.cds:67) has carried DEFUEL since
+    // the valuation model was written; this is the tail ledger catching up.
+    Defuel      = 'DEFUEL';      // Fuel off the aircraft, into a storage location
 }
 
 /**
@@ -3761,7 +3775,26 @@ entity ROB_LEDGER : cuid, AuditTrail {
         fuel_delivery       : Association to FUEL_DELIVERIES; // Associated ePOD/uplift
 
         // Entry Type
-        entry_type          : ROBEntryType @mandatory;    // FLIGHT, UPLIFT, ADJUSTMENT, INITIAL
+        // ENFORCED, NOT MERELY DECLARED, 23 Oct 2026.
+        //
+        // A CDS enum is documentation until @assert.range is on the element —
+        // CAP validates nothing without it, and this codebase has paid for
+        // that before (D25). Adding DEFUEL to the type would otherwise have
+        // widened a vocabulary nothing checks, which is worse than not
+        // widening it: a typo'd entry_type would reach the ledger and sort
+        // into whichever position the replay happened to give it.
+        //
+        // SAFE ON THE EXISTING DATA, measured before adding: the 3,580 seeded
+        // rows carry BURN, APU_BURN, UPLIFT, INITIAL and ADJUSTMENT only, all
+        // five members of this type. No seed row is refused by this.
+        //
+        // The comment that was here read "FLIGHT, UPLIFT, ADJUSTMENT,
+        // INITIAL" — naming a member renamed to BURN in September and
+        // omitting APU_BURN and TRANSFER. A list that has to be maintained
+        // beside the type it lists is a list that goes stale, so it is gone
+        // rather than corrected.
+        @assert.range
+        entry_type          : ROBEntryType @mandatory;
 
         // ROB Calculation Components (all in kg)
         opening_rob_kg      : Decimal(12,2) @mandatory;   // Opening ROB (previous closing)

@@ -4,6 +4,7 @@ using { fuelsphere as db } from '../db/fifo-valuation';
 // so the mixin lives on the projection, and is not exposed.
 using { fuelsphere as map } from '../db/mapping-tables';
 using from '../db/carrier-units';
+using { fuelsphere as dfl } from '../db/defuel';
 
 /**
  * FuelSphere - fuel stock valuation, FIFO beside moving average.
@@ -76,4 +77,25 @@ service ValuationService {
             cast(h.burn_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as burn_qty_cv : Decimal(15,2),
             cast(h.burn_rate_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as burn_rate_per_cm : Decimal(15,4)
         };
+
+    /**
+     * The defuels that produced the DEFUEL rows above.
+     *
+     * READ-ONLY HERE, AND WRITEABLE IN THE DEFUELING APP. This is the same
+     * document, shown beside the ledger rows it wrote so a reader asking
+     * "where did that movement come from" does not have to leave the screen.
+     * Recording and correcting a defuel stays in the app that owns it.
+     *
+     * IMPORTANT COLUMNS ONLY, per the 26 Oct instruction. The full document
+     * has thirty-odd fields; this view carries what identifies the movement
+     * and what it was worth.
+     */
+    @readonly
+    entity Defuels as projection on dfl.DEFUEL {
+        ID, defuel_id, defuel_type, source_mode, status,
+        tail_number, carrier_code, flight_number, flight_date,
+        station_code, defuel_date, defuel_time,
+        location_code, quantity_kg, specific_gravity, fuel_value_usd,
+        defuel_charges_usd, taxes_usd
+    };
 }

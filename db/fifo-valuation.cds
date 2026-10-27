@@ -81,7 +81,14 @@ type ValuationLineType : String(12) enum {
 // case statement to read.
 entity FUEL_STOCK_MOVEMENT_LEDGER : cuid, db.AuditTrail {
         valuation_method   : ValuationMethod @mandatory;
-        tail_number        : String(10) @mandatory;
+
+        // NOT MANDATORY ANY MORE, and the reason is a defuel. Fuel taken off
+        // an aircraft and put into a storage location is still the airline's
+        // fuel and still has to be valued, but it is on no tail while it sits
+        // there. The inbound half of a defuel therefore carries a storage
+        // location and no tail, exactly as the outbound half carries a tail
+        // and no storage location. Every seeded row still names its tail.
+        tail_number        : String(10);
 
 
         // ---- WHOSE FLEET THIS IS - added 7 Oct 2026 ---------------------
@@ -124,6 +131,18 @@ entity FUEL_STOCK_MOVEMENT_LEDGER : cuid, db.AuditTrail {
         // Where it happened. The leg's ORIGIN - the airport that fuelled it -
         // the same rule the FOB ledger follows.
         station            : String(3);
+
+        // WHERE THE FUEL IS NOW, when it is not on an aircraft. Set only on
+        // the inbound half of a defuel - the row that puts fuel into a tank
+        // on the ground - and null on every other row, including the outbound
+        // half that took it off the wing.
+        //
+        // A STRING, NOT AN ASSOCIATION. fifo-valuation EXIT-6 asserts that
+        // these tables declare no association into the rest of the schema,
+        // because that isolation is what made the valuation safe to build
+        // beside the FOB ledger. carrier_code and station are denormalised
+        // for the same reason; this follows them.
+        storage_location   : String(20);
 
         // WHAT CAUSED THE ROW: the ticket number on an uplift, the burn id on
         // a burn. Distinct from batch_ref, which says what the row was valued
@@ -170,8 +189,19 @@ entity FUEL_STOCK_MOVEMENT_LEDGER : cuid, db.AuditTrail {
 // MAP: ONE row per tail, batch_ref null. There is one pool and one price.
 entity FUEL_STOCK_BALANCE : cuid, db.AuditTrail {
         valuation_method   : ValuationMethod @mandatory;
-        tail_number        : String(10) @mandatory;
+
+        // OPTIONAL, for the same reason it is optional on the movement
+        // ledger: a storage location holds a balance and is not a tail. One
+        // of tail_number and storage_location is set on every row.
+        tail_number        : String(10);
         batch_ref          : String(40);      // null under MAP
+
+        // THE TANK ON THE GROUND that holds this balance, when no aircraft
+        // does. The fuel keeps the batch it arrived on, so a storage balance
+        // still names batch_ref and still carries that batch's rate - which
+        // is what lets it be re-uplifted later at the price it was bought at
+        // rather than at whatever the pool averages to that week.
+        storage_location   : String(20);
         // ---- WHOSE FLEET THIS IS - added 7 Oct 2026 ---------------------
         //
         // STORED, NOT AN ASSOCIATION, and that is deliberate. These three

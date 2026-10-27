@@ -50,20 +50,13 @@ extend db.UNIT_OF_MEASURE with {
 // CARRIER_MASTER - the company code's currency, volume unit and mass unit
 // ===========================================================================
 //
-// CODES, NOT MANAGED ASSOCIATIONS, so the columns are named what they are
-// (currency_code, not currency_currency_code) and a seed file reads plainly.
-// The unmanaged associations beside them give the screens a value help and a
-// navigation without adding a column.
+// THE THREE CODES ARE DECLARED IN db/mapping-tables.cds (reporting_currency,
+// reporting_volume_uom, reporting_mass_uom), where the defuel work put them.
+// This branch carried its own copy under the same names until that work
+// merged on 27 Oct 2026. What is added here is the unmanaged associations,
+// which give the screens a value help and the conversions their factors
+// without adding a column.
 extend CARRIER_MASTER with {
-    // THE NAMES OF THE DEFUEL BRANCH (claude/defuel-redesign), adopted 27 Oct
-    // 2026 so the system carries one set of carrier settings, not two. That
-    // branch declares these three inline in db/mapping-tables.cds; WHEN IT
-    // MERGES, DELETE THESE THREE LINES and keep the associations below, or
-    // the compiler rejects the duplicate element.
-    reporting_currency   : String(3);   // ISO 4217 - the company code's currency
-    reporting_volume_uom : String(3);   // UNIT_OF_MEASURE, category VOLUME
-    reporting_mass_uom   : String(3);   // UNIT_OF_MEASURE, category MASS
-
     currency   : Association to db.CURRENCY_MASTER on currency.currency_code = reporting_currency;
     volume_uom : Association to db.UNIT_OF_MEASURE on volume_uom.uom_code = reporting_volume_uom;
     mass_uom   : Association to db.UNIT_OF_MEASURE on mass_uom.uom_code = reporting_mass_uom;

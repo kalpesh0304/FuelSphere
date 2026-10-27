@@ -280,6 +280,65 @@ were reported as codes until airline prefixes were excluded.
 | `STG` | 1 | 1 | **BUILT** — never listed here |
 | `INT` | 10 | 1 | **DESIGNED** |
 | `CA` · `CMP` · `FPE` · `PLN` · `RA` · `SEC` | 10·12·12·10·10·12 | **0 each** | **DESIGNED** — declared in a `.cds` and executed by nothing |
+| `CAR` | 12 | 12 | **BUILT** — carrier, station-supplier and flight-supplier mapping guards. `CAR401`–`CAR411` and `CAR413`; **there is no `CAR412`**. All twelve executable. **Never listed here**, and found by the measurement below rather than by this table |
+| `DFL` | 0 | 0 | **RESERVED 23 Oct 2026** — defuel. Prefix registered ahead of its first code, deliberately: see below |
+
+#### Re-measured again, 23 Oct 2026, before adding `DFL`
+
+**Rule: measure the prefix before extending it.** Measured across `srv/**/*.{js,cds}`:
+
+- **three-letter prefixes: 16, carrying 172 codes** — `APU CAR CFG CMP DSP ENR EPD FPE
+  IMP INT INV MDM PLN PRC SEC STG`
+- plus the two-letter `FB`, `CA` and `RA` already listed above
+
+**A three-letter sweep undercounts**, because `FB402` is real and two letters long — so any
+figure quoted without its method is not comparable to any other. The 18/192 above was
+measured on 14 September with a different pattern; this is not a correction of it, because
+the two did not measure the same thing.
+
+**What the measurement did find is `CAR`.** **Twelve** codes, all twelve executable, none of
+them in this table — `CAR401` to `CAR411`, and `CAR413`. **There is no `CAR412`**, which is
+worth stating because a contiguous range is what a reader assumes and this one has a hole in
+it. That is one more prefix added without §8 moving, and it is added above rather than left
+for the next re-measurement.
+
+### Defuel — `DFL4xx` / `DFL5xx` — 13 codes, all executable
+
+**Registered before its first validation exists**, which is the opposite of how the ten
+unlisted prefixes arrived. `4xx` for business rules, `5xx` for technical failures.
+
+**RENUMBERED 26 Oct 2026, and the old numbers are not reused.** The defuel service was
+redesigned from a settlement model to a stock movement, and twelve of the thirteen codes
+below went with the behaviour they guarded. The new validations start at `DFL420` rather
+than refilling DFL401: a code that means one thing in a screenshot taken last week and
+another in the log today is worse than a gap in the numbering.
+
+**What went, and why** — DFL401 (defuel exceeds its uplift), DFL404, DFL405,
+DFL411, DFL412 and DFL501 guarded the credit-and-settlement model that no longer
+exists. DFL408, DFL409 and DFL410 guarded a timezone resolver replaced by a plain
+date and time. DFL402 and DFL403 are superseded by `DFL423` and `DFL426`.
+
+**DFL407 is the reversal worth reading twice.** It refused a defuel on a FIFO carrier,
+on the grounds that FIFO layers were produced by an offline replay and so a FIFO defuel
+had a value nobody could produce. The instruction of 26 Oct is that a defuel DRAWS from
+those layers at their own rates. The layers are maintained live from that point, and the
+code is deleted rather than left to fire on what is now the normal path.
+
+| Code | Description | State |
+|---|---|---|
+| `DFL420` | A flight is required when the defuel references one | **BUILT** — the four fields it fills cannot be allowed to disagree with the schedule |
+| `DFL421` | A station is required on a tail-only defuel | **BUILT** — the defuel number is built from it, so it cannot be optional |
+| `DFL422` | The aircraft is not in the register | **BUILT** — technical, but surfaced as a field error on the tail |
+| `DFL423` | Storage location missing or not active | **BUILT** — supersedes DFL402. Names the tank and says where to reactivate it |
+| `DFL424` | Quantity must be greater than zero | **BUILT** — a zero-quantity defuel would post two empty ledger rows |
+| `DFL425` | The tail holds no valued stock | **BUILT** — nothing to draw from; distinct from holding too little |
+| `DFL426` | The defuel draws more than the tail is carrying | **BUILT** — supersedes DFL403. Quotes both figures. Refused, never drawn negative — a clamped balance hides fuel that went missing |
+| `DFL427` | Already reversed | **BUILT** — kept and marked, never deleted, never reversed twice |
+| `DFL428` | No specific gravity on the tail, so litres cannot become kilograms | **BUILT** — litres are what the meter reads; the ledger values mass, and without a density the two cannot be bridged |
+| `DFL429` | A defuel to storage has no vendor to claim from | **BUILT** — fuel on the ground is still the airline's until it is returned or re-uplifted |
+| `DFL430` | Already posted, so it cannot be posted again | **BUILT** — reverse it if the credit was agreed wrongly |
+| `DFL431` | Expected credit is negative, or exceeds what the fuel was worth | **BUILT** — a credit above the original value books a profit on fuel handed back. A keying error every time |
+| `DFL520` | The defuel no longer exists | **BUILT** — technical |
 
 **"In JS" is the honest signal**, not a count of `req.error` calls: many codes are raised through a
 shared constant, so a raise-site count undercounts. A code appearing in a `.js` file is something

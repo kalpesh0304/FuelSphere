@@ -46,6 +46,11 @@ annotate ValuationService.StockMovements with @(
             { Value: flight_date,       Label: 'Flight date',   ![@UI.Importance]: #Medium },
             { Value: flight_aobt,       Label: 'AOBT (UTC)',    ![@UI.Importance]: #Low },
             { Value: station,           Label: 'Station',       ![@UI.Importance]: #Medium },
+            // WHERE THE FUEL IS WHEN IT IS NOT ON A WING. Set only on the
+            // inbound half of a defuel, so it is blank on every flight
+            // movement - which is what makes a defuel visible at a glance in
+            // a list of thousands of burns and uplifts.
+            { Value: storage_location,  Label: 'Storage location', ![@UI.Importance]: #High },
             { Value: reference,         Label: 'Reference',     ![@UI.Importance]: #High },
             { Value: line_type,         Label: 'Line type',     ![@UI.Importance]: #High },
             { Value: qty_cm,            Label: 'Qty',      ![@UI.Importance]: #High },
@@ -119,6 +124,11 @@ annotate ValuationService.StockBalances with @(
             { Value: carrier_code,     Label: 'Carrier',           ![@UI.Importance]: #High },
             { Value: tail_number,      Label: 'Tail',              ![@UI.Importance]: #High },
             { Value: batch_ref,        Label: 'Batch',             ![@UI.Importance]: #High },
+            // A BALANCE ROW CARRIES EITHER A TAIL OR A TANK, never both. The
+            // fuel keeps its batch across the move, so a tank's balance names
+            // the same batch the aircraft held it under - and at the same
+            // rate, which is what lets it be re-uplifted at what it cost.
+            { Value: storage_location, Label: 'Storage location',  ![@UI.Importance]: #High },
             { Value: line_type,        Label: 'Opened by',         ![@UI.Importance]: #Medium },
             { Value: station,          Label: 'Opened at',         ![@UI.Importance]: #Medium },
             { Value: flight_number,    Label: 'Flight',            ![@UI.Importance]: #Medium },
@@ -277,6 +287,123 @@ annotate ValuationService.BurnValuations with @(
         PresentationVariant: {
             $Type: 'UI.PresentationVariantType',
             SortOrder: [ { Property: tail_number }, { Property: flight_aobt }, { Property: line_type } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+
+// ===========================================================================
+// Defueling — the documents behind the DEFUEL rows
+// ===========================================================================
+//
+// THE FOURTH VIEW. A reader looking at a DEFUEL movement asks what produced
+// it; this is that document, on the same screen rather than another tile.
+//
+// IMPORTANT COLUMNS ONLY, per the 26 Oct instruction: what identifies the
+// movement and what it was worth. The full document lives in the Defueling
+// app, which is where it can also be changed.
+annotate ValuationService.Defuels with @(
+    UI: {
+        LineItem: [
+            { Value: defuel_id,        Label: 'Defuel No.',        ![@UI.Importance]: #High },
+            { Value: defuel_type,      Label: 'Type',              ![@UI.Importance]: #High },
+            { Value: tail_number,      Label: 'Tail',              ![@UI.Importance]: #High },
+            { Value: flight_number,    Label: 'Flight',            ![@UI.Importance]: #Medium },
+            { Value: defuel_date,      Label: 'Defuel date',       ![@UI.Importance]: #High },
+            { Value: station_code,     Label: 'Station',           ![@UI.Importance]: #Medium },
+            { Value: location_code,    Label: 'Storage location',  ![@UI.Importance]: #High },
+            { Value: quantity_kg,      Label: 'Qty (kg)',          ![@UI.Importance]: #High },
+            { Value: specific_gravity, Label: 'Sp. gravity',       ![@UI.Importance]: #Low },
+            { Value: fuel_value_usd,   Label: 'Fuel value USD',    ![@UI.Importance]: #High },
+            { Value: status,           Label: 'Status',            ![@UI.Importance]: #Medium }
+        ],
+
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [ { Property: defuel_date, Descending: true }, { Property: defuel_id } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+annotate ValuationService.Defuels with {
+    defuel_id        @title: 'Defuel No.';
+    defuel_type      @title: 'Type';
+    source_mode      @title: 'Recorded against';
+    tail_number      @title: 'Tail';
+    carrier_code     @title: 'Carrier';
+    flight_number    @title: 'Flight';
+    flight_date      @title: 'Flight date';
+    station_code     @title: 'Station';
+    defuel_date      @title: 'Defuel date';
+    defuel_time      @title: 'Defuel time';
+    location_code    @title: 'Storage location';
+    quantity_kg      @title: 'Qty (kg)';
+    specific_gravity @title: 'Sp. gravity';
+    fuel_value_usd   @title: 'Fuel value USD';
+    status           @title: 'Status';
+};
+
+// NEWEST FIRST, unlike the three valuation views.
+//
+// Those are a replay and read oldest-first, because the order IS the
+// algorithm. This one is a worklist: the defuel somebody just recorded is the
+// one they want to see, and a station user scrolling to the bottom of a
+// thousand historical documents to find today's is the wrong default.
+annotate ValuationService.Defuels with @(
+    UI.SelectionPresentationVariant #Defuels: {
+        $Type: 'UI.SelectionPresentationVariantType',
+        Text: 'Defueling',
+        SelectionVariant: { $Type: 'UI.SelectionVariantType', SelectOptions: [] },
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [ { Property: defuel_date, Descending: true }, { Property: defuel_id } ],
+            Visualizations: ['@UI.LineItem']
+        }
+    }
+);
+
+
+// ===========================================================================
+// Defuel Movements — the ledger lines a defuel wrote
+// ===========================================================================
+//
+// A FIFTH VIEW, AND THE ONLY ONE THAT PRE-FILTERS. The three valuation views
+// deliberately open unfiltered, because a view that silently narrowed would
+// make the same query return different totals depending on which tab the
+// reader was on. This one is different in kind: it is not another way of
+// reading the valuation, it is a worklist for the handful of rows a defuel
+// produced among twelve thousand burns and uplifts.
+//
+// WITHOUT IT THE LINES ARE EFFECTIVELY INVISIBLE. Six rows in 12,882, in a
+// table that shows fifteen at a time, reachable only by knowing to filter on
+// a line type - which is the reported "defuel entries not appearing".
+//
+// NEWEST FIRST, unlike the replay views: somebody checking a defuel they just
+// recorded wants it at the top, not buried under a year of history.
+annotate ValuationService.StockMovements with @(
+    UI.SelectionPresentationVariant #DefuelMovements: {
+        $Type: 'UI.SelectionPresentationVariantType',
+        Text: 'Defuel Movements',
+        SelectionVariant: {
+            $Type: 'UI.SelectionVariantType',
+            SelectOptions: [{
+                $Type: 'UI.SelectOptionType',
+                PropertyName: line_type,
+                Ranges: [{
+                    $Type: 'UI.SelectionRangeType',
+                    Sign: #I, Option: #EQ, Low: 'DEFUEL'
+                }]
+            }]
+        },
+        PresentationVariant: {
+            $Type: 'UI.PresentationVariantType',
+            SortOrder: [
+                { Property: flight_aobt, Descending: true },
+                { Property: reference },
+                { Property: sequence }
+            ],
             Visualizations: ['@UI.LineItem']
         }
     }

@@ -1,0 +1,7 @@
+code;description;credit_expected;valid_from;valid_to;is_active;notes;created_at;created_by;modified_at;modified_by
+MTOW;Over maximum take-off weight;true;2026-01-01;;true;Late cargo or late passengers push the aircraft over MTOW and dispatch calls for fuel off before pushback. The commonest cause, and fuel the vendor delivered correctly.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
+TECHNICAL;Technical defect;true;2026-01-01;;true;A defect requiring fuel off the wing.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
+AIRCRAFT_CHANGE;Aircraft change;true;2026-01-01;;true;The flight moves to another tail and the fuel follows it, or does not.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
+FUEL_QUALITY;Fuel quality concern;false;2026-01-01;;true;Default is NO credit expected, deliberately: where the quality problem is the airline handling rather than the vendor delivery, the whole held value is written off. The opposite case is equally common, which is why this is a default and not a rule.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
+MAINTENANCE;Maintenance requiring empty tanks;true;2026-01-01;;true;Planned work needing the tanks drained.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
+OTHER;Other;true;2026-01-01;;true;Requires a note. Present because a mandatory reason code with no escape makes people pick a wrong one.;2026-10-23T00:00:00Z;SEED_DEFUEL;2026-10-23T00:00:00Z;SEED_DEFUEL
