@@ -244,11 +244,17 @@ module.exports = class InvoiceService extends cds.ApplicationService {
                     ? Number((tktAmt / tktKg).toFixed(4)) : null;
 
                 // The flight goes on the LINE - decision Q1. The ticket's own
-                // association where it has one; otherwise its flight number on
-                // its delivery date, the key FLIGHT_DISPATCH already matches
-                // on. Number alone would attach a recurring flight to the
-                // wrong day, so an ambiguous match writes nothing.
+                // association where it has one; then the RESOLVED ORDER's
+                // flight; only then its flight number on its delivery date,
+                // the key FLIGHT_DISPATCH already matches on. The order comes
+                // before the date because a delivery date is not a flight
+                // date: an overnight preflight uplift is delivered the
+                // evening BEFORE departure, and number + delivery day then
+                // names the previous day's instance of a daily flight (F12).
+                // Number alone would attach a recurring flight to the wrong
+                // day, so an ambiguous match writes nothing.
                 let flightId = t ? (t.flight_ID || null) : null;
+                if (t && !flightId && res.order && res.order.flight_ID) flightId = res.order.flight_ID;
                 if (t && !flightId && t.flight_number) {
                     const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
                     const where = day ? { flight_number: t.flight_number, flight_date: day }
@@ -468,13 +474,20 @@ module.exports = class InvoiceService extends cds.ApplicationService {
             d.ticket_amount = null;
             if (!d.ticket_ID) return;
             const t = await SELECT.one.from('fuelsphere.FUEL_TICKETS')
-                .columns('ticket_number', 'flight_ID', 'flight_number', 'delivery_timestamp')
+                .columns('ticket_number', 'flight_ID', 'flight_number', 'delivery_timestamp', 'order_ID')
                 .where({ ID: d.ticket_ID });
             if (!t) return;
             d.ticket_number = t.ticket_number;
             d.resolution_source = 'TICKET_ID';
             if ('flight_ID' in d) return;
+            // Same order as persistResolution: ticket, then its order's
+            // flight, then number + delivery day (F12).
             let flightId = t.flight_ID || null;
+            if (!flightId && t.order_ID) {
+                const o = await SELECT.one.from('fuelsphere.FUEL_ORDERS').columns('flight_ID')
+                    .where({ ID: t.order_ID });
+                flightId = (o && o.flight_ID) || null;
+            }
             if (!flightId && t.flight_number) {
                 const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
                 const f = await SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE').columns('ID')

@@ -26,6 +26,8 @@
  *   EXIT-9  a narrow $select still populates the row
  *   EXIT-10 posting and payment simulate, and refuse what they must
  *   EXIT-11 the matcher persists what the ticket said
+ *   EXIT-14 an overnight preflight uplift attaches to the ORDER's flight, not
+ *           to the same number on the delivery day (F12)
  */
 const PROJECT = require('node:path').resolve(__dirname, '..', '..');
 process.env.CDS_ENV = 'development';
@@ -587,5 +589,57 @@ describe('Invoice views - header, lines, and the ticket link', () => {
             assert.ok(l.flight_ID, 'a resolved line must STORE its flight');
         }
         out(`${resolved.length} resolved line(s): ticket mass and flight now stored by the matcher`);
+    });
+
+    it('EXIT-14 - an uplift fuelled the evening before attaches to the order\'s flight (F12)', async () => {
+        // A daily flight fuelled the evening before departure is a normal
+        // overnight preflight uplift. Number + DELIVERY day then names the
+        // previous day's instance, so the line must take the resolved
+        // order's flight before it ever tries that key. Constructed rather
+        // than found: the condition needs the same flight number to have
+        // flown the earlier day, and no seeded ticket sits on that seam.
+        const V = 'f1c00000-0000-4000-8000-000000000002';
+        const TKT_ID = 'b8c9d0e1-8888-4000-8000-0000000d0001';
+        const PREV = 'e5f6a7b8-5555-4000-8000-0000000f1200';
+        const t = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_TICKETS')
+            .columns('flight_ID', 'flight_number', 'delivery_timestamp', 'order_ID').where({ ID: TKT_ID }));
+        const o = await cds.db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS')
+            .columns('flight_ID').where({ ID: t.order_ID }));
+        const f = await cds.db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE').where({ ID: o.flight_ID }));
+        assert.ok(o.flight_ID && !t.flight_ID && t.flight_number === f.flight_number,
+            'precondition: ticket has an order with a flight, no flight of its own, and the same number');
+
+        const day = String(f.flight_date).slice(0, 10);
+        const eve = new Date(Date.parse(day + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+        await cds.db.run(INSERT.into('fuelsphere.FLIGHT_SCHEDULE').entries({ ...f, ID: PREV, flight_date: eve }));
+        await cds.db.run(UPDATE('fuelsphere.FUEL_TICKETS')
+            .set({ delivery_timestamp: `${eve}T22:30:00Z` }).where({ ID: TKT_ID }));
+        try {
+            // The control: the key the old code used DOES name exactly one
+            // flight - the wrong one - so a number + delivery-day lookup
+            // would have written it rather than declining.
+            const byDay = await cds.db.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE').columns('ID')
+                .where({ flight_number: f.flight_number, flight_date: eve }));
+            assert.deepStrictEqual(byDay.map(r => r.ID), [PREV],
+                'control: number + delivery day must name the PREVIOUS day\'s flight, or this proves nothing');
+
+            await test.POST(`${INV}/Invoices(ID=${V},IsActiveEntity=true)/InvoiceService.validateForPosting`, {})
+                .catch(() => {});
+            const lines = await cds.db.run(SELECT.from('fuelsphere.INVOICE_ITEMS')
+                .columns('line_number', 'flight_ID').where({ invoice_ID: V, ticket_ID: TKT_ID }));
+            assert.ok(lines.length > 0, 'precondition: a line resolves to the ticket');
+            for (const l of lines) {
+                assert.notStrictEqual(l.flight_ID, PREV,
+                    `line ${l.line_number} attached to ${f.flight_number} of ${eve}, the delivery day`);
+                assert.strictEqual(l.flight_ID, o.flight_ID,
+                    `line ${l.line_number} must carry the order's flight (${f.flight_number} ${day})`);
+            }
+            out(`ticket delivered ${eve} 22:30, order on ${f.flight_number} ${day}, `
+                + `${f.flight_number} also flew ${eve}: ${lines.length} line(s) attached to ${day}`);
+        } finally {
+            await cds.db.run(UPDATE('fuelsphere.FUEL_TICKETS')
+                .set({ delivery_timestamp: t.delivery_timestamp }).where({ ID: TKT_ID }));
+            await cds.db.run(DELETE.from('fuelsphere.FLIGHT_SCHEDULE').where({ ID: PREV }));
+        }
     });
 });
