@@ -79,14 +79,15 @@ def ensure(head, col, after=None):
 def main():
     # ---- master data --------------------------------------------------------
     head, rows, eol = read('CARRIER_MASTER')
-    for c in ('currency_code', 'volume_uom_code', 'mass_uom_code'):
+    for c in ('reporting_currency', 'reporting_volume_uom', 'reporting_mass_uom'):
         ensure(head, c)
     for r in rows:
         cur, vol, mass = CARRIERS.get(r['carrier_code'], ('', '', ''))
-        r.setdefault('currency_code', ''); r.setdefault('volume_uom_code', ''); r.setdefault('mass_uom_code', '')
-        r['currency_code'] = r['currency_code'] or cur
-        r['volume_uom_code'] = r['volume_uom_code'] or vol
-        r['mass_uom_code'] = r['mass_uom_code'] or mass
+        for k in ('reporting_currency', 'reporting_volume_uom', 'reporting_mass_uom'):
+            r.setdefault(k, '')
+        r['reporting_currency'] = r['reporting_currency'] or cur
+        r['reporting_volume_uom'] = r['reporting_volume_uom'] or vol
+        r['reporting_mass_uom'] = r['reporting_mass_uom'] or mass
     write('CARRIER_MASTER', head, rows, eol)
 
     head, rows, eol = read('UNIT_OF_MEASURE')

@@ -103,10 +103,10 @@ async function applyLedgerLitres(data) {
     const ratioOf = new Map();
     if (codes.length) {
         const cs = await cds.db.run(SELECT.from('fuelsphere.CARRIER_MASTER')
-            .columns('carrier_code', 'volume_uom_code').where({ carrier_code: { in: codes } }));
+            .columns('carrier_code', 'reporting_volume_uom').where({ carrier_code: { in: codes } }));
         const us = await cds.db.run(SELECT.from('fuelsphere.UNIT_OF_MEASURE').columns('uom_code', 'conversion_to_ltr'));
         const lt = new Map(us.map(u => [u.uom_code, num(u.conversion_to_ltr)]));
-        for (const c of cs) ratioOf.set(c.carrier_code, lt.get(c.volume_uom_code) || null);
+        for (const c of cs) ratioOf.set(c.carrier_code, lt.get(c.reporting_volume_uom) || null);
     }
 
     for (const row of rows) {

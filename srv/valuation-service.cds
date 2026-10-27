@@ -31,9 +31,9 @@ service ValuationService {
         mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
         into {
             *,
-            carrier.currency_code   as carrier_currency   : String(3),
-            carrier.volume_uom_code as carrier_volume_uom : String(3),
-            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            carrier.reporting_currency   as carrier_currency   : String(3),
+            carrier.reporting_volume_uom as carrier_volume_uom : String(3),
+            carrier.reporting_mass_uom   as carrier_mass_uom   : String(3),
             cast(m.qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as qty_cm : Decimal(15,2),
             cast(m.balance_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as balance_qty_cm : Decimal(15,2),
             cast(m.qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as qty_cv : Decimal(15,2),
@@ -50,9 +50,9 @@ service ValuationService {
         mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
         into {
             *,
-            carrier.currency_code   as carrier_currency   : String(3),
-            carrier.volume_uom_code as carrier_volume_uom : String(3),
-            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            carrier.reporting_currency   as carrier_currency   : String(3),
+            carrier.reporting_volume_uom as carrier_volume_uom : String(3),
+            carrier.reporting_mass_uom   as carrier_mass_uom   : String(3),
             cast(b.uplift_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as uplift_qty_cm : Decimal(15,2),
             cast(b.balance_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as balance_qty_cm : Decimal(15,2),
             cast(b.uplift_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as uplift_qty_cv : Decimal(15,2),
@@ -69,9 +69,9 @@ service ValuationService {
         mixin { carrier : Association to map.CARRIER_MASTER on carrier.carrier_code = $projection.carrier_code; }
         into {
             *,
-            carrier.currency_code   as carrier_currency   : String(3),
-            carrier.volume_uom_code as carrier_volume_uom : String(3),
-            carrier.mass_uom_code   as carrier_mass_uom   : String(3),
+            carrier.reporting_currency   as carrier_currency   : String(3),
+            carrier.reporting_volume_uom as carrier_volume_uom : String(3),
+            carrier.reporting_mass_uom   as carrier_mass_uom   : String(3),
             cast(h.burn_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2)) as burn_qty_cm : Decimal(15,2),
             cast(h.burn_qty_l / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) as burn_qty_cv : Decimal(15,2),
             cast(h.burn_rate_usd_per_kg * carrier.mass_uom.conversion_to_kg as Decimal(15,4)) as burn_rate_per_cm : Decimal(15,4)

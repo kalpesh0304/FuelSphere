@@ -121,7 +121,7 @@ async function carrierSettings(code, tx) {
     if (!code) return null;
     const db = tx || cds.db;
     return db.run(SELECT.one.from('fuelsphere.CARRIER_MASTER')
-        .columns('carrier_code', 'currency_code', 'volume_uom_code', 'mass_uom_code')
+        .columns('carrier_code', 'reporting_currency', 'reporting_volume_uom', 'reporting_mass_uom')
         .where({ carrier_code: code }));
 }
 
@@ -131,7 +131,7 @@ async function currencyForFlight(flightId, tx) {
     const db = tx || cds.db;
     const f = await db.run(SELECT.one.from(FLIGHTS).columns('airline_code').where({ ID: flightId }));
     const c = f && await carrierSettings(f.airline_code, db);
-    return (c && c.currency_code) || null;
+    return (c && c.reporting_currency) || null;
 }
 
 /** A contract's currency and unit, or nulls. */
@@ -169,12 +169,12 @@ async function applyCarrierUnits(data, entity, spec) {
     const codes = [...new Set(rows.map(r => r.carrier_code || codeById.get(r.ID)).filter(Boolean))];
     if (!codes.length) return;
     const carriers = await cds.db.run(SELECT.from('fuelsphere.CARRIER_MASTER')
-        .columns('carrier_code', 'volume_uom_code', 'mass_uom_code').where({ carrier_code: { in: codes } }));
+        .columns('carrier_code', 'reporting_volume_uom', 'reporting_mass_uom').where({ carrier_code: { in: codes } }));
     const uoms = new Map((await cds.db.run(SELECT.from('fuelsphere.UNIT_OF_MEASURE')
         .columns('uom_code', 'conversion_to_kg', 'conversion_to_ltr'))).map(u => [u.uom_code, u]));
     const f = new Map(carriers.map(c => [c.carrier_code, {
-        kg: Number((uoms.get(c.mass_uom_code) || {}).conversion_to_kg) || null,
-        l: Number((uoms.get(c.volume_uom_code) || {}).conversion_to_ltr) || null }]));
+        kg: Number((uoms.get(c.reporting_mass_uom) || {}).conversion_to_kg) || null,
+        l: Number((uoms.get(c.reporting_volume_uom) || {}).conversion_to_ltr) || null }]));
     const n = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
     for (const r of rows) {
         const k = f.get(r.carrier_code || codeById.get(r.ID));

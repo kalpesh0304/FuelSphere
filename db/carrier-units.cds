@@ -55,13 +55,18 @@ extend db.UNIT_OF_MEASURE with {
 // The unmanaged associations beside them give the screens a value help and a
 // navigation without adding a column.
 extend CARRIER_MASTER with {
-    currency_code    : String(3);    // ISO 4217 - the company code's currency
-    volume_uom_code  : String(3);    // UNIT_OF_MEASURE, category VOLUME
-    mass_uom_code    : String(3);    // UNIT_OF_MEASURE, category MASS
+    // THE NAMES OF THE DEFUEL BRANCH (claude/defuel-redesign), adopted 27 Oct
+    // 2026 so the system carries one set of carrier settings, not two. That
+    // branch declares these three inline in db/mapping-tables.cds; WHEN IT
+    // MERGES, DELETE THESE THREE LINES and keep the associations below, or
+    // the compiler rejects the duplicate element.
+    reporting_currency   : String(3);   // ISO 4217 - the company code's currency
+    reporting_volume_uom : String(3);   // UNIT_OF_MEASURE, category VOLUME
+    reporting_mass_uom   : String(3);   // UNIT_OF_MEASURE, category MASS
 
-    currency   : Association to db.CURRENCY_MASTER on currency.currency_code = currency_code;
-    volume_uom : Association to db.UNIT_OF_MEASURE on volume_uom.uom_code = volume_uom_code;
-    mass_uom   : Association to db.UNIT_OF_MEASURE on mass_uom.uom_code = mass_uom_code;
+    currency   : Association to db.CURRENCY_MASTER on currency.currency_code = reporting_currency;
+    volume_uom : Association to db.UNIT_OF_MEASURE on volume_uom.uom_code = reporting_volume_uom;
+    mass_uom   : Association to db.UNIT_OF_MEASURE on mass_uom.uom_code = reporting_mass_uom;
 }
 
 // ===========================================================================
@@ -107,9 +112,9 @@ extend db.FUEL_ORDERS with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     quantity_uom : Association to db.UNIT_OF_MEASURE on quantity_uom.uom_code = uom_code;
     ordered_quantity_cm : Decimal(15,2) = cast(ordered_quantity_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     planned_quantity_cm : Decimal(15,2) = cast(planned_quantity_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -123,9 +128,9 @@ extend db.FUEL_DELIVERIES with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     quantity_uom : Association to db.UNIT_OF_MEASURE on quantity_uom.uom_code = uom_code;
     fob_at_arrival_cm : Decimal(15,2) = cast(fob_at_arrival_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     fob_before_cm : Decimal(15,2) = cast(fob_before_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -148,9 +153,9 @@ extend db.FUEL_TICKETS with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     quantity_uom : Association to db.UNIT_OF_MEASURE on quantity_uom.uom_code = uom_code;
     quantity_cm : Decimal(15,2) = cast(quantity_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     quantity_cv : Decimal(15,2) = case when quantity_uom.conversion_to_ltr is not null then cast(quantity * quantity_uom.conversion_to_ltr / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) when quantity_uom.uom_category = 'MASS' and density_value > 0 then cast(quantity * quantity_uom.conversion_to_kg / density_value / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) end;
@@ -163,9 +168,9 @@ extend db.INVOICE_ITEMS with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     quantity_uom : Association to db.UNIT_OF_MEASURE on quantity_uom.uom_code = uom_code;
     ticket_quantity_cm : Decimal(15,2) = cast(ticket_quantity_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     quantity_cv : Decimal(15,2) = case when quantity_uom.conversion_to_ltr is not null then cast(quantity * quantity_uom.conversion_to_ltr / carrier.volume_uom.conversion_to_ltr as Decimal(15,2)) end;
@@ -177,9 +182,9 @@ extend db.FUEL_BURNS with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     planned_burn_cm : Decimal(15,2) = cast(planned_burn_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     actual_burn_cm : Decimal(15,2) = cast(actual_burn_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     taxi_out_cm : Decimal(15,2) = cast(taxi_out_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -196,9 +201,9 @@ extend db.ROB_LEDGER with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     opening_rob_cm : Decimal(15,2) = cast(opening_rob_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     uplift_cm : Decimal(15,2) = cast(uplift_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     burn_cm : Decimal(15,2) = cast(burn_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -218,9 +223,9 @@ extend db.FLIGHT_DISPATCH with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     dispatch_qty_cm : Decimal(15,2) = cast(dispatch_qty_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     trip_fuel_cm : Decimal(15,2) = cast(trip_fuel_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     contingency_fuel_cm : Decimal(15,2) = cast(contingency_fuel_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -242,9 +247,9 @@ extend db.FLIGHT_SCHEDULE with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     cargo_cm : Decimal(15,2) = cast(cargo_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     fob_at_out_cm : Decimal(15,2) = cast(fob_at_out_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     fob_at_off_cm : Decimal(15,2) = cast(fob_at_off_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
@@ -258,9 +263,9 @@ extend db.APU_USAGE with {
     // The carrier's units as scalars on this row, so @Measures can point at a
     // field of the same entity rather than a path whose target a service
     // may not expose (D47).
-    carrier_currency   : String(3) = carrier.currency_code;
-    carrier_volume_uom : String(3) = carrier.volume_uom_code;
-    carrier_mass_uom   : String(3) = carrier.mass_uom_code;
+    carrier_currency   : String(3) = carrier.reporting_currency;
+    carrier_volume_uom : String(3) = carrier.reporting_volume_uom;
+    carrier_mass_uom   : String(3) = carrier.reporting_mass_uom;
     apu_burn_cm : Decimal(15,2) = cast(apu_burn_kg / carrier.mass_uom.conversion_to_kg as Decimal(15,2));
     burn_rate_cm_hr : Decimal(15,4) = cast(burn_rate_kg_hr * carrier.mass_uom.conversion_to_kg as Decimal(15,4));
 }

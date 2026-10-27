@@ -1,4 +1,4 @@
-carrier_code;carrier_name;company_code;is_active;notes;currency_code;volume_uom_code;mass_uom_code
+carrier_code;carrier_name;company_code;is_active;notes;reporting_currency;reporting_volume_uom;reporting_mass_uom
 B6;JetBlue Airways;B600;true;From the mapping sheet of 30 Sep 2026.;USD;USG;LB
 B7;JetBlue (second company code);B601;true;From the mapping sheet of 30 Sep 2026.;USD;USG;LB
 AC;Air Canada;AC00;true;Added by the designation migration (4 Oct 2026). COMPANY CODE IS A PLACEHOLDER - set it before any posting is raised for this carrier.;CAD;LTR;KG

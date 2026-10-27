@@ -78,7 +78,7 @@ def build(D, upload_path):
     country = {k: v['country_code'] for k, v in airport.items()}
 
     T['CARRIER_MASTER'].add({'carrier_code': 'TP', 'carrier_name': 'TAP Air Portugal', 'company_code': COMPANY,
-                             'currency_code': 'EUR', 'volume_uom_code': 'LTR', 'mass_uom_code': 'KG',
+                             'reporting_currency': 'EUR', 'reporting_volume_uom': 'LTR', 'reporting_mass_uom': 'KG',
                              'is_active': 'true',
                              'notes': 'COMPANY CODE IS A PLACEHOLDER (TP00) - set it before any posting is raised for this carrier.'})
     _, cur_rows = read_csv('CURRENCY_MASTER')

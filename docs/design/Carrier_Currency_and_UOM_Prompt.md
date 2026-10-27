@@ -63,8 +63,10 @@ Values to seed. **B6/B7 USG and LB confirmed by the business, 27 Oct 2026.** TP 
 
 ### Schema (one commit)
 
-- `CARRIER_MASTER`: `currency_code` (String(3)), `volume_uom_code` and `mass_uom_code` (String(3)),
-  extended in `db/mapping-tables.cds`.
+- `CARRIER_MASTER`: `reporting_currency`, `reporting_volume_uom` and `reporting_mass_uom` (String(3)).
+  **Built as `db/carrier-units.cds`, under the defuel branch's names** (adopted 27 Oct 2026, so there is
+  one set of carrier settings). When `claude/defuel-redesign` merges, delete the three declarations from
+  `db/carrier-units.cds` and keep its associations.
 - `MASTER_CONTRACTS`: `uom_code` (String(3)), the unit the vendor prices and tickets in.
 - `UNIT_OF_MEASURE`: `conversion_to_ltr` (Decimal), the volume ratio. LTR 1, USG and GAL 3.785411784.
   Add an LB row (`uom_category` MASS, `conversion_to_kg` 0.45359237, `sap_uom` LB). Leave the existing

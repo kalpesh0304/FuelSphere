@@ -227,7 +227,7 @@ async function buildRows(filters) {
         cds.db.run(SELECT.from(MOVEMENT_BY_DAY).where(dateWindow)),
         cds.db.run(SELECT.from(UPLIFT_BY_DAY).where(dateWindow)),
         cds.db.run(SELECT.from(UPLIFT_FI_BY_DAY).where(dateWindow)),
-        cds.db.run(SELECT.from(CARRIER_MASTER).columns('carrier_code', 'carrier_name', 'company_code', 'currency_code', 'mass_uom_code')),
+        cds.db.run(SELECT.from(CARRIER_MASTER).columns('carrier_code', 'carrier_name', 'company_code', 'reporting_currency', 'reporting_mass_uom')),
         cds.db.run(SELECT.from(GL_ACCOUNTS).columns(
             'ID', 'carrier_carrier_code', 'company_code', 'gl_account',
             'account_role', 'description', 'valid_from', 'valid_to', 'is_active'))
@@ -468,8 +468,8 @@ function finish(a, carrierById, glAccounts) {
         // THE CARRIER'S COMPANY-CODE CURRENCY. This read 'USD' for every
         // carrier, so a TAP period in euros was labelled dollars. Null where
         // the carrier is not mapped - an unknown currency is not a dollar.
-        currency_code: c.currency_code || null,
-        _massUom: c.mass_uom_code || null,
+        currency_code: c.reporting_currency || null,
+        _massUom: c.reporting_mass_uom || null,
 
         uplift_count: a.n_uplift,
         posted_count: a.n_posted,
