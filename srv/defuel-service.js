@@ -117,6 +117,40 @@ module.exports = cds.service.impl(async function () {
             d.tail_number = d.tail_registration;
         }
 
+        // ---- the station the two context flights imply -------------------
+        //
+        // A PRE-FLIGHT IS THE DEPARTURE THE AIRCRAFT IS BEING PREPARED FOR,
+        // so the defuel happens at that leg's ORIGIN - fuel comes off on
+        // stand before pushback, typically for weight.
+        //
+        // A POST-FLIGHT IS THE ARRIVAL IT JUST MADE, so the defuel happens at
+        // that leg's DESTINATION - the aircraft is already down.
+        //
+        // The two cannot both be right about where the aircraft is, so the
+        // pre-flight wins when both are given: it is the nearer event to a
+        // defuel being recorded now.
+        const legStation = async (number, date, which) => {
+            if (!number) return null;
+            const where = { flight_number: number };
+            if (date) where.flight_date = date;
+            const f = await db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
+                .columns('origin_airport', 'destination_airport', 'flight_date')
+                .where(where).orderBy({ flight_date: 'desc' }));
+            return f ? (which === 'origin' ? f.origin_airport : f.destination_airport) : null;
+        };
+
+        if (d.pre_flight_number !== undefined || d.pre_flight_date !== undefined
+            || d.post_flight_number !== undefined || d.post_flight_date !== undefined) {
+            const fromPre  = await legStation(d.pre_flight_number,  d.pre_flight_date,  'origin');
+            const fromPost = await legStation(d.post_flight_number, d.post_flight_date, 'destination');
+            const implied = fromPre || fromPost;
+            // DEFAULTED, NOT FORCED. A user who typed a station meant it -
+            // a diversion puts the aircraft somewhere the schedule does not
+            // know about, and overwriting that would be the system arguing
+            // with the person who was there.
+            if (implied && !d.station_code) d.station_code = implied;
+        }
+
         if (d.location_code !== undefined || d.location_ID !== undefined) {
             const where = d.location_ID ? { ID: d.location_ID }
                 : (d.location_code ? { code: d.location_code } : null);
@@ -265,10 +299,30 @@ module.exports = cds.service.impl(async function () {
         //
         // OLDEST FIRST, which is the whole of FIFO. The order IS the answer,
         // so it is stated explicitly rather than left to the database.
-        const layers = await db.run(SELECT.from(BALANCES)
+        // ---- the layers that EXISTED WHEN THE FUEL CAME OFF ---------------
+        //
+        // NOT MERELY THE LAYERS THAT ARE OPEN NOW. The balance table is the
+        // end state of the replay, so "open" includes batches opened days
+        // AFTER this defuel. Without the time bound a defuel on the 24th
+        // drew from an uplift on the 26th - fuel that was not on the
+        // aircraft, bought at a price nobody had paid yet.
+        //
+        // NULL AOBT IS AN OPENING BALANCE and predates everything, so it
+        // qualifies whatever the defuel's instant.
+        const asOf = d.defuel_date
+            ? `${d.defuel_date}T${d.defuel_time || '23:59:59'}Z` : null;
+        const layers = (await db.run(SELECT.from(BALANCES)
             .where({ valuation_method: 'FIFO', tail_number: d.tail_number,
                      storage_location: null, balance_qty_kg: { '>': 0 } })
-            .orderBy('flight_aobt', 'flight_date', 'batch_ref'));
+            .orderBy('flight_aobt', 'flight_date', 'batch_ref')))
+            .filter((l) => !asOf || !l.flight_aobt
+                        || String(l.flight_aobt).slice(0, 19) <= String(asOf).slice(0, 19));
+
+        if (layers.length === 0) {
+            return req.error(400, `DFL425: ${d.tail_number} held no valued stock on `
+                + `${d.defuel_date}, so there is nothing to draw a defuel from. Fuel uplifted `
+                + 'after that date cannot be taken off before it was loaded.', 'quantity_vol');
+        }
 
         // ---- litres to kilograms ----------------------------------------
         //
@@ -293,10 +347,6 @@ module.exports = cds.service.impl(async function () {
         }
         const qty = r3(litres * tailGravity);
 
-        if (layers.length === 0) {
-            return req.error(400, `DFL425: ${d.tail_number} holds no valued stock, so there is `
-                + 'nothing to draw a defuel from.', 'quantity_kg');
-        }
 
         const onHand = r3(layers.reduce((s, l) => s + Number(l.balance_qty_kg || 0), 0));
         if (onHand < qty) {
@@ -513,8 +563,12 @@ async function postToLedger(db, d, taken, qty) {
             qty_kg: -t.qty, qty_l: litres == null ? null : -litres,
             rate_usd_per_kg: t.rate, value_usd: -value, sequence: ++seq });
 
+        // FUEL IN A TANK IS ON NO FLIGHT. The inbound half carries the tank
+        // and drops the flight entirely - a storage row showing B6979 reads
+        // as though the tank flew somewhere.
         rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'FIFO',
             tail_number: null, storage_location: d.location_code,
+            flight_number: null, flight_date: null,
             batch_ref: t.layer.batch_ref, specific_gravity: sg,
             qty_kg: t.qty, qty_l: litres, rate_usd_per_kg: t.rate,
             value_usd: value, sequence: ++seq });
@@ -544,6 +598,7 @@ async function postToLedger(db, d, taken, qty) {
 
         rows.push({ ...base, ID: cds.utils.uuid(), valuation_method: 'MAP',
             tail_number: null, storage_location: d.location_code, batch_ref: null,
+            flight_number: null, flight_date: null,
             specific_gravity: sg, qty_kg: qty, qty_l: litres,
             rate_usd_per_kg: rate, value_usd: value, map_usd_per_kg: rate, sequence: ++seq });
 

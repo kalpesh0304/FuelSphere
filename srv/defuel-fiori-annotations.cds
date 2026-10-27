@@ -286,6 +286,44 @@ annotate DefuelService.Defuels with {
         }
     });
 
+    // THE TWO CONTEXT FLIGHTS, pickable rather than typed. They decide the
+    // station, and a mistyped flight number silently defaults the defuel to
+    // the wrong airport - which then goes into the defuel number itself.
+    //
+    // THE NUMBER CARRIES THE KEY, as everywhere else on this screen: binding
+    // a picker to a generated key shows the user a GUID.
+    pre_flight_number @(Common: {
+        ValueList: {
+            CollectionPath: 'Flights',
+            Label: 'Pre-flight (the departure being prepared for)',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: pre_flight_number, ValueListProperty: 'flight_number' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: pre_flight_date, ValueListProperty: 'flight_date' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' }
+            ]
+        }
+    });
+
+    post_flight_number @(Common: {
+        ValueList: {
+            CollectionPath: 'Flights',
+            Label: 'Post-flight (the arrival just made)',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: post_flight_number, ValueListProperty: 'flight_number' },
+                { $Type: 'Common.ValueListParameterOut',
+                  LocalDataProperty: post_flight_date, ValueListProperty: 'flight_date' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'origin_airport' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'destination_airport' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_reg' }
+            ]
+        }
+    });
+
     // THE TAILS THAT ACTUALLY FLY, from the schedule rather than the
     // register, which carries every airframe the airline has ever held.
     tail @(Common: {
@@ -367,6 +405,19 @@ annotate DefuelService.Defuels with @(
             'flight_number', 'flight_date', 'carrier_code',
             'origin_station', 'destination_station', 'station_code'
         ]
+    },
+
+    // EITHER CONTEXT FLIGHT DECIDES THE STATION, so both must tell the
+    // screen to re-read it - the server fills it and the client would
+    // otherwise never ask.
+    Common.SideEffects #PreFlightPicked: {
+        SourceProperties: [ pre_flight_number, pre_flight_date ],
+        TargetProperties: [ 'station_code' ]
+    },
+
+    Common.SideEffects #PostFlightPicked: {
+        SourceProperties: [ post_flight_number, post_flight_date ],
+        TargetProperties: [ 'station_code' ]
     },
 
     Common.SideEffects #TailPicked: {

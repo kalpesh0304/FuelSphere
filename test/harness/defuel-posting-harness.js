@@ -30,6 +30,11 @@ const n = (v) => Number(v || 0) || 0;
 const r3 = (v) => Math.round(n(v) * 1000) / 1000;
 const P = '/odata/v4/defuel/Defuels';
 
+// AFTER THE TAIL'S LAST LAYER. A defuel can only draw from fuel already on
+// board, so a date before the uplifts leaves nothing to take - correct
+// behaviour, and useless as a fixture.
+const DEFUEL_DATE = '2026-12-31';
+
 const MOVEMENTS = 'fuelsphere.FUEL_STOCK_MOVEMENT_LEDGER';
 const BALANCES  = 'fuelsphere.FUEL_STOCK_BALANCE';
 
@@ -130,7 +135,7 @@ describe('Defuel — posting into the valuation ledger', () => {
             // A harness that posted the key would exercise a path no user
             // takes and miss the resolution entirely.
             location_code: location.code,
-            defuel_date: '2026-09-24',
+            defuel_date: DEFUEL_DATE,
             defuel_time: '14:30:00',
             quantity_vol: 100,
             ...over
@@ -274,7 +279,11 @@ describe('Defuel — posting into the valuation ledger', () => {
         const b = await createDefuel({ quantity_vol: 10, station_code: 'BOS' });
         assert.ok(a.status < 400 && b.status < 400, 'posting failed');
 
-        const re = /^DFL-BOS-202609-(\d{6})$/;
+        // DERIVED FROM THE FIXTURE DATE, not hard-coded: the month is part of
+        // the number, so a criterion that pins it breaks whenever the fixture
+        // moves - and says the format is wrong when only the date changed.
+        const ym = DEFUEL_DATE.slice(0, 4) + DEFUEL_DATE.slice(5, 7);
+        const re = new RegExp("^DFL-BOS-" + ym + "-([0-9]{6})$");
         assert.ok(re.test(a.data.defuel_id), `first number is ${a.data.defuel_id}`);
         assert.ok(re.test(b.data.defuel_id), `second number is ${b.data.defuel_id}`);
         assert.strictEqual(
@@ -284,7 +293,7 @@ describe('Defuel — posting into the valuation ledger', () => {
         // PER STATION: a different station restarts its own run rather than
         // continuing a shared one.
         const c = await createDefuel({ quantity_vol: 10, station_code: 'LAX' });
-        assert.ok(/^DFL-LAX-202609-000001$/.test(c.data.defuel_id),
+        assert.ok(new RegExp(`^DFL-LAX-${ym}-000001$`).test(c.data.defuel_id),
             `a new station started at ${c.data.defuel_id}, not 000001`);
         out(`${a.data.defuel_id} -> ${b.data.defuel_id}, and LAX restarts at ${c.data.defuel_id}`);
     });
@@ -391,6 +400,47 @@ describe('Defuel — posting into the valuation ledger', () => {
             `a defuel was posted twice: ${fullError(again)}`);
         out(`original ${original.toFixed(2)}, credit ${credit.toFixed(2)}, `
           + `write-off ${n(d.write_off_usd).toFixed(2)}, status POSTING_PENDING`);
+    });
+
+    // --------------------------------------------------------- EXIT-11 --
+    it('EXIT-11  a defuel cannot draw from fuel that was not yet on board', async function () {
+        this.timeout(120000);
+        // THE BUG THIS GUARDS, found on the live system: the balance table is
+        // the END STATE of the replay, so "open layers" included batches
+        // opened days AFTER the defuel. A defuel on 24 Sep drew from an
+        // uplift on 26 Sep - fuel that was not on the aircraft, at a price
+        // nobody had paid yet.
+        //
+        // DATED BEFORE EVERY LAYER, so the bound always bites. An earlier
+        // version of this criterion dated the defuel just before the NEWEST
+        // layer and skipped whenever fewer than two remained - and by this
+        // point the criteria above have drained one, so it never ran at all.
+        // A guard that skips guards nothing.
+        const earliest = (await cds.db.run(SELECT.one.from(BALANCES)
+            .columns('flight_aobt')
+            .where({ valuation_method: 'FIFO', tail_number: tail,
+                     storage_location: null, flight_aobt: { '!=': null } })
+            .orderBy('flight_aobt'))) || {};
+        assert.ok(earliest.flight_aobt, 'instrument: no dated layer to reason about');
+
+        const before = new Date(Date.parse(String(earliest.flight_aobt)) - 86400000);
+        const res = await createDefuel({
+            quantity_vol: 1,
+            defuel_date: before.toISOString().slice(0, 10),
+            defuel_time: '00:00:01'
+        });
+
+        assert.ok(res.status >= 400,
+            'a defuel dated before every uplift was accepted - it drew fuel that was not '
+          + 'yet on the aircraft');
+        const msg = fullError(res);
+        assert.ok(/DFL425/.test(msg), `refused, but not with DFL425: ${msg}`);
+        // AND THE MESSAGE MUST BE ABOUT DATES, not density. Reporting "no
+        // specific gravity" here sent a reader hunting through master data
+        // for a problem that is about when the fuel arrived.
+        assert.ok(!/DFL428/.test(msg),
+            `refused for the wrong reason - DFL428 blames the gravity: ${msg}`);
+        out(`a defuel dated before the first uplift is refused with DFL425`);
     });
 
     // ---------------------------------------------------------- EXIT-8 --
