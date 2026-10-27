@@ -341,16 +341,17 @@ Mockup: `docs/design/flight_overview.html`
 - [x] **"Five passed, one failed, and sixteen nobody looked at."** On `INV-BPUK-20260325-001` a join-by-absence dashboard shows **21 green**. Sixteen rules never ran, because the line has no ticket number and INV462, INV463, INV464 and INV466 then have nothing to evaluate. **The grey count rises with the severity of the first failure** — measured: 14 grey at rung 1, 12, 11, 6, and 3 on a fully resolved line, with zero variance inside each. The worse the document, the more the join overstates
 - [x] **"Three not checked on a clean invoice, and two of them are because no contract breakdown exists."** `component_breakdown` is null on all six `DERIVED_PRICES` rows, so INV471 and INV472 have never run on any line — **D54**. That is a standing gap in the data, not a fact about the invoice being shown. **Say it rather than letting someone read "three" as close enough**
 - [ ] **Do not author a breakdown to improve the number.** It would be the first figure in this system typed to make a screen look better, and it is exactly what the counters exist to prevent. `idr-rule-status-harness` EXIT-10 fails the day a real one is authored, and asks for a test of the comparison instead
-### The one posted-and-gated row — say this, it is the strongest thing in the module
+### The one approved-and-gated row — say this, it is the strongest thing in the module
 
-**`INV-WFS-20260324-001`. GATED, POSTED and MATCHED at once, and every part of that is true.**
+**`INV-WFS-20260324-001`. GATED, APPROVED and MATCHED at once, and every part of that is true.**
 
-- [x] **"This posted before the check existed, and the check now disagrees."** It answers the question the airline actually has: **what have we already paid that was wrong.** Not a hypothetical and not a rule demonstration — a document that reached MIRO and is now contradicted
+- [x] **"This was approved for posting before the check existed, and the check now stops it."** It answers the question the airline actually has: **what were we about to pay that was wrong.** Not a hypothetical and not a rule demonstration - a document approved on 2026-03-25 and now contradicted. **Press Post: it is refused**, because the posting gate is GATED
+- [x] **CORRECTED 27 Oct 2026: it was never posted.** This row used to read POSTED with S/4 document `5100200001`. No posting ever reached S/4 - the invoice step calls S/4 for real since 13 Oct 2026 - so the seed now says VERIFIED, approved, **posting pending**, with no S/4 document. The story changes from *"already paid, and wrong"* to *"caught before it was paid"*
 - [x] **The line bills 2,180 kg at 0.85 and states 1,870 — which is 2,200 × 0.85, the ORDERED quantity, not the delivered one.** `INV469` catches it. Measured rather than asserted: `stated 1870 = ORDERED × price YES` / `= DELIVERED × price no`
-- [x] **The timeline holds without the note.** Posted **2026-03-25**; `INV469` entered the registry **2026-04-15**, three weeks later; the gate was first evaluated **2026-09-01**; `detected_by = VALIDATE_FOR_POSTING`. **So POSTED beside an open hard error is not a claim that a blocker was overridden — it is a claim that THE RULE IS YOUNGER THAN THE POSTING**, and the dates carry it
+- [x] **The timeline holds without the note.** Approved **2026-03-25**; `INV469` entered the registry **2026-04-15**, three weeks later; `detected_by = VALIDATE_FOR_POSTING`. **So APPROVED beside an open hard error is not a claim that a blocker was overridden — it is a claim that THE RULE IS YOUNGER THAN THE APPROVAL**, and the dates carry it
 - [x] **That distinction matters because this repository has now found five notes that said something the data contradicted.** A note is a claim; timestamps are evidence. This row has both, and the evidence stands alone
-- [x] **The rest of the row hangs together: 13 of 14 consistency checks pass and the failure IS `INV469`.** The invoice agrees with `INVOICE_MATCHES` on five of five fields; the match agrees with the PO on six of six. That is what makes it a scenario rather than a seed value
-- [x] **There is exactly ONE such row.** Measured across all 13 invoices. A plural reading of the screen is a misread, not a second case
+- [x] **The rest of the row hangs together.** The invoice agrees with `INVOICE_MATCHES` on five of five fields; the match agrees with the PO on six of six. That is what makes it a scenario rather than a seed value
+- [x] **There is exactly ONE such row in the baseline.** The scenario-16 originals are approved and CLEAR - they post; this one does not
 
 ### The fourth leg — one sentence, and it is the module's entire case
 
