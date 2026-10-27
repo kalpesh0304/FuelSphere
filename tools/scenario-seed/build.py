@@ -297,7 +297,7 @@ def main():
     cb = make_ctx(B, 'B6')
     refs_b = Engine(B, cb, tg_b).run()
     new_keys = {tb.key(r) for e, tb in B.t.items() for r in tb.rows if tb.key(r) not in B.snapshot[e]}
-    fill_carrier(B.t, only=new_keys)
+    fill_carrier(B.t, only=new_keys, fallback='B6')   # every row this workbook adds is JetBlue's
     adds, updates = B.diff()
     for u in updates:
         if u['column'] not in COLS[u['entity']]:

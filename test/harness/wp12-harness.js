@@ -296,13 +296,25 @@ describe('WP-12 — delivery measurement (B2, B5, B6)', function () {
         assert.ok(readers >= 5, 'the EPD401 readers must remain');
     });
 
-    it('EXIT-5c — seeded gallon tickets derive no mass, and say why (F19)', async () => {
+    // F19 IS CLOSED, so this criterion asserts the arm that now works rather
+    // than the gap it used to. It read "gallon tickets derive no mass, and
+    // say why" - correct while no volume ratio existed, and it failed the day
+    // UNIT_OF_MEASURE.conversion_to_ltr arrived, which is what it was for.
+    //
+    // THE EXPECTED FIGURE IS NOT FROM THE CODE. 1 US gallon is 3.785411784
+    // litres by definition; 1000 gal x 3.785411784 L x 0.802 kg/L = 3035.90.
+    it('EXIT-5c — a gallon ticket derives its mass from the exact volume ratio (F19 closed)', async () => {
         const { deriveTicketMassKg } = require(`${PROJECT}/srv/lib/fuel-uom`);
         const g = await deriveTicketMassKg({
             quantity_metered: 1000, uom_code: 'GAL', density_value: 0.802, density_uom: 'KGL'
         });
-        out(`GAL ticket -> quantity_kg=${g.quantity_kg}  reason: ${g.reason}`);
-        assert.strictEqual(g.quantity_kg, null, 'no invented gallon factor');
-        assert.match(g.reason, /F19/);
+        out(`GAL ticket -> quantity_kg=${g.quantity_kg}  basis: ${g.basis || g.reason}`);
+        assert.strictEqual(g.quantity_kg, Number((1000 * 3.785411784 * 0.802).toFixed(2)));
+        // The refusal survives where there is no ratio: a barrel is in no
+        // master data here, so it still derives nothing rather than a guess.
+        const x = await deriveTicketMassKg({
+            quantity_metered: 1000, uom_code: 'BBL', density_value: 0.802, density_uom: 'KGL'
+        });
+        assert.strictEqual(x.quantity_kg, null, 'no invented factor for a unit with no ratio');
     });
 });

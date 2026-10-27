@@ -309,3 +309,59 @@ extend ub.UNBILLED_TICKETS with columns {
     quantity_cm,
     quantity_metered_cv
 }
+
+// Labels for the carrier fields, on the database entities so every
+// projection inherits them (ui02 EXIT-2: no technical name on screen).
+annotate db.FUEL_ORDERS with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.FUEL_DELIVERIES with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.FUEL_TICKETS with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.INVOICE_ITEMS with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.FUEL_BURNS with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.ROB_LEDGER with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.FLIGHT_DISPATCH with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.APU_USAGE with {
+    carrier_code       @title: 'Carrier';
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
+annotate db.FLIGHT_SCHEDULE with {
+    carrier_currency   @title: 'Carrier currency';
+    carrier_volume_uom @title: 'Carrier volume unit';
+    carrier_mass_uom   @title: 'Carrier mass unit';
+}
