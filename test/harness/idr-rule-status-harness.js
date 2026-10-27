@@ -47,11 +47,13 @@ const C=require(`${PROJECT}/srv/lib/invoice-checks`);
 // Named here rather than derived, so that moving a rule between the two is a
 // visible edit rather than a silent change in what "complete" means.
 const HEADER_RULES = ['INV459','INV460','INV461','INV454','INV473'];
+const { validateAll } = require(`${PROJECT}/tools/lib/arrival-order`);   // the seed tool's ordering, shared
 
 const runAll = async () => {
     const invs = await (await db()).run(SELECT.from('fuelsphere.INVOICES').columns('ID','invoice_number'));
-    for (const i of invs)
-        await test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {});
+    // In ARRIVAL order where a duplicate came later, as the seed was
+    // computed: an original is validated before its duplicate exists (F6).
+    await validateAll(await db(), cds.ql, invs, i => test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {}));
     return invs;
 };
 

@@ -40,6 +40,12 @@ const groupPaths = (e, qual) => {
     assert.ok(g, `${e} facet points at @UI.FieldGroup#${qual} and the EDMX has no such group`);
     return [...g[1].matchAll(/<PropertyValue Property="Value" Path="([^"]+)"/g)].map(m => m[1]);
 };
+// THE CARRIER TWIN COUNTS AS THE FIELD. Since 27 Oct 2026 a page shows a
+// mass in the carrier's mass unit: <name>_cm is the stored <name>_kg divided
+// by that unit's factor (db/carrier-units.cds), the same figure in LB for B6
+// and KG for TP and AC. Read back to the kg name, so the criterion still
+// tests WHICH figure is shown and in what order, not which unit it is in.
+const kgOf = p => p.replace(/_cm$/, '_kg');
 const dig = (r, p) => p.split('/').reduce((v, k) => (v && typeof v === 'object') ? v[k] : undefined, r);
 const query = (ent, paths, filter) => {
     const sel = paths.filter(p => !p.includes('/'));
@@ -131,18 +137,20 @@ describe('The four drill-downs from a flight', () => {
         // the metered volume beside the derived mass is the argument the
         // whole module makes.
         const paths = groupPaths('FLIGHT_FUEL_TICKETS', 'TicketQty');
+        const shown = paths.map(kgOf);
+        const mass = paths[shown.indexOf('quantity_kg')];
         for (const f of ['quantity_metered', 'uom_code', 'quantity_kg'])
-            assert.ok(paths.includes(f),
+            assert.ok(shown.includes(f),
                 `the ticket quantity group does not show ${f}. Metered, its unit and the mass are `
               + `what makes 2884 LTR and 2305.76 kg legible as one uplift rather than two numbers.`);
-        assert.ok(paths.indexOf('quantity_metered') < paths.indexOf('quantity_kg'),
+        assert.ok(shown.indexOf('quantity_metered') < shown.indexOf('quantity_kg'),
             'the metered figure must precede the mass: the supplier measured a volume and density converted it');
         const { data } = await test.GET(query('FLIGHT_FUEL_TICKETS', paths, `flight_number eq '${DEMO}'`));
         const r = data.value[0];
-        assert.ok(r.quantity_metered && r.uom_code && r.quantity_kg,
-            `on ${DEMO} the ticket shows metered=${r.quantity_metered} uom=${r.uom_code} kg=${r.quantity_kg} `
+        assert.ok(r.quantity_metered && r.uom_code && r[mass],
+            `on ${DEMO} the ticket shows metered=${r.quantity_metered} uom=${r.uom_code} mass=${r[mass]} `
           + `— all three must be present or the conversion is not visible`);
-        out(`${DEMO}: metered=${r.quantity_metered} ${r.uom_code}  density=${r.density_value}  mass=${r.quantity_kg} kg`);
+        out(`${DEMO}: metered=${r.quantity_metered} ${r.uom_code}  density=${r.density_value}  mass=${r[mass]} (${mass})`);
     });
 
     it('EXIT-5  NO _kg FIELD TAKES ITS UNIT FROM A SIBLING uom_code', async () => {

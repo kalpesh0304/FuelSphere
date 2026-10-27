@@ -31,12 +31,14 @@ const test=cds.test(PROJECT); const out=s=>process.stdout.write('      '+s+'\n')
 const db=()=>cds.connect.to('db');
 const O='/odata/v4/invoice';
 
+const { validateAll } = require(`${PROJECT}/tools/lib/arrival-order`);   // the seed tool's ordering, shared
 const num = v => v === null || v === undefined ? null : Number(v);
 
 async function runAll() {
     const invs = await (await db()).run(SELECT.from('fuelsphere.INVOICES').columns('ID'));
-    for (const i of invs)
-        await test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {});
+    // In ARRIVAL order where a duplicate came later, as the seed was
+    // computed: an original is validated before its duplicate exists (F6).
+    await validateAll(await db(), cds.ql, invs, i => test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {}));
     return invs.length;
 }
 

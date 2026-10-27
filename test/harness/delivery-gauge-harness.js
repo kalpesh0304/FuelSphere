@@ -50,6 +50,12 @@ const E = 'PlanningService.FLIGHT_FUEL_DELIVERIES';
 const CHAIN = ['fob_at_arrival_kg', 'ground_burn_kg', 'fob_before_kg',
                'fob_after_kg', 'fob_delta_kg', 'fob_source'];
 const WINDOW = ['refuel_start_utc', 'refuel_end_utc', 'refuel_complete'];
+// THE CARRIER TWIN COUNTS AS THE FIELD. Since 27 Oct 2026 a page shows a
+// mass in the carrier's mass unit: <name>_cm is the stored <name>_kg divided
+// by that unit's factor (db/carrier-units.cds), the same figure in LB for B6
+// and KG for TP and AC. Read back to the kg name, so the criterion still
+// tests WHICH figure is shown and in what order, not which unit it is in.
+const kgOf = p => p.replace(/_cm$/, '_kg');
 const MASSES = ['fob_at_arrival_kg', 'ground_burn_kg', 'fob_before_kg',
                 'fob_after_kg', 'fob_delta_kg'];
 
@@ -175,7 +181,7 @@ describe('The gauge readings on the delivery page a flight reaches', function ()
         const nxt = rest.search(new RegExp(term('FieldGroup') + '|' + term('Facets') + '|' + term('LineItem')));
         const seg = blk.slice(i, nxt > 0 ? i + 10 + nxt : blk.length);
         VALUE_PATH.lastIndex = 0;
-        const got = [...seg.matchAll(VALUE_PATH)].map(x => x[1]);
+        const got = [...seg.matchAll(VALUE_PATH)].map(x => kgOf(x[1]));
         out(`  expected: ${CHAIN.join(' -> ')}`);
         out(`  emitted:  ${got.join(' -> ')}`);
         assert.deepStrictEqual(got, CHAIN, 'the gauge chain is not in the order the subtractions read');

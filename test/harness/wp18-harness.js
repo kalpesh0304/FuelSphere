@@ -213,18 +213,27 @@ describe('WP-18 — plan versioning and the regulated stack', function () {
         assert.ok(superseded, 'precondition: a superseded version exists');
         const other = await d.run(SELECT.one.from('fuelsphere.FUEL_ORDERS')
             .columns('ID','order_number').where({ order_number: 'FO-YYZ-20260410-002' }));
-        await d.run(UPDATE('fuelsphere.FUEL_ORDERS')
-            .set({ dispatch_plan_ID: superseded.ID }).where({ ID: other.ID }));
-
-        // The stale query: orders whose plan is not ACTIVE.
-        const staleOrders = await d.run(`
+        const staleQuery = () => d.run(`
             SELECT o.order_number, p.plan_version, p.plan_status
             FROM fuelsphere_FUEL_ORDERS o
             JOIN fuelsphere_FLIGHT_DISPATCH p ON p.ID = o.dispatch_plan_ID
             WHERE p.plan_status <> 'ACTIVE'`);
+        const staleBefore = (await staleQuery()).map(r => r.order_number);
+        out(`stale orders in the seed before the plant: ${staleBefore.length ? staleBefore.join(', ') : 'none'}`);
+        assert.ok(!staleBefore.includes('FO-YYZ-20260410-002'), 'precondition: the planted order starts current');
+        await d.run(UPDATE('fuelsphere.FUEL_ORDERS')
+            .set({ dispatch_plan_ID: superseded.ID }).where({ ID: other.ID }));
+
+        // The stale query: orders whose plan is not ACTIVE.
+        const staleOrders = await staleQuery();
         staleOrders.forEach(r => out(`  STALE: ${r.order_number} -> v${r.plan_version} ${r.plan_status}`));
-        assert.strictEqual(staleOrders.length, 1);
-        assert.strictEqual(staleOrders[0].order_number, 'FO-YYZ-20260410-002');
+        // MEASURED AGAINST THE SEED'S OWN STALE ORDERS, not against zero.
+        // Scenario 9 (docs/test-data/scenarios) seeds orders pinned to a
+        // superseded plan on purpose, so the seed is not stale-free. What the
+        // plant must show is that it adds exactly the order it repointed.
+        const added = staleOrders.map(r => r.order_number).filter(n => !staleBefore.includes(n));
+        assert.deepStrictEqual(added, ['FO-YYZ-20260410-002']);
+        assert.strictEqual(staleOrders.length, staleBefore.length + 1);
         out('identified by plan status alone — no field comparison');
     });
 

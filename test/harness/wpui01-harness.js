@@ -15,6 +15,12 @@ const assert = require('node:assert');
 
 const test = cds.test(PROJECT);
 const out = (s) => process.stdout.write('      ' + s + '\n');
+// THE CARRIER TWIN COUNTS AS THE FIELD. Since 27 Oct 2026 a page shows a
+// mass in the carrier's mass unit: <name>_cm is the stored <name>_kg divided
+// by that unit's factor (db/carrier-units.cds), the same figure in LB for B6
+// and KG for TP and AC. Read back to the kg name, so these criteria still
+// test WHICH figure is shown and where, not which unit it is in.
+const kgOf = p => p.replace(/_cm$/, '_kg');
 
 const ENTITIES = {
     'FuelOrderService.FuelOrders': ['uom_code', 'conversion_density', 'conversion_source', 'ordered_quantity_kg'],
@@ -78,7 +84,7 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
         for (const [entity, fields] of Object.entries(ENTITIES)) {
             const d = cds.model.definitions[entity];
             assert.ok(d, `${entity} missing`);
-            const shown = shownFields(d);
+            const shown = new Set([...shownFields(d)].map(kgOf));
             // Instrument check: the extractor must see SOMETHING, or every
             // field would report as present-nowhere and this test would fail
             // for the wrong reason — or, with the assertion inverted, pass.
@@ -210,7 +216,7 @@ describe('WP-UI-01 — Phase 1 fields in the annotations', function () {
         const g = cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.FieldGroup#AircraftGauge.Data']
             || (cds.model.definitions['FuelOrderService.FuelDeliveries']['@UI.FieldGroup#AircraftGauge'] || {}).Data;
         assert.ok(g, 'FieldGroup#AircraftGauge missing');
-        const gn = g.map(r => (r.Value && r.Value['=']) || null);
+        const gn = g.map(r => (r.Value && r.Value['=']) || null).map(p => p && kgOf(p));
         out('FieldGroup#AircraftGauge: ' + gn.join(', '));
         for (const f of ['fob_source', 'fob_before_kg', 'fob_after_kg', 'fob_delta_kg']) {
             assert.ok(gn.includes(f), f + ' is not on the gauge group');

@@ -25,6 +25,7 @@ const db=()=>cds.connect.to('db');
 const O='/odata/v4/invoice';
 
 /** The identity of an exception, independent of its row id and timestamps. */
+const { validateAll } = require(`${PROJECT}/tools/lib/arrival-order`);   // the seed tool's ordering, shared
 const key = (e) => [e.invoice_ID, e.check_code, e.line_number ?? '', e.severity,
                     e.severity_source, e.message].join('|');
 
@@ -32,9 +33,9 @@ async function computed() {
     const invs = await (await db()).run(SELECT.from('fuelsphere.INVOICES').columns('ID'));
     // A re-run DELETES non-bypassed priors and re-raises, so what is in the
     // table afterwards is the computed set rather than the seed plus it.
-    for (const i of invs) {
-        await test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {});
-    }
+    // In ARRIVAL order where a duplicate came later, as the seed was
+    // computed: an original is validated before its duplicate exists (F6).
+    await validateAll(await db(), cds.ql, invs, i => test.POST(`${O}/Invoices(ID=${i.ID},IsActiveEntity=true)/InvoiceService.validateForPosting`, {}));
     return (await db()).run(SELECT.from('fuelsphere.INVOICE_EXCEPTIONS'));
 }
 

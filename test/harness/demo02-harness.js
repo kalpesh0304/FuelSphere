@@ -13,14 +13,19 @@ const test=cds.test(P); const out=s=>process.stdout.write('      '+s+'\n');
 const AC = { YYZ:'AC-WFS-2025-001', YVR:'AC-MENZ-2025-001',
              LHR:'AC-BPUK-2025-001', CDG:'AC-TOTAL-2025-001' };
 
-const lookup = async (s) =>
-    (await test.GET(`/odata/v4/orders/StationLookup?$filter=station_code eq '${s}'`)).data.value;
+// THE CARRIER IS PART OF THE QUESTION since 27 Oct 2026. The value help
+// passes the order's carrier_code (ValueListParameterIn), because a station
+// two airlines trade at (YYZ: Air Canada and TAP) holds both airlines'
+// contracts. These are Air Canada's orders, so they ask as Air Canada.
+const lookup = async (s, carrier) =>
+    (await test.GET(`/odata/v4/orders/StationLookup?$filter=station_code eq '${s}'`
+        + (carrier ? ` and carrier_code eq '${carrier}'` : ''))).data.value;
 
 describe('WP-DEMO-02 — contract locations', function () {
 
     it('each AC station resolves, with all four derivations populated', async () => {
         for (const [s, contract] of Object.entries(AC)) {
-            const rows = await lookup(s);
+            const rows = await lookup(s, 'AC');
             assert.strictEqual(rows.length, 1, `${s}: expected exactly one lookup row, got ${rows.length}`);
             const r = rows[0];
             out(`${s} -> ${r.airport_name} | ${r.supplier_name} | ${r.contract_number} | ${r.product_name}`);
@@ -36,7 +41,7 @@ describe('WP-DEMO-02 — contract locations', function () {
         // product came from CONTRACT_PRODUCTS, which the AC contracts had none
         // of. Locations alone surfaced the station and left product null.
         for (const s of Object.keys(AC)) {
-            const r = (await lookup(s))[0];
+            const r = (await lookup(s, 'AC'))[0];
             assert.ok(r.product_ID, `${s}: product_ID still null`);
             assert.strictEqual(r.product_name, 'Jet A-1 Aviation Turbine Fuel');
         }
@@ -71,9 +76,14 @@ describe('WP-DEMO-02 — contract locations', function () {
     it('a station with no contract is still correctly absent', async () => {
         // Instrument check. If everything resolved, the checks above would
         // pass whether or not the lookup does anything.
-        const yul = await lookup('YUL');
-        out(`YUL -> ${yul.length} row(s) — no YUL contract exists, so this must stay 0`);
+        const yul = await lookup('YUL', 'AC');
+        out(`YUL -> ${yul.length} row(s) for Air Canada — no AC contract at YUL, so this must stay 0`);
         assert.strictEqual(yul.length, 0);
+        // And the carrier filter is what makes it 0, not an empty station:
+        // TAP does hold a YUL contract, and asking as TAP must find it.
+        const tp = await lookup('YUL', 'TP');
+        out(`YUL -> ${tp.length} row(s) for TAP`);
+        assert.ok(tp.length > 0, 'the TAP YUL contract is missing - the AC zero above proves nothing');
     });
 
     it('the WP-DEMO-01 orders were never affected', async () => {

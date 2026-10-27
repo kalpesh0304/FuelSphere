@@ -81,7 +81,18 @@ describe('the maps answer what the designations answered', () => {
         const differ = [];
         let agreed = 0, bothNone = 0;
 
-        for (const f of flights) {
+        // ONLY THE CARRIERS THE LEGACY TABLE KNOWS. The migration moved B6
+        // and AC designations into the maps; TAP (TP) was seeded on 27 Oct
+        // 2026 straight into STATION_SUPPLIER_MAP and never had a legacy row,
+        // so "was (none)" on a TP flight is not a migration difference - there
+        // was nothing to migrate. A designation with no carrier scopes every
+        // carrier, and then every flight stays in.
+        const legacy = new Set(designations.map(d => d.carrier_code || '*'));
+        const migrated = flights.filter(f => legacy.has('*') || legacy.has(f.airline_code));
+        out(`${migrated.length} of ${flights.length} flight(s) belong to a carrier with legacy designations `
+          + `(${[...legacy].sort().join(', ')})`);
+        assert.ok(migrated.length > 0, 'no flight of a migrated carrier - the comparison would be vacuous');
+        for (const f of migrated) {
             const before = oldAnswer(f, designations);
             const after = now.get(f.ID);
             const nameBefore = before ? (suppliers.get(before.supplier_ID) || null) : null;
