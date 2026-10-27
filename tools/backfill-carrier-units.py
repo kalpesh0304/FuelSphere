@@ -20,8 +20,8 @@ from collections import defaultdict
 DATA = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', 'db', 'data')
 
 # Company-code currency and the units its fuel records are read in. B6/B7 in
-# US gallons and pounds as a US carrier reports; TP and AC in litres and
-# kilograms. CONFIRM WITH THE BUSINESS - recorded in notes where unconfirmed.
+# US gallons and pounds - CONFIRMED by the business, 27 Oct 2026. TP and AC in
+# litres and kilograms.
 CARRIERS = {
     'B6': ('USD', 'USG', 'LB'),
     'B7': ('USD', 'USG', 'LB'),

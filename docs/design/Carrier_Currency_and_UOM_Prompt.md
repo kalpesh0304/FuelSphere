@@ -27,8 +27,7 @@ projections and the seed files.
 4. Mass ↔ volume conversion uses the **measured density on the ticket** (`density_value`, KGL), never an
    assumed one. Where the density is missing, the converted value is **null, not 0** (CLAUDE.md §13).
 
-Values to seed (confirm with the business before loading; mark anything unconfirmed as PLACEHOLDER
-in `notes`):
+Values to seed. **B6/B7 USG and LB confirmed by the business, 27 Oct 2026.** TP and AC as below:
 
 | Carrier | Currency | Volume UOM | Mass UOM |
 |---|---|---|---|
