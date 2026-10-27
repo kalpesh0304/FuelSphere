@@ -912,7 +912,8 @@ type TicketMatchStatus : String(20) enum {
 /**
  * Density Unit of Measure (WP-12, decision B6)
  *
- * IATA VUOMBase. Two values, because two is what IATA transmits.
+ * IATA VUOMBase: KGL and KGM, the two IATA transmits; LBG added for US-unit
+ * vendors (27 Oct 2026).
  *
  * NOT a row in UNIT_OF_MEASURE. That table holds *quantity* units and
  * carries attributes — conversion_to_kg, sap_uom, sap_uom_iso. A density
@@ -927,6 +928,9 @@ type TicketMatchStatus : String(20) enum {
 type DensityUom : String(6) enum {
     KgPerLitre = 'KGL';   // kg per litre
     KgPerM3    = 'KGM';   // kg per cubic metre
+    // ADDED 27 Oct 2026: pound per US gallon, for vendors reporting in the
+    // carrier's US units (B6). Converted to KGL at capture; never stored.
+    LbPerUsg   = 'LBG';
 }
 
 /**
