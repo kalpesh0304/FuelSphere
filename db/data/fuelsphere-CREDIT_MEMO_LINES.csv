@@ -1,0 +1,2 @@
+ID;memo_ID;line_number;reference_type;expected_credit_ID;ticket_ID;invoice_item_ID;reference_display;po_number;po_item;flight_ID;aircraft_reg;station_code;cost_center;value_only;quantity;uom_code;amount;price_component;tax_code;text;final_clearing
+cd000000-0000-4000-8000-000000000011;cd000000-0000-4000-8000-000000000001;10;INVOICE_LINE;;;550e8400-e29b-41d4-a716-44665544A211;INV-WFS-20260324-001/10;4500100002;00010;;;YYZ;CC3000;false;20.000;KG;17.00;BASE;V1;20 KG billed above the delivered 2180 KG;false
