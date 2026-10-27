@@ -49,6 +49,11 @@ service CreditMemoService {
         action reprocess() returns CheckResult;
     };
 
+    // open_amount is computed after READ, so it has no column: a $filter or
+    // $orderby on it would be a 500. Withheld here, beside the declaration,
+    // as srv/virtual-restrictions.cds does for the rest of the model.
+    @Capabilities.FilterRestrictions.NonFilterableProperties: [open_amount]
+    @Capabilities.SortRestrictions.NonSortableProperties: [open_amount]
     entity CreditMemoLines as projection on cm.CREDIT_MEMO_LINES {
         *,
         virtual null as open_amount : Decimal(15,2)   // still creditable on the reference, posted lines only
