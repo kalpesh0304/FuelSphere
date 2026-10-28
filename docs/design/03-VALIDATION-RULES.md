@@ -438,6 +438,32 @@ Carried from CLAUDE.md §8, where the defuel work documented them (27 Oct 2026);
 | `DFL520` | — | `DEFUEL` | The defuel no longer exists (technical) | Error |
 | `DFL407` | — | `DEFUEL` | **RETIRED 26 Oct 2026** — refused a defuel on a FIFO carrier. Named in `srv/defuel-service.js` only to record its removal; raised by nothing | — |
 
+## Credit memo — `CRD4xx` / `CRD5xx`
+
+Built with the supplier credit memo backend (27 Oct 2026, `srv/credit-memo-service.js`, design in `docs/design/Credit_Memo_Service.md`); carried here on merging it, because this file is what `test/harness/code-gate.js` reads. There is no `CRD415` or `CRD417`.
+
+| Code | Was | Applies to | Rule | Severity |
+|---|---|---|---|---|
+| `CRD401` | — | `CREDIT_MEMO_LINES` | Reference or mandatory field missing, or the reference is not found | Error |
+| `CRD402` | — | `CREDIT_MEMO_LINES` | Credit exceeds what is still creditable on the reference, net of earlier posted credits | Error |
+| `CRD403` | — | `CREDIT_MEMO_LINES` | Quantity exceeds the referenced quantity | Error |
+| `CRD404` | — | `CREDIT_MEMOS` | Supplier mismatch: the reference's vendor (defuel, uplift ticket, invoice) is not the memo's | Error |
+| `CRD405` | — | `CREDIT_MEMOS` | Currency mismatch with the reference (expected credits are USD only in R1) | Error |
+| `CRD406` | — | `CREDIT_MEMO_LINES` | Reference in an invalid status: invoice not posted, or defuel credit not agreed | Error |
+| `CRD407` | — | `CREDIT_MEMOS` | Duplicate: same supplier, credit memo number, date and amount | Error |
+| `CRD408` | — | `CREDIT_MEMOS` | Credit memo number reused with a different date or amount | Warning |
+| `CRD409` | — | `CREDIT_MEMO_LINES` | The referenced ticket is not yet invoiced | Warning |
+| `CRD410` | — | `CREDIT_MEMOS` | Balance is not zero: stated gross differs from lines plus tax | Error |
+| `CRD411` | — | `CREDIT_MEMOS` | The memo's status does not allow this action | Error |
+| `CRD412` | — | `CREDIT_MEMOS` | Four-eyes: the creator cannot post | Error |
+| `CRD413` | — | `CREDIT_MEMO_EXCEPTIONS` | Expected credit short beyond tolerance; posts and goes to the worklist | Warning |
+| `CRD414` | — | `CREDIT_MEMO_LINES` | The reference carries no amount to credit against | Error |
+| `CRD416` | — | `CREDIT_MEMOS` | The memo has no lines | Error |
+| `CRD418` | — | `CREDIT_MEMOS` | Reversal date before the posting date | Error |
+| `CRD419` | — | `CREDIT_MEMO_LINES` | Line amount must be positive | Error |
+| `CRD420` | — | `CREDIT_MEMO_EXCEPTIONS` | Expected credit closed and written off; recorded on the worklist | Warning |
+| `CRD501` | — | `TOLERANCE_RULES` | Tolerance or parameter not configured (technical) | Error |
+
 ---
 
 ## Severity

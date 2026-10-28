@@ -26,8 +26,14 @@ const O='/odata/v4/invoice';
 
 /** The identity of an exception, independent of its row id and timestamps. */
 const { validateAll } = require(`${PROJECT}/tools/lib/arrival-order`);   // the seed tool's ordering, shared
+// INV461 quotes the day it ran ("is after today (2026-10-27)"), so the seeded
+// message differs from a re-run on any later day while the finding is the
+// same. The date is taken out of the identity; whether the exception is
+// raised at all is still compared - on and after the invoice's own date it is
+// not, and the seeded row is then reported STALE, which it will be.
+const msg = (m) => String(m ?? '').replace(/after today \(\d{4}-\d{2}-\d{2}\)/, 'after today (…)');
 const key = (e) => [e.invoice_ID, e.check_code, e.line_number ?? '', e.severity,
-                    e.severity_source, e.message].join('|');
+                    e.severity_source, msg(e.message)].join('|');
 
 async function computed() {
     const invs = await (await db()).run(SELECT.from('fuelsphere.INVOICES').columns('ID'));
