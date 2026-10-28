@@ -44,14 +44,14 @@ const ec = async id => (await test.get(`${S}/ExpectedCredits(${id})`)).data;
 const ecLine = (id, amount, extra = {}) => ({ reference_type: 'EXPECTED_CREDIT', defuel_ID: id, amount, ...extra });
 
 describe('Credit memo — FS-SPEC-CM-001, BTP level', () => {
-    let tail, location, other;
+    let tail, location, other, when;
     const defuels = {};
 
     // A defuel to a supplier, through the draft flow the defuel app uses.
     async function defuel(litres, supplierId, credit) {
         const draft = await test.post(D, { defuel_type: 'TO_SUPPLIER', source_mode: 'WITHOUT_FLIGHT',
             tail_registration: tail, station_code: location.station_code, location_code: location.code,
-            defuel_date: '2026-09-24', defuel_time: '14:30:00', quantity_vol: litres,
+            defuel_date: when.date, defuel_time: when.time, quantity_vol: litres,
             supplier_ID: supplierId, ticket_number: `DF-${Math.random().toString(36).slice(2, 8).toUpperCase()}` });
         const id = draft.data.ID;
         if (draft.data.IsActiveEntity === false)
@@ -70,12 +70,19 @@ describe('Credit memo — FS-SPEC-CM-001, BTP level', () => {
         const by = {};
         for (const b of stock) if (Number(b.rate_usd_per_kg) > 0) by[b.tail_number] = (by[b.tail_number] || 0) + Number(b.balance_qty_kg);
         tail = Object.entries(by).sort((a, b) => b[1] - a[1])[0][0];
+        // A defuel draws on the stock the tail held AT ITS OWN TIME (DFL425/432),
+        // so date it the day after the tail's last ledger movement: all of the
+        // tail's stock is on board then, and no later movement can go negative.
+        const last = await SELECT.one.from('fuelsphere.ROB_LEDGER').columns('record_date')
+            .where({ tail_number: tail }).orderBy('record_date desc');
+        const next = new Date(`${last.record_date}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+        when = { date: next.toISOString().slice(0, 10), time: '12:00:00' };
         location = await SELECT.one.from('fuelsphere.STORAGE_LOCATION').where({ location_type: 'DEFUEL', is_active: true });
         other = await SELECT.one.from('fuelsphere.MASTER_SUPPLIERS').columns('ID', 'supplier_code').where({ ID: { '!=': WFS } });
 
         // Expected credits a little under the fuel's value, so DFL431 never fires.
         for (const k of ['clear', 'short']) {
-            const d = await defuel(100, WFS);
+            const d = await defuel(400, WFS);    // well above the 25.00 floor at any tail's rate
             const credit = r2(Math.min(1000, Number(d.fuel_value_usd) * 0.9));
             await test.post(`${D}(ID=${d.ID},IsActiveEntity=true)/DefuelService.postToSupplier`, { expected_credit_usd: credit });
             defuels[k] = { ID: d.ID, credit };
