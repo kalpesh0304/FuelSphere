@@ -55,6 +55,7 @@ node tools/seed-idr-rule-status.js --write
 python3 tools/seed-storage-locations.py           # a DEFUEL and a TEMP tank at every station
 node tools/seed-defuel-scenarios.js --write       # posts the 15 defuels through DefuelService
 node tools/seed-fifo-valuation.js --write         # regenerates the stock valuation from ROB_LEDGER
+node tools/seed-credit-memo-scenarios.js --write  # scenario 12's credit notes, through CreditMemoService
 ```
 
 The specs are `tools/scenario-seed/defuel-scenarios.json`, from the workbooks' `PROPOSED_DEFUEL_TICKETS`.
@@ -63,6 +64,13 @@ The specs are `tools/scenario-seed/defuel-scenarios.json`, from the workbooks' `
 a `DEFUEL` row on `ROB_LEDGER` there, recalculates the tail and replays its valuation; the tool exports
 the documents and the ledger, and checks that nothing before a defuel moved and that the service's stock
 rows equal the replay's. Scenario 12 is JetBlue only (expected credits are USD-only in the credit memo R1).
+
+**Scenario 12's credit notes** (`CN-CGA-SFO-260925A`, `CN-WFS-BDL-260925B`, `CN-SHL-BOS-260924C`) are
+seeded as **DRAFT** credit memos, one `EXPECTED_CREDIT` line each for exactly the credit agreed on the
+defuel; the tool simulates each and refuses to write one that would not post. **Posting them is the demo
+step**: Post clears the expected credit and the Expected Credits list empties. `INV-WFS-20260324-001` is
+**POSTED in FuelSphere only** (`fi_posting_status NOT_SENT`, no S/4 number), so the baseline credit memo
+`CM-WFS001-20260402-0001` can reference it (CRD406 accepts only posted invoices).
 
 **Nothing in the seed is posted to S/4.** The PO/GR step and the invoice step call S/4 for real, so
 a seeded document number would claim a posting that never happened. The scenario-16 originals are

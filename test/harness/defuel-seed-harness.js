@@ -11,9 +11,14 @@
  *           an edit to either without regenerating the other fails here
  *   EXIT-3  scenario 12's credits are the scenario's: 12A and 12B credited in
  *           full, 12C for 1,768 of 2,068 L, the difference written off
+ *   EXIT-4  each scenario 12 defuel has its supplier's credit note seeded as a
+ *           DRAFT memo, one EXPECTED_CREDIT line for exactly the agreed credit,
+ *           and CreditMemoService simulates it postable - so Post in the demo
+ *           cannot fail on the seed
  *
  * Regenerate with tools/seed-defuel-scenarios.js, then
- * tools/seed-fifo-valuation.js (docs/test-data/scenarios/README.md).
+ * tools/seed-fifo-valuation.js, then tools/seed-credit-memo-scenarios.js
+ * (docs/test-data/scenarios/README.md).
  */
 process.env.CDS_ENV = 'development';
 process.env.CDS_REQUIRES_DB_KIND = 'sqlite';
@@ -22,7 +27,7 @@ process.env.CDS_REQUIRES_DB_CREDENTIALS_URL = ':memory:';
 const PROJECT = require('node:path').resolve(__dirname, '..', '..');
 const cds = require(`${PROJECT}/node_modules/@sap/cds`);
 const assert = require('node:assert');
-cds.test(PROJECT);
+const test = cds.test(PROJECT);
 const out = (s) => process.stdout.write('      ' + s + '\n');
 const SPECS = require(`${PROJECT}/tools/scenario-seed/defuel-scenarios.json`);
 const stock = require(`${PROJECT}/srv/lib/stock-replay`);
@@ -98,6 +103,26 @@ describe('Defuel demo seed', () => {
             assert.ok(Math.abs(n(d.write_off_usd) - (n(d.fuel_value_usd) - n(d.expected_credit_usd))) <= 0.01,
                 `${s.defuel_ticket}: write-off ${d.write_off_usd} is not value less credit`);
             out(`${s.defuel_ticket}: worth ${d.fuel_value_usd}, credit ${d.expected_credit_usd}, write-off ${d.write_off_usd}`);
+        }
+    });
+
+    it('EXIT-4  scenario 12 credit notes are seeded as DRAFT memos that simulate postable', async () => {
+        const s12 = SPECS.filter((s) => s.scenario === 12);
+        for (const s of s12) {
+            const d = defuels.find((x) => x.ticket_number === s.defuel_ticket);
+            const lines = await db.run(SELECT.from('fuelsphere.CREDIT_MEMO_LINES').where({ defuel_ID: d.ID }));
+            assert.strictEqual(lines.length, 1, `${s.defuel_ticket}: ${lines.length} credit memo lines, not one`);
+            const l = lines[0];
+            assert.strictEqual(l.reference_type, 'EXPECTED_CREDIT');
+            assert.ok(Math.abs(n(l.amount) - n(d.expected_credit_usd)) <= 0.005,
+                `${s.defuel_ticket}: the note credits ${l.amount}, the agreed credit is ${d.expected_credit_usd}`);
+            const m = await db.run(SELECT.one.from('fuelsphere.CREDIT_MEMOS').where({ ID: l.memo_ID }));
+            assert.strictEqual(m.status, 'DRAFT', `${m.document_number} is ${m.status}: posting it is the demo step`);
+            assert.strictEqual(m.supplier_ID, d.supplier_ID, `${m.document_number} is not from the defuel's supplier`);
+            assert.strictEqual(m.s4_document_number, null);
+            const { data: sim } = await test.get(`/odata/v4/credit-memo/CreditMemos(${m.ID})/CreditMemoService.simulate()`);
+            assert.strictEqual(sim.canPost, true, `${m.document_number}: ${JSON.stringify(sim.messages)}`);
+            out(`${m.document_number} ${m.supplier_cm_number}: ${l.amount} USD, DRAFT, postable`);
         }
     });
 });
