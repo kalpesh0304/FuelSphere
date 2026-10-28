@@ -1,0 +1,7 @@
+code;name;description;is_active
+DEFUEL_RETURN;Defuel return;Fuel taken back off the aircraft and credited by the supplier;true
+PRICE_CORRECTION;Price correction;Unit price, differential or index billed above contract;true
+QTY_SHORT;Quantity short;Billed quantity above what was delivered;true
+DUPLICATE_BILLING;Duplicate billing;The same uplift billed twice;true
+FEE_REFUND;Fee refund;Into-plane, throughput or other fee refunded;true
+OTHER;Other;Any other reason - reason text required by policy, not by the system;true

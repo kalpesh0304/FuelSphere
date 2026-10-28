@@ -636,3 +636,46 @@ annotate ValuationService.StockBalances with @(restrict: [
 annotate ValuationService.BurnValuations with @(restrict: [
     { grant: 'READ', to: ['BurnDataView', 'BurnDataEdit', 'ReportView', 'AdminAccess'] }
 ]);
+
+// ============================================================================
+// CreditMemoService — FS-SPEC-CM-001.
+// Authorised from its first commit rather than joining D23. Clerks
+// (InvoiceVerify) enter, park and simulate; posting and reversal need
+// FinancePost. Every bound action has its own grant (D22).
+// ============================================================================
+using CreditMemoService from './credit-memo-service';
+
+annotate CreditMemoService with @(requires: 'authenticated-user');
+
+annotate CreditMemoService.CreditMemos with @(restrict: [
+    { grant: 'READ',   to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['InvoiceVerify', 'AdminAccess'] },
+    { grant: ['simulate', 'park'],           to: ['InvoiceVerify', 'FinancePost', 'AdminAccess'] },
+    { grant: ['postMemo', 'reverse', 'reprocess'], to: ['FinancePost', 'AdminAccess'] }
+]);
+annotate CreditMemoService.CreditMemoLines with @(restrict: [
+    { grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['InvoiceVerify', 'AdminAccess'] }
+]);
+annotate CreditMemoService.Attachments with @(restrict: [
+    { grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['InvoiceVerify', 'AdminAccess'] }
+]);
+annotate CreditMemoService.Exceptions with @(restrict: [
+    { grant: 'READ',    to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] },
+    { grant: 'resolve', to: ['InvoiceApprove', 'FinancePost', 'AdminAccess'] }
+]);
+// Read only: an expected credit is a defuel to a supplier, owned by DefuelService.
+annotate CreditMemoService.ExpectedCredits with @(restrict: [
+    { grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }
+]);
+annotate CreditMemoService.Log            with @(restrict: [{ grant: 'READ', to: ['InvoiceVerify', 'InvoiceApprove', 'FinancePost', 'ReportView', 'AdminAccess'] }]);
+annotate CreditMemoService.Reasons        with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.Suppliers      with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.Currencies     with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.PostedInvoices with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.InvoiceLines   with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.FuelTickets    with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.Flights        with @(restrict: [{ grant: 'READ', to: 'authenticated-user' }]);
+annotate CreditMemoService.proposeLines   with @(requires: ['InvoiceVerify', 'FinancePost', 'AdminAccess']);
+annotate CreditMemoService.massPost       with @(requires: ['FinancePost', 'AdminAccess']);
