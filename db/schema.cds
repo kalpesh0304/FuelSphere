@@ -2199,7 +2199,14 @@ entity FLIGHT_DISPATCH : cuid, AuditTrail {
         // Source & References
         dispatch_source         : String(15);               // TRIPRECORD | MANUAL | SMARTDOC
         ofplan_reference        : String(30);               // Operational Flight Plan reference (e.g. OFP-EK001-20260316)
-        remarks                 : String(200);              // Operational notes (e.g. Extra fuel for EDTO)
+        // WIDENED FROM 200 on 28 Oct: the seeded dispatch plans carry the
+        // regulatory basis for the figures - "EASA CAT.OP.MPA.181: 5%
+        // contingency (min 5 min hold) + alternate + 30 min final reserve" -
+        // and the longest runs to 223 characters. HDI refused the import
+        // outright rather than truncate, which is the right call: the
+        // citation is why the numbers are what they are, and half of it
+        // explains nothing. 500 matches remarks elsewhere in this schema.
+        remarks                 : String(500);              // Operational notes (e.g. Extra fuel for EDTO)
 }
 
 // ============================================================================
@@ -2800,7 +2807,20 @@ entity INVOICE_ITEMS : cuid {
         // Pricing
         unit_price          : Decimal(15,4) @mandatory;   // Price per unit
         net_amount          : Decimal(15,2) @mandatory;   // Line net amount
-        tax_code            : String(2);                  // Tax code
+        // WIDENED FROM 2 on 28 Oct, and the reason is worth recording.
+        // SAP's own tax code (MWSKZ) is TWO characters, so String(2) was
+        // right by the standard. The scenario generator emits V23 for 23%
+        // domestic VAT - tools/scenario-seed/tap_base.py:396 - across 128
+        // invoice lines, and HDI refused the whole import over it.
+        //
+        // THE COLUMN GIVES WAY RATHER THAN THE DATA because the generator
+        // would re-emit V23 on its next run: editing the CSV fixes one
+        // deploy and nothing else.
+        //
+        // STILL WORTH SETTLING BEFORE ANY REAL POSTING. A three-character
+        // tax code cannot reach S/4 FI, so either the generator should emit
+        // a real two-character code or the mapping must translate it.
+        tax_code            : String(4);                  // Tax code
         tax_amount          : Decimal(15,2) default 0;    // Line tax amount
 
         // Delivery Reference (for three-way match)

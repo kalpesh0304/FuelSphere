@@ -11,6 +11,13 @@ build-parameters:
     - builder: custom
       commands:
         - npx cds build --production
+        # SCOPE THE SEEDS THAT SHARE A TABLE WITH RUNTIME DATA, and it has to
+        # run HERE. cds build regenerates gen/ wholesale, so patching those
+        # files afterwards is wiped by the next build - which is exactly how
+        # the 28 Oct deploy failed twice with the same error after it had
+        # supposedly been fixed. Inside before-all, it runs after the
+        # generation and before the packaging.
+        - node tools/scope-tabledata-filters.js
 
 modules:
   # ==================== APPLICATION ROUTER ====================
