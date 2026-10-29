@@ -346,6 +346,26 @@ code is deleted rather than left to fire on what is now the normal path.
 shared constant, so a raise-site count undercounts. A code appearing in a `.js` file is something
 that can execute; a code appearing only in a `.cds` is a declaration.
 
+### Fuel ticket — `TKT4xx` — 5 codes, all executable
+
+**A NEW PREFIX, added 29 Oct 2026**, and added here first because this page says an
+unlisted prefix is not a free choice. Ticket-level errors previously borrowed `EPD` and
+`INV`, which belong to delivery and invoicing — an uplift drawn from a storage tank is
+neither.
+
+**All five guard the same new thing**: an uplift whose fuel came out of a storage location
+rather than from a supplier. That fuel is already owned and already valued, so it moves
+stock rather than buying it, and every one of these refusals exists to stop the ledger
+saying the airline holds fuel twice.
+
+| Code | Description | State |
+|---|---|---|
+| `TKT441` | Storage location missing, unknown or inactive | **BUILT** — refused at capture, not at posting: telling somebody the tank was wrong after the whole ticket is keyed is the expensive moment to say it |
+| `TKT442` | No tail to uplift onto | **BUILT** — a storage uplift must name the aircraft receiving the fuel |
+| `TKT443` | Quantity must be greater than zero | **BUILT** — a zero uplift would post two empty ledger rows |
+| `TKT444` | The location is a DEFUEL tank | **BUILT** — its fuel is staged for return to the vendor or disposal. A TEMP location is the one that holds fuel for re-uplift. This is the uplift-side twin of the rule the defuel config has always carried |
+| `TKT445` | The tank holds less than the uplift takes | **BUILT** — quotes both figures. Refused, never drawn negative: a clamped balance hides fuel that went missing |
+
 ### ePOD and delivery — `EPD4xx` — 17 codes, 16 executable
 
 | Code | Description | State |

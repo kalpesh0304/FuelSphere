@@ -106,15 +106,24 @@ annotate TicketService.FuelTickets with @(
     // which is why these fields stayed blank after picking an order.
     Common.SideEffects #OrderPicked: {
         SourceProperties : [order_ID],
+        // supplier_name_v AND ITS SIBLINGS WERE MISSING HERE, and that is the
+        // whole of the reported "supplier does not appear until after the
+        // ticket is created". They are VIRTUAL - filled by an after-READ
+        // handler that already covers drafts - so the server computes them
+        // correctly and Fiori simply never asks again. A side effect that
+        // omits a derived field leaves the screen showing the value from
+        // before the change.
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref', 'currency_code']
+                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref', 'currency_code',
+                            'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
     },
     // The alternative path: picking a flight directly, with no order,
     // auto-fills aircraft_reg (populateFromFlight in ticket-service.js).
     Common.SideEffects #FlightPicked: {
         SourceProperties : [flight_ID],
         TargetProperties : ['flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg']
+                            'flight_number', 'aircraft_reg',
+                            'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
     },
     // The amount re-derives from the rate AND from either meter reading,
     // because the metered quantity is what it multiplies (see
@@ -251,7 +260,20 @@ annotate TicketService.FuelTickets with @(
                 // create screen, and an association path resolves on a draft
                 // row where a calculated column does not.
                 { Value: flight.flight_date, Label: 'Flight Date' },
-                { Value: aircraft_reg,       ![@UI.Importance]: #Medium }
+                // STILL AUTO-FILLED FROM THE ORDER OR THE FLIGHT. The value
+                // help only matters on the third path - no order, no flight,
+                // an uplift at tail - where nothing can derive it.
+                { Value: aircraft_reg,       ![@UI.Importance]: #High },
+
+                // WHERE THE FUEL CAME FROM. A supplier sells it; a storage
+                // tank already holds it, bought and valued weeks ago.
+                { Value: uplift_source,      Label: 'Fuel Source',
+                  ![@UI.Importance]: #High },
+                { Value: storage_location_code, Label: 'Storage Location',
+                  ![@UI.Importance]: #High,
+                  // ASKED FOR ONLY WHEN IT APPLIES. On a supplier uplift this
+                  // is a field inviting an answer the service then clears.
+                  ![@UI.Hidden]: { $edmJson: { $Ne: [{ $Path: 'uplift_source' }, 'STORAGE'] } } }
             ]
         },
 
@@ -876,3 +898,93 @@ annotate TicketService.TicketPostingMessages with {
     msg_v4     @title: 'Variable 4';
     sequence   @title: 'Sequence';
 }
+
+
+// ============================================================================
+// Uplift at tail, and uplift from a storage location
+// ============================================================================
+//
+// THE TAIL WAS ONLY EVER DERIVED - from the order, or from the flight. That
+// covers an ordered uplift and leaves out the one the schema has always
+// anticipated: a verbal top-up, a diversion, an aircraft on the ground. The
+// field stays auto-filled on the order and flight paths; the value help is
+// what makes the third path reachable.
+//
+// ON aircraft_reg ITSELF, which is a real String element and so can carry a
+// value list. The generated foreign key tail_registration cannot - annotating
+// one is discarded in silence, which is what left every picker on the
+// defueling app showing a GUID.
+annotate TicketService.Tails with @(
+    UI.LineItem: [
+        { Value: registration,       Label: 'Tail No.' },
+        { Value: aircraft_type_code, Label: 'Type' },
+        { Value: fuel_capacity_kg,   Label: 'Capacity (kg)' }
+    ]
+);
+
+annotate TicketService.Tails with {
+    registration       @title: 'Tail No.';
+    aircraft_type_code @title: 'Type';
+    fuel_capacity_kg   @title: 'Capacity (kg)';
+};
+
+annotate TicketService.StorageLocations with @(
+    UI.LineItem: [
+        { Value: code,          Label: 'Location' },
+        { Value: description,   Label: 'Description' },
+        { Value: station_code,  Label: 'Station' },
+        // THE TYPE IS SHOWN so a user picking a source can see that a DEFUEL
+        // tank is not one, rather than discovering it on save.
+        { Value: location_type, Label: 'Type' }
+    ]
+);
+
+annotate TicketService.StorageLocations with {
+    ID            @UI.Hidden;
+    code          @title: 'Location';
+    description   @title: 'Description';
+    station_code  @title: 'Station';
+    location_type @title: 'Type';
+};
+
+annotate TicketService.FuelTickets with {
+    uplift_source         @title: 'Fuel Source';
+    storage_location_code @title: 'Storage Location';
+
+    aircraft_reg @(Common: {
+        ValueList: {
+            CollectionPath: 'Tails',
+            Label: 'Aircraft',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: aircraft_reg, ValueListProperty: 'registration' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'aircraft_type_code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'fuel_capacity_kg' }
+            ]
+        }
+    });
+
+    storage_location_code @(Common: {
+        ValueList: {
+            CollectionPath: 'StorageLocations',
+            Label: 'Storage Locations',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: storage_location_code, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'description' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'station_code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'location_type' }
+            ]
+        }
+    });
+};
+
+// THE STORAGE LOCATION IS ONLY ASKED FOR WHEN THE FUEL CAME FROM ONE. On a
+// supplier uplift it would be a field inviting an answer that the service
+// then has to clear.
+annotate TicketService.FuelTickets with @(
+    Common.SideEffects #SourcePicked: {
+        SourceProperties : [uplift_source],
+        TargetProperties : ['storage_location_code', 'supplier_name_v']
+    }
+);

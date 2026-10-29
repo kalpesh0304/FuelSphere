@@ -10,6 +10,7 @@ const { allocateTicketNumber, allocateTicketNumberByFlight, reportAllocationErro
 const { deriveTicketMeasurement, fieldReader, applyDensityFieldControl } = require('./lib/ticket-measurement');
 const { isMassUom } = require('./lib/fuel-uom');
 const { postTicketUplift } = require('./lib/rob-uplift');
+const { postStorageUplift } = require('./lib/storage-uplift');
 const { ensureDeliveryForTicket } = require('./lib/ticket-delivery');
 const { applyTicketBilling } = require('./lib/ticket-billing');
 const { applyTicketEmissions } = require('./lib/carbon-emissions');
@@ -139,6 +140,64 @@ module.exports = class TicketService extends cds.ApplicationService {
             req.data.tail_registration = row ? row.registration : null;
         };
         this.before(['CREATE', 'UPDATE'], [FuelTickets, FuelTickets.drafts], resolveTicketTail);
+
+        // ---- where the fuel came from -------------------------------------
+        //
+        // A ticket drawn from a storage tank is not a purchase: the airline
+        // already owns that fuel and already valued it. So the two sources
+        // carry different requirements, and the one that does not apply is
+        // CLEARED rather than left behind - a supplier ticket holding a stale
+        // storage location would post against a tank it never touched.
+        const resolveUpliftSource = async (req) => {
+            const d = req.data;
+            if (d.uplift_source === undefined && d.storage_location_code === undefined) return;
+
+            if (d.uplift_source === 'SUPPLIER') {
+                d.storage_location = null;
+                d.storage_location_ID = null;
+                d.storage_location_code = null;
+                return;
+            }
+            if (d.uplift_source !== 'STORAGE') return;
+
+            if (d.storage_location_code) {
+                const loc = await SELECT.one.from('fuelsphere.STORAGE_LOCATION')
+                    .columns('ID', 'code', 'location_type', 'is_active')
+                    .where({ code: d.storage_location_code });
+                if (!loc) {
+                    return req.error(400, `TKT441: storage location ${d.storage_location_code} `
+                        + 'does not exist.', 'storage_location_code');
+                }
+                if (loc.is_active === false) {
+                    return req.error(400, `TKT441: ${loc.code} is not active and cannot be `
+                        + 'uplifted from.', 'storage_location_code');
+                }
+                // REFUSED AT CAPTURE, not at posting. Telling somebody the
+                // tank was wrong after they have keyed the whole ticket is
+                // the expensive moment to say it.
+                if (loc.location_type === 'DEFUEL') {
+                    return req.error(400, `TKT444: ${loc.code} is a DEFUEL location - its fuel `
+                        + 'is staged for return to the vendor or disposal and cannot be '
+                        + 'uplifted back onto an aircraft. Pick a TEMP location.',
+                        'storage_location_code');
+                }
+                d.storage_location_ID = loc.ID;
+                d.storage_location_code = loc.code;
+            }
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelTickets, FuelTickets.drafts], resolveUpliftSource);
+
+        // ---- draw the tank down when the ticket is saved ------------------
+        //
+        // ON SAVE, because a draft is not a movement. The ledger rows are the
+        // mirror of a defuel: out of the tank, onto the tail, same batch and
+        // same rate, because the fuel was never re-purchased.
+        this.before('SAVE', FuelTickets, async (req) => {
+            const d = req.data;
+            if (d.uplift_source !== 'STORAGE') return;
+            const res = await postStorageUplift(cds.transaction(req), d);
+            if (res && res.error) return req.error(400, res.error, 'storage_location_code');
+        });
 
         // WP-17: the metered side of the reconciliation is the sum of the
         // tickets, so any change to a ticket's mass, its delivery or its order

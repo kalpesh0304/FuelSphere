@@ -447,6 +447,40 @@ extend db.INVOICES with {
             and vendor_expected_credits.defuel_type = 'TO_SUPPLIER';
 }
 
+// ===========================================================================
+// FUEL_TICKETS — where the fuel came from
+// ===========================================================================
+//
+// AN UPLIFT FROM A STORAGE LOCATION IS THE MIRROR OF A DEFUEL. Fuel that came
+// off one aircraft and was held in a tank goes back onto another: the tank
+// balance falls, the tail gains a layer, and the fuel keeps the batch and the
+// price it was originally bought at. It was never re-purchased, so there is
+// no second invoice - which is exactly why it cannot be modelled as an
+// ordinary supplier uplift.
+//
+// AN EXTEND, because this file imports the core schema and so the core schema
+// cannot import this one. ROB_LEDGER and INVOICE_ITEMS are extended from here
+// for the same reason.
+//
+// DEFAULTED TO SUPPLIER, so every ticket that exists today keeps its meaning
+// without being touched.
+type UpliftSource : String(10) enum {
+    Supplier = 'SUPPLIER';   // bought from a vendor, invoiced, into-plane
+    Storage  = 'STORAGE';    // drawn from a tank, already owned and valued
+}
+
+extend db.FUEL_TICKETS with {
+        @assert.range
+        uplift_source    : UpliftSource default 'SUPPLIER';
+
+        // Set only when uplift_source is STORAGE. The code is stored beside
+        // the association so a picker can show a tank name rather than a
+        // GUID - the same reason location_code sits beside location on a
+        // defuel.
+        storage_location : Association to STORAGE_LOCATION;
+        storage_location_code : String(20);
+}
+
 extend db.INVOICE_ITEMS with {
         defuel : Association to DEFUEL;
 }

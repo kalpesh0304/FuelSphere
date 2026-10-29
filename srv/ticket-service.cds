@@ -9,6 +9,8 @@
 
 using { fuelsphere as db } from '../db/schema';
 
+using { fuelsphere as dfl } from '../db/defuel';
+
 @path: '/odata/v4/tickets'
 service TicketService {
 
@@ -141,6 +143,36 @@ service TicketService {
 
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
+
+    /**
+     * The aircraft a ticket can be raised against — AN UPLIFT AT TAIL.
+     *
+     * UNTIL NOW THE TAIL WAS ONLY EVER DERIVED: from the order, or from the
+     * flight. That covers the ordered uplift and leaves out the one the
+     * schema has always anticipated - FUEL_TICKETS.order is optional "for a
+     * verbal post-freeze top-up, a diversion", and 30 of the 1,787 seeded
+     * tickets carry no flight at all. Those tickets could be stored and not
+     * captured.
+     *
+     * FROM THE REGISTER, not from the schedule. A tail-only uplift happens
+     * precisely when there is no schedule row to lean on - a diversion, a
+     * ferry, an aircraft on the ground - so the register is the only list
+     * that can contain the answer.
+     */
+    @readonly entity Tails as projection on db.AIRCRAFT_REGISTRATIONS {
+        registration, aircraft_type_code, fuel_capacity_kg
+    };
+
+    /**
+     * Storage locations an uplift can be drawn FROM — the mirror of a defuel.
+     *
+     * location_type is carried so the picker shows it and the service can
+     * refuse a DEFUEL tank: that fuel is staged for return to a vendor and
+     * must not quietly go back onto a wing. Only TEMP is a real source.
+     */
+    @readonly entity StorageLocations as projection on dfl.STORAGE_LOCATION {
+        ID, code, description, station_code, location_type, is_active
+    };
 
     /**
      * TicketPostingAttempts - what S/4 did, attempt by attempt.
