@@ -79,6 +79,21 @@ service TicketService {
         // volume ticket, optional on a mass one. See applyDensityFieldControl.
         virtual null as densityFieldControl : Integer @UI.Hidden,
 
+        // DRIVES aircraft_reg's FieldControl, and it is the whole reason an
+        // uplift at a tail is reachable at all. The tail was annotated
+        // #ReadOnly outright, which is right while an order or a flight
+        // DECIDES it - a ticket that disagreed with the schedule would be two
+        // records of one leg - and wrong when neither exists, because then
+        // there is nothing to derive it FROM and the field is the only place
+        // the tail can come from. A value help on a read-only field is a
+        // picker nobody can open, which is what shipped on 28 Oct.
+        //
+        // Virtual and filled on read, as densityFieldControl is, rather than
+        // a calculated column: deciding it needs only the two keys already on
+        // the row, and a `case when` over them would put a join on every read
+        // of a 1,787-row list.
+        virtual null as tailFieldControl : Integer @UI.Hidden,
+
         // EVERY LINE THAT BILLED THIS TICKET, not just the first. The three
         // scalars above name the first and count the rest, which was the
         // whole truth while a second line meant a duplicate. A third-party

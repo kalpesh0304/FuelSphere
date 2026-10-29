@@ -113,8 +113,15 @@ annotate TicketService.FuelTickets with @(
         // correctly and Fiori simply never asks again. A side effect that
         // omits a derived field leaves the screen showing the value from
         // before the change.
+        //
+        // tailFieldControl COMES WITH THEM. Choosing an order makes the tail
+        // derived and so read-only; CLEARING one makes it typeable again,
+        // which is the uplift at a tail. Without it here the control is
+        // whatever it was when the page loaded, and the field stays locked
+        // after the order it came from has been removed.
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg', 'uom_code', 'supplier_ticket_ref', 'currency_code',
+                            'flight_number', 'aircraft_reg', 'tailFieldControl',
+                            'uom_code', 'supplier_ticket_ref', 'currency_code',
                             'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
     },
     // The alternative path: picking a flight directly, with no order,
@@ -122,7 +129,7 @@ annotate TicketService.FuelTickets with @(
     Common.SideEffects #FlightPicked: {
         SourceProperties : [flight_ID],
         TargetProperties : ['flight/flight_number', 'flight/flight_date',
-                            'flight_number', 'aircraft_reg',
+                            'flight_number', 'aircraft_reg', 'tailFieldControl',
                             'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
     },
     // The amount re-derives from the rate AND from either meter reading,
@@ -401,7 +408,13 @@ annotate TicketService.FuelTickets with {
     // FLIGHT_SCHEDULE.flight_date and paints an asterisk on a field nobody
     // can type into.
     flight_date           @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
-    aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: #ReadOnly;
+    // NOT #ReadOnly ANY MORE, and that one word was the whole defect. The
+    // tail carried a value help and a flat read-only control at the same
+    // time, so the picker could never be opened and an uplift at a tail -
+    // the case with no order and no flight to derive the tail from - could
+    // not be captured. tailFieldControl is read-only under an order or a
+    // flight and editable under neither. See srv/ticket-service.js.
+    aircraft_reg         @title: 'Aircraft Reg' @Common.FieldControl: tailFieldControl;
     quantity             @title: 'Claimed Quantity' @mandatory @Measures.Unit: uom_code;
     uom_code             @title: 'Unit of Measure'
                           @Common.ValueList: {

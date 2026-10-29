@@ -46,6 +46,30 @@ module.exports = class TicketService extends cds.ApplicationService {
             await applyDensityFieldControl(data, isMassUom);
         });
 
+        // THE TAIL IS DERIVED OR IT IS TYPED, and which one depends on
+        // whether anything exists to derive it from.
+        //
+        // READ-ONLY UNDER AN ORDER OR A FLIGHT. populateFromOrder and
+        // populateFromFlight fill it, and a ticket whose tail disagreed with
+        // the schedule would be two records of one leg.
+        //
+        // EDITABLE WITH NEITHER. That is the uplift at a tail - a verbal
+        // top-up, a diversion, an aircraft on the ground - and the aircraft
+        // register is where the answer comes from, which is why the value
+        // help on this field points at it. The field carried that value help
+        // and #ReadOnly at the same time from 28 Oct until this fix: a picker
+        // that could not be opened.
+        //
+        // Drafts too, and especially drafts: the create screen IS a draft,
+        // and that is where the tail has to be typeable.
+        this.after(['READ'], [FuelTickets, FuelTickets.drafts], (data) => {
+            const READ_ONLY = 1, OPTIONAL = 3;
+            for (const row of (Array.isArray(data) ? data : [data])) {
+                if (!row) continue;
+                row.tailFieldControl = (row.order_ID || row.flight_ID) ? READ_ONLY : OPTIONAL;
+            }
+        });
+
         // Drafts too. statusCriticality is a `virtual null as ...` element:
         // no column holds it, so a read that skips this handler returns the
         // property ABSENT rather than null, and a UI that binds it cannot
