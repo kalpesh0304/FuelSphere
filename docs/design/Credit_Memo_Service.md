@@ -65,11 +65,29 @@ The spec is sound and maps cleanly onto MIRO. Measured against this repository a
 
 ## 2. Design
 
-### Why the service is non-draft
+### Draft-enabled — the decision this section used to leave open (29 Oct 2026)
 
-A credit memo already has working states — `DRAFT` and `PARKED` — with rules. An OData draft on top would be a second "not yet real" state with different rules, and every handler would need a `.drafts` twin. The service edits active entities directly while the memo is `DRAFT` or `PARKED`, and refuses with `CRD411` after that.
+This section previously argued the service should stay non-draft, and closed by saying that enabling draft was "one annotation plus `.drafts` handlers" and **the main decision for the UI team**. The app is Fiori Elements V4, and `@odata.draft.enabled` is what puts Create and Edit on an FE list: without it the app can only read what a seeder wrote. The decision is taken — `CreditMemos` is draft-enabled.
 
-**Consequence for the UI.** A freestyle UI5 app on the OData V4 model works directly. If the app is built with **Fiori Elements V4** and needs its standard create/edit flow, check that the UI5 version you target supports non-draft editing well enough. If not, enabling draft is one annotation plus `.drafts` handlers. **This is the main decision for the UI team.**
+**The two "drafts" are different things, and the screen says so:**
+
+| | what it is | who sees it |
+|---|---|---|
+| the OData draft | an edit in progress, not saved | only the user editing |
+| status `DRAFT` | saved and real, not yet parked or posted | everyone |
+
+**What follows from it:**
+
+- **`document_number` is issued on `SAVE`, not on create.** The number is keyed by the vendor and the document date, and at create neither is known — issuing one then would burn a number on every Create somebody cancels. It is therefore **not** `@mandatory`: CAP input validation runs before every handler, so a mandatory document number is a memo that can never be saved.
+- **A re-save keeps the number it already has.** Only the first activation sets `DRAFT` and allocates.
+- **Derivation happens twice.** On the draft, so the user sees a reference's PO, tail, cost object, quantity and amount the moment they pick it; and again on the stored rows after activation, because a draft can be patched by anything and a posting must not depend on the screen having been polite.
+- **`EDIT` carries the same guard as `UPDATE`.** `CRD411` now refuses to *open* a `POSTED` memo for editing rather than refusing the save after the user has retyped it. `UI.UpdateHidden` and `UI.DeleteHidden` hide both buttons outside `DRAFT`/`PARKED`.
+- **Saving is permissive; posting is not.** A memo with no lines saves (`DRAFT` is exactly for a half-entered document) and `CRD416` still blocks posting. The only thing refused at save is a memo with no vendor, because the number cannot be built without one.
+- **A partial amount proposes no quantity.** Picking a reference and typing nothing credits the whole of it, quantity included. Typing a *part* of its value leaves the quantity blank for the user to state — the reference's full quantity beside part of its value is a claim nobody made, and two partial credits on one reference would breach `CRD403` while their amounts were still inside its value.
+
+**What a line credits is now pickable.** Until this change none of the three reference types had a value help, so a screen that could not name a reference could not enter a memo. Each picker is bound to the **readable** number (`defuel_number`, `ref_ticket_number`, `ref_invoice_number` + `ref_line_number`) and carries the key out beside it, because a value list on a generated foreign key is discarded by the compiler and the user is shown a GUID. A number typed rather than picked arrives without the key and the service resolves it. One picker is visible at a time, by `reference_type`.
+
+**Three enums became code lists** — `CREDIT_MEMO_TYPE_CODE`, `CREDIT_MEMO_REF_TYPE_CODE`, `CREDIT_PRICE_COMPONENT_CODE` — because an enum reaches OData as a plain string and Fiori gives a string a text box. The enums remain the contract the service validates against; the tables are the list the screen offers.
 
 ### Nothing is decremented
 
@@ -89,7 +107,7 @@ DRAFT ──park──► PARKED ──postMemo──► POSTED ──reverse─
 POSTING_ATTEMPTED ──reprocess──► POSTED      (S/4 failure path, later)
 ```
 
-Edit and delete are allowed only in `DRAFT` and `PARKED`.
+Edit and delete are allowed only in `DRAFT` and `PARKED` — enforced on `EDIT`, `UPDATE` and `DELETE`, and hidden on the screen by `UI.UpdateHidden` / `UI.DeleteHidden`.
 
 ### Expected credit clearing (spec §7)
 

@@ -1,0 +1,3 @@
+code;name;sort;created_at;created_by;modified_at;modified_by
+CREDIT_MEMO;Credit memo (quantity and value);10;2026-10-29T00:00:00Z;SEED_CREDIT_MEMO_CODES;2026-10-29T00:00:00Z;SEED_CREDIT_MEMO_CODES
+SUBSEQUENT_CREDIT;Subsequent credit (value only);20;2026-10-29T00:00:00Z;SEED_CREDIT_MEMO_CODES;2026-10-29T00:00:00Z;SEED_CREDIT_MEMO_CODES

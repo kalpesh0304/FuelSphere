@@ -11,6 +11,20 @@
  * change followed by the same refresh — there is no compensating write to get
  * wrong.
  *
+ * ENTERED THROUGH AN ODATA DRAFT since 29 Oct 2026. The memo is typed over
+ * several requests and becomes real on SAVE, which is where the document
+ * number is issued. Two rules follow from that, and both have cost a defect
+ * elsewhere in this codebase:
+ *
+ *   NOTHING THE SERVICE FILLS IN MAY BE @mandatory. CAP input validation runs
+ *   BEFORE every handler, so a mandatory document_number is a memo that can
+ *   never be saved.
+ *
+ *   WHAT IS DERIVED IS DERIVED TWICE. Once on the draft, so the user sees a
+ *   reference's amount and PO the moment they pick it, and again on the
+ *   stored rows after activation - because a draft can be patched by anything
+ *   and a posting must not depend on the screen having been polite.
+ *
  * Codes (CRD4xx business rule, CRD5xx technical):
  *   CRD401 reference or mandatory field missing     CRD411 status does not allow this
  *   CRD402 credit exceeds what is still creditable  CRD412 four-eyes: creator cannot post
@@ -106,14 +120,45 @@ async function loadReference(type, id) {
 
 const countedMemos = () => SELECT('ID').from(T.MEMO).where({ status: { in: COUNTED } });
 
-/** Still creditable on each line's reference, posted memos only. */
-async function applyOpenAmounts(lines) {
+/**
+ * Still creditable on each line's reference, posted memos only.
+ *
+ * `from` is the table the rows came out of - the active lines or the draft
+ * ones - because of what the client sends. THE SCREEN SHOWS THE REFERENCE'S
+ * NUMBER, NOT ITS KEY (a picker bound to a generated foreign key shows a
+ * GUID), so Fiori has no reason to $select defuel_ID, ticket_ID or
+ * invoice_item_ID and does not. The row that arrives here then has nothing
+ * to look the reference up BY, and every "Still Open" reads empty. So when
+ * the key is missing it is fetched by the row's own ID, from the table the
+ * row belongs to.
+ */
+async function applyOpenAmounts(lines, from) {
     for (const l of [].concat(lines || [])) {
-        if (!l || !l.reference_type) continue;
-        const id = refIdOf(l);
-        const ref = id && await loadReference(l.reference_type, id);
-        if (!ref || ref.amount === null) { l.open_amount = null; continue; }
-        const done = await creditedSoFar(l.reference_type, id, null);
+        if (!l) continue;
+        // ALWAYS PRESENT, EVEN WHEN THERE IS NOTHING TO SAY. open_amount is a
+        // virtual element: leaving it unset drops the property from the
+        // response entirely, and the client that asked for it then logs
+        // "invalid segment: open_amount" and shows an empty cell it cannot
+        // explain. A line with no reference yet - every line, for the first
+        // moment of its life - is exactly that case.
+        l.open_amount = null;
+
+        let type = l.reference_type;
+        let id = refIdOf(l);
+        if ((!type || !id) && from && l.ID) {
+            const stored = await SELECT.one.from(from)
+                .columns('reference_type', 'defuel_ID', 'ticket_ID', 'invoice_item_ID')
+                .where({ ID: l.ID });
+            // READ, NOT WRITTEN BACK. The client did not ask for these
+            // columns and a response carrying fields nobody selected is a
+            // surprise; they are needed here and nowhere else.
+            if (stored) { type = stored.reference_type; id = refIdOf(stored); }
+        }
+        if (!type || !id) continue;
+
+        const ref = await loadReference(type, id);
+        if (!ref || ref.amount === null) continue;
+        const done = await creditedSoFar(type, id, null);
         l.open_amount = r2(ref.amount - done.amount);
     }
 }
@@ -300,6 +345,8 @@ async function log(memoId, event, severity, code, message) {
 module.exports = class CreditMemoService extends cds.ApplicationService {
     async init() {
         const { CreditMemos, CreditMemoLines, Exceptions } = this.entities;
+        const MemoDrafts = CreditMemos.drafts;
+        const LineDrafts = CreditMemoLines.drafts;
 
         const guardEditable = async (req, memoId) => {
             const m = await SELECT.one.from(T.MEMO).columns('status').where({ ID: memoId });
@@ -321,6 +368,245 @@ module.exports = class CreditMemoService extends cds.ApplicationService {
                 if (!l.line_number) { l.line_number = next; next += 10; }
             }
         };
+
+        // ===================================================================
+        // DRAFTS - a credit memo is typed, not posted in one call
+        // ===================================================================
+
+        const today = () => new Date().toISOString().slice(0, 10);
+
+        /**
+         * A NEW DRAFT HOLDS NO NUMBER. The number is keyed by the vendor and
+         * the document date, and at NEW the vendor is not known yet - issuing
+         * one here would burn a number on every Create somebody cancels.
+         *
+         * The dates and the currency ARE defaulted, because a clerk entering
+         * today's credit memo should not have to say that it is today's.
+         */
+        this.before('NEW', MemoDrafts, (req) => {
+            const d = req.data;
+            d.status = 'DRAFT';
+            if (!d.memo_type) d.memo_type = 'CREDIT_MEMO';
+            if (!d.document_date) d.document_date = today();
+            if (!d.posting_date) d.posting_date = d.document_date;
+            // EVERY FuelSphere VALUATION IS IN USD and the carrier's
+            // reporting currency is configured as USD, so this is the default
+            // rather than a guess. The field stays editable.
+            if (!d.currency_code) d.currency_code = 'USD';
+            if (d.tax_amount === undefined || d.tax_amount === null) d.tax_amount = 0;
+            d.lines_amount = 0;
+            d.balance = null;
+            d.document_number = null;
+        });
+
+        /**
+         * EDIT IS THE SAME GATE AS UPDATE. Without this a POSTED memo opens in
+         * edit mode and refuses only at save, after the user has retyped it.
+         */
+        this.before('EDIT', CreditMemos, (req) =>
+            guardEditable(req, (req.params[0] && req.params[0].ID) || req.data.ID));
+
+        // ---- one line's reference -----------------------------------------
+        //
+        // THE KEY FOLLOWS THE NUMBER. Each picker is bound to a readable
+        // column - DFL-..., a ticket number, an invoice number and line -
+        // because a value help bound to a generated foreign key shows the
+        // user a GUID. The picker sends the key beside the number; a number
+        // TYPED rather than picked arrives alone, so it is resolved here too.
+        //
+        // THE OTHER TWO REFERENCES ARE CLEARED. A line credits ONE thing, and
+        // a key left behind by a reference type the user changed away from
+        // would silently be the one that counts.
+        const REF_KEYS = ['defuel_ID', 'ticket_ID', 'invoice_item_ID',
+                          'defuel_number', 'ref_ticket_number',
+                          'ref_invoice_number', 'ref_line_number'];
+        const DERIVED_LINE = ['reference_display', 'po_number', 'po_item', 'flight_ID',
+                              'aircraft_reg', 'station_code', 'cost_center', 'uom_code',
+                              'tax_code', 'value_only', 'quantity', 'amount', 'line_number'];
+        const KEEP_BY_TYPE = {
+            EXPECTED_CREDIT: ['defuel_ID', 'defuel_number'],
+            FUEL_TICKET: ['ticket_ID', 'ref_ticket_number'],
+            INVOICE_LINE: ['invoice_item_ID', 'ref_invoice_number', 'ref_line_number']
+        };
+
+        const resolveReference = async (l) => {
+            const keep = KEEP_BY_TYPE[l.reference_type];
+            if (!keep) return;
+
+            if (l.reference_type === 'EXPECTED_CREDIT') {
+                if (!l.defuel_ID && l.defuel_number) {
+                    const d = await SELECT.one.from(T.DEFUEL).columns('ID')
+                        .where({ defuel_id: l.defuel_number, defuel_type: 'TO_SUPPLIER' });
+                    l.defuel_ID = d ? d.ID : null;
+                }
+                if (l.defuel_ID) {
+                    const d = await SELECT.one.from(T.DEFUEL).columns('defuel_id').where({ ID: l.defuel_ID });
+                    if (d) l.defuel_number = d.defuel_id;
+                }
+            } else if (l.reference_type === 'FUEL_TICKET') {
+                if (!l.ticket_ID && l.ref_ticket_number) {
+                    const t = await SELECT.one.from(T.TICKET).columns('ID')
+                        .where({ ticket_number: l.ref_ticket_number });
+                    l.ticket_ID = t ? t.ID : null;
+                }
+                if (l.ticket_ID) {
+                    const t = await SELECT.one.from(T.TICKET).columns('ticket_number').where({ ID: l.ticket_ID });
+                    if (t) l.ref_ticket_number = t.ticket_number;
+                }
+            } else {
+                if (!l.invoice_item_ID && l.ref_invoice_number && l.ref_line_number) {
+                    const inv = await SELECT.one.from(T.INVOICE).columns('ID')
+                        .where({ invoice_number: l.ref_invoice_number });
+                    const it = inv && await SELECT.one.from(T.ITEM).columns('ID')
+                        .where({ invoice_ID: inv.ID, line_number: l.ref_line_number });
+                    l.invoice_item_ID = it ? it.ID : null;
+                }
+                if (l.invoice_item_ID) {
+                    const it = await SELECT.one.from(T.ITEM).columns('invoice_ID', 'line_number')
+                        .where({ ID: l.invoice_item_ID });
+                    const inv = it && await SELECT.one.from(T.INVOICE).columns('invoice_number')
+                        .where({ ID: it.invoice_ID });
+                    if (inv) { l.ref_invoice_number = inv.invoice_number; l.ref_line_number = it.line_number; }
+                }
+            }
+            for (const f of REF_KEYS) if (!keep.includes(f)) l[f] = null;
+        };
+
+        const nextLineNumber = async (from, memoId) => {
+            if (!memoId) return 10;
+            const rows = await SELECT.from(from).columns('line_number').where({ memo_ID: memoId });
+            return rows.reduce((m, r) => Math.max(m, Number(r.line_number) || 0), 0) + 10;
+        };
+
+        /**
+         * THE DRAFT TOTALS, WHILE THE USER IS STILL TYPING. `balance` being
+         * zero is the whole gate on posting, so a screen that showed it only
+         * after saving would hide the one number the user is working towards.
+         */
+        const refreshDraftTotals = async (memoId) => {
+            if (!memoId) return;
+            const m = await SELECT.one.from(MemoDrafts)
+                .columns('stated_gross_amount', 'tax_amount').where({ ID: memoId });
+            if (!m) return;
+            const rows = await SELECT.from(LineDrafts).columns('amount').where({ memo_ID: memoId });
+            const lines = r2(rows.reduce((t, r) => t + Number(r.amount || 0), 0));
+            const balance = m.stated_gross_amount === null || m.stated_gross_amount === undefined
+                ? null : r2(Number(m.stated_gross_amount) - lines - Number(m.tax_amount || 0));
+            await UPDATE(MemoDrafts).set({ lines_amount: lines, balance }).where({ ID: memoId });
+        };
+
+        /**
+         * A DRAFT LINE DERIVES AS IT IS TYPED. Picking a reference fills the
+         * PO, the flight, the tail, the cost object and the quantity, and
+         * PROPOSES the amount - proposes, because the memo states what the
+         * vendor actually credited, which is often less than the reference is
+         * worth. An amount the user has already typed is never overwritten.
+         */
+        this.before(['NEW', 'PATCH', 'UPDATE'], LineDrafts, async (req) => {
+            const d = req.data;
+            const stored = d.ID ? await SELECT.one.from(LineDrafts).where({ ID: d.ID }) : null;
+            const l = { ...(stored || {}), ...d };
+            if (!l.memo_ID) return;
+
+            const memo = (await SELECT.one.from(MemoDrafts).where({ ID: l.memo_ID }))
+                || (await SELECT.one.from(T.MEMO).where({ ID: l.memo_ID }));
+
+            await resolveReference(l);
+            const ref = await loadReference(l.reference_type, refIdOf(l));
+            if (ref) {
+                const typed = stored ? stored.amount : undefined;
+                deriveLine(l, ref, memo);
+                // THE WHOLE REFERENCE, OR NOTHING PROPOSED. Picking a
+                // reference and typing no amount means "credit all of it", so
+                // the quantity comes with the value. A PARTIAL amount gets no
+                // quantity: the reference's full quantity beside a part of
+                // its value is a claim nobody made, and two partial credits
+                // on one reference would then exceed its quantity (CRD403)
+                // while their amounts were still inside its value.
+                if (d.amount === undefined && (typed === null || typed === undefined)) {
+                    l.amount = ref.amount;
+                    if (!l.value_only && !l.quantity) l.quantity = ref.quantity;
+                }
+            }
+            if (!l.line_number) l.line_number = await nextLineNumber(LineDrafts, l.memo_ID);
+
+            for (const f of REF_KEYS.concat(DERIVED_LINE))
+                if (l[f] !== undefined) d[f] = l[f];
+        });
+
+        const draftMemoOf = async (req) => req.data.memo_ID
+            || ((await SELECT.one.from(LineDrafts).columns('memo_ID').where({ ID: req.data.ID })) || {}).memo_ID;
+
+        this.after(['NEW', 'PATCH', 'UPDATE'], LineDrafts, async (_, req) => {
+            await refreshDraftTotals(await draftMemoOf(req));
+        });
+
+        this.before('DELETE', LineDrafts, async (req) => {
+            const cur = await SELECT.one.from(LineDrafts).columns('memo_ID').where({ ID: req.data.ID });
+            if (cur) req._cmDraftMemo = cur.memo_ID;
+        });
+        this.after('DELETE', LineDrafts, async (_, req) => {
+            if (req._cmDraftMemo) await refreshDraftTotals(req._cmDraftMemo);
+        });
+
+        // The stated amount and the tax are the other two terms of the
+        // balance, so they move it as surely as a line does.
+        this.after(['PATCH', 'UPDATE'], MemoDrafts, async (_, req) => {
+            const d = req.data;
+            if (d.stated_gross_amount !== undefined || d.tax_amount !== undefined)
+                await refreshDraftTotals(d.ID);
+        });
+
+        /**
+         * SAVE IS WHERE THE MEMO BECOMES REAL, so it is where the number is
+         * issued - once. A re-save after an Edit keeps the number it already
+         * has and the status it already reached; only the first activation
+         * sets DRAFT.
+         *
+         * NO LINE CHECK HERE, ON PURPOSE. CRD416 (no lines) is an error at
+         * simulate and a bar to posting, not a bar to saving: a half-entered
+         * memo a clerk comes back to tomorrow is exactly what DRAFT is for.
+         */
+        this.before('SAVE', CreditMemos, async (req) => {
+            const d = req.data;
+            const sup = d.supplier_ID && await SELECT.one.from(T.SUPPLIER)
+                .columns('supplier_code').where({ ID: d.supplier_ID });
+            if (!sup) return req.reject(400, 'CRD401: supplier is required and must exist');
+            if (d.document_number) return;
+            d.status = 'DRAFT';
+            try { d.document_number = await allocate('CM', sup.supplier_code, d.document_date, 'Supplier'); }
+            catch (e) { if (!reportAllocationError(req, e)) throw e; }
+        });
+
+        /**
+         * DERIVED AGAIN, ON THE STORED ROWS. The draft handler above is a
+         * convenience for the screen and not the guarantee: this one runs on
+         * what was actually saved, which is what every check and every
+         * posting reads.
+         */
+        this.after('SAVE', CreditMemos, async (_, req) => {
+            const id = req.data.ID;
+            if (!id) return;
+            const memo = await SELECT.one.from(T.MEMO).where({ ID: id });
+            if (!memo) return;
+            const lines = await SELECT.from(T.LINE).where({ memo_ID: id }).orderBy('line_number');
+            let next = 10;
+            for (const l of lines) {
+                const was = JSON.stringify(l);
+                await resolveReference(l);
+                const ref = await loadReference(l.reference_type, refIdOf(l));
+                if (ref) deriveLine(l, ref, memo);
+                if (!l.line_number) l.line_number = next;
+                next = Math.max(next, Number(l.line_number) || 0) + 10;
+                if (JSON.stringify(l) !== was) {
+                    const set = {};
+                    for (const f of REF_KEYS.concat(DERIVED_LINE)) set[f] = l[f] === undefined ? null : l[f];
+                    await UPDATE(T.LINE).set(set).where({ ID: l.ID });
+                }
+            }
+            await refreshTotals(id);
+            await log(id, 'SAVED', 'INFO', null, `saved as ${memo.status} with ${lines.length} line(s)`);
+        });
 
         // ---- header create: number it, force DRAFT, derive nested lines
         this.before('CREATE', CreditMemos, async (req) => {
@@ -372,9 +658,21 @@ module.exports = class CreditMemoService extends cds.ApplicationService {
         this.after('DELETE', CreditMemoLines, async (_, req) => { if (req._cmMemo) await refreshTotals(req._cmMemo); });
 
         // ---- open amount on a line: still creditable, posted memos only
-        this.after('READ', CreditMemoLines, applyOpenAmounts);
+        //
+        // ON THE DRAFTS TOO. What is still creditable on a reference is the
+        // number that decides how much a line may credit, so it has to be
+        // visible while the line is being typed - not only after saving.
+        //
+        // REGISTERED SEPARATELY rather than on both entities at once, because
+        // each has to say WHICH table to fall back to when the client has not
+        // selected the reference key.
+        this.after('READ', CreditMemoLines, (data) => applyOpenAmounts(data, T.LINE));
+        this.after('READ', LineDrafts, (data) => applyOpenAmounts(data, LineDrafts));
         this.after('READ', CreditMemos, async (data) => {
-            for (const m of [].concat(data || [])) if (m && Array.isArray(m.lines)) await applyOpenAmounts(m.lines);
+            for (const m of [].concat(data || [])) if (m && Array.isArray(m.lines)) await applyOpenAmounts(m.lines, T.LINE);
+        });
+        this.after('READ', MemoDrafts, async (data) => {
+            for (const m of [].concat(data || [])) if (m && Array.isArray(m.lines)) await applyOpenAmounts(m.lines, LineDrafts);
         });
 
         // ---- actions

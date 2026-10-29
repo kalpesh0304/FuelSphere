@@ -21,6 +21,8 @@
  *   NUMBER_RANGES   every ticket, order and memo number allocated since the
  *                   last deploy. Deleting these would re-issue used numbers.
  *   DEFUEL          every defuel recorded through the app.
+ *   CREDIT_MEMOS    every credit memo entered through the app, from the day
+ *                   the app got a Create button.
  *   the valuation   every ledger and balance row a defuel posted.
  *
  * HOW IT IS SCOPED. Each seeder stamps CREATED_BY with its own name, and the
@@ -54,7 +56,15 @@ const RUNTIME_WRITTEN = {
     'fuelsphere-FUEL_STOCK_MOVEMENT_LEDGER':
         { by: 'stamp', column: 'CREATED_BY', value: 'SEED_FIFO_VALUATION' },
     'fuelsphere-FUEL_STOCK_BALANCE':
-        { by: 'stamp', column: 'CREATED_BY', value: 'SEED_FIFO_VALUATION' }
+        { by: 'stamp', column: 'CREATED_BY', value: 'SEED_FIFO_VALUATION' },
+
+    // THE CREDIT MEMO SEED, scoped BEFORE the app could write one. Its
+    // CREATED_BY is a finance user rather than a seeder stamp - the scenario
+    // reads as a clerk's own work on purpose - so there is nothing to filter
+    // on but the keys, and there are four of each. CREDIT_MEMO_LINES has no
+    // audit columns at all, so keys are the only scope it can have.
+    'fuelsphere-CREDIT_MEMOS': { by: 'keys', keys: ['ID'] },
+    'fuelsphere-CREDIT_MEMO_LINES': { by: 'keys', keys: ['ID'] }
 };
 
 let patched = 0;

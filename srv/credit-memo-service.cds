@@ -5,10 +5,23 @@ using { fuelsphere as dfl } from '../db/defuel';
 /**
  * FuelSphere — Supplier Credit Memo service (FS-SPEC-CM-001).
  *
- * The backend for an independent UI5 app. Non-draft on purpose: a credit
- * memo already has its own working states (DRAFT, PARKED), and an OData draft
- * on top of them would be a second "not yet real" state with different rules.
- * The contract is in docs/design/Credit_Memo_Service.md.
+ * The backend for an independent UI5 app. The contract is in
+ * docs/design/Credit_Memo_Service.md.
+ *
+ * DRAFT-ENABLED SINCE 29 OCT 2026, which reverses the note that stood here.
+ * It said an OData draft would be a second "not yet real" state beside the
+ * memo's own DRAFT. The reason it has to be is simpler than that objection:
+ * @odata.draft.enabled is what puts Create and Edit on a Fiori list, and
+ * without it the app could only read what a seeder wrote. A memo with four
+ * mandatory amounts and n lines cannot be entered in one atomic POST anyway.
+ *
+ * THE TWO "DRAFTS" ARE DIFFERENT THINGS, and the screen says so:
+ *   the OData draft  an edit in progress - not saved, nobody else sees it
+ *   status DRAFT     saved and real, not yet parked or posted
+ * An OData draft holds no document number, because a number is issued when
+ * the memo becomes real. That is why document_number is not @mandatory: the
+ * service allocates it on activation, and CAP's input validation runs before
+ * any handler could have filled it in.
  *
  * BTP LEVEL ONLY. post() writes POSTED and a FuelSphere document number and
  * calls nothing. s4_document_number stays null until S/4 is wired.
@@ -31,6 +44,7 @@ service CreditMemoService {
         messages : array of Message;
     };
 
+    @odata.draft.enabled
     entity CreditMemos as projection on cm.CREDIT_MEMOS {
         *,
         case when balance = 0 then 3 when balance is null then 0 else 1 end as balanceCriticality : Integer,
@@ -99,6 +113,12 @@ service CreditMemoService {
 
     @readonly entity Reasons as projection on cm.CREDIT_MEMO_REASONS;
 
+    // THE ENUMS AS ROWS. An enum reaches OData as a string and Fiori gives it
+    // a text box; a dropdown needs a collection to read.
+    @readonly entity MemoTypes       as projection on cm.CREDIT_MEMO_TYPE_CODE;
+    @readonly entity RefTypes        as projection on cm.CREDIT_MEMO_REF_TYPE_CODE;
+    @readonly entity PriceComponents as projection on cm.CREDIT_PRICE_COMPONENT_CODE;
+
     // ---- value helps -----------------------------------------------------
     @readonly entity Suppliers as projection on db.MASTER_SUPPLIERS {
         key ID, supplier_code, supplier_name, s4_vendor_no
@@ -111,10 +131,15 @@ service CreditMemoService {
             currency_code, net_amount, tax_amount, gross_amount, status
     } where status in ('POSTED', 'PAID');
 
+    // invoice_number IS WHAT THE USER PICKS BY. A line's own key says
+    // nothing, and `invoice` is an association: a value help can only offer
+    // columns it can show, so the invoice's number is projected flat beside
+    // the line number.
     @readonly entity InvoiceLines as projection on db.INVOICE_ITEMS {
         key ID, invoice, line_number, description, po_number, po_item, quantity,
-            uom_code, unit_price, net_amount, tax_code, ticket_number, cost_center, flight
-    };
+            uom_code, unit_price, net_amount, tax_code, ticket_number, cost_center, flight,
+            invoice.invoice_number as invoice_number : String(30)
+    } where invoice.status in ('POSTED', 'PAID');
 
     @readonly entity Flights as projection on db.FLIGHT_SCHEDULE {
         key ID, flight_number, flight_date, aircraft_reg

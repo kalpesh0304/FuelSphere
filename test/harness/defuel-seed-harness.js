@@ -120,7 +120,10 @@ describe('Defuel demo seed', () => {
             assert.strictEqual(m.status, 'DRAFT', `${m.document_number} is ${m.status}: posting it is the demo step`);
             assert.strictEqual(m.supplier_ID, d.supplier_ID, `${m.document_number} is not from the defuel's supplier`);
             assert.strictEqual(m.s4_document_number, null);
-            const { data: sim } = await test.get(`/odata/v4/credit-memo/CreditMemos(${m.ID})/CreditMemoService.simulate()`);
+            // TWO-PART KEY: CreditMemos is draft-enabled, so IsActiveEntity
+            // is part of its key and the ID alone is a 400.
+            const { data: sim } = await test.get(
+                `/odata/v4/credit-memo/CreditMemos(ID=${m.ID},IsActiveEntity=true)/CreditMemoService.simulate()`);
             assert.strictEqual(sim.canPost, true, `${m.document_number}: ${JSON.stringify(sim.messages)}`);
             out(`${m.document_number} ${m.supplier_cm_number}: ${l.amount} USD, DRAFT, postable`);
         }

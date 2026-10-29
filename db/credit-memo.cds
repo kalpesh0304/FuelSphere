@@ -77,6 +77,34 @@ entity CREDIT_MEMO_REASONS {
 }
 
 /**
+ * THREE ENUMS THAT HAVE TO BE PICKED FROM, so they are tables.
+ *
+ * A CDS enum reaches OData as a plain string and Fiori renders a text box for
+ * it: the user types CREDIT_MEMO or mistypes it. A value help needs ROWS, so
+ * the three enums a user chooses between on the entry screen are mirrored as
+ * code lists. The enums stay the contract the service validates against -
+ * these are the list the screen offers, and `sort` is the order it offers it
+ * in rather than alphabetical.
+ */
+entity CREDIT_MEMO_TYPE_CODE : db.AuditTrail {
+    key code : String(20);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
+entity CREDIT_MEMO_REF_TYPE_CODE : db.AuditTrail {
+    key code : String(20);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
+entity CREDIT_PRICE_COMPONENT_CODE : db.AuditTrail {
+    key code : String(20);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
+/**
  * EXPECTED CREDITS ARE NOT MODELLED HERE. They already exist: a DEFUEL of type
  * TO_SUPPLIER, once postToSupplier has stated `expected_credit_usd`, IS the
  * expected credit (db/defuel.cds). The vendor is DEFUEL.supplier and the
@@ -155,6 +183,16 @@ entity CREDIT_MEMO_LINES : cuid {
         invoice_item        : Association to db.INVOICE_ITEMS;
         reference_display   : String(80);                   // DERIVED: the reference's own number
 
+        // WHAT THE USER PICKS BY. A value help bound to defuel_ID shows a
+        // GUID, because a generated foreign key is not an annotatable
+        // element - the picker binds to the number and brings the key back
+        // beside it. One column per reference type, each shown only for its
+        // own type, because the three lists have nothing in common.
+        defuel_number       : String(30);                   // EXPECTED_CREDIT: DFL-...
+        ref_ticket_number   : String(30);                   // FUEL_TICKET
+        ref_invoice_number  : String(30);                   // INVOICE_LINE: the invoice
+        ref_line_number     : Integer;                      // INVOICE_LINE: its line
+
         // DERIVED from the reference on save, read-only to the UI
         po_number           : String(10);
         po_item             : String(5);
@@ -168,7 +206,11 @@ entity CREDIT_MEMO_LINES : cuid {
         uom_code            : String(3);
         amount              : Decimal(15,2) @mandatory;
         price_component     : CreditPriceComponent;
-        tax_code            : String(2);
+        // FOUR, NOT TWO. The line copies the reference's tax code and
+        // INVOICE_ITEMS.tax_code was widened to String(4) for V23; copying a
+        // four-character code into String(2) truncates it to a code that
+        // means something else.
+        tax_code            : String(4);
         text                : String(255);
 
         final_clearing      : Boolean default false;        // expected credit: "Close & write off"
