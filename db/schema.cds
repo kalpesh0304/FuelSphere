@@ -1615,6 +1615,22 @@ entity FUEL_TICKETS : cuid, AuditTrail {
 
         // Flight Reference
         aircraft_reg        : String(10);               // Aircraft registration
+
+        // WHERE THE UPLIFT HAPPENED, and the one input every S/4 mapping
+        // lookup starts from: the plant, the designated supplier and the
+        // contract are all keyed on the airport (srv/lib/s4-fuel-posting.js,
+        // resolvePostingMasterData).
+        //
+        // IT CAME FROM THE ORDER OR THE FLIGHT AND THAT IS WHY IT HAD NO
+        // COLUMN. An uplift at a tail has neither, so the station was null,
+        // no airport resolved, STATION_SUPPLIER_MAP was never searched, and
+        // the posting failed with INT401 "Order needs an S/4 contract number,
+        // or airport S/4 plant + product S/4 material" - which named the
+        // missing output and not the missing input. Measured 30 Oct 2026.
+        //
+        // Still derived where an order or a flight decides it; typed only on
+        // the third path, where nothing else can say.
+        station_code        : String(3);                // IATA, the uplift station
         // WP-07B / decisions B1 and A4. ADDITIVE — the string above keeps its
         // existing constraint and this is optional, always.
         //

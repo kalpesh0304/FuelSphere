@@ -156,6 +156,11 @@ service TicketService {
     @readonly
     entity Airports as projection on db.MASTER_AIRPORTS;
 
+    // TWO ROWS, SO THE FUEL SOURCE IS A SELECT. An enum reaches OData as a
+    // plain string and Fiori gives a string a text box.
+    @readonly
+    entity UpliftSources as projection on db.UPLIFT_SOURCE_CODE;
+
     @readonly
     entity Suppliers as projection on db.MASTER_SUPPLIERS;
 

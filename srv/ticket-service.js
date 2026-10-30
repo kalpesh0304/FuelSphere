@@ -46,6 +46,38 @@ module.exports = class TicketService extends cds.ApplicationService {
             await applyDensityFieldControl(data, isMassUom);
         });
 
+        // THE STATION THE UPLIFT HAPPENED AT. Every S/4 mapping lookup
+        // starts from it - plant, designated supplier and contract are all
+        // keyed on the airport - and until 30 Oct the ticket had no column
+        // for it because the order or the flight always carried one.
+        //
+        // AN UPLIFT AT A TAIL HAS NEITHER, so nothing could say where the
+        // fuel went in, STATION_SUPPLIER_MAP was never searched, and the
+        // posting failed with INT401. Derived here where an order or a
+        // flight decides it, typed by the user where neither does.
+        const resolveTicketStation = async (req) => {
+            const d = req.data;
+            if (d.order_ID === undefined && d.flight_ID === undefined) return;
+            const db = cds.db;
+
+            if (d.order_ID) {
+                const o = await db.run(SELECT.one.from('fuelsphere.FUEL_ORDERS')
+                    .columns('station_code').where({ ID: d.order_ID }));
+                if (o && o.station_code) { d.station_code = o.station_code; return; }
+            }
+            if (d.flight_ID) {
+                // THE ORIGIN, because that is the airport that fuelled the
+                // leg - the same choice the defuel screen makes.
+                const f = await db.run(SELECT.one.from('fuelsphere.FLIGHT_SCHEDULE')
+                    .columns('origin_airport').where({ ID: d.flight_ID }));
+                if (f && f.origin_airport) { d.station_code = f.origin_airport; return; }
+            }
+            // Cleared both: the station becomes the user's to state again,
+            // and whatever the order put there is no longer evidence.
+            if (!d.order_ID && !d.flight_ID) d.station_code = null;
+        };
+        this.before(['CREATE', 'UPDATE', 'PATCH'], [FuelTickets, FuelTickets.drafts], resolveTicketStation);
+
         // THE TAIL IS DERIVED OR IT IS TYPED, and which one depends on
         // whether anything exists to derive it from.
         //
@@ -66,6 +98,10 @@ module.exports = class TicketService extends cds.ApplicationService {
             const READ_ONLY = 1, OPTIONAL = 3;
             for (const row of (Array.isArray(data) ? data : [data])) {
                 if (!row) continue;
+                // THE STATION IS THE SAME CASE AS THE TAIL and so shares the
+                // control: both come from the order or the flight where
+                // there is one, and both are the user's to state where there
+                // is not.
                 row.tailFieldControl = (row.order_ID || row.flight_ID) ? READ_ONLY : OPTIONAL;
             }
         });

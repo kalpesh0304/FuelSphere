@@ -45,7 +45,11 @@ const { SELECT } = cds.ql;
 // flight_ID JOINS THE RE-READ, 19 Oct 2026. A ticket raised against a FLIGHT
 // rather than an order has no order to walk to a supplier, and the station
 // and date the maps are keyed on come from the flight.
-const TICKET_COLUMNS = ['ID', 'order_ID', 'flight_ID'];
+// READ FROM THE STORED ROW, not from what the client selected: a list
+// report asks for the columns it displays, and the station, the carrier
+// and the delivery day are not among them.
+const TICKET_COLUMNS = ['ID', 'order_ID', 'flight_ID',
+                        'station_code', 'carrier_code', 'delivery_timestamp'];
 
 async function applyTicketBilling(rows) {
     const list = (Array.isArray(rows) ? rows : [rows]).filter(r => r && r.ID);
@@ -84,14 +88,40 @@ async function applyTicketBilling(rows) {
     // THE ORDER STILL WINS WHERE THERE IS ONE. An order records who was
     // actually bought from, which is a fact; the map records who is supposed
     // to fuel there, which is an arrangement. Where both exist the fact wins.
-    const noOrder = stored.filter(t => !t.order_ID && t.flight_ID);
-    const flightIds = [...new Set(noOrder.map(t => t.flight_ID))];
+    //
+    // AND A TICKET WITH NO FLIGHT EITHER. An uplift at a tail has neither an
+    // order nor a flight; it has the station it happened at and the tail it
+    // went onto, and the station's mapping answers just as well. Excluding
+    // those was why the fuel supplier stayed empty on exactly the tickets
+    // the tail path creates - reported 30 Oct 2026.
+    const noOrder = stored.filter(t => !t.order_ID && (t.flight_ID || t.station_code));
+    const flightIds = [...new Set(noOrder.map(t => t.flight_ID).filter(Boolean))];
     const flights = flightIds.length
         ? await cds.db.run(SELECT.from('fuelsphere.FLIGHT_SCHEDULE')
             .columns('ID', 'flight_number', 'origin_airport', 'airline_code', 'flight_date')
             .where({ ID: { in: flightIds } }))
         : [];
     const flightById = new Map(flights.map(f => [f.ID, f]));
+
+    /**
+     * WHAT A TICKET KNOWS ABOUT WHERE AND WHEN, whether it has a flight or
+     * not. A flight states all four; a tail-only ticket states the station
+     * and the day it was delivered, and names no flight to override by.
+     */
+    const arrangementOf = (t) => {
+        const f = t.flight_ID ? flightById.get(t.flight_ID) : null;
+        if (f) {
+            return f.origin_airport && f.flight_date
+                ? { flightNumber: f.flight_number || null, stationCode: f.origin_airport,
+                    carrierCode: f.airline_code || null, asOfDate: String(f.flight_date) }
+                : null;
+        }
+        const day = t.delivery_timestamp ? String(t.delivery_timestamp).slice(0, 10) : null;
+        return t.station_code && day
+            ? { flightNumber: null, stationCode: t.station_code,
+                carrierCode: t.carrier_code || null, asOfDate: day }
+            : null;
+    };
 
     // RESOLVED ONCE PER DISTINCT ARRANGEMENT, not once per ticket. A list
     // report showing thirty orderless tickets at one station would otherwise
@@ -101,20 +131,15 @@ async function applyTicketBilling(rows) {
         const { resolveDesignation } = require('./designation-resolver');
         const combos = new Map();
         for (const t of noOrder) {
-            const f = flightById.get(t.flight_ID);
-            if (!f || !f.origin_airport || !f.flight_date) continue;
-            const key = `${f.flight_number || ''}|${f.origin_airport}|${f.airline_code || ''}|${f.flight_date}`;
-            if (!combos.has(key)) combos.set(key, { f, tickets: [] });
+            const a = arrangementOf(t);
+            if (!a) continue;
+            const key = `${a.flightNumber || ''}|${a.stationCode}|${a.carrierCode || ''}|${a.asOfDate}`;
+            if (!combos.has(key)) combos.set(key, { a, tickets: [] });
             combos.get(key).tickets.push(t.ID);
         }
-        for (const { f, tickets } of combos.values()) {
+        for (const { a, tickets } of combos.values()) {
             try {
-                const d = await resolveDesignation({
-                    flightNumber: f.flight_number || null,
-                    stationCode: f.origin_airport,
-                    asOfDate: f.flight_date,
-                    carrierCode: f.airline_code || null
-                });
+                const d = await resolveDesignation(a);
                 if (d.resolved && d.row && d.row.supplier_ID) {
                     for (const id of tickets) mappedSupplierOf.set(id, d.row.supplier_ID);
                 }

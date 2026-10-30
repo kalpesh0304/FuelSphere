@@ -67,7 +67,13 @@ annotate TicketService.FlightSchedule with @(
 annotate TicketService.FlightSchedule with {
     ID                  @UI.Hidden;
     flight_number       @title: 'Flight';
-    flight_date         @title: 'Flight Date';
+    // #ReadOnly FOR THE SAME REASON flight_number carries it on FuelOrders
+    // above: the ticket screen shows this through the `flight` association,
+    // so it inherits the @mandatory on FLIGHT_SCHEDULE.flight_date and
+    // paints a red asterisk on a field nobody can type into. An uplift at a
+    // tail has no flight at all, and was being asked for the flight's date.
+    // Reported 30 Oct 2026.
+    flight_date         @title: 'Flight Date' @Common.FieldControl: #ReadOnly;
     origin_airport       @title: 'From';
     destination_airport  @title: 'To';
     aircraft_reg         @title: 'Aircraft Reg';
@@ -121,7 +127,7 @@ annotate TicketService.FuelTickets with @(
         // after the order it came from has been removed.
         TargetProperties : ['flight_ID', 'flight/flight_number', 'flight/flight_date',
                             'flight_number', 'aircraft_reg', 'tailFieldControl',
-                            'uom_code', 'supplier_ticket_ref', 'currency_code',
+                            'station_code', 'uom_code', 'supplier_ticket_ref', 'currency_code',
                             'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
     },
     // The alternative path: picking a flight directly, with no order,
@@ -130,7 +136,24 @@ annotate TicketService.FuelTickets with @(
         SourceProperties : [flight_ID],
         TargetProperties : ['flight/flight_number', 'flight/flight_date',
                             'flight_number', 'aircraft_reg', 'tailFieldControl',
+                            'station_code',
                             'supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
+    },
+
+    // THE STATION DECIDES THE SUPPLIER on a ticket with no order - the
+    // designation is keyed on the airport, the carrier and the date - so
+    // naming a station has to re-read who is going to be billed. Without
+    // this the vendor stays blank on exactly the path that needs it most.
+    Common.SideEffects #StationPicked: {
+        SourceProperties : [station_code],
+        TargetProperties : ['supplier_name_v', 's4_vendor_no_v', 'billing_status_v']
+    },
+
+    // The tail decides the carrier, and the carrier is half the designation
+    // key. Picking one therefore moves the vendor as surely as the station.
+    Common.SideEffects #TailPicked: {
+        SourceProperties : [aircraft_reg],
+        TargetProperties : ['carrier_code', 'supplier_name_v', 's4_vendor_no_v']
     },
     // The amount re-derives from the rate AND from either meter reading,
     // because the metered quantity is what it multiplies (see
@@ -271,6 +294,15 @@ annotate TicketService.FuelTickets with @(
                 // help only matters on the third path - no order, no flight,
                 // an uplift at tail - where nothing can derive it.
                 { Value: aircraft_reg,       ![@UI.Importance]: #High },
+
+                // WHERE THE FUEL WENT IN. Derived from the order or the
+                // flight where there is one; on an uplift at a tail there is
+                // neither, and this is the only thing that can say. Every
+                // S/4 mapping lookup starts from it - the plant, the
+                // designated supplier and the contract are all keyed on the
+                // airport - so a ticket without it cannot post.
+                { Value: station_code,       Label: 'Station',
+                  ![@UI.Importance]: #High },
 
                 // WHERE THE FUEL CAME FROM. A supplier sells it; a storage
                 // tank already holds it, bought and valued weeks ago.
@@ -743,6 +775,33 @@ annotate TicketService.TicketInvoiceLines with {
 // THE S/4 TRAIL - titles, because a card column with none falls back to the
 // technical name and ui02 EXIT-2c ratchets exactly that.
 // ===========================================================================
+// ---------------------------------------------------------------------------
+// EVERY FIELD BELOW IS WRITTEN BY THE POSTING, NEVER BY A USER.
+//
+// They are what S/4 answered - the purchase order it created, the goods
+// receipt, the invoice, and the status of the exchange. A typeable PO number
+// is an invitation to record a document that does not exist, and nothing
+// would ever reconcile against it. Read-only on the screen; postToS4 is the
+// only thing that fills them.
+// ---------------------------------------------------------------------------
+annotate TicketService.FuelTickets with {
+    s4_posting_status    @readonly;
+    s4_posting_message   @readonly;
+    s4_posted_at         @readonly;
+    s4_contract_number   @readonly;
+    s4_po_number         @readonly;
+    s4_po_item           @readonly;
+    s4_po_quantity       @readonly;
+    s4_po_unit           @readonly;
+    s4_gr_number         @readonly;
+    s4_gr_year           @readonly;
+    s4_invoice_number    @readonly;
+    s4_invoice_year      @readonly;
+    s4_invoice_amount    @readonly;
+    s4_invoice_currency  @readonly;
+    s4_fi_posting_date   @readonly;
+};
+
 annotate TicketService.FuelTickets with {
     s4_posting_status    @title: 'S/4 Posting Status'
                          @Common.QuickInfo: 'S complete, P partial - some documents posted and a later step failed, E error. Empty means the ticket has never been sent to S/4.';
@@ -963,6 +1022,39 @@ annotate TicketService.StorageLocations with {
 annotate TicketService.FuelTickets with {
     uplift_source         @title: 'Fuel Source';
     storage_location_code @title: 'Storage Location';
+
+    // THE SAME CONTROL THE TAIL USES, because it is the same case: derived
+    // under an order or a flight, the user's to state under neither.
+    station_code          @title: 'Station' @Common.FieldControl: tailFieldControl;
+
+    station_code @(Common: {
+        ValueList: {
+            CollectionPath: 'Airports',
+            Label: 'Airports',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: station_code, ValueListProperty: 'iata_code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'airport_name' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'city' }
+            ]
+        }
+    });
+
+    // TWO ROWS, SO IT IS A SELECT rather than a text box somebody types
+    // SUPPLIER into. ValueListWithFixedValues renders it inline instead of
+    // opening a dialog to choose between two.
+    uplift_source @(Common: {
+        ValueListWithFixedValues: true,
+        ValueList: {
+            CollectionPath: 'UpliftSources',
+            Label: 'Fuel source',
+            Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',
+                  LocalDataProperty: uplift_source, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+            ]
+        }
+    });
 
     aircraft_reg @(Common: {
         ValueList: {

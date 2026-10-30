@@ -469,6 +469,19 @@ type UpliftSource : String(10) enum {
     Storage  = 'STORAGE';    // drawn from a tank, already owned and valued
 }
 
+/**
+ * THE SAME TWO VALUES AS ROWS. An enum reaches OData as a plain string and
+ * Fiori gives a string a text box: the user types SUPPLIER, or mistypes it.
+ * A dropdown needs a collection to read, which is what this is. The enum
+ * stays the contract the service validates against; this is the list the
+ * screen offers, in the order it offers it.
+ */
+entity UPLIFT_SOURCE_CODE : db.AuditTrail {
+    key code : String(10);
+        name : String(60) @mandatory;
+        sort : Integer;
+}
+
 extend db.FUEL_TICKETS with {
         @assert.range
         uplift_source    : UpliftSource default 'SUPPLIER';
